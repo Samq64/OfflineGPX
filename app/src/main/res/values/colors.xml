@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Matches the light chart surface so there is no flash before Compose draws. -->
+    <color name="window_background">#FCFCFB</color>
+    <color name="ic_launcher_background">#2A78D6</color>
+</resources>

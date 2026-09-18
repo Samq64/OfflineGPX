@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">GPX Viewer</string>
+
+    <string name="library_title">Tracks</string>
+    <string name="library_open">Open GPX file</string>
+    <string name="library_empty_title">No tracks yet</string>
+    <string name="library_empty_body">Open a .gpx file to see its speed timeline and elevation profile.\n\nFiles are read only when you pick them, and this app has no internet access.</string>
+    <string name="library_remove">Remove from list</string>
+    <string name="library_clear">Clear list</string>
+    <string name="library_more">More options</string>
+    <string name="library_import_failed">Couldn\'t open that file.</string>
+
+    <string name="action_back">Back</string>
+    <string name="action_retry">Try again</string>
+
+    <string name="track_loading">Reading track…</string>
+    <string name="track_error_title">Couldn\'t open this file</string>
+    <string name="track_error_invalid">This file isn\'t valid GPX.</string>
+    <string name="track_error_empty">This GPX file has no track points.</string>
+    <string name="track_error_unreadable">The file couldn\'t be read. It may have been moved, renamed or deleted.</string>
+
+    <string name="chart_speed">Speed</string>
+    <string name="chart_elevation">Elevation</string>
+    <string name="chart_speed_empty">This track has no timestamps, so speed can\'t be computed.</string>
+    <string name="chart_elevation_empty">This track has no elevation data.</string>
+
+    <string name="axis_time">Time</string>
+    <string name="axis_distance">Distance</string>
+
+    <string name="stat_duration">Duration</string>
+    <string name="stat_moving">Moving</string>
+    <string name="stat_avg_speed">Avg speed</string>
+    <string name="stat_max_speed">Max speed</string>
+    <string name="stat_ascent">Ascent</string>
+    <string name="stat_descent">Descent</string>
+    <string name="stat_points">Points</string>
+
+    <string name="scrub_hint">Drag across a chart to inspect a point</string>
+    <string name="scrub_clear">Clear selection</string>
+</resources>
