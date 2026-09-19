@@ -19,13 +19,13 @@ coreKtx = "1.19.0"
 activityCompose = "1.11.0"
 lifecycle = "2.11.0"
 
-# The four below were not verifiable offline - check them against the Version Catalog
-# update in Android Studio before trusting the first build. KSP in particular is pinned to
-# the exact Kotlin version ("<kotlin>-<ksp>") and fails the build if the pair is wrong.
-ksp = "2.4.20-2.0.5"
-room = "2.9.0"
-navigation = "2.10.0"
-serialization = "1.9.0"
+# KSP dropped the "<kotlin>-<ksp>" pairing at 2.3.0 and is versioned independently now,
+# so this no longer has to track the Kotlin version - and a "2.4.20-x.y.z" spelling does
+# not exist to be found.
+ksp = "2.3.12"
+room = "2.8.5"
+navigation = "2.10.1"
+serialization = "1.11.0"
 
 kxml2 = "2.3.0"
 

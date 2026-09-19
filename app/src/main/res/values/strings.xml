@@ -2,17 +2,69 @@
 <resources>
     <string name="app_name">GPX Viewer</string>
 
-    <string name="library_title">Tracks</string>
-    <string name="library_open">Open GPX file</string>
-    <string name="library_empty_title">No tracks yet</string>
-    <string name="library_empty_body">Open a .gpx file to see its speed timeline and elevation profile.\n\nFiles are read only when you pick them, and this app has no internet access.</string>
-    <string name="library_remove">Remove from list</string>
-    <string name="library_clear">Clear list</string>
-    <string name="library_more">More options</string>
-    <string name="library_import_failed">Couldn\'t open that file.</string>
-
     <string name="action_back">Back</string>
     <string name="action_retry">Try again</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_save">Save</string>
+    <string name="action_ok">OK</string>
+
+    <string name="map_open_list">Tracks</string>
+    <string name="map_description">Routes. Tap one to open it.</string>
+    <string name="map_recording">Recording…</string>
+    <string name="map_empty_title">Nothing to show</string>
+    <string name="map_empty_body">Record a ride or a walk, or open a .gpx file from the track list.</string>
+    <string name="map_empty_hidden">Every track is hidden. Show one from the track list.</string>
+    <plurals name="map_shown">
+        <item quantity="one">%d track</item>
+        <item quantity="other">%d tracks</item>
+    </plurals>
+
+    <string name="library_title">Tracks</string>
+    <string name="library_import">Open GPX file</string>
+    <string name="library_export">Export…</string>
+    <string name="library_rename">Rename</string>
+    <string name="library_rename_label">Track name</string>
+    <string name="library_more">More options</string>
+    <string name="library_show">Show</string>
+    <string name="library_hide">Hide</string>
+    <string name="library_show_all">Show all</string>
+    <string name="library_hide_all">Hide all</string>
+    <string name="library_delete">Delete</string>
+    <string name="library_select_all">Select all</string>
+    <string name="library_clear_selection">Clear selection</string>
+    <string name="library_selected">%d selected</string>
+    <string name="library_empty_title">No tracks yet</string>
+    <string name="library_empty_body">Record one, or open a .gpx file. Files are read only when you pick them, and this app has no internet access.</string>
+    <string name="library_import_failed">Couldn\'t open that file.</string>
+    <string name="library_export_failed">Couldn\'t export that track.</string>
+    <string name="library_exported">Exported.</string>
+    <string name="library_rename_failed">Couldn\'t rename that track.</string>
+
+    <string name="record_title">Record</string>
+    <string name="record_start">Record</string>
+    <string name="record_pause">Pause</string>
+    <string name="record_resume">Resume</string>
+    <string name="record_stop">Stop</string>
+    <string name="record_discard">Discard</string>
+    <string name="record_speed">Speed</string>
+    <string name="record_ready_title">Ready to record</string>
+    <string name="record_ready_body">Your position is written to a file on this device and sent nowhere.</string>
+    <string name="record_waiting_for_fix">Waiting for a GPS fix…</string>
+    <string name="record_no_gps">Location is switched off, so there is nothing to record.</string>
+    <string name="record_save_failed">Couldn\'t save that recording. It is still on the device.</string>
+    <string name="record_discarded">Recording discarded.</string>
+    <string name="record_discard_title">Discard this recording?</string>
+    <string name="record_discard_body">It won\'t be saved and can\'t be recovered.</string>
+    <string name="record_discard_confirm">Discard</string>
+    <string name="record_precise_required_title">Precise location needed</string>
+    <string name="record_precise_required_body">Approximate location is accurate to hundreds of metres, which can\'t produce a route, a distance or a speed. Grant precise location to record.</string>
+    <string name="record_notification_active">Recording</string>
+    <string name="record_notification_paused">Recording paused</string>
+    <string name="record_channel_name">Recording</string>
+    <string name="record_channel_description">Shown while a track is being recorded.</string>
+
+    <string name="route_description">Route shape. Tap or drag to inspect a point.</string>
+    <string name="route_empty">This track has no positions to draw.</string>
 
     <string name="track_loading">Reading track…</string>
     <string name="track_error_title">Couldn\'t open this file</string>

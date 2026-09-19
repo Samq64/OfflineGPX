@@ -14,22 +14,32 @@ import dev.samuelq.gpx.data.db.TrackEntity
 import dev.samuelq.gpx.data.db.TrackSource
 import dev.samuelq.gpx.data.gpx.GpxParseException
 import dev.samuelq.gpx.data.gpx.GpxParser
+import dev.samuelq.gpx.data.gpx.GpxWriter
+import dev.samuelq.gpx.data.record.RecordingService
+import dev.samuelq.gpx.data.record.RecordingWal
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileNotFoundException
 import java.io.IOException
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 class GpxTrackRepository(
     context: Context,
     private val dao: TrackDao,
     private val parser: GpxParser = GpxParser(),
+    private val writer: GpxWriter = GpxWriter(),
     private val io: CoroutineDispatcher = Dispatchers.IO,
 ) : TrackRepository {
 
     private val appContext = context.applicationContext
+
+    private val recordingsDir: File get() = RecordingService.recordingsDir(appContext)
 
     /**
      * Single-entry cache: re-entering a track the user just looked at would otherwise
@@ -39,7 +49,12 @@ class GpxTrackRepository(
     @Volatile
     private var cached: Pair<String, LoadedTrack>? = null
 
-    override val tracks: Flow<List<TrackEntity>> get() = dao.observeAll()
+    override val tracks: Flow<List<TrackEntity>> get() = dao.observeByRecent()
+
+    // Reversed, so the most recently touched track is drawn last and lands on top - the
+    // same order the list shows, walked back to front.
+    override val visibleTracks: Flow<List<TrackEntity>> =
+        dao.observeByRecent().map { all -> all.filter(TrackEntity::visible).asReversed() }
 
     override suspend fun import(location: String): Result<Long> = withContext(io) {
         runCatching {
@@ -52,10 +67,15 @@ class GpxTrackRepository(
 
             // Look the row up rather than relying on @Upsert to resolve the unique index:
             // upsert falls back to updating by primary key, which an id of 0 would miss.
-            val existingId = dao.byLocation(location)?.id
+            val existing = dao.byLocation(location)
+            val existingId = existing?.id
             val stats = loaded.profile.stats
             val entity = TrackEntity(
                 id = existingId ?: 0,
+                // Re-importing keeps the colour it already had; a track changing hue
+                // because it was opened twice would be baffling.
+                colorIndex = existing?.colorIndex ?: nextColorIndex(),
+                visible = existing?.visible ?: true,
                 source = TrackSource.IMPORTED,
                 location = location,
                 displayName = displayName,
@@ -96,6 +116,68 @@ class GpxTrackRepository(
         }.recoverFailure()
     }
 
+    override suspend fun saveRecording(track: Track, startedAt: Instant): Result<Long> =
+        withContext(io) {
+            runCatching {
+                val profile = TrackAnalyzer.analyze(track)
+                val displayName = recordingFileName(startedAt)
+                val file = File(recordingsDir, displayName)
+
+                file.outputStream().use { writer.write(track, it) }
+
+                val stats = profile.stats
+                val entity = TrackEntity(
+                    source = TrackSource.RECORDED,
+                    colorIndex = nextColorIndex(),
+                    location = file.absolutePath,
+                    displayName = displayName,
+                    trackName = stats.name,
+                    startedAtEpochMillis = stats.startedAt?.toEpochMilli()
+                        ?: startedAt.toEpochMilli(),
+                    lastOpenedAtEpochMillis = System.currentTimeMillis(),
+                    distanceMeters = stats.distanceMeters,
+                    movingSeconds = stats.movingDurationSeconds,
+                    totalSeconds = stats.totalDurationSeconds,
+                    ascentMeters = stats.ascentMeters,
+                    descentMeters = stats.descentMeters,
+                    pointCount = stats.pointCount,
+                )
+                dao.upsert(entity)
+            }.recoverFailure()
+        }
+
+    override suspend fun recoverAbandonedRecording(): Long? = withContext(io) {
+        val log = File(recordingsDir, RecordingService.WAL_NAME)
+        if (!log.exists() || log.length() == 0L) return@withContext null
+
+        // Timestamps come from the fixes themselves, so a recovered ride is dated when it
+        // happened rather than when the app next opened.
+        val track = RecordingWal.recover(log, name = null)
+        if (track == null) {
+            log.delete()
+            return@withContext null
+        }
+
+        val startedAt = track.segments.firstOrNull()?.points?.firstOrNull()?.time ?: Instant.now()
+        saveRecording(track, startedAt).getOrNull()?.also { log.delete() }
+    }
+
+    override suspend fun export(id: Long, destination: String): Result<Unit> = withContext(io) {
+        runCatching {
+            val entity = dao.byId(id)
+                ?: throw TrackLoadException.Unreadable("No track with id $id")
+
+            val output = appContext.contentResolver.openOutputStream(Uri.parse(destination))
+                ?: throw TrackLoadException.Unreadable("Could not write to $destination")
+
+            // A copy, not a re-serialisation: what is on disk is already correct GPX, and
+            // regenerating it would let the exported file drift from the stored one.
+            output.use { sink -> openStream(entity.location).use { it.copyTo(sink) } }
+            // copyTo returns the byte count; the caller only needs to know it worked.
+            Unit
+        }.recoverFailure()
+    }
+
     override suspend fun openTransient(location: String): Result<LoadedTrack> = withContext(io) {
         runCatching {
             cached?.let { (cachedLocation, track) ->
@@ -107,11 +189,58 @@ class GpxTrackRepository(
         }.recoverFailure()
     }
 
-    override suspend fun forget(id: Long) = withContext(io) {
-        val entity = dao.byId(id) ?: return@withContext
-        if (cached?.first == entity.location) cached = null
-        dao.delete(id)
-        releaseOrDelete(entity)
+    override suspend fun geometry(id: Long): Result<LoadedTrack> = withContext(io) {
+        runCatching {
+            val entity = dao.byId(id)
+                ?: throw TrackLoadException.Unreadable("No track with id $id")
+            read(entity.location, entity.displayName, id)
+        }.recoverFailure()
+    }
+
+    override suspend fun touch(id: Long) = withContext(io) {
+        dao.touch(id, System.currentTimeMillis())
+    }
+
+    override suspend fun rename(id: Long, name: String): Result<Unit> = withContext(io) {
+        runCatching {
+            val entity = dao.byId(id)
+                ?: throw TrackLoadException.Unreadable("No track with id $id")
+            val trimmed = name.trim().takeIf(String::isNotEmpty)
+
+            if (entity.source == TrackSource.RECORDED) {
+                // Rewrite via a temp file: a crash partway through would otherwise leave
+                // the recording truncated, which is the one outcome worth engineering out.
+                val file = File(entity.location)
+                val parsed = file.inputStream().use(parser::parse)
+                val temp = File(file.parentFile, "${file.name}.tmp")
+                temp.outputStream().use { writer.write(parsed.copy(name = trimmed), it) }
+                if (!temp.renameTo(file)) {
+                    temp.delete()
+                    throw TrackLoadException.Unreadable("Could not rewrite ${file.name}")
+                }
+                if (cached?.first == entity.location) cached = null
+            }
+
+            dao.setTrackName(id, trimmed)
+        }.recoverFailure()
+    }
+
+    override suspend fun setVisible(ids: List<Long>, visible: Boolean) = withContext(io) {
+        dao.setVisible(ids, visible)
+    }
+
+    override suspend fun setAllVisible(visible: Boolean) = withContext(io) {
+        dao.setAllVisible(visible)
+    }
+
+    override suspend fun forget(id: Long) = forgetAll(listOf(id))
+
+    override suspend fun forgetAll(ids: List<Long>) = withContext(io) {
+        if (ids.isEmpty()) return@withContext
+        val entities = dao.byIds(ids)
+        if (entities.any { it.location == cached?.first }) cached = null
+        ids.forEach { dao.delete(it) }
+        entities.forEach(::releaseOrDelete)
     }
 
     override suspend fun clearAll() = withContext(io) {
@@ -121,6 +250,9 @@ class GpxTrackRepository(
         dao.deleteAll()
         all.forEach(::releaseOrDelete)
     }
+
+    /** Round-robin over the palette, so a handful of tracks rarely collide on a hue. */
+    private suspend fun nextColorIndex(): Int = dao.count() % ROUTE_PALETTE_SIZE
 
     /** Reads and analyses whatever [location] points at, SAF URI or app-private path. */
     private fun read(location: String, displayName: String, id: Long): LoadedTrack {
@@ -192,6 +324,16 @@ class GpxTrackRepository(
 
     private companion object {
         const val TAG = "GpxTrackRepository"
+
+        /** Matches `routePalette()` in the theme. Six, then hues repeat. */
+        const val ROUTE_PALETTE_SIZE = 6
+
+        /** Sortable, unambiguous, and legible as a filename once exported. */
+        private val FILE_STAMP: DateTimeFormatter =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HHmmss")
+
+        fun recordingFileName(startedAt: Instant): String =
+            "${FILE_STAMP.format(startedAt.atZone(ZoneId.systemDefault()))}.gpx"
 
         /** Maps the read failures onto the three the UI has messages for. */
         fun <T> Result<T>.recoverFailure(): Result<T> = recoverCatching { e ->

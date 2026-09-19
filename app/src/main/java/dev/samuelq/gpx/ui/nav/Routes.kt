@@ -10,10 +10,16 @@ import kotlinx.serialization.Serializable
  * hand-rolled back stack got wrong - it encoded destinations space-separated, which a URI
  * containing a literal space silently decoded as the wrong screen after process death.
  */
+
+/** Home. Every track the user has chosen to show, overlaid. */
+@Serializable
+data object MapRoute
+
+/** The management list: import, export, rename, show, hide, delete. */
 @Serializable
 data object LibraryRoute
 
-/** An indexed track, addressed by its `tracks` row - never by URI. */
+/** One track in detail, addressed by its `tracks` row - never by URI. */
 @Serializable
 data class TrackRoute(val id: Long)
 
@@ -26,3 +32,7 @@ data class TrackRoute(val id: Long)
  */
 @Serializable
 data class TransientTrackRoute(val uri: String)
+
+/** The live recorder. */
+@Serializable
+data object RecordRoute

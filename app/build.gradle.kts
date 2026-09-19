@@ -46,8 +46,8 @@ android {
         }
     }
 
-    // The app requests no permissions and has no network access; don't ship the
-    // dependency-metadata blob Play would otherwise embed in the artifact.
+    // The app has no network access; don't ship the dependency-metadata blob Play would
+    // otherwise embed in the artifact.
     dependenciesInfo {
         includeInApk = false
         includeInBundle = false

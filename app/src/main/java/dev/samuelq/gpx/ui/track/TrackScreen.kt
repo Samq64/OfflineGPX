@@ -14,6 +14,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -22,10 +23,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberBottomSheetScaffoldState
+import androidx.compose.material3.rememberStandardBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -50,6 +54,13 @@ import dev.samuelq.gpx.ui.theme.LocalChartColors
 
 private val ScreenPadding = 20.dp
 
+/**
+ * Enough of the sheet to keep the headline stats on screen at its lowest detent. The sheet
+ * is deliberately not dismissible: the route is context, the numbers are the point, and a
+ * state where the numbers are gone entirely is not worth reaching.
+ */
+private val SheetPeekHeight = 168.dp
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TrackScreen(
@@ -62,15 +73,74 @@ fun TrackScreen(
     LaunchedEffect(ref) { viewModel.load(ref) }
 
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val ready = state as? TrackUiState.Ready
 
-    Scaffold(
+    when (val current = state) {
+        is TrackUiState.Ready -> TrackContent(loaded = current.track, onBack = onBack)
+
+        TrackUiState.Loading -> Plain(title = null, onBack = onBack) { padding ->
+            CenteredMessage(
+                text = stringResource(R.string.track_loading),
+                modifier = Modifier.padding(padding),
+                showSpinner = true,
+            )
+        }
+
+        is TrackUiState.Failed -> Plain(title = null, onBack = onBack) { padding ->
+            ErrorState(
+                messageRes = current.messageRes,
+                onRetry = viewModel::retry,
+                modifier = Modifier.padding(padding),
+            )
+        }
+    }
+}
+
+/**
+ * Route behind, numbers in front.
+ *
+ * The route is the canvas and the analysis rides over it in a sheet, rather than both
+ * competing for room in one scroll. That also settles the gesture question: the sheet's
+ * handle owns vertical drag, and everything above it belongs to the route.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TrackContent(
+    loaded: LoadedTrack,
+    onBack: () -> Unit,
+) {
+    val profile = loaded.profile
+    val chartColors = LocalChartColors.current
+
+    // Reset when the track changes: an index into a different track is meaningless.
+    var selectedIndex by remember(profile) { mutableStateOf<Int?>(null) }
+    var preferTimeAxis by rememberSaveable { mutableStateOf(true) }
+    val useTimeAxis = preferTimeAxis && profile.hasTime
+
+    // One track, so its own extent is the extent: no union to take.
+    val layers = remember(profile, chartColors) {
+        val bounds = GeoBounds.of(profile.points) ?: return@remember emptyList()
+        val path = routePathOf(profile.points, profile.segmentStartIndices, bounds)
+            ?: return@remember emptyList()
+        listOf(RouteLayer(trackId = loaded.id, path = path, color = chartColors.speed))
+    }
+
+    val scaffoldState = rememberBottomSheetScaffoldState(
+        bottomSheetState = rememberStandardBottomSheetState(
+            initialValue = SheetValue.PartiallyExpanded,
+            // The one state this sheet must never reach. Without it a downward fling
+            // hides the summary and leaves a screen that answers nothing.
+            skipHiddenState = true,
+        ),
+    )
+
+    BottomSheetScaffold(
+        scaffoldState = scaffoldState,
+        sheetPeekHeight = SheetPeekHeight,
         topBar = {
             TopAppBar(
                 title = {
                     Text(
-                        text = ready?.track?.let { it.track.name?.takeIf(String::isNotBlank) ?: it.displayName }
-                            ?: stringResource(R.string.app_name),
+                        text = loaded.track.name?.takeIf(String::isNotBlank) ?: loaded.displayName,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -82,46 +152,51 @@ fun TrackScreen(
                 },
             )
         },
+        sheetContent = {
+            SheetContent(
+                loaded = loaded,
+                selectedIndex = selectedIndex,
+                onSelectedIndexChange = { selectedIndex = it },
+                useTimeAxis = useTimeAxis,
+                onAxisChange = { preferTimeAxis = it },
+            )
+        },
     ) { padding ->
-        when (val current = state) {
-            TrackUiState.Loading -> CenteredMessage(
-                text = stringResource(R.string.track_loading),
-                modifier = Modifier.padding(padding),
-                showSpinner = true,
-            )
-
-            is TrackUiState.Failed -> ErrorState(
-                messageRes = current.messageRes,
-                onRetry = viewModel::retry,
-                modifier = Modifier.padding(padding),
-            )
-
-            is TrackUiState.Ready -> TrackContent(
-                loaded = current.track,
-                contentPadding = padding,
-            )
+        Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+            if (layers.isEmpty()) {
+                Unavailable(stringResource(R.string.route_empty))
+            } else {
+                RouteCanvas(
+                    layers = layers,
+                    contentDescription = stringResource(R.string.route_description),
+                    selectedIndex = selectedIndex,
+                    markerLayerId = loaded.id,
+                    markerColor = chartColors.speed,
+                    markerRingColor = MaterialTheme.colorScheme.surface,
+                    onSelect = { _, index -> selectedIndex = index },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
         }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TrackContent(
+private fun SheetContent(
     loaded: LoadedTrack,
-    contentPadding: PaddingValues,
+    selectedIndex: Int?,
+    onSelectedIndexChange: (Int?) -> Unit,
+    useTimeAxis: Boolean,
+    onAxisChange: (Boolean) -> Unit,
 ) {
     val profile = loaded.profile
     val stats = profile.stats
     val chartColors = LocalChartColors.current
 
-    // Reset when the track changes: an index into a different track is meaningless.
-    var selectedIndex by remember(profile) { mutableStateOf<Int?>(null) }
-    var preferTimeAxis by rememberSaveable { mutableStateOf(true) }
-    val useTimeAxis = preferTimeAxis && profile.hasTime
-
     val xValues = if (useTimeAxis) profile.elapsedSeconds else profile.distanceMeters
     // One domain, shared by both charts, so the same pixel column is the same moment in
-    // each and the scrubber means the same thing in both.
+    // each and the scrubber means the same thing in both - and in the route above.
     val xScale = remember(profile, useTimeAxis) {
         axisScale(xValues.firstOrNull() ?: 0f, xValues.lastOrNull() ?: 1f)
     }
@@ -129,9 +204,8 @@ private fun TrackContent(
 
     Column(
         modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(top = contentPadding.calculateTopPadding()),
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState()),
     ) {
         TrackSummary(
             stats = stats,
@@ -140,13 +214,12 @@ private fun TrackContent(
             modifier = Modifier.padding(horizontal = ScreenPadding),
         )
 
-        Spacer(Modifier.height(28.dp))
+        Spacer(Modifier.height(20.dp))
 
-        // One control row, above everything it scopes - both charts re-render against it.
         if (profile.hasTime) {
             AxisSelector(
                 useTimeAxis = useTimeAxis,
-                onChange = { preferTimeAxis = it },
+                onChange = onAxisChange,
                 modifier = Modifier.padding(horizontal = ScreenPadding),
             )
             Spacer(Modifier.height(4.dp))
@@ -156,7 +229,7 @@ private fun TrackContent(
             profile = profile,
             selectedIndex = selectedIndex,
             useTimeAxis = useTimeAxis,
-            onClear = { selectedIndex = null },
+            onClear = { onSelectedIndexChange(null) },
             modifier = Modifier.padding(horizontal = ScreenPadding),
         )
 
@@ -187,7 +260,7 @@ private fun TrackContent(
                     formatX = formatX,
                     formatY = Formatters.SpeedAxis,
                     selectedIndex = selectedIndex,
-                    onSelectedIndexChange = { selectedIndex = it },
+                    onSelectedIndexChange = onSelectedIndexChange,
                     contentDescription = stringResource(R.string.chart_speed),
                     highlightIndex = stats.maxSpeedIndex,
                     highlightLabel = Formatters.speed(stats.maxSpeedMps),
@@ -223,7 +296,7 @@ private fun TrackContent(
                     formatX = formatX,
                     formatY = Formatters.ElevationAxis,
                     selectedIndex = selectedIndex,
-                    onSelectedIndexChange = { selectedIndex = it },
+                    onSelectedIndexChange = onSelectedIndexChange,
                     contentDescription = stringResource(R.string.chart_elevation),
                     highlightIndex = stats.maxElevationIndex,
                     highlightLabel = stats.maxElevationMeters?.let { Formatters.elevation(it) },
@@ -231,8 +304,31 @@ private fun TrackContent(
             }
         }
 
-        Spacer(Modifier.height(contentPadding.calculateBottomPadding() + 32.dp))
+        Spacer(Modifier.height(32.dp))
     }
+}
+
+/** The plain scaffold the loading and error states use, with the same chrome. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun Plain(
+    title: String?,
+    onBack: () -> Unit,
+    content: @Composable (PaddingValues) -> Unit,
+) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(title ?: stringResource(R.string.app_name), maxLines = 1) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.action_back))
+                    }
+                },
+            )
+        },
+        content = content,
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -293,7 +389,7 @@ private fun Unavailable(message: String) {
         text = message,
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(vertical = 24.dp),
+        modifier = Modifier.padding(vertical = 24.dp, horizontal = ScreenPadding),
     )
 }
 

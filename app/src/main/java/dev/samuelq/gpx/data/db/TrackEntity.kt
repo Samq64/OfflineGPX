@@ -38,8 +38,28 @@ data class TrackEntity(
     /** When the activity happened. Null for a file with no timestamps. */
     @ColumnInfo(index = true) val startedAtEpochMillis: Long?,
 
-    /** When the app last showed it - the library's sort order when there is no start time. */
+    /** When the app last showed it - the list's sort order when there is no start time. */
     val lastOpenedAtEpochMillis: Long,
+
+    /**
+     * Whether this track is drawn on the map screen.
+     *
+     * Persisted rather than a UI-session flag: which tracks you want overlaid is a
+     * curation decision, and one that should not evaporate when the process dies. New
+     * tracks arrive visible - you just made or imported it, so you want to see it - and
+     * the list is where a pile-up gets pruned.
+     */
+    @ColumnInfo(index = true, defaultValue = "1") val visible: Boolean = true,
+
+    /**
+     * Which slot of the route palette this track is drawn in.
+     *
+     * Assigned once, at import, and never recomputed. Colour here identifies *a track*,
+     * so it has to be the same every time the user looks - deriving it from a position in
+     * a list would repaint the map on every sort, and from stacking order would repaint it
+     * on every tap.
+     */
+    @ColumnInfo(defaultValue = "0") val colorIndex: Int = 0,
 
     val distanceMeters: Double,
     val movingSeconds: Double,

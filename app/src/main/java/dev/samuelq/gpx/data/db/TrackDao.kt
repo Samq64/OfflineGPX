@@ -12,8 +12,18 @@ interface TrackDao {
      * Newest activity first, falling back to when it was last opened for files that carry
      * no timestamps at all.
      */
-    @Query("SELECT * FROM tracks ORDER BY COALESCE(startedAtEpochMillis, lastOpenedAtEpochMillis) DESC")
-    fun observeAll(): Flow<List<TrackEntity>>
+    /**
+     * Most recently interacted with first.
+     *
+     * The only ordering in the app. The list and the map agree by construction - the map
+     * just walks it backwards, so the track at the top of the list is the one drawn on
+     * top of the pile.
+     */
+    @Query("SELECT * FROM tracks ORDER BY lastOpenedAtEpochMillis DESC")
+    fun observeByRecent(): Flow<List<TrackEntity>>
+
+    @Query("SELECT COUNT(*) FROM tracks")
+    suspend fun count(): Int
 
     /** A one-shot read of every row, to release SAF grants before clearing the table. */
     @Query("SELECT * FROM tracks")
@@ -31,8 +41,20 @@ interface TrackDao {
     @Query("UPDATE tracks SET lastOpenedAtEpochMillis = :at WHERE id = :id")
     suspend fun touch(id: Long, at: Long)
 
+    @Query("UPDATE tracks SET trackName = :name WHERE id = :id")
+    suspend fun setTrackName(id: Long, name: String?)
+
     @Query("DELETE FROM tracks WHERE id = :id")
     suspend fun delete(id: Long)
+
+    @Query("SELECT * FROM tracks WHERE id IN (:ids)")
+    suspend fun byIds(ids: List<Long>): List<TrackEntity>
+
+    @Query("UPDATE tracks SET visible = :visible WHERE id IN (:ids)")
+    suspend fun setVisible(ids: List<Long>, visible: Boolean)
+
+    @Query("UPDATE tracks SET visible = :visible")
+    suspend fun setAllVisible(visible: Boolean)
 
     @Query("DELETE FROM tracks")
     suspend fun deleteAll()

@@ -86,6 +86,42 @@ internal val StaticDarkColors = darkColorScheme(
 )
 
 /**
+ * The categorical set the map overlays routes with.
+ *
+ * A different job from [ChartColors]: there, colour encodes *which quantity* and the two
+ * hues are fixed for that reason. Here it encodes *which track*, which is an arbitrary
+ * identity with no meaning to preserve, so the set only has to stay mutually
+ * distinguishable - including for a colourblind reader, which is why these are separated
+ * by lightness as well as hue rather than being six evenly spaced rainbow steps.
+ *
+ * Six, then it repeats. Past about six overlaid routes the canvas is unreadable whatever
+ * the palette does, and the answer is to hide some in the list.
+ */
+private val RoutePaletteLight = listOf(
+    Blue450,
+    Orange,
+    Color(0xFF2E8B6F),
+    Color(0xFF8E5BC4),
+    Color(0xFFB8912B),
+    Color(0xFFC2456E),
+)
+
+private val RoutePaletteDark = listOf(
+    Blue400,
+    OrangeDark,
+    Color(0xFF45A587),
+    Color(0xFFA87ADA),
+    Color(0xFFD3AC46),
+    Color(0xFFDB6489),
+)
+
+/** The route palette for the current theme. Follows dark mode, not the wallpaper. */
+@androidx.compose.runtime.Composable
+@androidx.compose.runtime.ReadOnlyComposable
+fun routePalette(): List<Color> =
+    if (androidx.compose.foundation.isSystemInDarkTheme()) RoutePaletteDark else RoutePaletteLight
+
+/**
  * Colours the charts draw with, held apart from the Material scheme deliberately.
  *
  * These two hues were checked for lightness band, chroma floor, CVD separation and

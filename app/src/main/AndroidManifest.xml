@@ -4,17 +4,39 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <!--
-      No permissions. Files - tracks and offline map regions alike - come through SAF,
-      which grants access to exactly the one file the user picked. Recording will add
-      ACCESS_FINE_LOCATION and a location foreground service; nothing else is planned.
+      Files - tracks and offline map regions alike - come through SAF, which grants access
+      to exactly the one file the user picked. There is no storage permission and never
+      will be.
 
-      The two below are denied structurally: the manifest merger folds in every
-      dependency's permissions, so a library can add INTERNET without anyone writing it.
-      tools:node="remove" strips it back out. Check what shipped with
+      What recording costs, and nothing beyond it:
+        ACCESS_FINE_LOCATION       the only way to sample a position.
+        ACCESS_COARSE_LOCATION     not wanted. Android 12+ ignores a fine request that
+                                   does not also name coarse, so it has to be declared.
+                                   The app refuses to record on an approximate-only grant
+                                   rather than produce numbers that look real and are not.
+        FOREGROUND_SERVICE(_LOCATION)  sampling with the screen off, visibly.
+        POST_NOTIFICATIONS         so the recording notification is actually seen.
+                                   Recording still works if this is refused.
+      All four are requested on the tap that starts a recording, not at launch, and every
+      other feature works without them.
+    -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!--
+      Network access is denied structurally, not by vigilance: the manifest merger folds in
+      every dependency's permissions, so a library can add INTERNET without anyone writing
+      it. tools:node="remove" strips it back out. Check what shipped with
       :app:processReleaseMainManifest, then grep the merged manifest.
     -->
     <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" tools:node="remove" />
+
+    <!-- GPS is required for the recorder, but the viewer works on any device. -->
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
 
     <application
         android:name=".GpxApplication"
@@ -78,6 +100,11 @@
                 <data android:mimeType="text/xml" />
             </intent-filter>
         </activity>
+
+        <service
+            android:name=".data.record.RecordingService"
+            android:exported="false"
+            android:foregroundServiceType="location" />
     </application>
 
 </manifest>

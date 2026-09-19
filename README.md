@@ -1,9 +1,11 @@
 # GPX Viewer
 
-An Android app for cycling and hiking stats. Open a `.gpx` file, get a **speed timeline**
-and an **elevation profile** on a shared, synchronised scrubber.
+An Android app for cycling and hiking stats. Record a ride or a walk, or open a `.gpx`
+file, and get a **route**, a **speed timeline** and an **elevation profile** on one shared,
+synchronised scrubber.
 
-Recording and offline maps are planned; neither is implemented yet.
+Offline maps are planned. Until they land the route is drawn on a plain surface - the shape
+alone is recognisable, and the slot a map renders into is already there.
 
 ## The permission budget
 
@@ -15,7 +17,8 @@ still being a real tool for cycling and hiking.
 | `INTERNET`, `ACCESS_NETWORK_STATE` | **never** | stripped from the merged manifest; map regions are downloaded by the *browser* |
 | storage | never | SAF grants access to exactly the file the user picked — tracks and map regions alike |
 | camera, microphone, Bluetooth, contacts | never | no feature needs them |
-| `ACCESS_FINE_LOCATION`, `FOREGROUND_SERVICE_LOCATION` | when recording ships | the irreducible cost of being a tracker; asked for on tapping record |
+| `ACCESS_FINE_LOCATION`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_LOCATION` | **declared** | the irreducible cost of being a tracker; asked for on the tap that starts a recording, never at launch |
+| `POST_NOTIFICATIONS` | declared | so the recording notification is seen. Refusing it does not stop recording |
 | `ACCESS_COARSE_LOCATION` | forced, never used | see *Recording* |
 
 Two things make the network claim structural rather than aspirational:
@@ -35,9 +38,13 @@ A permission added here must map to a feature a user can name.
 
 ## Status
 
-**Never compiled**: the machine this was written on has no JDK. Treat the first
-`./gradlew assembleDebug` as the real review. Versions were checked against release notes
-in September 2026; if Android Studio offers newer stables, take them.
+Compiles. Not yet run on a device - treat the first launch, and the first real recording
+in particular, as the review. The recorder has never sampled a fix outside a reading of the
+code.
+
+Dependency versions were resolved against Maven Central and Google's Maven. Note that KSP
+dropped its `<kotlin>-<ksp>` version pairing at 2.3.0 and is versioned independently now,
+so it no longer tracks the Kotlin version.
 
 The Gradle wrapper JAR is not included. Run `gradle wrapper --gradle-version 9.7.1`, or
 open the project in Android Studio.
@@ -57,10 +64,11 @@ permission budget is. A dependency earns its place by beating the hand-rolled co
 replaces; what disqualifies one is pulling `INTERNET` into the merged manifest or wanting
 a permission for a feature nobody asked for. None of these four do either.
 
-Still hand-rolled, deliberately: the charts (a library gives no shared-domain scrubber and
-no extreme-preserving reduction), `GpxParser` (streaming and tolerant, where `jpx` builds
-an object model), and `AppContainer` (Hilt earns its keep when the recording service
-lands, not for two objects).
+Still hand-rolled, deliberately: the charts and the route canvas (a library gives no
+shared-domain scrubber and no extreme-preserving reduction), `GpxParser`/`GpxWriter`
+(streaming and tolerant, where `jpx` builds an object model), and `AppContainer` — the
+recording service reaches the graph through the Application, which is the one place the
+lack of Hilt shows and still not enough to pay for it.
 
 `minSdk 29` because Chrome dropped below Android 10 at version 140. Material You is gated
 on the *device's* version, so Android 12+ gets the wallpaper palette and 10/11 fall back to
@@ -73,21 +81,46 @@ core/            Pure Kotlin. No Android imports, directly unit-testable.
   model/         Track, TrackSegment, TrackPoint - a faithful view of the file.
   analysis/      Geo + TrackAnalyzer -> TrackProfile (distance, speed, ascent, stats).
 data/
-  gpx/           GpxParser: streaming XmlPullParser, tolerant of real-world GPX.
+  gpx/           GpxParser + GpxWriter: streaming, tolerant of real-world GPX.
   db/            Room: one `tracks` row per track, summaries only, no geometry.
+  record/        LocationSource, RecordingWal, RecordingService, RecordingController.
   track/         TrackRepository (interface) + GpxTrackRepository (SAF + Room).
 ui/
   chart/         ChartSeries, scales, ProfileChart - the Canvas charts.
-  track/         Chart screen, summary, scrub readout.
-  library/       File picker and track list.
+  map/           Home. Visible routes overlaid in one projection.
+  track/         One track: route, summary, scrub readout, charts. RouteCanvas.
+  library/       Manage: import, export, rename, show/hide, batch delete.
+  record/        The live recorder.
   nav/           @Serializable routes for navigation-compose.
 di/              AppContainer: manual wiring.
 ```
 
-## The plan: recording and offline maps
+## How it is put together
 
-Between them these decide the shape of storage and navigation, which is why those two
-layers are being replaced first rather than after.
+Recording is implemented; offline maps are not. Between them they decided the shape of the
+storage and navigation layers, which is why those were replaced before either was built.
+
+### The map is home, the list is for managing
+
+The app opens on the map, showing every track the user has chosen to show. Dumping the
+whole library onto one canvas is noise, so visibility is a per-track property, persisted,
+and curated in the list — a screen that decides for you is worse than one you point at what
+you want.
+
+There is exactly one ordering in the app: **most recently interacted with first.** The list
+shows it top-down; the map walks the same list backwards so the track you last touched is
+painted last and lands on top of the pile. The two agree by construction rather than by two
+orderings kept in step.
+
+Colour does *not* follow that order. It is assigned per track at import and never
+recomputed, because a hue that changed when you tapped something would be worse than any
+stacking order. The list shows each track's swatch, so the two surfaces read against each
+other without a legend. Six colours, then they repeat — past about six overlaid routes the
+canvas is unreadable whatever the palette does, and the answer is to hide some.
+
+Import lives in the list rather than on the map: the app makes its own GPX files now, so
+bringing one in from elsewhere is the rarer action, and the map's one button should be the
+common one.
 
 ### A recorded track is a GPX file
 
@@ -207,6 +240,19 @@ should not vary by device. Chrome follows the wallpaper; data does not.
 1000px chart collapses each column to first/min/max/last. Every-nth subsampling would
 delete the peaks, which on a speed chart are the whole point of looking.
 
+**The track screen puts the route behind and the numbers in a sheet over it**, rather than
+both competing in one scroll. That also settles the gesture question - the sheet's handle
+owns vertical drag, everything above it belongs to the route. The sheet cannot be
+dismissed: a state where the summary is gone entirely is not worth reaching.
+
+**The scrubber runs both ways.** Dragging a chart moves the marker on the route, and
+tapping the route moves the chart crosshairs, because `TrackProfile` shares its indices
+with the track's lat/lon. That is what a route view buys over a picture of one.
+
+**The route is projected equirectangular with longitude scaled by cos(latitude).** Over one
+activity's extent the error against a true Mercator is below a pixel. Taking the extent in
+raw degrees instead would stretch the shape a third too wide at 50N.
+
 ## Tests
 
 `./gradlew test` — JVM unit tests over the parser and the analyzer, no device needed.
@@ -219,7 +265,12 @@ kxml2 on a plain JVM; `android.jar`'s xmlpull classes are stubs in unit tests.
 - `<extensions>` are skipped, so heart rate, cadence and power are not read.
 - Metric only. All user-facing formatting is in `ui/format/Formatters.kt`, so an imperial
   toggle is a one-file change.
-- No map yet, no recording yet.
+- No offline map yet. The route is drawn on a plain surface; the slot is there.
+- Recording has never been run on a device.
+- No stats over time. The schema is a table of summaries, so "distance this month" is one
+  query away, but nothing asks it yet.
+- No comparison view. Overlaying routes on the map is as far as it goes; the charts show
+  one track at a time.
 - **The charts are not readable without a pointer.** The per-point table that used to
   cover this was removed; `ProfileChart` carries only a `contentDescription`, so TalkBack
   announces "Speed" and no values. The fix is semantics on the scrub readout plus d-pad
