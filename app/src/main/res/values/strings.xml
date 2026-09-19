@@ -6,11 +6,9 @@
     <string name="action_retry">Try again</string>
     <string name="action_cancel">Cancel</string>
     <string name="action_save">Save</string>
-    <string name="action_ok">OK</string>
 
     <string name="map_open_list">Tracks</string>
-    <string name="map_description">Routes. Tap one to open it.</string>
-    <string name="map_recording">Recording…</string>
+    <string name="map_description">Routes. Tap one to open it. Drag to move, pinch to zoom; pinch all the way out to see everything.</string>
     <string name="map_empty_title">Nothing to show</string>
     <string name="map_empty_body">Record a ride or a walk, or open a .gpx file from the track list.</string>
     <string name="map_empty_hidden">Every track is hidden. Show one from the track list.</string>
@@ -19,17 +17,40 @@
         <item quantity="other">%d tracks</item>
     </plurals>
 
+    <string name="settings_title">Settings</string>
+    <string name="settings_open">Settings</string>
+    <string name="settings_section_display">Display</string>
+    <string name="settings_section_recording">Recording</string>
+    <string name="settings_units">Units</string>
+    <string name="settings_units_explanation">Changes how numbers are shown. Files stay in metres either way, so switching back and forth never alters a track.</string>
+    <string name="settings_units_metric">Metric</string>
+    <string name="settings_units_imperial">Imperial</string>
+
+    <string name="settings_accuracy">Accuracy limit</string>
+    <string name="settings_accuracy_explanation">Fixes less certain than this are ignored. Lower keeps out the wandering a phone does when it can\'t see the sky; too low and a wooded valley records nothing.</string>
+
+    <string name="settings_displacement">Minimum movement</string>
+    <string name="settings_displacement_explanation">How far a fix must move before it counts as travel. This is what stops a stationary phone from recording a ride. Lower it if real rides come out short.</string>
+    <string name="settings_displacement_off">Off</string>
+
+    <string name="settings_recording_applies_next">Both are read when a recording starts, so changing them won\'t affect one already running.</string>
+    <string name="settings_reset">Reset to defaults</string>
+
     <string name="library_title">Tracks</string>
     <string name="library_import">Open GPX file</string>
     <string name="library_export">Export…</string>
     <string name="library_rename">Rename</string>
     <string name="library_rename_label">Track name</string>
     <string name="library_more">More options</string>
-    <string name="library_show">Show</string>
-    <string name="library_hide">Hide</string>
     <string name="library_show_all">Show all</string>
     <string name="library_hide_all">Hide all</string>
     <string name="library_delete">Delete</string>
+    <plurals name="library_delete_title">
+        <item quantity="one">Delete this track?</item>
+        <item quantity="other">Delete %d tracks?</item>
+    </plurals>
+    <string name="library_delete_body_imported">The file itself is left where it is. This app only forgets about it.</string>
+    <string name="library_delete_body_recorded">Recordings are stored by this app and will be deleted from the device. Imported files are left where they are.</string>
     <string name="library_select_all">Select all</string>
     <string name="library_clear_selection">Clear selection</string>
     <string name="library_selected">%d selected</string>
@@ -40,33 +61,49 @@
     <string name="library_exported">Exported.</string>
     <string name="library_rename_failed">Couldn\'t rename that track.</string>
 
-    <string name="record_title">Record</string>
     <string name="record_start">Record</string>
     <string name="record_pause">Pause</string>
     <string name="record_resume">Resume</string>
     <string name="record_stop">Stop</string>
     <string name="record_discard">Discard</string>
-    <string name="record_speed">Speed</string>
-    <string name="record_ready_title">Ready to record</string>
-    <string name="record_ready_body">Your position is written to a file on this device and sent nowhere.</string>
     <string name="record_waiting_for_fix">Waiting for a GPS fix…</string>
-    <string name="record_no_gps">Location is switched off, so there is nothing to record.</string>
+    <string name="record_weak_signal">Signal too weak to record — accurate to ±%1$s. Try outdoors.</string>
+    <plurals name="record_points_logged">
+        <item quantity="one">%s point logged</item>
+        <item quantity="other">%s points logged</item>
+    </plurals>
     <string name="record_save_failed">Couldn\'t save that recording. It is still on the device.</string>
     <string name="record_discarded">Recording discarded.</string>
     <string name="record_discard_title">Discard this recording?</string>
     <string name="record_discard_body">It won\'t be saved and can\'t be recovered.</string>
     <string name="record_discard_confirm">Discard</string>
-    <string name="record_precise_required_title">Precise location needed</string>
-    <string name="record_precise_required_body">Approximate location is accurate to hundreds of metres, which can\'t produce a route, a distance or a speed. Grant precise location to record.</string>
+
+    <!-- Every way starting a recording can fail, said where the user tapped. -->
+    <string name="record_location_off">Location is switched off. Turn it on to record.</string>
+    <string name="record_location_denied">Recording needs location access.</string>
+    <string name="record_precise_required">Precise location is needed: approximate is accurate to hundreds of metres, which can\'t produce a route or a speed.</string>
+    <string name="record_location_lost">Location was switched off. Nothing is being recorded.</string>
+    <string name="record_nothing_recorded">Nothing was recorded — no fix was ever accurate enough to use.</string>
+    <string name="record_no_distance">That recording didn\'t go anywhere, so it wasn\'t saved.</string>
+
     <string name="record_notification_active">Recording</string>
     <string name="record_notification_paused">Recording paused</string>
     <string name="record_channel_name">Recording</string>
     <string name="record_channel_description">Shown while a track is being recorded.</string>
 
-    <string name="route_description">Route shape. Tap or drag to inspect a point.</string>
-    <string name="route_empty">This track has no positions to draw.</string>
+    <!-- What a recording is called until it is renamed. %1$s is "ride" or "walk". -->
+    <string name="track_default_morning">Morning %1$s</string>
+    <string name="track_default_afternoon">Afternoon %1$s</string>
+    <string name="track_default_evening">Evening %1$s</string>
+    <string name="track_default_night">Night %1$s</string>
+    <string name="track_default_ride">ride</string>
+    <string name="track_default_walk">walk</string>
 
     <string name="track_loading">Reading track…</string>
+    <string name="track_close">Close</string>
+    <string name="track_details">Details</string>
+    <string name="track_sheet_expand">Taller</string>
+    <string name="track_sheet_collapse">Shorter</string>
     <string name="track_error_title">Couldn\'t open this file</string>
     <string name="track_error_invalid">This file isn\'t valid GPX.</string>
     <string name="track_error_empty">This GPX file has no track points.</string>
@@ -74,6 +111,7 @@
 
     <string name="chart_speed">Speed</string>
     <string name="chart_elevation">Elevation</string>
+    <string name="chart_paused">Paused %1$s</string>
     <string name="chart_speed_empty">This track has no timestamps, so speed can\'t be computed.</string>
     <string name="chart_elevation_empty">This track has no elevation data.</string>
 
@@ -83,11 +121,7 @@
     <string name="stat_duration">Duration</string>
     <string name="stat_moving">Moving</string>
     <string name="stat_avg_speed">Avg speed</string>
-    <string name="stat_max_speed">Max speed</string>
     <string name="stat_ascent">Ascent</string>
     <string name="stat_descent">Descent</string>
     <string name="stat_points">Points</string>
-
-    <string name="scrub_hint">Drag across a chart to inspect a point</string>
-    <string name="scrub_clear">Clear selection</string>
 </resources>

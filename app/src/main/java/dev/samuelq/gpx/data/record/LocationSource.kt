@@ -8,6 +8,7 @@ import android.location.LocationManager
 import android.os.Bundle
 import android.os.Looper
 import androidx.core.content.getSystemService
+import dev.samuelq.gpx.core.analysis.Fix
 import dev.samuelq.gpx.core.model.TrackPoint
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -34,23 +35,30 @@ class LocationSource(context: Context) {
     /**
      * Fixes until the collector stops.
      *
+     * @param onUnavailable called when the user switches location off mid-recording. The
+     *   flow stays open - the provider can come back, and the points already collected are
+     *   still a recording - but silence is not something the caller can distinguish from a
+     *   slow fix, so it has to be told.
      * @throws SecurityException if the location permission is not held - the caller checks
      *   first, and a throw here means a bug rather than a user decision.
      */
     @SuppressLint("MissingPermission")
-    fun fixes(intervalMillis: Long = DEFAULT_INTERVAL_MILLIS): Flow<TrackPoint> = callbackFlow {
+    fun fixes(
+        intervalMillis: Long = DEFAULT_INTERVAL_MILLIS,
+        onUnavailable: () -> Unit = {},
+    ): Flow<Fix> = callbackFlow {
         val locationManager = manager
             ?: throw IllegalStateException("No LocationManager on this device")
 
         val listener = object : LocationListener {
             override fun onLocationChanged(location: Location) {
-                trySend(location.toTrackPoint())
+                trySend(location.toFix())
             }
 
             // Required on API < 30 and harmless above it; without them the platform
             // throws AbstractMethodError on some OEM builds.
             override fun onProviderEnabled(provider: String) = Unit
-            override fun onProviderDisabled(provider: String) = Unit
+            override fun onProviderDisabled(provider: String) = onUnavailable()
 
             @Deprecated("Removed in API 29, still dispatched by some OEM builds")
             override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) = Unit
@@ -59,8 +67,10 @@ class LocationSource(context: Context) {
         locationManager.requestLocationUpdates(
             LocationManager.GPS_PROVIDER,
             intervalMillis,
-            // No minimum distance: standing still is data. The analyzer decides what
-            // counts as moving, and a filter here would silently shorten paused time.
+            // No minimum distance, even though the recorder does apply one. This
+            // parameter suppresses the *callback*, so a stationary rider would go silent
+            // and the recorder would lose the seconds along with the metres. Standing
+            // still is data; FixFilter drops the movement and keeps the time.
             0f,
             listener,
             Looper.getMainLooper(),
@@ -72,13 +82,24 @@ class LocationSource(context: Context) {
     private companion object {
         const val DEFAULT_INTERVAL_MILLIS = 1000L
 
-        fun Location.toTrackPoint() = TrackPoint(
-            latitude = latitude,
-            longitude = longitude,
-            // hasAltitude() is false indoors and on some fixes; a null reads as "not
-            // recorded", which the elevation chart already handles.
-            elevation = if (hasAltitude()) altitude else null,
-            time = Instant.ofEpochMilli(time.takeIf { it > 0 } ?: System.currentTimeMillis()),
+        /**
+         * Everything is passed on, believable or not.
+         *
+         * Filtering here would be filtering in the wrong place: a reading the recorder
+         * throws away is still a second that passed, and this class has no idea what the
+         * recorder is counting. It reports what the hardware said, including how much the
+         * hardware trusts itself.
+         */
+        fun Location.toFix() = Fix(
+            point = TrackPoint(
+                latitude = latitude,
+                longitude = longitude,
+                // hasAltitude() is false indoors and on some fixes; a null reads as "not
+                // recorded", which the elevation chart already handles.
+                elevation = if (hasAltitude()) altitude else null,
+                time = Instant.ofEpochMilli(time.takeIf { it > 0 } ?: System.currentTimeMillis()),
+            ),
+            accuracyMeters = if (hasAccuracy()) accuracy.toDouble() else null,
         )
     }
 }

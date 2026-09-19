@@ -19,7 +19,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
@@ -43,6 +42,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.TriStateCheckbox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -52,14 +52,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.samuelq.gpx.R
 import dev.samuelq.gpx.data.db.TrackEntity
+import dev.samuelq.gpx.data.db.TrackSource
 import dev.samuelq.gpx.ui.format.Formatters
+import dev.samuelq.gpx.ui.format.LocalFormatters
 import dev.samuelq.gpx.ui.theme.routePalette
 import java.time.Instant
 
@@ -68,7 +74,8 @@ import java.time.Instant
  *
  * Import lives here instead of on the map because the app makes its own GPX files now -
  * bringing one in from elsewhere is the rarer thing, and the map's one action should be
- * the common one. Long-press starts a selection for batch show, hide and delete.
+ * the common one. Long-press starts a selection, which exists for deleting several
+ * tracks at once - visibility is a switch on every row and an all-at-once pair in the menu.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -77,7 +84,8 @@ fun LibraryScreen(
     onBack: () -> Unit,
     viewModel: LibraryViewModel = viewModel(factory = LibraryViewModel.Factory),
 ) {
-    val tracks by viewModel.tracks.collectAsStateWithLifecycle()
+    val loaded by viewModel.tracks.collectAsStateWithLifecycle()
+    val tracks = loaded.orEmpty()
     val selection by viewModel.selection.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     var menuOpen by remember { mutableStateOf(false) }
@@ -87,6 +95,7 @@ fun LibraryScreen(
     val exported = stringResource(R.string.library_exported)
     val renameFailed = stringResource(R.string.library_rename_failed)
     var renaming by remember { mutableStateOf<TrackEntity?>(null) }
+    var deleting by remember { mutableStateOf<Set<Long>>(emptySet()) }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let(viewModel::import)
@@ -128,7 +137,9 @@ fun LibraryScreen(
                         IconButton(onClick = { picker.launch(arrayOf("*/*")) }) {
                             Icon(Icons.Default.Add, stringResource(R.string.library_import))
                         }
-                        if (tracks.isNotEmpty()) {
+                        // Shown while still loading too. Deciding on an empty list would
+                        // pop the icon into existence a frame later, during the slide.
+                        if (loaded == null || tracks.isNotEmpty()) {
                             IconButton(onClick = { menuOpen = true }) {
                                 Icon(Icons.Default.MoreVert, stringResource(R.string.library_more))
                             }
@@ -154,21 +165,25 @@ fun LibraryScreen(
             } else {
                 SelectionBar(
                     count = selection.size,
+                    total = tracks.size,
                     onClose = viewModel::clearSelection,
                     onSelectAll = { viewModel.selectAll(tracks.map(TrackEntity::id)) },
-                    onShow = { viewModel.setVisible(selection, true) },
-                    onHide = { viewModel.setVisible(selection, false) },
-                    onDelete = { viewModel.delete(selection) },
+                    onDelete = { deleting = selection },
                 )
             }
         },
     ) { padding ->
-        if (tracks.isEmpty()) {
-            EmptyState(
+        when {
+            // Nothing yet. An empty surface for a frame or two beats telling the user they
+            // have no tracks and then taking it back.
+            loaded == null -> Unit
+
+            tracks.isEmpty() -> EmptyState(
                 onImport = { picker.launch(arrayOf("*/*")) },
                 modifier = Modifier.fillMaxSize().padding(padding),
             )
-        } else {
+
+            else -> {
             val palette = routePalette()
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
@@ -183,7 +198,15 @@ fun LibraryScreen(
                         color = palette[track.colorIndex % palette.size],
                         selected = track.id in selection,
                         selectionActive = selection.isNotEmpty(),
-                        onOpen = { onOpenTrack(track.id) },
+                        onOpen = {
+                            // Opening a hidden track shows it. It used to be drawn as a
+                            // one-off that vanished when the sheet closed, which made
+                            // "hidden" mean two different things depending on how you got
+                            // there - and left the switch saying off about a line that
+                            // was plainly on the map.
+                            if (!track.visible) viewModel.setVisible(listOf(track.id), true)
+                            onOpenTrack(track.id)
+                        },
                         onToggleSelected = { viewModel.toggleSelected(track.id) },
                         onToggleVisible = { viewModel.setVisible(listOf(track.id), !track.visible) },
                         onExport = {
@@ -191,9 +214,11 @@ fun LibraryScreen(
                             exporter.launch(track.displayName.ensureGpxSuffix())
                         },
                         onRename = { renaming = track },
+                        onDelete = { deleting = setOf(track.id) },
                     )
                     HorizontalDivider()
                 }
+            }
             }
         }
     }
@@ -208,18 +233,96 @@ fun LibraryScreen(
             },
         )
     }
+
+    if (deleting.isNotEmpty()) {
+        DeleteDialog(
+            // What is actually being destroyed differs by source, and the difference is
+            // the one the user cares about: a recording only exists here.
+            deletesFiles = tracks.any { it.id in deleting && it.source == TrackSource.RECORDED },
+            count = deleting.size,
+            onDismiss = { deleting = emptySet() },
+            onConfirm = {
+                viewModel.delete(deleting)
+                deleting = emptySet()
+            },
+        )
+    }
 }
 
+/**
+ * The one confirmation in the app, for the one action nothing can undo.
+ *
+ * Reached from both the row menu and the selection bar, so a single track and forty go
+ * through the same question - the batch used to delete on the tap itself, which is a long
+ * way to fall off a mis-aimed icon.
+ */
+@Composable
+private fun DeleteDialog(
+    deletesFiles: Boolean,
+    count: Int,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(pluralStringResource(R.plurals.library_delete_title, count, count)) },
+        text = {
+            Text(
+                stringResource(
+                    if (deletesFiles) {
+                        R.string.library_delete_body_recorded
+                    } else {
+                        R.string.library_delete_body_imported
+                    }
+                )
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(
+                    text = stringResource(R.string.library_delete),
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+        },
+    )
+}
+
+/**
+ * The bar that replaces the title while rows are ticked.
+ *
+ * Select-all is a tri-state checkbox rather than an icon, because there is no icon for it:
+ * `material-icons-core` carries no `select_all` or `done_all`, and the nearest thing in it
+ * is a bare tick, which in a bar next to a bin reads as "confirm" rather than "everything".
+ * Pulling in `material-icons-extended` for one glyph is the trade the dependency note
+ * already refuses.
+ *
+ * A checkbox is the better control anyway, and not as a consolation. It *shows* whether
+ * everything is selected, which no icon can, and it toggles - so deselecting all stops
+ * being a thing you can only do by leaving selection mode entirely. Indeterminate is the
+ * honest state for a partial selection and the one people already know from every mail
+ * client.
+ *
+ * Show and hide are not here at all. Every row already carries a switch with a full touch
+ * target, and show-all and hide-all sit in the list's own menu; a third way to do it, only
+ * reachable by first long-pressing something, was a row in a menu nobody needed to open.
+ * What a selection is actually for is deleting several things at once.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SelectionBar(
     count: Int,
+    total: Int,
     onClose: () -> Unit,
     onSelectAll: () -> Unit,
-    onShow: () -> Unit,
-    onHide: () -> Unit,
     onDelete: () -> Unit,
 ) {
+    val allSelected = count >= total
+    val selectAll = stringResource(R.string.library_select_all)
+
     TopAppBar(
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = MaterialTheme.colorScheme.secondaryContainer,
@@ -231,11 +334,11 @@ private fun SelectionBar(
             }
         },
         actions = {
-            IconButton(onClick = onSelectAll) {
-                Icon(Icons.Default.Check, stringResource(R.string.library_select_all))
-            }
-            IconButton(onClick = onShow) { Text(stringResource(R.string.library_show)) }
-            IconButton(onClick = onHide) { Text(stringResource(R.string.library_hide)) }
+            TriStateCheckbox(
+                state = if (allSelected) ToggleableState.On else ToggleableState.Indeterminate,
+                onClick = { if (allSelected) onClose() else onSelectAll() },
+                modifier = Modifier.semantics { contentDescription = selectAll },
+            )
             IconButton(onClick = onDelete) {
                 Icon(Icons.Default.Delete, stringResource(R.string.library_delete))
             }
@@ -255,8 +358,28 @@ private fun TrackRow(
     onToggleVisible: () -> Unit,
     onExport: () -> Unit,
     onRename: () -> Unit,
+    onDelete: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
+    val formatters = LocalFormatters.current
+
+    // Built once per row, not once per composition. Three `String.format` calls each, and
+    // the first use of a localized `DateTimeFormatter` loads its locale data - which is
+    // exactly the kind of work that lands on the frames of an entry animation.
+    val summary = remember(track, formatters) {
+        buildString {
+            append(formatters.distance(track.distanceMeters))
+            if (track.totalSeconds > 0) {
+                append("  ·  ")
+                append(Formatters.duration(track.totalSeconds))
+            }
+            val recorded = track.startedAtEpochMillis ?: track.lastOpenedAtEpochMillis
+            if (recorded > 0) {
+                append("  ·  ")
+                append(Formatters.dateTime(Instant.ofEpochMilli(recorded)))
+            }
+        }
+    }
 
     ListItem(
         colors = if (selected) {
@@ -287,18 +410,7 @@ private fun TrackRow(
         },
         supportingContent = {
             Text(
-                text = buildString {
-                    append(Formatters.distance(track.distanceMeters))
-                    if (track.totalSeconds > 0) {
-                        append("  ·  ")
-                        append(Formatters.duration(track.totalSeconds))
-                    }
-                    val recorded = track.startedAtEpochMillis ?: track.lastOpenedAtEpochMillis
-                    if (recorded > 0) {
-                        append("  ·  ")
-                        append(Formatters.dateTime(Instant.ofEpochMilli(recorded)))
-                    }
-                },
+                text = summary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.bodySmall,
@@ -315,7 +427,13 @@ private fun TrackRow(
                         IconButton(onClick = { menuOpen = true }) {
                             Icon(Icons.Default.MoreVert, stringResource(R.string.library_more))
                         }
-                        DropdownMenu(menuOpen, onDismissRequest = { menuOpen = false }) {
+                        // Only once it is wanted. Composed unconditionally this was a
+                        // transition object and a popup's worth of setup per row, for a
+                        // menu almost none of them will ever show.
+                        if (menuOpen) DropdownMenu(
+                            expanded = true,
+                            onDismissRequest = { menuOpen = false },
+                        ) {
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.library_rename)) },
                                 onClick = {
@@ -328,6 +446,19 @@ private fun TrackRow(
                                 onClick = {
                                     menuOpen = false
                                     onExport()
+                                },
+                            )
+                            HorizontalDivider()
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text = stringResource(R.string.library_delete),
+                                        color = MaterialTheme.colorScheme.error,
+                                    )
+                                },
+                                onClick = {
+                                    menuOpen = false
+                                    onDelete()
                                 },
                             )
                         }

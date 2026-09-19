@@ -13,6 +13,12 @@ class LoadedTrack(
     val displayName: String,
     val track: Track,
     val profile: TrackProfile,
+    /**
+     * The row's slot in the route palette, carried through so a track is the same colour
+     * wherever it is drawn. Without it the detail screen picked its own hue and every
+     * track was blue there while the list and the map agreed on something else.
+     */
+    val colorIndex: Int = 0,
 ) {
     companion object {
         const val TRANSIENT_ID = 0L

@@ -5,11 +5,15 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import dev.samuelq.gpx.data.db.TrackEntity
+import dev.samuelq.gpx.data.record.LiveTrace
 import dev.samuelq.gpx.data.record.RecordingController
-import dev.samuelq.gpx.data.record.RecordingState
 import dev.samuelq.gpx.data.track.LoadedTrack
 import dev.samuelq.gpx.data.track.TrackRepository
 import dev.samuelq.gpx.di.appContainer
+import dev.samuelq.gpx.ui.track.FocusedTrack
+import dev.samuelq.gpx.ui.track.TrackRef
+import dev.samuelq.gpx.ui.track.toTrackMessageRes
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -32,7 +36,18 @@ class MapViewModel(
     private val _state = MutableStateFlow(MapUiState())
     val state: StateFlow<MapUiState> = _state.asStateFlow()
 
-    val recording: StateFlow<RecordingState> = controller.state
+    /**
+     * The in-progress recording's geometry, drawn alongside the saved tracks. The
+     * recorder's *numbers* are not this screen's business - [dev.samuelq.gpx.ui.record.RecordViewModel]
+     * carries those - but its shape is, because it shares the map's projection.
+     */
+    val trace: StateFlow<LiveTrace> = controller.trace
+
+    private val _focused = MutableStateFlow<FocusedTrack>(FocusedTrack.None)
+    val focused: StateFlow<FocusedTrack> = _focused.asStateFlow()
+
+    private var requested: TrackRef? = null
+    private var focusJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -45,6 +60,54 @@ class MapViewModel(
             repository.tracks.collect { all ->
                 _state.value = _state.value.copy(totalCount = all.size)
             }
+        }
+    }
+
+    /**
+     * Shows a track's detail, or clears it with null.
+     *
+     * Idempotent for the track already showing: this is called from a tap on the route,
+     * which can arrive again for the same line, and reloading would blank the sheet the
+     * reader is looking at.
+     */
+    fun focus(ref: TrackRef?) {
+        if (ref == null) {
+            requested = null
+            focusJob?.cancel()
+            _focused.value = FocusedTrack.None
+            return
+        }
+        if (ref == requested && _focused.value !is FocusedTrack.Failed) return
+        requested = ref
+        reload()
+    }
+
+    fun retryFocus() {
+        if (requested != null) reload()
+    }
+
+    private fun reload() {
+        val ref = requested ?: return
+        focusJob?.cancel()
+        _focused.value = FocusedTrack.Loading
+        focusJob = viewModelScope.launch {
+            // A visible track's geometry is already parsed and in hand; going back to the
+            // repository for it would re-read the file to produce what is on screen.
+            val cached = (ref as? TrackRef.Saved)?.let { _state.value.geometry[it.id] }
+            if (cached != null) {
+                _focused.value = FocusedTrack.Ready(cached)
+                repository.touch(cached.id)
+                return@launch
+            }
+
+            val result = when (ref) {
+                is TrackRef.Saved -> repository.open(ref.id)
+                is TrackRef.Transient -> repository.openTransient(ref.uri)
+            }
+            _focused.value = result.fold(
+                onSuccess = FocusedTrack::Ready,
+                onFailure = { FocusedTrack.Failed(it.toTrackMessageRes()) },
+            )
         }
     }
 

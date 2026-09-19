@@ -6,6 +6,7 @@ import androidx.lifecycle.viewmodel.CreationExtras
 import dev.samuelq.gpx.GpxApplication
 import dev.samuelq.gpx.data.db.GpxDatabase
 import dev.samuelq.gpx.data.record.RecordingController
+import dev.samuelq.gpx.data.settings.SettingsRepository
 import dev.samuelq.gpx.data.track.GpxTrackRepository
 import dev.samuelq.gpx.data.track.TrackRepository
 import kotlinx.coroutines.CoroutineScope
@@ -38,6 +39,9 @@ class AppContainer(context: Context) {
      * has to outlive any screen: leaving the app mid-ride is the normal case.
      */
     val recordingController = RecordingController()
+
+    /** Read by the recorder when a recording starts, and by everything that shows a number. */
+    val settingsRepository by lazy { SettingsRepository(appContext) }
 
     /**
      * Rescues a ride whose process died before it was stopped.

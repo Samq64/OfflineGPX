@@ -12,6 +12,7 @@ import dev.samuelq.gpx.core.model.Track
 import dev.samuelq.gpx.data.db.TrackDao
 import dev.samuelq.gpx.data.db.TrackEntity
 import dev.samuelq.gpx.data.db.TrackSource
+import dev.samuelq.gpx.R
 import dev.samuelq.gpx.data.gpx.GpxParseException
 import dev.samuelq.gpx.data.gpx.GpxParser
 import dev.samuelq.gpx.data.gpx.GpxWriter
@@ -43,8 +44,8 @@ class GpxTrackRepository(
 
     /**
      * Single-entry cache: re-entering a track the user just looked at would otherwise
-     * reparse 30k points for a visible stall. One entry, because nothing shows two tracks
-     * at once and an unbounded map would hold every track the user opened.
+     * reparse 30k points for a visible stall. One entry, because the sheet shows one track
+     * and an unbounded map would hold every track the user opened.
      */
     @Volatile
     private var cached: Pair<String, LoadedTrack>? = null
@@ -92,7 +93,13 @@ class GpxTrackRepository(
             val insertedId = dao.upsert(entity)
             val id = existingId ?: insertedId
 
-            cached = location to LoadedTrack(id, displayName, loaded.track, loaded.profile)
+            cached = location to LoadedTrack(
+                id = id,
+                displayName = displayName,
+                track = loaded.track,
+                profile = loaded.profile,
+                colorIndex = entity.colorIndex,
+            )
             id
         }.recoverFailure()
     }
@@ -109,7 +116,7 @@ class GpxTrackRepository(
                 }
             }
 
-            val loaded = read(entity.location, entity.displayName, id)
+            val loaded = read(entity.location, entity.displayName, id, entity.colorIndex)
             dao.touch(id, System.currentTimeMillis())
             cached = entity.location to loaded
             loaded
@@ -123,9 +130,17 @@ class GpxTrackRepository(
                 val displayName = recordingFileName(startedAt)
                 val file = File(recordingsDir, displayName)
 
-                file.outputStream().use { writer.write(track, it) }
+                // Named before it is written, so the name is inside the GPX and survives
+                // an export. The filename stays the sortable stamp - that is for the
+                // filesystem, and nobody reads a list of those.
+                val named = if (track.name.isNullOrBlank()) {
+                    track.copy(name = defaultName(profile.stats))
+                } else {
+                    track
+                }
+                file.outputStream().use { writer.write(named, it) }
 
-                val stats = profile.stats
+                val stats = profile.stats.copy(name = named.name)
                 val entity = TrackEntity(
                     source = TrackSource.RECORDED,
                     colorIndex = nextColorIndex(),
@@ -154,6 +169,16 @@ class GpxTrackRepository(
         // happened rather than when the app next opened.
         val track = RecordingWal.recover(log, name = null)
         if (track == null) {
+            log.delete()
+            return@withContext null
+        }
+
+        // The same bar a clean stop applies. A crash must not resurrect a recording that
+        // pressing Stop would have thrown away - the log is the only difference between
+        // the two, and it is not a difference the user made.
+        if (TrackAnalyzer.analyze(track).stats.distanceMeters <
+            RecordingService.MIN_SAVEABLE_DISTANCE_METERS
+        ) {
             log.delete()
             return@withContext null
         }
@@ -193,7 +218,7 @@ class GpxTrackRepository(
         runCatching {
             val entity = dao.byId(id)
                 ?: throw TrackLoadException.Unreadable("No track with id $id")
-            read(entity.location, entity.displayName, id)
+            read(entity.location, entity.displayName, id, entity.colorIndex)
         }.recoverFailure()
     }
 
@@ -251,16 +276,55 @@ class GpxTrackRepository(
         all.forEach(::releaseOrDelete)
     }
 
+    /**
+     * What a recording is called before anyone renames it.
+     *
+     * "2026-09-19T110233.gpx" is a filename, not a name - it sorts, and that is all it
+     * does for a reader scanning a list. The time of day is what people actually reach for
+     * ("the ride on Sunday morning"), and the row underneath already carries the date, the
+     * distance and the duration, so the headline does not have to repeat any of them.
+     *
+     * Walk or ride is inferred from average moving speed. The two are far enough apart -
+     * hiking is 3-6 km/h and cycling 15-30 - that a threshold between them is safe, and a
+     * wrong guess costs one rename.
+     */
+    private fun defaultName(stats: dev.samuelq.gpx.core.analysis.TrackStats): String {
+        val zoned = (stats.startedAt ?: Instant.now()).atZone(ZoneId.systemDefault())
+        val activity = if (stats.averageSpeedMps < WALKING_SPEED_CEILING_MPS) {
+            R.string.track_default_walk
+        } else {
+            R.string.track_default_ride
+        }
+        val partOfDay = when (zoned.hour) {
+            in 5..11 -> R.string.track_default_morning
+            in 12..16 -> R.string.track_default_afternoon
+            in 17..20 -> R.string.track_default_evening
+            else -> R.string.track_default_night
+        }
+        return appContext.getString(partOfDay, appContext.getString(activity))
+    }
+
     /** Round-robin over the palette, so a handful of tracks rarely collide on a hue. */
     private suspend fun nextColorIndex(): Int = dao.count() % ROUTE_PALETTE_SIZE
 
     /** Reads and analyses whatever [location] points at, SAF URI or app-private path. */
-    private fun read(location: String, displayName: String, id: Long): LoadedTrack {
+    private fun read(
+        location: String,
+        displayName: String,
+        id: Long,
+        colorIndex: Int = 0,
+    ): LoadedTrack {
         val track: Track = openStream(location).use(parser::parse)
         if (track.isEmpty) throw TrackLoadException.Empty("No track points in $displayName")
 
         val profile: TrackProfile = TrackAnalyzer.analyze(track)
-        return LoadedTrack(id = id, displayName = displayName, track = track, profile = profile)
+        return LoadedTrack(
+            id = id,
+            displayName = displayName,
+            track = track,
+            profile = profile,
+            colorIndex = colorIndex,
+        )
     }
 
     private fun openStream(location: String) =
@@ -327,6 +391,9 @@ class GpxTrackRepository(
 
         /** Matches `routePalette()` in the theme. Six, then hues repeat. */
         const val ROUTE_PALETTE_SIZE = 6
+
+        /** 9 km/h. Above a brisk walk, well below a bicycle. */
+        const val WALKING_SPEED_CEILING_MPS = 2.5
 
         /** Sortable, unambiguous, and legible as a filename once exported. */
         private val FILE_STAMP: DateTimeFormatter =

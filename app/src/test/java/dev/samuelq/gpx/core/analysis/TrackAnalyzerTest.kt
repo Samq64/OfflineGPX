@@ -162,4 +162,108 @@ class TrackAnalyzerTest {
         assertTrue(profile.elevationMeters[5].isNaN())
         assertFalse(profile.elevationMeters[4].isNaN())
     }
+
+    /**
+     * A ride, a dismounted break the file records only as a long interval, then a ride.
+     *
+     * The break is not a `<trkseg>` boundary - almost none of them are - so without gap
+     * detection the chart draws a straight line from the speed going in to the speed
+     * coming out, and the whole stop reads as riding pace.
+     */
+    private fun rideWithGap(gapSeconds: Long): Track {
+        val step = 5.0 / metersPerDegreeLatitude
+        val points = buildList {
+            repeat(60) { i ->
+                add(TrackPoint(latitude = i * step, longitude = 8.0, time = start.plusSeconds(i.toLong())))
+            }
+            // Resumes a few metres further on, after a long silence.
+            repeat(60) { i ->
+                add(
+                    TrackPoint(
+                        latitude = (60 + i) * step,
+                        longitude = 8.0,
+                        time = start.plusSeconds(59 + gapSeconds + i),
+                    )
+                )
+            }
+        }
+        return Track(name = "gap", description = null, segments = listOf(TrackSegment(points)))
+    }
+
+    @Test
+    fun `a long gap becomes a break in the track`() {
+        val profile = TrackAnalyzer.analyze(rideWithGap(gapSeconds = 600))
+
+        // The file declared one segment; the analyzer finds two.
+        assertEquals(listOf(0, 60), profile.segmentStartIndices.toList())
+    }
+
+    @Test
+    fun `a break is not counted as moving time`() {
+        val profile = TrackAnalyzer.analyze(rideWithGap(gapSeconds = 600))
+
+        // 118 seconds of riding either side, and none of the 600 in between.
+        assertTrue(
+            profile.stats.movingDurationSeconds < 130.0,
+            "moving time was ${profile.stats.movingDurationSeconds}, expected about 118",
+        )
+        // Total duration is wall clock and still includes it.
+        assertTrue(profile.stats.totalDurationSeconds > 700.0)
+    }
+
+    @Test
+    fun `speed is not carried across a break`() {
+        val profile = TrackAnalyzer.analyze(rideWithGap(gapSeconds = 600))
+
+        // The last sample before the gap has nothing after it to difference against, so
+        // its window is one-sided - but it must not be measured against the far side.
+        val lastBefore = profile.speedMps[59]
+        val firstAfter = profile.speedMps[60]
+        assertTrue(lastBefore.isFinite() && firstAfter.isFinite())
+
+        // Distance does not accumulate across the break: what happened in it is unknown.
+        val jump = profile.distanceMeters[60] - profile.distanceMeters[59]
+        assertEquals(0f, jump, 0.001f)
+    }
+
+    @Test
+    fun `an ordinary sample interval is not a break`() {
+        // Every interval identical: there is no gap here to find.
+        val profile = TrackAnalyzer.analyze(straightRun(count = 120, metersPerSecond = 5.0))
+        assertEquals(listOf(0), profile.segmentStartIndices.toList())
+    }
+
+    /**
+     * A route exported with one point a minute is not a track full of breaks. The rule is
+     * "unusual for this file", not "longer than half a minute".
+     */
+    @Test
+    fun `a sparsely sampled file is left alone`() {
+        val profile = TrackAnalyzer.analyze(
+            straightRun(count = 30, metersPerSecond = 8.0, secondsBetween = 60)
+        )
+        assertEquals(listOf(0), profile.segmentStartIndices.toList())
+    }
+
+    @Test
+    fun `the gap threshold decides what counts as a stop`() {
+        val track = rideWithGap(gapSeconds = 45)
+
+        // 45s clears the default 30s floor and ten times the 1s median, so it is a break.
+        assertEquals(listOf(0, 60), TrackAnalyzer.analyze(track).segmentStartIndices.toList())
+
+        // Told to expect longer stops, the same file is one continuous ride again.
+        assertEquals(
+            listOf(0),
+            TrackAnalyzer.analyze(track, minGapSeconds = 120.0).segmentStartIndices.toList(),
+        )
+    }
+
+    /** The median rule still applies underneath: it is a floor, not an override. */
+    @Test
+    fun `lowering the threshold cannot cut a sparse file into confetti`() {
+        val sparse = straightRun(count = 30, metersPerSecond = 8.0, secondsBetween = 60)
+        val profile = TrackAnalyzer.analyze(sparse, minGapSeconds = 10.0)
+        assertEquals(listOf(0), profile.segmentStartIndices.toList())
+    }
 }

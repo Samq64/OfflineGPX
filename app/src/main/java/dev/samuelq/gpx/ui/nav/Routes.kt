@@ -9,9 +9,13 @@ import kotlinx.serialization.Serializable
  * arguments, so nothing here is ever concatenated into a path string. That is what the
  * hand-rolled back stack got wrong - it encoded destinations space-separated, which a URI
  * containing a literal space silently decoded as the wrong screen after process death.
+ *
+ * A track is not among them. It used to be, which made looking at one a place you travelled
+ * to and came back from; it is a selection on the map now, and selections do not belong on
+ * a back stack.
  */
 
-/** Home. Every track the user has chosen to show, overlaid. */
+/** Home. Every track the user has chosen to show, overlaid, plus whichever one is open. */
 @Serializable
 data object MapRoute
 
@@ -19,20 +23,6 @@ data object MapRoute
 @Serializable
 data object LibraryRoute
 
-/** One track in detail, addressed by its `tracks` row - never by URI. */
+/** Units, and the three thresholds that decide what the recorder believes. */
 @Serializable
-data class TrackRoute(val id: Long)
-
-/**
- * A track handed over by a VIEW or SEND intent, which is not in the library.
- *
- * The URI rides in the route because there is no row to point at yet. It is safe here in
- * a way it was not before: the value is carried as a typed argument, not spliced into a
- * route string.
- */
-@Serializable
-data class TransientTrackRoute(val uri: String)
-
-/** The live recorder. */
-@Serializable
-data object RecordRoute
+data object SettingsRoute

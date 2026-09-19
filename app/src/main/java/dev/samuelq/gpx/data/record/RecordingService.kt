@@ -10,14 +10,19 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import androidx.annotation.StringRes
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.getSystemService
 import dev.samuelq.gpx.MainActivity
 import dev.samuelq.gpx.R
+import dev.samuelq.gpx.core.analysis.Fix
+import dev.samuelq.gpx.core.analysis.FixFilter
+import dev.samuelq.gpx.core.analysis.SpeedWindow
 import dev.samuelq.gpx.core.analysis.TrackAnalyzer
 import dev.samuelq.gpx.core.analysis.haversineMeters
 import dev.samuelq.gpx.core.model.TrackPoint
+import dev.samuelq.gpx.data.settings.Settings
 import dev.samuelq.gpx.GpxApplication
 import dev.samuelq.gpx.ui.format.Formatters
 import kotlinx.coroutines.CoroutineScope
@@ -53,6 +58,29 @@ class RecordingService : Service() {
     private var movingSeconds = 0.0
     private var lastPoint: TrackPoint? = null
     private var currentSpeedMps: Double? = null
+    private var lastFixAt: Instant? = null
+    private var lastAccuracyMeters: Double? = null
+
+    /**
+     * What counts as having moved, and how fast. Both live for one recording, and the
+     * filter is built from the settings as they stood when that recording started -
+     * changing a threshold mid-ride would make the first half and the second half of one
+     * track mean different things.
+     */
+    private var filter = FixFilter()
+    private val speedWindow = SpeedWindow()
+
+    /** Fixed for the run, for the same reason, and shown so the UI can explain a refusal. */
+    private var accuracyLimitMeters = Settings.Defaults.maxAccuracyMeters
+
+    /**
+     * The route so far, kept in memory purely so the map can draw it live. The WAL is
+     * still the record of truth; this is a copy that dies with the service.
+     */
+    private val tracePoints = mutableListOf<TrackPoint>()
+    private val traceSegmentStarts = mutableListOf<Int>()
+    private var traceStartsSegment = true
+    private var tracePublishedAt = 0
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -79,60 +107,164 @@ class RecordingService : Service() {
         distanceMeters = 0.0
         movingSeconds = 0.0
         lastPoint = null
+        currentSpeedMps = null
+        lastFixAt = null
+        lastAccuracyMeters = null
+
+        val settings = container.settingsRepository.settings.value
+        accuracyLimitMeters = settings.maxAccuracyMeters
+        filter = FixFilter(
+            maxAccuracyMeters = settings.maxAccuracyMeters,
+            minDisplacementMeters = settings.minDisplacementMeters,
+        )
+        speedWindow.reset()
+        tracePoints.clear()
+        traceSegmentStarts.clear()
+        traceStartsSegment = true
+        tracePublishedAt = 0
+
+        // Before anything else: the caller reached us through startForegroundService, so
+        // the notification has to go up within seconds whatever happens next - including
+        // the refusal below.
+        startForegroundNotification()
+
+        val source = LocationSource(this)
+        // The one failure the old code let pass in silence. Location off system-wide means
+        // requestLocationUpdates succeeds and then never calls back, which looks exactly
+        // like a recording that is waiting for a fix and never gets one.
+        if (!source.isGpsEnabled) {
+            abandon(R.string.record_location_off)
+            return
+        }
 
         val file = File(recordingsDir(this), WAL_NAME)
         wal = RecordingWal.open(file)
 
-        startForegroundNotification()
         publish()
+        collectFixes(source)
+    }
 
-        val source = LocationSource(this)
-        collection = source.fixes()
+    private fun collectFixes(source: LocationSource) {
+        collection = source
+            .fixes(onUnavailable = ::onLocationUnavailable)
             .onEach(::onFix)
             .launchIn(scope)
     }
 
-    private fun onFix(point: TrackPoint) {
+    /** Give up before a recording exists: say why, drop the notification, go away. */
+    private fun abandon(@StringRes messageRes: Int) {
+        container.recordingController.emit(RecordingEvent.Failed(messageRes))
+        container.recordingController.update(RecordingState.Idle)
+        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+        stopSelf()
+    }
+
+    /**
+     * Location switched off mid-ride. The recording stays up - the points already logged
+     * are real, and the provider often comes back - but the user is told, because from the
+     * outside this is indistinguishable from standing still.
+     */
+    private fun onLocationUnavailable() {
+        container.recordingController.emit(RecordingEvent.Failed(R.string.record_location_lost))
+    }
+
+    /**
+     * One reading. Two separate questions: is this a position, and how long has it been?
+     *
+     * They used to be the same question, which is why a phone on a table recorded a ride -
+     * every wander inside the error circle was committed as travel. Only [FixFilter] now
+     * decides what is travel; time, speed and the moving clock advance on every reading,
+     * believed or not, because a second passed either way. A reading that did not move
+     * still comes back as a point - the last position, stamped now - so a stop is written
+     * into the file as a stop rather than left as a hole for the analyser to infer.
+     */
+    private fun onFix(fix: Fix) {
         if (paused) return
 
-        val previous = lastPoint
-        if (previous != null) {
-            val meters = haversineMeters(previous, point)
-            val seconds = secondsBetween(previous, point)
-            distanceMeters += meters
-            if (seconds > 0) {
-                currentSpeedMps = meters / seconds
-                // The analyzer's own threshold, so the live number and the one on the
-                // track screen afterwards cannot disagree.
-                if (meters / seconds >= TrackAnalyzer.MOVING_SPEED_THRESHOLD_MPS) {
-                    movingSeconds += seconds
-                }
+        val at = fix.point.time ?: return
+        val seconds = lastFixAt?.let { (at.toEpochMilli() - it.toEpochMilli()) / 1000.0 } ?: 0.0
+        lastFixAt = at
+        lastAccuracyMeters = fix.accuracyMeters
+
+        filter.pointFor(fix)?.let { point ->
+            lastPoint?.let { distanceMeters += haversineMeters(it, point) }
+            lastPoint = point
+            pointCount++
+            wal?.append(point)
+
+            if (traceStartsSegment) {
+                traceSegmentStarts += tracePoints.size
+                traceStartsSegment = false
             }
+            tracePoints += point
+            if (tracePoints.size - tracePublishedAt >= TRACE_PUBLISH_EVERY) publishTrace()
         }
 
-        lastPoint = point
-        pointCount++
-        wal?.append(point)
+        speedWindow.add(at.toEpochMilli() / 1000.0, distanceMeters)
+        currentSpeedMps = speedWindow.speedMps
+
+        // The analyzer's own threshold against the analyzer's own window, so the live
+        // moving time and the one on the sheet afterwards cannot disagree.
+        if (seconds > 0.0 && (currentSpeedMps ?: 0.0) >= TrackAnalyzer.MOVING_SPEED_THRESHOLD_MPS) {
+            movingSeconds += seconds
+        }
 
         publish()
         updateNotification()
     }
 
+    /**
+     * What pause is actually for, now that a stop detects itself.
+     *
+     * [FixFilter] already drops a stationary phone's wander, so a dismounted break leaves
+     * a silence in the log that the analyser splits on without being told. Pause is not
+     * needed for that any more, and it used to do nothing else: the receiver stayed on at
+     * 1 Hz and every fix was thrown away, which is the worst of both outcomes - you lose
+     * the data *and* the battery.
+     *
+     * So it stops sampling outright. That is the thing auto-detection cannot do: a long
+     * stop with the GPS off is the difference between a lunch that costs nothing and one
+     * that costs an hour of receiver. It also writes a real segment break, which is the
+     * other thing an inferred gap is not - a `<trkseg>` boundary travels with the file to
+     * whatever reads it next, where our rule about medians does not.
+     */
     private fun pause() {
         if (paused) return
         paused = true
+
+        collection?.cancel()
+        collection = null
+
         // A pause is a gap in the track, not a straight line across it. Mark it now so
         // the recovered file shows the break even if the app dies while paused.
         wal?.appendBreak()
+        traceStartsSegment = true
         lastPoint = null
         currentSpeedMps = null
+        lastFixAt = null
+        // Resuming somewhere else must not read as having travelled there: the next fix
+        // starts a new run with nothing to measure against.
+        filter.reset()
+        speedWindow.reset()
+        publishTrace()
         publish()
         updateNotification()
     }
 
     private fun resume() {
         if (!paused) return
+
+        val source = LocationSource(this)
+        // Location can be switched off during a long pause - it is a quick-settings
+        // toggle and a paused recording is exactly when someone would reach for it.
+        // Staying paused and saying so beats resuming into silence.
+        if (!source.isGpsEnabled) {
+            container.recordingController.emit(RecordingEvent.Failed(R.string.record_location_off))
+            return
+        }
+
         paused = false
+        collectFixes(source)
         publish()
         updateNotification()
     }
@@ -153,9 +285,22 @@ class RecordingService : Service() {
                     log?.close()
                     val file = log?.file
                     val track = file?.let { RecordingWal.recover(it, name = null) }
-                    if (track == null) {
+                    // Nothing in the log at all, or fixes that never went anywhere. A
+                    // library row for either is a track with no route, no speed and no
+                    // profile - three empty charts and a name. Both are far more likely
+                    // since the fix filter arrived, and neither is the user's decision,
+                    // so neither is called "discarded".
+                    if (track == null || distanceMeters < MIN_SAVEABLE_DISTANCE_METERS) {
                         file?.delete()
-                        container.recordingController.emit(RecordingEvent.Discarded)
+                        container.recordingController.emit(
+                            RecordingEvent.Failed(
+                                if (track == null) {
+                                    R.string.record_nothing_recorded
+                                } else {
+                                    R.string.record_no_distance
+                                }
+                            )
+                        )
                     } else {
                         val id = container.trackRepository.saveRecording(track, startedAt)
                         id.fold(
@@ -167,7 +312,7 @@ class RecordingService : Service() {
                                 // Keep the log. A failed save that also deleted the ride
                                 // would be the worst outcome this class exists to prevent.
                                 container.recordingController.emit(
-                                    RecordingEvent.Failed(it.message ?: "Could not save")
+                                    RecordingEvent.Failed(R.string.record_save_failed)
                                 )
                             },
                         )
@@ -175,10 +320,25 @@ class RecordingService : Service() {
                 }
             } finally {
                 container.recordingController.update(RecordingState.Idle)
+                container.recordingController.updateTrace(LiveTrace.Empty)
                 ServiceCompat.stopForeground(this@RecordingService, ServiceCompat.STOP_FOREGROUND_REMOVE)
                 stopSelf()
             }
         }
+    }
+
+    /**
+     * Hands the map a snapshot of the route so far.
+     *
+     * Throttled, unlike [publish]: every published trace re-projects every route the map
+     * is drawing, and once a second for hours is a lot of work to show a line growing by
+     * a pixel.
+     */
+    private fun publishTrace() {
+        tracePublishedAt = tracePoints.size
+        container.recordingController.updateTrace(
+            LiveTrace(tracePoints.toList(), traceSegmentStarts.toIntArray())
+        )
     }
 
     private fun publish() {
@@ -191,6 +351,8 @@ class RecordingService : Service() {
                 movingSeconds = movingSeconds,
                 lastPoint = lastPoint,
                 currentSpeedMps = currentSpeedMps,
+                accuracyMeters = lastAccuracyMeters,
+                accuracyLimitMeters = accuracyLimitMeters,
             )
         )
     }
@@ -229,7 +391,15 @@ class RecordingService : Service() {
             .setSmallIcon(R.drawable.ic_launcher_monochrome)
             .setContentTitle(title)
             .setContentText(
-                "${Formatters.distance(distanceMeters)}  ·  ${Formatters.duration(movingSeconds)}"
+                // Read per notification rather than cached: the units are a display
+                // preference, and a notification still on screen from before the switch
+                // should catch up with the rest of the app on its next tick.
+                buildString {
+                    val formatters = Formatters(container.settingsRepository.settings.value.units)
+                    append(formatters.distance(distanceMeters))
+                    append("  ·  ")
+                    append(Formatters.duration(movingSeconds))
+                }
             )
             .setContentIntent(open)
             .setOngoing(true)
@@ -283,6 +453,19 @@ class RecordingService : Service() {
         private const val CHANNEL_ID = "recording"
         private const val NOTIFICATION_ID = 1
 
+        /** Fixes between live-trace snapshots. At 1 Hz, the map's line grows every 5s. */
+        private const val TRACE_PUBLISH_EVERY = 5
+
+        /**
+         * Below this a recording is not a track.
+         *
+         * Not zero, because a handful of accepted fixes that happened to clear the
+         * displacement floor is the same nothing as none at all - a few metres of line
+         * and three empty charts. Shared with the crash-recovery path, which must not
+         * resurrect what a clean stop would have thrown away.
+         */
+        const val MIN_SAVEABLE_DISTANCE_METERS = 10.0
+
         /** The in-progress log. Fixed name: there is only ever one recording. */
         const val WAL_NAME = "recording.wal"
 
@@ -297,12 +480,6 @@ class RecordingService : Service() {
             } else {
                 context.startService(intent)
             }
-        }
-
-        private fun secondsBetween(from: TrackPoint, to: TrackPoint): Double {
-            val a = from.time ?: return 0.0
-            val b = to.time ?: return 0.0
-            return (b.toEpochMilli() - a.toEpochMilli()) / 1000.0
         }
     }
 }

@@ -1,6 +1,7 @@
 package dev.samuelq.gpx.ui.library
 
 import android.net.Uri
+import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
@@ -26,10 +27,25 @@ sealed interface LibraryEvent {
     data object RenameFailed : LibraryEvent
 }
 
+/**
+ * `@Stable` so the lambdas a row captures can be memoised by the compiler. The one mutable
+ * property here, [exporting], is never read during composition - it is handed to the
+ * document picker and read back when it returns - so nothing in the UI can go stale.
+ */
+@Stable
 class LibraryViewModel(private val repository: TrackRepository) : ViewModel() {
 
-    val tracks: StateFlow<List<TrackEntity>> = repository.tracks
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    /**
+     * Null until the first query comes back, which is not the same as empty.
+     *
+     * Starting at `emptyList()` meant the screen rendered "No tracks yet" for the first
+     * frames of its own entry animation and then replaced it with the list - a full
+     * content swap mid-slide, which reads as the animation stuttering rather than as data
+     * arriving. `WhileSubscribed` keeps this warm for five seconds, so only the first open
+     * ever sees the null.
+     */
+    val tracks: StateFlow<List<TrackEntity>?> = repository.tracks
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     /** Ids ticked for a batch action. Empty means the list is in its normal mode. */
     private val _selection = MutableStateFlow<Set<Long>>(emptySet())
