@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.AP
 import androidx.lifecycle.viewmodel.CreationExtras
 import dev.samuelq.gpx.GpxApplication
 import dev.samuelq.gpx.data.db.GpxDatabase
+import dev.samuelq.gpx.data.map.MapStore
 import dev.samuelq.gpx.data.record.RecordingController
 import dev.samuelq.gpx.data.settings.SettingsRepository
 import dev.samuelq.gpx.data.track.GpxTrackRepository
@@ -44,6 +45,12 @@ class AppContainer(context: Context) {
     val settingsRepository by lazy { SettingsRepository(appContext) }
 
     /**
+     * The offline basemaps on this device. Shared rather than per-screen: settings manages
+     * them and the map draws with them, and the two have to agree on which one is active.
+     */
+    val mapStore by lazy { MapStore(appContext, settingsRepository) }
+
+    /**
      * Rescues a ride whose process died before it was stopped.
      *
      * Runs once per launch, off the main thread. The write-ahead log is only worth writing
@@ -52,6 +59,17 @@ class AppContainer(context: Context) {
      */
     fun recoverAbandonedRecording() {
         applicationScope.launch { trackRepository.recoverAbandonedRecording() }
+    }
+
+    /**
+     * Reads the maps directory once at launch, off the main thread.
+     *
+     * Eager because the map screen is the first thing shown and its basemap comes from
+     * here: doing it lazily would mean a frame of routes on an empty background before the
+     * tiles appear, every launch.
+     */
+    fun loadOfflineMaps() {
+        applicationScope.launch { mapStore.refresh() }
     }
 }
 

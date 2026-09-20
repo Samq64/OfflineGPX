@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">GPX Viewer</string>
+    <string name="app_name">Offline GPX</string>
 
     <string name="action_back">Back</string>
     <string name="action_retry">Try again</string>
@@ -8,7 +8,9 @@
     <string name="action_save">Save</string>
 
     <string name="map_open_list">Tracks</string>
-    <string name="map_description">Routes. Tap one to open it. Drag to move, pinch to zoom; pinch all the way out to see everything.</string>
+    <string name="map_description">Map showing your routes. Tap a route to open it. Drag to move, pinch to zoom.</string>
+    <string name="map_attribution">Map data © OpenStreetMap contributors</string>
+    <string name="map_attribution_show">Map data attribution</string>
     <string name="map_empty_title">Nothing to show</string>
     <string name="map_empty_body">Record a ride or a walk, or open a .gpx file from the track list.</string>
     <string name="map_empty_hidden">Every track is hidden. Show one from the track list.</string>
@@ -35,6 +37,26 @@
 
     <string name="settings_recording_applies_next">Both are read when a recording starts, so changing them won\'t affect one already running.</string>
     <string name="settings_reset">Reset to defaults</string>
+
+    <string name="settings_section_maps">Offline maps</string>
+    <string name="settings_maps_explanation">This app has no internet access, so maps can\'t be downloaded here. Get a .pmtiles file on another device and open it below. Everything works without one — routes are simply drawn on a plain background.</string>
+    <string name="settings_maps_import">Open map file</string>
+    <string name="settings_maps_where">Where to get maps</string>
+    <string name="settings_maps_none">No maps imported.</string>
+    <string name="settings_maps_delete">Delete map</string>
+    <string name="settings_maps_blocked">Overlaps “%1$s”</string>
+    <string name="settings_maps_failed_overlap">Maps can\'t overlap. Hide the other one first.</string>
+    <!-- Size, then how far it zooms. "2.4 MB · to zoom 15" -->
+    <string name="settings_maps_detail">%1$s · %2$s</string>
+    <string name="settings_maps_zoom_to">to zoom %1$d</string>
+    <string name="settings_maps_raster">image tiles</string>
+    <string name="settings_maps_importing">Copying map…</string>
+    <string name="settings_maps_imported">Map added.</string>
+    <string name="settings_maps_deleted">Map deleted.</string>
+    <string name="settings_maps_failed_unreadable">That file couldn\'t be read.</string>
+    <string name="settings_maps_failed_format">That isn\'t a PMTiles map file.</string>
+    <string name="settings_maps_failed_space">Not enough free space for that map.</string>
+    <string name="settings_maps_no_browser">No app on this device can open a web page.</string>
 
     <string name="library_title">Tracks</string>
     <string name="library_import">Open GPX file</string>

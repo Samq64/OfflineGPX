@@ -29,6 +29,12 @@ serialization = "1.11.0"
 
 kxml2 = "2.3.0"
 
+# MapLibre Native. Its own manifest declares INTERNET, ACCESS_NETWORK_STATE,
+# ACCESS_WIFI_STATE and both location permissions; the app manifest strips the three
+# network ones and a build-time check fails the build if any of them ever comes back.
+# See the `no-network` task in app/build.gradle.kts.
+maplibre = "13.6.1"
+
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
@@ -54,6 +60,8 @@ androidx-room-compiler = { group = "androidx.room", name = "room-compiler", vers
 # Type-safe routes are @Serializable classes, so navigation needs the runtime too.
 androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigation" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "serialization" }
+
+maplibre-android = { group = "org.maplibre.gl", name = "android-sdk", version.ref = "maplibre" }
 
 kotlin-test-junit = { group = "org.jetbrains.kotlin", name = "kotlin-test-junit", version.ref = "kotlin" }
 # Test-only: a real XmlPullParser so GpxParser is testable on the JVM without

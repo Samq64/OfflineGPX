@@ -11,7 +11,6 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -49,22 +48,20 @@ import androidx.compose.material3.rememberStandardBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -81,15 +78,8 @@ import dev.samuelq.gpx.ui.record.RecordingBar
 import dev.samuelq.gpx.ui.theme.routePalette
 import dev.samuelq.gpx.ui.track.DeleteTrackDialog
 import dev.samuelq.gpx.ui.track.FocusedTrack
-import dev.samuelq.gpx.ui.track.GeoBounds
-import dev.samuelq.gpx.ui.track.MapCamera
-import dev.samuelq.gpx.ui.track.RouteCanvas
-import dev.samuelq.gpx.ui.track.RouteExtent
-import dev.samuelq.gpx.ui.track.RouteLayer
 import dev.samuelq.gpx.ui.track.TrackActions
 import dev.samuelq.gpx.ui.track.TrackRef
-import dev.samuelq.gpx.ui.track.followingCamera
-import dev.samuelq.gpx.ui.track.routeExtentOf
 import dev.samuelq.gpx.ui.track.TrackNameDialog
 import dev.samuelq.gpx.ui.track.TrackSheet
 import dev.samuelq.gpx.ui.track.TrackSheetError
@@ -97,7 +87,6 @@ import dev.samuelq.gpx.ui.track.TrackSheetLoading
 import dev.samuelq.gpx.ui.track.TrackSheetPeekHeight
 import dev.samuelq.gpx.ui.track.editableTrackName
 import dev.samuelq.gpx.ui.track.exportFileName
-import dev.samuelq.gpx.ui.track.routePathOf
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
@@ -130,6 +119,9 @@ fun MapScreen(
     val trace by viewModel.trace.collectAsStateWithLifecycle()
     val focused by viewModel.focused.collectAsStateWithLifecycle()
     val recording by recorder.state.collectAsStateWithLifecycle()
+    // Empty until someone imports one, which is how the app ships. Settings is the only
+    // place maps are managed, and nothing here ever goes looking for one.
+    val basemaps by viewModel.basemaps.collectAsStateWithLifecycle()
 
     val palette = routePalette()
     val liveColor = MaterialTheme.colorScheme.error
@@ -145,6 +137,8 @@ fun MapScreen(
     // above in its title and in nothing else.
     var renamingId by remember { mutableStateOf<Long?>(null) }
     var deletingId by remember { mutableStateOf<Long?>(null) }
+    // Metres to a screen pixel, republished by the map as the camera moves.
+    var metersPerPixel by remember { mutableDoubleStateOf(0.0) }
 
     // CreateDocument rather than a share sheet: the destination is picked through SAF, so
     // the file lands where the user chose and the app needs no storage permission.
@@ -152,12 +146,12 @@ fun MapScreen(
         ActivityResultContracts.CreateDocument("application/gpx+xml")
     ) { destination -> viewModel.finishExport(destination?.toString()) }
 
-    // Fitted at a cold start, which is how every track ends up on screen without anything
-    // having to aim at them - the fit *is* the identity camera. Nothing moves it afterwards
-    // except the reader's fingers and the scrubber; selecting a track no longer flies to
-    // it, because a map that rearranges itself when you tap something is a map you have to
+    // The camera belongs to MapLibre now - pinch, fling, the pan clamp and the projection
+    // were all this file's problem and are none of its business any more. What is kept is
+    // the policy: frame everything once at a cold start, and never move on a selection,
+    // because a map that rearranges itself when you tap something is a map you have to
     // re-read rather than one you were already looking at.
-    var camera by remember { mutableStateOf(MapCamera.Fitted) }
+    //
     // Distance by default. On a time axis every stop is a hole as wide as the stop was,
     // which on a ride with a long lunch is most of the chart; on a distance axis a stop
     // takes no width at all, because no distance passed during it. Time is one tap away
@@ -327,7 +321,9 @@ fun MapScreen(
 
     // --- What the canvas draws, and how much room it has ---------------------------
 
-    val layers = remember(state.entities, state.geometry, trace, focusedTrack, palette, liveColor) {
+    // Positions, not shapes. There is no shared projection to normalise into any more -
+    // the map has one, it is Web Mercator, and it agrees with the tiles underneath.
+    val overlays = remember(state.entities, state.geometry, trace, focusedTrack, palette, liveColor) {
         val drawable = state.entities.mapNotNull { entity ->
             state.geometry[entity.id]?.let { entity to it }
         }
@@ -335,30 +331,39 @@ fun MapScreen(
         // line would be a readout for something that is not on screen.
         val unlisted = focusedTrack?.takeIf { focus -> drawable.none { it.first.id == focus.id } }
 
-        val bounds = GeoBounds.union(
-            drawable.mapNotNull { (_, track) -> GeoBounds.of(track.profile.points) } +
-                listOfNotNull(unlisted?.let { GeoBounds.of(it.profile.points) }) +
-                listOfNotNull(GeoBounds.of(trace.points))
-        ) ?: return@remember emptyList()
-
         buildList {
             drawable.forEach { (entity, track) ->
-                routePathOf(track.profile.points, track.profile.segmentStartIndices, bounds)
-                    ?.let {
-                        // Colour comes from the track, never its position: a hue that
-                        // changed when you tapped something would be worse than any
-                        // stacking order.
-                        add(RouteLayer(entity.id, it, palette[entity.colorIndex % palette.size]))
-                    }
+                // Colour comes from the track, never its position: a hue that changed when
+                // you tapped something would be worse than any stacking order.
+                add(
+                    RouteOverlay(
+                        trackId = entity.id,
+                        points = track.profile.points,
+                        segmentStartIndices = track.profile.segmentStartIndices,
+                        color = palette[entity.colorIndex % palette.size],
+                    )
+                )
             }
             unlisted?.let { track ->
-                routePathOf(track.profile.points, track.profile.segmentStartIndices, bounds)
-                    ?.let {
-                        add(RouteLayer(track.id, it, palette[track.colorIndex % palette.size]))
-                    }
+                add(
+                    RouteOverlay(
+                        trackId = track.id,
+                        points = track.profile.points,
+                        segmentStartIndices = track.profile.segmentStartIndices,
+                        color = palette[track.colorIndex % palette.size],
+                    )
+                )
             }
-            routePathOf(trace.points, trace.segmentStartIndices, bounds)
-                ?.let { add(RouteLayer(LIVE_TRACK_ID, it, liveColor)) }
+            if (trace.points.isNotEmpty()) {
+                add(
+                    RouteOverlay(
+                        trackId = LIVE_TRACK_ID,
+                        points = trace.points,
+                        segmentStartIndices = trace.segmentStartIndices,
+                        color = liveColor,
+                    )
+                )
+            }
         }
     }
 
@@ -492,65 +497,68 @@ fun MapScreen(
         // of the map: the map runs to the bottom edge and the sheet floats over it, which
         // is both what a map should look like and the only way the sheet can be gone
         // entirely without leaving a strip of nothing behind.
-        //
-        // BoxWithConstraints because framing a selected track needs the viewport, and this
-        // is the only place in the composition that knows it.
-        BoxWithConstraints(
-            Modifier.fillMaxSize().padding(top = padding.calculateTopPadding())
-        ) {
-            val viewport = Size(constraints.maxWidth.toFloat(), constraints.maxHeight.toFloat())
+        Box(Modifier.fillMaxSize().padding(top = padding.calculateTopPadding())) {
 
-            FollowScrubbedPoint(
-                trackId = focusedTrack?.id,
+            // Always composed, even with nothing to draw. The basemap is worth looking at
+            // on its own - someone who has imported one and not yet recorded anything
+            // should see where they are, not an empty state telling them the app is empty.
+            OfflineMapCanvas(
+                routes = overlays,
+                basemaps = basemaps,
+                contentDescription = stringResource(R.string.map_description),
+                focusedTrackId = focusedTrack?.id,
                 selectedIndex = selectedIndex,
-                layers = layers,
-                extent = remember(layers) { routeExtentOf(layers) },
-                viewport = viewport,
+                markerColor = focusedTrack
+                    ?.let { palette[it.colorIndex % palette.size] }
+                    ?: MaterialTheme.colorScheme.primary,
+                markerRingColor = MaterialTheme.colorScheme.surface,
+                puckTrackId = LIVE_TRACK_ID.takeIf { recording is RecordingState.Active },
+                puckColor = liveColor,
+                onSelect = { trackId, index ->
+                    when (trackId) {
+                        // The recording has no row to open and no numbers to scrub.
+                        LIVE_TRACK_ID -> Unit
+                        // A tap on the route already showing moves its marker; a tap
+                        // on any other line is a request to look at that one instead.
+                        focusedTrack?.id -> selectedIndex = index
+                        else -> viewModel.focus(TrackRef.Saved(trackId))
+                    }
+                },
+                // Tapping the bare map puts it away, which is the gesture people try
+                // first and the only one that does not involve aiming at anything.
+                onSelectNothing = { viewModel.focus(null) },
                 contentPadding = canvasPadding,
-                camera = camera,
-                onCameraChange = { camera = it },
+                backgroundColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+                landColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+                labelColor = MaterialTheme.colorScheme.onSurface,
+                gridColor = MaterialTheme.colorScheme.outlineVariant,
+                onScaleChange = { metersPerPixel = it },
+                modifier = Modifier.fillMaxSize(),
             )
 
             when {
-                layers.isNotEmpty() -> RouteCanvas(
-                    layers = layers,
-                    contentDescription = stringResource(R.string.map_description),
-                    selectedIndex = selectedIndex,
-                    markerLayerId = focusedTrack?.id,
-                    markerColor = focusedTrack
-                        ?.let { palette[it.colorIndex % palette.size] }
-                        ?: MaterialTheme.colorScheme.primary,
-                    markerRingColor = MaterialTheme.colorScheme.surface,
-                    onSelect = { trackId, index ->
-                        when (trackId) {
-                            // The recording has no row to open and no numbers to scrub.
-                            LIVE_TRACK_ID -> Unit
-                            // A tap on the route already showing moves its marker; a tap
-                            // on any other line is a request to look at that one instead.
-                            focusedTrack?.id -> selectedIndex = index
-                            else -> viewModel.focus(TrackRef.Saved(trackId))
-                        }
-                    },
-                    // Tapping the bare map puts it away, which is the gesture people try
-                    // first and the only one that does not involve aiming at anything.
-                    onSelectNothing = { viewModel.focus(null) },
-                    puckLayerId = LIVE_TRACK_ID.takeIf { recording is RecordingState.Active },
-                    puckColor = liveColor,
-                    camera = camera,
-                    onCameraChange = { camera = it },
-                    contentPadding = canvasPadding,
-                    modifier = Modifier.fillMaxSize(),
-                )
+                overlays.isNotEmpty() -> Unit
 
                 state.loading -> Box(Modifier.fillMaxSize(), Alignment.Center) {
                     LinearProgressIndicator(Modifier.padding(32.dp))
                 }
 
-                else -> EmptyState(
+                // Only over a blank map. With a basemap imported there is something to
+                // look at, and a card explaining the app is empty would be covering it.
+                basemaps.isEmpty() -> EmptyState(
                     hasHiddenTracks = state.totalCount > 0,
                     modifier = Modifier.fillMaxSize(),
                 )
+
+                else -> Unit
             }
+
+            MapChrome(
+                metersPerPixel = metersPerPixel,
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(bottom = sheetInset + 4.dp),
+            )
 
             Column(
                 modifier = Modifier
@@ -559,10 +567,11 @@ fun MapScreen(
                     .padding(bottom = sheetInset)
                     .onSizeChanged { controlsHeight = with(density) { it.height.toDp() } },
             ) {
-                // No reset button. Pinching back out lands exactly on the fit - `nudged`
-                // returns `MapCamera.Fitted` the moment the zoom reaches 1 - so the way
-                // back is the same gesture that left, and a button to do it as well is a
-                // control that duplicates a pinch.
+                // Still no reset button, though the reason has changed: a real map has a
+                // whole world to be lost in rather than a unit square to pinch back out
+                // of, so "show me everything again" is no longer the same gesture that
+                // left. It is now a missing feature rather than a deliberate omission -
+                // worth adding as a control that frames the visible tracks.
                 if (recording !is RecordingState.Active) {
                     Box(
                         modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -648,50 +657,6 @@ fun MapScreen(
                 }
             },
         )
-    }
-}
-
-/**
- * Keeps the scrubbed point on screen while a chart is being dragged.
- *
- * Having the marker and the charts on one surface is the whole argument for the sheet,
- * and it is worth nothing if scrubbing walks the marker off the side of the map or behind
- * the sheet itself. Unlike the framing move this is not animated: it is answering a drag
- * that is happening right now, and a 450ms ease would arrive after the finger had moved on.
- */
-@Composable
-private fun FollowScrubbedPoint(
-    trackId: Long?,
-    selectedIndex: Int?,
-    layers: List<RouteLayer>,
-    extent: RouteExtent,
-    viewport: Size,
-    contentPadding: PaddingValues,
-    camera: MapCamera,
-    onCameraChange: (MapCamera) -> Unit,
-) {
-    val density = LocalDensity.current
-    val layoutDirection = LocalLayoutDirection.current
-    val current by rememberUpdatedState(camera)
-    val padding by rememberUpdatedState(contentPadding)
-
-    LaunchedEffect(trackId, selectedIndex, layers, viewport) {
-        if (trackId == null || selectedIndex == null) return@LaunchedEffect
-        val path = layers.firstOrNull { it.trackId == trackId }?.path ?: return@LaunchedEffect
-
-        val moved = followingCamera(
-            path = path,
-            sourceIndex = selectedIndex,
-            camera = current,
-            viewport = viewport,
-            contentPadding = padding,
-            density = density,
-            layoutDirection = layoutDirection,
-            extent = extent,
-        )
-        // Identity when nothing needed moving, so this costs a comparison per scrub frame
-        // and no recomposition at all in the common case.
-        if (moved !== current) onCameraChange(moved)
     }
 }
 

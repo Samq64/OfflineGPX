@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import dev.samuelq.gpx.data.db.TrackEntity
+import dev.samuelq.gpx.data.map.MapStore
+import dev.samuelq.gpx.data.map.OfflineMap
 import dev.samuelq.gpx.data.record.LiveTrace
 import dev.samuelq.gpx.data.record.RecordingController
 import dev.samuelq.gpx.data.track.LoadedTrack
@@ -17,9 +19,11 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /** Something the map should say, once. The words are the screen's business. */
@@ -46,7 +50,18 @@ data class MapUiState(
 class MapViewModel(
     private val repository: TrackRepository,
     controller: RecordingController,
+    mapStore: MapStore,
 ) : ViewModel() {
+
+    /**
+     * The basemaps to draw under the routes, empty when none is shown.
+     *
+     * Empty is the shipped state and stays a perfectly good screen: the routes were drawn
+     * on a plain background before there was a basemap at all, and an app that refuses to
+     * show a ride until someone has sideloaded a 90 MB file would be a worse app.
+     */
+    val basemaps: StateFlow<List<OfflineMap>> = mapStore.active
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private val _state = MutableStateFlow(MapUiState())
     val state: StateFlow<MapUiState> = _state.asStateFlow()
@@ -231,7 +246,11 @@ class MapViewModel(
     companion object {
         val Factory = viewModelFactory {
             initializer {
-                MapViewModel(appContainer.trackRepository, appContainer.recordingController)
+                MapViewModel(
+                    repository = appContainer.trackRepository,
+                    controller = appContainer.recordingController,
+                    mapStore = appContainer.mapStore,
+                )
             }
         }
     }

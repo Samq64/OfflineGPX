@@ -26,6 +26,20 @@ data class Settings(
     /** The floor under the accuracy rule, for the rare very confident fix. */
     val minDisplacementMeters: Double = FixFilter.MIN_DISPLACEMENT_METERS,
 
+    /**
+     * Filenames of the offline basemaps to draw under the routes.
+     *
+     * Names rather than paths: the directory is the app's own and moves with it between
+     * installs and devices, and a stored absolute path would survive a restore pointing at
+     * a data directory that no longer exists. Empty is the shipped state - this app comes
+     * with no maps and no way to fetch one.
+     *
+     * A set rather than one name because adjacent areas are the normal case: a town and
+     * the park next to it are two files and one journey. They are only ever allowed to be
+     * non-overlapping, which is what keeps this from needing a stacking order.
+     */
+    val activeMapFiles: Set<String> = emptySet(),
+
 ) {
     companion object {
         val Defaults = Settings()
@@ -62,8 +76,24 @@ class SettingsRepository(context: Context) {
     fun setMinDisplacementMeters(meters: Double) =
         update { putFloat(KEY_DISPLACEMENT, meters.toFloat()) }
 
+    fun setActiveMapFiles(names: Set<String>) = update {
+        putStringSet(KEY_ACTIVE_MAPS, names)
+        // The single-map key this replaced would otherwise win on the next read.
+        remove(KEY_ACTIVE_MAP)
+    }
 
-    fun resetToDefaults() = update { clear() }
+    /**
+     * Back to the shipped defaults - which deliberately does not touch the imported maps.
+     *
+     * Resetting settings is about the numbers above. Silently dropping a 90 MB file the
+     * user had to leave the app to obtain would be a deletion wearing a reset's clothes,
+     * and the maps section has its own delete for when that is what was meant.
+     */
+    fun resetToDefaults() = update {
+        val activeMaps = read().activeMapFiles
+        clear()
+        if (activeMaps.isNotEmpty()) putStringSet(KEY_ACTIVE_MAPS, activeMaps)
+    }
 
     private inline fun update(crossinline edits: SharedPreferences.Editor.() -> Unit) {
         prefs.edit { edits() }
@@ -80,6 +110,11 @@ class SettingsRepository(context: Context) {
                 .getFloat(KEY_ACCURACY, defaults.maxAccuracyMeters.toFloat()).toDouble(),
             minDisplacementMeters = prefs
                 .getFloat(KEY_DISPLACEMENT, defaults.minDisplacementMeters.toFloat()).toDouble(),
+            // Falls back to the single-map key this replaced, so an upgrade keeps the
+            // map the user had chosen rather than silently losing it.
+            activeMapFiles = prefs.getStringSet(KEY_ACTIVE_MAPS, null)
+                ?: prefs.getString(KEY_ACTIVE_MAP, null)?.let(::setOf)
+                ?: defaults.activeMapFiles,
         )
     }
 
@@ -89,5 +124,9 @@ class SettingsRepository(context: Context) {
         const val KEY_UNITS = "units"
         const val KEY_ACCURACY = "max_accuracy_meters"
         const val KEY_DISPLACEMENT = "min_displacement_meters"
+        const val KEY_ACTIVE_MAPS = "active_map_files"
+
+        /** Superseded by [KEY_ACTIVE_MAPS]; still read once so upgrades keep their map. */
+        const val KEY_ACTIVE_MAP = "active_map_file"
     }
 }
