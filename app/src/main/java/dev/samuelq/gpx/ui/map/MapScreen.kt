@@ -62,6 +62,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalWindowInfo
@@ -72,23 +73,32 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.samuelq.gpx.R
+import dev.samuelq.gpx.data.db.TrackSource
 import dev.samuelq.gpx.data.record.RecordingEvent
 import dev.samuelq.gpx.data.record.RecordingState
 import dev.samuelq.gpx.ui.record.RecordViewModel
 import dev.samuelq.gpx.ui.record.RecordingBar
 import dev.samuelq.gpx.ui.theme.routePalette
+import dev.samuelq.gpx.ui.track.DeleteTrackDialog
 import dev.samuelq.gpx.ui.track.FocusedTrack
 import dev.samuelq.gpx.ui.track.GeoBounds
 import dev.samuelq.gpx.ui.track.MapCamera
 import dev.samuelq.gpx.ui.track.RouteCanvas
+import dev.samuelq.gpx.ui.track.RouteExtent
 import dev.samuelq.gpx.ui.track.RouteLayer
+import dev.samuelq.gpx.ui.track.TrackActions
 import dev.samuelq.gpx.ui.track.TrackRef
 import dev.samuelq.gpx.ui.track.followingCamera
+import dev.samuelq.gpx.ui.track.routeExtentOf
+import dev.samuelq.gpx.ui.track.TrackNameDialog
 import dev.samuelq.gpx.ui.track.TrackSheet
 import dev.samuelq.gpx.ui.track.TrackSheetError
 import dev.samuelq.gpx.ui.track.TrackSheetLoading
 import dev.samuelq.gpx.ui.track.TrackSheetPeekHeight
+import dev.samuelq.gpx.ui.track.editableTrackName
+import dev.samuelq.gpx.ui.track.exportFileName
 import dev.samuelq.gpx.ui.track.routePathOf
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
 /**
@@ -112,6 +122,9 @@ fun MapScreen(
     recorder: RecordViewModel = viewModel(factory = RecordViewModel.Factory),
 ) {
     val context = LocalContext.current
+    // Not `context.getString`: the context a long-lived collector captured is the one it
+    // started with, so a locale change would leave it saying the old language.
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     val state by viewModel.state.collectAsStateWithLifecycle()
     val trace by viewModel.trace.collectAsStateWithLifecycle()
@@ -124,6 +137,20 @@ fun MapScreen(
 
     val snackbarHostState = remember { SnackbarHostState() }
     var confirmDiscard by remember { mutableStateOf(false) }
+    // The recording waiting to be named, if the user has just finished one. Held as an id
+    // rather than a flag: the prompt cannot open until the track it names has been read
+    // back, and by then any number of other things could have taken the sheet.
+    var namingId by remember { mutableStateOf<Long?>(null) }
+    // The same prompt reached on purpose from the sheet's menu, which differs from the one
+    // above in its title and in nothing else.
+    var renamingId by remember { mutableStateOf<Long?>(null) }
+    var deletingId by remember { mutableStateOf<Long?>(null) }
+
+    // CreateDocument rather than a share sheet: the destination is picked through SAF, so
+    // the file lands where the user chose and the app needs no storage permission.
+    val exporter = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/gpx+xml")
+    ) { destination -> viewModel.finishExport(destination?.toString()) }
 
     // Fitted at a cold start, which is how every track ends up on screen without anything
     // having to aim at them - the fit *is* the identity camera. Nothing moves it afterwards
@@ -145,6 +172,10 @@ fun MapScreen(
     val locationDenied = stringResource(R.string.record_location_denied)
     val preciseRequired = stringResource(R.string.record_precise_required)
     val discarded = stringResource(R.string.record_discarded)
+    val exported = stringResource(R.string.library_exported)
+    val exportFailed = stringResource(R.string.library_export_failed)
+    val renameFailed = stringResource(R.string.library_rename_failed)
+    val hidden = stringResource(R.string.track_hidden)
 
     // Replaces whatever is on screen rather than queueing behind it: these are answers to
     // a tap that just happened, and a stale one arriving four seconds later is a lie.
@@ -179,14 +210,36 @@ fun MapScreen(
         }
     }
 
+    // Resolved here rather than where they are sent, like every other line this screen
+    // says: a string read at composition is re-read when the locale changes, and one read
+    // inside a collector is whatever it was when the collector started.
+    LaunchedEffect(viewModel) {
+        viewModel.messages.collect { message ->
+            say(
+                when (message) {
+                    MapMessage.Exported -> exported
+                    MapMessage.ExportFailed -> exportFailed
+                    MapMessage.RenameFailed -> renameFailed
+                    MapMessage.Hidden -> hidden
+                }
+            )
+        }
+    }
+
     LaunchedEffect(recorder) {
         recorder.events.collect { event ->
             when (event) {
                 // Straight into the sheet: the ride you just finished is the one you want
-                // to look at, and it is already on the map.
-                is RecordingEvent.Saved -> viewModel.focus(TrackRef.Saved(event.id))
+                // to look at, and it is already on the map. And straight into naming it,
+                // while you still remember where you went - the app's guess at a name is
+                // the hour and the pace, which is a placeholder and reads like one. Later
+                // means never: the rename is three taps down a menu on another screen.
+                is RecordingEvent.Saved -> {
+                    namingId = event.id
+                    viewModel.focus(TrackRef.Saved(event.id))
+                }
                 RecordingEvent.Discarded -> say(discarded)
-                is RecordingEvent.Failed -> say(context.getString(event.messageRes))
+                is RecordingEvent.Failed -> say(resources.getString(event.messageRes))
             }
         }
     }
@@ -216,12 +269,22 @@ fun MapScreen(
         // hide before it has been laid out is asking for an anchor that does not exist.
         if (hasFocus) sheetState.partialExpand()
         else if (sheetState.currentValue != SheetValue.Hidden) sheetState.hide()
+        // Letting go of the track lets go of the offer to name it. Otherwise a prompt that
+        // never got the chance to open would be waiting to ambush the next time that same
+        // track was opened, hours later, from the list.
+        if (!hasFocus) namingId = null
     }
 
     // Swiped away by hand: the selection follows the sheet rather than lingering as an
     // invisible bit of state with a marker still on the route.
+    //
+    // `drop(1)`, because a `snapshotFlow` opens by reporting where it already is, and where
+    // the sheet already is on the frame the map is composed is Hidden. Undropped, that reads
+    // as a dismissal and clears the focus - including the one the effect above it has just
+    // set from the list. Opening a track from the library therefore worked only when a sheet
+    // happened to be open when you left the map, and did nothing at all when one wasn't.
     LaunchedEffect(sheetState) {
-        snapshotFlow { sheetState.currentValue }.collect { value ->
+        snapshotFlow { sheetState.currentValue }.drop(1).collect { value ->
             if (value == SheetValue.Hidden) viewModel.focus(null)
             // Dragging the sheet down past the middle gives the map back for good: the
             // next expand starts from the middle again rather than leaping to full.
@@ -400,7 +463,27 @@ fun MapScreen(
                     onSelectedIndexChange = { selectedIndex = it },
                     useTimeAxis = preferTimeAxis && current.track.profile.hasTime,
                     onAxisChange = { preferTimeAxis = it },
-                    onClose = { viewModel.focus(null) },
+                    // Null for a file opened from an intent: it has no row to rename,
+                    // hide or delete, and the export it could offer is a copy of a file
+                    // the user already has.
+                    actions = state.entity(current.track.id)?.let { entity ->
+                        remember(entity.id, entity.displayName) {
+                            TrackActions(
+                                onRename = { renamingId = entity.id },
+                                onExport = {
+                                    viewModel.beginExport(entity.id)
+                                    exporter.launch(
+                                        exportFileName(entity.trackName, entity.displayName)
+                                    )
+                                },
+                                onHide = {
+                                    viewModel.hide(entity.id)
+                                    viewModel.focus(null)
+                                },
+                                onDelete = { deletingId = entity.id },
+                            )
+                        }
+                    },
                 )
             }
         },
@@ -421,6 +504,7 @@ fun MapScreen(
                 trackId = focusedTrack?.id,
                 selectedIndex = selectedIndex,
                 layers = layers,
+                extent = remember(layers) { routeExtentOf(layers) },
                 viewport = viewport,
                 contentPadding = canvasPadding,
                 camera = camera,
@@ -450,6 +534,8 @@ fun MapScreen(
                     // Tapping the bare map puts it away, which is the gesture people try
                     // first and the only one that does not involve aiming at anything.
                     onSelectNothing = { viewModel.focus(null) },
+                    puckLayerId = LIVE_TRACK_ID.takeIf { recording is RecordingState.Active },
+                    puckColor = liveColor,
                     camera = camera,
                     onCameraChange = { camera = it },
                     contentPadding = canvasPadding,
@@ -506,6 +592,45 @@ fun MapScreen(
         }
     }
 
+    // Only once the track has been read back, which is what knows the name to offer. The
+    // prompt that follows a recording and the one reached from the menu are the same
+    // dialog; only the title tells the reader which of the two brought it up.
+    focusedTrack?.takeIf { it.id == namingId || it.id == renamingId }?.let { track ->
+        val justRecorded = track.id == namingId
+        TrackNameDialog(
+            titleRes = if (justRecorded) R.string.record_name_title else R.string.library_rename,
+            initialName = editableTrackName(track.track.name, track.displayName),
+            // Dismissing keeps the name that is already there, which is why it is in the
+            // field rather than behind it as a hint: what you are leaving is what you see.
+            onDismiss = {
+                namingId = null
+                renamingId = null
+            },
+            onConfirm = { name ->
+                viewModel.rename(track.id, name)
+                namingId = null
+                renamingId = null
+            },
+        )
+    }
+
+    deletingId?.let { id ->
+        DeleteTrackDialog(
+            // What is actually destroyed differs by source, and that is the difference
+            // the user cares about: a recording only exists here.
+            deletesFiles = state.entity(id)?.source == TrackSource.RECORDED,
+            count = 1,
+            onDismiss = { deletingId = null },
+            onConfirm = {
+                deletingId = null
+                // The sheet first: it is about to be a readout for a row that does not
+                // exist, and the map behind it has one less line to draw.
+                viewModel.focus(null)
+                viewModel.delete(id)
+            },
+        )
+    }
+
     if (confirmDiscard) {
         AlertDialog(
             onDismissRequest = { confirmDiscard = false },
@@ -539,6 +664,7 @@ private fun FollowScrubbedPoint(
     trackId: Long?,
     selectedIndex: Int?,
     layers: List<RouteLayer>,
+    extent: RouteExtent,
     viewport: Size,
     contentPadding: PaddingValues,
     camera: MapCamera,
@@ -561,6 +687,7 @@ private fun FollowScrubbedPoint(
             contentPadding = padding,
             density = density,
             layoutDirection = layoutDirection,
+            extent = extent,
         )
         // Identity when nothing needed moving, so this costs a comparison per scrub frame
         // and no recomposition at all in the common case.

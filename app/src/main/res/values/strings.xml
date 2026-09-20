@@ -39,6 +39,12 @@
     <string name="library_title">Tracks</string>
     <string name="library_import">Open GPX file</string>
     <string name="library_export">Export…</string>
+    <string name="library_export_all">Export to a folder…</string>
+    <string name="library_search">Search tracks</string>
+    <string name="library_search_hint">Search tracks</string>
+    <string name="library_search_close">Close search</string>
+    <string name="library_search_clear">Clear search</string>
+    <string name="library_search_empty">Nothing matches “%1$s”.</string>
     <string name="library_rename">Rename</string>
     <string name="library_rename_label">Track name</string>
     <string name="library_more">More options</string>
@@ -59,6 +65,11 @@
     <string name="library_import_failed">Couldn\'t open that file.</string>
     <string name="library_export_failed">Couldn\'t export that track.</string>
     <string name="library_exported">Exported.</string>
+    <plurals name="library_exported_all">
+        <item quantity="one">Exported %1$d track.</item>
+        <item quantity="other">Exported %1$d tracks.</item>
+    </plurals>
+    <string name="library_exported_some">Exported %1$d of %2$d tracks. The rest couldn\'t be written there.</string>
     <string name="library_rename_failed">Couldn\'t rename that track.</string>
 
     <string name="record_start">Record</string>
@@ -77,6 +88,7 @@
     <string name="record_discard_title">Discard this recording?</string>
     <string name="record_discard_body">It won\'t be saved and can\'t be recovered.</string>
     <string name="record_discard_confirm">Discard</string>
+    <string name="record_name_title">Name this recording</string>
 
     <!-- Every way starting a recording can fail, said where the user tapped. -->
     <string name="record_location_off">Location is switched off. Turn it on to record.</string>
@@ -101,7 +113,9 @@
 
     <string name="track_loading">Reading track…</string>
     <string name="track_close">Close</string>
-    <string name="track_details">Details</string>
+    <string name="track_manage">Manage this track</string>
+    <string name="track_hide">Hide</string>
+    <string name="track_hidden">Hidden. Show it again from the track list.</string>
     <string name="track_sheet_expand">Taller</string>
     <string name="track_sheet_collapse">Shorter</string>
     <string name="track_error_title">Couldn\'t open this file</string>
@@ -120,6 +134,7 @@
 
     <string name="stat_duration">Duration</string>
     <string name="stat_moving">Moving</string>
+    <string name="stat_elapsed">Elapsed</string>
     <string name="stat_avg_speed">Avg speed</string>
     <string name="stat_ascent">Ascent</string>
     <string name="stat_descent">Descent</string>

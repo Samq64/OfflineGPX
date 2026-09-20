@@ -1,6 +1,5 @@
 package dev.samuelq.gpx.ui.track
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,11 +18,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -34,15 +34,14 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
@@ -55,6 +54,7 @@ import dev.samuelq.gpx.data.track.LoadedTrack
 import dev.samuelq.gpx.ui.chart.ChartSeries
 import dev.samuelq.gpx.ui.chart.ProfileChart
 import dev.samuelq.gpx.ui.chart.axisScale
+import dev.samuelq.gpx.ui.chart.yScale
 import dev.samuelq.gpx.ui.format.Formatters
 import dev.samuelq.gpx.ui.format.LocalFormatters
 import dev.samuelq.gpx.ui.theme.LocalChartColors
@@ -70,11 +70,33 @@ private val SheetPadding = 20.dp
 val TrackSheetPeekHeight = 128.dp
 
 /**
+ * Everything the sheet can do to the track it is showing.
+ *
+ * Null for a track that arrived through an intent: it has no row in the library, so there
+ * is nothing to rename, hide or delete, and the sheet leaves the menu off entirely rather
+ * than offering four actions that would all have to refuse.
+ */
+@Immutable
+class TrackActions(
+    val onRename: () -> Unit,
+    val onExport: () -> Unit,
+    val onHide: () -> Unit,
+    val onDelete: () -> Unit,
+)
+
+/**
  * What the map knows about the track it is focused on.
  *
  * A sheet rather than a screen: the route is already drawn on the map behind it, and
  * sending the reader somewhere else to see its numbers meant redrawing the same line on a
  * second canvas and losing every other track off the side of it.
+ *
+ * Height is the only thing that hides anything here. There used to be a fold as well - a
+ * Details button that opened the secondary numbers - which meant two disclosure systems
+ * stacked on one surface: the sheet was already taller-or-shorter, and the button was
+ * shorter-or-taller inside it. Worse, at the peek height it opened onto content below the
+ * bottom of the screen, so pressing it appeared to do nothing but turn an arrow over. Now
+ * the column simply runs on, and dragging is what reveals more of it.
  */
 @Composable
 fun TrackSheet(
@@ -87,13 +109,12 @@ fun TrackSheet(
     onSelectedIndexChange: (Int?) -> Unit,
     useTimeAxis: Boolean,
     onAxisChange: (Boolean) -> Unit,
-    onClose: () -> Unit,
+    actions: TrackActions?,
 ) {
     val profile = loaded.profile
     val stats = profile.stats
     val chartColors = LocalChartColors.current
     val formatters = LocalFormatters.current
-    var detailsShown by rememberSaveable { mutableStateOf(false) }
 
     val xValues = if (useTimeAxis) profile.elapsedSeconds else profile.distanceMeters
     // One domain, shared by both charts, so the same pixel column is the same moment in
@@ -101,8 +122,11 @@ fun TrackSheet(
     val xScale = remember(profile, useTimeAxis) {
         axisScale(xValues.firstOrNull() ?: 0f, xValues.lastOrNull() ?: 1f)
     }
-    val formatX: (Float) -> String =
-        if (useTimeAxis) formatters.DurationAxis else formatters.DistanceAxis
+    // Keyed on the scale as well as the units: the distance ticks are labelled to whatever
+    // precision tells one of them from the next, and that is a property of the step.
+    val formatX: (Float) -> String = remember(formatters, useTimeAxis, xScale) {
+        if (useTimeAxis) formatters.DurationAxis else formatters.distanceAxisFor(xScale.step)
+    }
 
     // With units, unlike the axis formatters: a tick is read in a column of ticks, a
     // tooltip is read on its own and has to say what it is. Remembered because the chart
@@ -145,7 +169,7 @@ fun TrackSheet(
             routeColor = routeColor,
             atFullHeight = atFullHeight,
             onStepHeight = onStepHeight,
-            onClose = onClose,
+            actions = actions,
             modifier = Modifier.padding(start = SheetPadding, end = 4.dp),
         )
 
@@ -155,23 +179,7 @@ fun TrackSheet(
         StatRow(
             stats = trackHeadline(stats, profile.hasTime),
             modifier = Modifier.padding(start = SheetPadding, end = 8.dp),
-        ) {
-            // Beside the readings it opens more of, rather than on a row of its own
-            // underneath them. Drops to its own line when the numbers have used the width.
-            TextButton(
-                onClick = { detailsShown = !detailsShown },
-                modifier = Modifier.align(Alignment.CenterVertically),
-            ) {
-                Text(stringResource(R.string.track_details))
-                Icon(
-                    imageVector = Icons.Default.ArrowDropDown,
-                    contentDescription = null,
-                    // A triangle, and one that turns over - not the chevron in the title,
-                    // which opens the sheet rather than the numbers.
-                    modifier = Modifier.rotate(if (detailsShown) 180f else 0f),
-                )
-            }
-        }
+        )
 
         Column(
             modifier = Modifier
@@ -184,27 +192,28 @@ fun TrackSheet(
         ) {
             HorizontalDivider(Modifier.padding(horizontal = SheetPadding, vertical = 8.dp))
 
-            // The whole stretch between the headline and the first chart, in one fold.
-            // Date, moving time, ascent, descent and point count are answers to questions
-            // you go looking for, and what the charts are plotted against is a decision
-            // you make once - none of them is worth the room above a graph you came to
-            // read. Sticky rather than per-track: someone who wants them wants them every
-            // time.
-            AnimatedVisibility(visible = detailsShown) {
-                Column(Modifier.padding(horizontal = SheetPadding, vertical = 4.dp)) {
-                    TrackDetails(
-                        stats = stats,
-                        hasTime = profile.hasTime,
-                        hasElevation = profile.hasElevation,
-                    )
+            // Date, elapsed time, ascent, descent and point count: the answers you go
+            // looking for rather than the ones you glance at, which is why they are the
+            // first thing under the fold and not on the row above it.
+            Column(Modifier.padding(horizontal = SheetPadding, vertical = 4.dp)) {
+                TrackDetails(
+                    stats = stats,
+                    hasTime = profile.hasTime,
+                    hasElevation = profile.hasElevation,
+                )
+            }
 
-                    if (profile.hasTime) {
-                        Spacer(Modifier.height(16.dp))
-                        AxisSelector(useTimeAxis = useTimeAxis, onChange = onAxisChange)
-                    }
+            Spacer(Modifier.height(20.dp))
 
-                    Spacer(Modifier.height(16.dp))
-                }
+            // With the charts, because it is a fact about them - what they are plotted
+            // against - and not a fact about the ride.
+            if (profile.hasTime) {
+                AxisSelector(
+                    useTimeAxis = useTimeAxis,
+                    onChange = onAxisChange,
+                    modifier = Modifier.padding(horizontal = SheetPadding),
+                )
+                Spacer(Modifier.height(16.dp))
             }
 
             ChartSection(
@@ -229,6 +238,7 @@ fun TrackSheet(
                     ProfileChart(
                         series = series,
                         xScale = xScale,
+                        yScale = remember(series) { series.yScale() },
                         formatX = formatX,
                         formatY = formatters.SpeedAxis,
                         selectedIndex = selectedIndex,
@@ -239,11 +249,17 @@ fun TrackSheet(
                         breakLabel = breakLabel,
                         formatValue = speedValue,
                         formatPosition = positionValue,
+                        // The elevation chart below carries the ticks for both, unless
+                        // this file has no elevation to draw and there is no chart there
+                        // to carry them.
+                        showXAxis = !profile.hasElevation,
                     )
                 }
             }
 
-            Spacer(Modifier.height(28.dp))
+            // Tighter than it was: the two plots share an axis now, which only reads as
+            // one axis under two charts if they are close enough to be one object.
+            Spacer(Modifier.height(20.dp))
 
             ChartSection(
                 title = stringResource(R.string.chart_elevation),
@@ -265,11 +281,17 @@ fun TrackSheet(
                             zeroBased = false,
                         )
                     }
+                    val yScale = remember(series) { series.yScale() }
                     ProfileChart(
                         series = series,
                         xScale = xScale,
+                        yScale = yScale,
                         formatX = formatX,
-                        formatY = formatters.ElevationAxis,
+                        // A flat towpath gets half-metre gridlines, which whole metres
+                        // cannot label without repeating themselves.
+                        formatY = remember(formatters, yScale) {
+                            formatters.elevationAxisFor(yScale.step)
+                        },
                         selectedIndex = selectedIndex,
                         onSelectedIndexChange = onSelectedIndexChange,
                         contentDescription = stringResource(R.string.chart_elevation),
@@ -293,6 +315,11 @@ fun TrackSheet(
  * It used to live in a top app bar that this sheet does not have. The colour is not
  * decoration: with several routes overlaid it is the only thing tying these numbers to one
  * of the lines behind them.
+ *
+ * No close button any more. The sheet is dragged away, tapped away on the bare map, and
+ * backed away out of - three ways out already - and the icon was spending a permanent slot
+ * in the one row that is on screen at every height to offer a fourth. The slot went to the
+ * menu instead, which is the thing that had nowhere else to live.
  */
 @Composable
 private fun SheetTitle(
@@ -300,7 +327,7 @@ private fun SheetTitle(
     routeColor: Color,
     atFullHeight: Boolean,
     onStepHeight: () -> Unit,
-    onClose: () -> Unit,
+    actions: TrackActions?,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -317,9 +344,9 @@ private fun SheetTitle(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
-        // Back in the title, because it is the one row on screen at every height - and
-        // everything it used to sit beside now folds away, which is no place for the
-        // control that makes room for what is left.
+        // Back in the title, because it is the one row on screen at every height, and it
+        // is the only way to reach the third height - the platform sheet has no fourth
+        // drag anchor to put it on.
         IconButton(onClick = onStepHeight) {
             if (atFullHeight) {
                 Icon(
@@ -333,8 +360,63 @@ private fun SheetTitle(
                 )
             }
         }
-        IconButton(onClick = onClose) {
-            Icon(Icons.Default.Close, stringResource(R.string.track_close))
+        actions?.let { TrackMenu(it) }
+    }
+}
+
+/**
+ * Rename, export, hide, delete - the whole of managing a track, behind one glyph.
+ *
+ * A menu rather than four controls, and here rather than only in the library: these are
+ * things you decide about a ride while you are looking at it, and the sheet is where you
+ * are looking at it. Four buttons would have cost the sheet a row it does not have; one
+ * icon costs a slot that the close button was using for a gesture you already have.
+ */
+@Composable
+private fun TrackMenu(actions: TrackActions) {
+    var open by remember { mutableStateOf(false) }
+
+    Box {
+        IconButton(onClick = { open = true }) {
+            Icon(Icons.Default.MoreVert, stringResource(R.string.track_manage))
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.library_rename)) },
+                onClick = {
+                    open = false
+                    actions.onRename()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.library_export)) },
+                onClick = {
+                    open = false
+                    actions.onExport()
+                },
+            )
+            // Takes the line off the map and the sheet with it, which is the only reading
+            // of "hide" that leaves the screen in a state that makes sense.
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.track_hide)) },
+                onClick = {
+                    open = false
+                    actions.onHide()
+                },
+            )
+            HorizontalDivider()
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        text = stringResource(R.string.library_delete),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                },
+                onClick = {
+                    open = false
+                    actions.onDelete()
+                },
+            )
         }
     }
 }

@@ -91,6 +91,20 @@ interface TrackRepository {
     suspend fun export(id: Long, destination: String): Result<Unit>
 
     /**
+     * Writes several tracks into [treeUri], a folder the user chose through SAF, under the
+     * [names] they are given here. Returns how many of them landed.
+     *
+     * A folder rather than a file, because there is no such thing as one destination for
+     * forty tracks: the alternatives were a zip - a container the user then has to undo -
+     * or forty trips through the document picker. The grant is still SAF and still pointed
+     * at by hand, and it is deliberately not persisted: it lasts the one export.
+     *
+     * Counts rather than fails: one unwritable name should not cost the other thirty-nine,
+     * so a track that cannot be created is skipped and the total says so.
+     */
+    suspend fun exportAll(names: Map<Long, String>, treeUri: String): Result<Int>
+
+    /**
      * Reads a track without indexing it, for VIEW and SEND intents. Those URIs are
      * one-shot grants, so a library row for one would only fail when tapped.
      */

@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.database.Cursor
 import android.net.Uri
+import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import android.util.Log
 import dev.samuelq.gpx.core.analysis.TrackAnalyzer
@@ -203,6 +204,40 @@ class GpxTrackRepository(
         }.recoverFailure()
     }
 
+    override suspend fun exportAll(names: Map<Long, String>, treeUri: String): Result<Int> =
+        withContext(io) {
+            runCatching {
+                val tree = Uri.parse(treeUri)
+                // A tree URI is not a document URI: the folder has to be named as the
+                // document it also is before anything can be created inside it.
+                val folder = DocumentsContract.buildDocumentUriUsingTree(
+                    tree,
+                    DocumentsContract.getTreeDocumentId(tree),
+                )
+
+                names.count { (id, name) ->
+                    val entity = dao.byId(id)
+                    // The provider resolves a name that is already taken by adding a
+                    // number, so two rides called the same thing cost nothing here.
+                    val target = entity?.let {
+                        DocumentsContract.createDocument(
+                            appContext.contentResolver,
+                            folder,
+                            GPX_MIME,
+                            name,
+                        )
+                    }
+                    if (target == null) {
+                        false
+                    } else {
+                        appContext.contentResolver.openOutputStream(target)?.use { sink ->
+                            openStream(entity.location).use { it.copyTo(sink) }
+                        } != null
+                    }
+                }
+            }.recoverFailure()
+        }
+
     override suspend fun openTransient(location: String): Result<LoadedTrack> = withContext(io) {
         runCatching {
             cached?.let { (cachedLocation, track) ->
@@ -394,6 +429,9 @@ class GpxTrackRepository(
 
         /** 9 km/h. Above a brisk walk, well below a bicycle. */
         const val WALKING_SPEED_CEILING_MPS = 2.5
+
+        /** What a provider is told an exported track is, so it files it as one. */
+        const val GPX_MIME = "application/gpx+xml"
 
         /** Sortable, unambiguous, and legible as a filename once exported. */
         private val FILE_STAMP: DateTimeFormatter =

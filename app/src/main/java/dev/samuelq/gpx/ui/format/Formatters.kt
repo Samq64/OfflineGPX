@@ -10,6 +10,8 @@ import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
 import kotlin.math.abs
+import kotlin.math.ceil
+import kotlin.math.log10
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 
@@ -60,14 +62,38 @@ class Formatters(val units: UnitSystem) {
         }
     }
 
-    /** Compact axis form: bare kilometres or miles, no unit (the axis title carries it). */
-    fun distanceAxis(meters: Float, locale: Locale = Locale.getDefault()): String {
-        val value = meters / if (metric) METERS_PER_KM else METERS_PER_MILE
-        return if (abs(value) < 100.0) {
-            String.format(locale, "%.1f", value)
-        } else {
-            String.format(locale, "%.0f", value)
-        }
+    /**
+     * Compact axis form: bare kilometres or miles, no unit (the axis title carries it).
+     *
+     * [decimals] rather than a rule about the value's own magnitude, because what has to be
+     * resolved is the gap between one tick and the next: see [distanceAxisFor].
+     */
+    fun distanceAxis(
+        meters: Float,
+        decimals: Int = 1,
+        locale: Locale = Locale.getDefault(),
+    ): String = String.format(
+        locale,
+        "%.${decimals.coerceIn(0, MAX_AXIS_DECIMALS)}f",
+        meters / if (metric) METERS_PER_KM else METERS_PER_MILE,
+    )
+
+    /**
+     * Tick labels for a distance axis whose ticks stand [stepMeters] apart.
+     *
+     * The precision comes from the step, not from the values. A 170 m walk gets ticks every
+     * 50 m, and one decimal of a kilometre prints both 50 and 100 as "0.1" - two different
+     * places on the axis wearing the same label, which is worse than a long number because
+     * the reader cannot tell it has happened.
+     *
+     * Returned as a lambda because the charts key their measured layout on its identity: it
+     * has to change when the axis does and not once per recomposition.
+     */
+    fun distanceAxisFor(stepMeters: Float, locale: Locale = Locale.getDefault()): (Float) -> String {
+        val decimals = axisDecimals(
+            abs(stepMeters) / if (metric) METERS_PER_KM else METERS_PER_MILE
+        )
+        return { meters -> distanceAxis(meters, decimals, locale) }
     }
 
     fun speed(metersPerSecond: Double, locale: Locale = Locale.getDefault()): String =
@@ -97,12 +123,32 @@ class Formatters(val units: UnitSystem) {
     fun elevation(meters: Double, locale: Locale = Locale.getDefault()): String =
         meters(meters, locale)
 
-    fun elevationAxis(meters: Float, locale: Locale = Locale.getDefault()): String =
-        if (meters.isNaN()) {
-            EMPTY
-        } else {
-            String.format(locale, "%,d", elevationIn(meters.toDouble()).roundToInt())
-        }
+    fun elevationAxis(
+        meters: Float,
+        decimals: Int = 0,
+        locale: Locale = Locale.getDefault(),
+    ): String = if (meters.isNaN()) {
+        EMPTY
+    } else {
+        String.format(
+            locale,
+            "%,.${decimals.coerceIn(0, MAX_AXIS_DECIMALS)}f",
+            elevationIn(meters.toDouble()),
+        )
+    }
+
+    /**
+     * Tick labels for an elevation axis whose ticks stand [stepMeters] apart.
+     *
+     * Whole metres are right for a mountain and wrong for a towpath: a track that never
+     * leaves a two-metre band gets half-metre ticks, and rounding those to integers labels
+     * five gridlines 9, 10, 10, 11, 11. Same rule as [distanceAxisFor] - the step decides
+     * the precision, because the step is what the reader is being asked to tell apart.
+     */
+    fun elevationAxisFor(stepMeters: Float, locale: Locale = Locale.getDefault()): (Float) -> String {
+        val decimals = axisDecimals(elevationIn(abs(stepMeters).toDouble()))
+        return { meters -> elevationAxis(meters, decimals, locale) }
+    }
 
     private fun speedIn(metersPerSecond: Double): Double =
         metersPerSecond * SECONDS_PER_HOUR / if (metric) METERS_PER_KM else METERS_PER_MILE
@@ -120,13 +166,28 @@ class Formatters(val units: UnitSystem) {
     val SpeedAxis: (Float) -> String = { speedAxis(it) }
     val ElevationAxis: (Float) -> String = { elevationAxis(it) }
     val DurationAxis: (Float) -> String = { durationAxis(it) }
-    val DistanceAxis: (Float) -> String = { distanceAxis(it) }
 
     companion object {
         /** The fallback, and what every preview and test gets unless it says otherwise. */
         val Metric = Formatters(UnitSystem.METRIC)
 
         const val EMPTY = "—"
+
+        /** Past three, an axis tick is reading out float noise rather than a distance. */
+        const val MAX_AXIS_DECIMALS = 3
+
+        /**
+         * How many decimals it takes to tell one tick from the next one up.
+         *
+         * Steps come off the 1-2-5 progression, so this is simply where the step sits
+         * against the decimal point: 5 and 2 need none, 0.5 needs one, 0.05 needs two.
+         */
+        private fun axisDecimals(step: Double): Int =
+            if (step > 0.0 && step.isFinite()) {
+                ceil(-log10(step)).toInt().coerceIn(0, MAX_AXIS_DECIMALS)
+            } else {
+                1
+            }
 
         private const val METERS_PER_KM = 1000.0
         private const val METERS_PER_MILE = 1609.344

@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.FlowRowScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -43,14 +42,10 @@ class Stat(val label: String, val value: String)
 fun StatRow(
     stats: List<Stat>,
     modifier: Modifier = Modifier,
-    /**
-     * Put beside the last reading when the line has room for it, and on its own line
-     * underneath when it does not - which is what a `Row` could not do, having no choice
-     * but to clip. Wide units, a long duration and a large font scale can each use the
-     * room up on their own.
-     */
-    trailing: @Composable (FlowRowScope.() -> Unit)? = null,
 ) {
+    // A FlowRow rather than a Row: wide units, a long duration and a large font scale can
+    // each use the width up on their own, and wrapping beats a Row's only other option,
+    // which is to clip.
     FlowRow(
         modifier = modifier.fillMaxWidth().heightIn(min = RowHeight),
         horizontalArrangement = Arrangement.spacedBy(24.dp),
@@ -73,8 +68,6 @@ fun StatRow(
                 )
             }
         }
-
-        trailing?.invoke(this)
     }
 }
 
@@ -86,6 +79,8 @@ private val RowHeight = 48.dp
  * Max speed used to sit here too and does not any more: the speed chart marks and labels
  * its own peak a few hundred pixels below, and printing the same figure twice on one
  * screen is the sheet paying rent in height for nothing.
+ *
+ * The duration is whichever one the average speed was measured over - see [movingIsBasis].
  */
 @Composable
 fun trackHeadline(stats: TrackStats, hasTime: Boolean): List<Stat> {
@@ -93,13 +88,39 @@ fun trackHeadline(stats: TrackStats, hasTime: Boolean): List<Stat> {
     return buildList {
         add(Stat(stringResource(R.string.axis_distance), formatters.distance(stats.distanceMeters)))
         if (hasTime) {
-            add(Stat(stringResource(R.string.stat_duration), Formatters.duration(stats.totalDurationSeconds)))
+            val moving = stats.movingIsBasis
+            add(
+                Stat(
+                    label = stringResource(if (moving) R.string.stat_moving else R.string.stat_duration),
+                    value = Formatters.duration(
+                        if (moving) stats.movingDurationSeconds else stats.totalDurationSeconds
+                    ),
+                )
+            )
             add(Stat(stringResource(R.string.stat_avg_speed), formatters.speed(stats.averageSpeedMps)))
         } else {
             add(Stat(stringResource(R.string.stat_points), Formatters.count(stats.pointCount)))
         }
     }
 }
+
+/**
+ * Whether the headline should read the moving time rather than the wall clock.
+ *
+ * The average speed is distance over *moving* time, the way every tracker reports it. Put
+ * the wall clock next to it and the row does not reconcile: a ride with a long lunch reads
+ * 8 km, 2:30, 18 km/h, and the reader is left to work out which of the three is lying -
+ * none of them is, but the one number that would explain it is folded away under Details.
+ * So the time on this row is the time the speed beside it was measured over, and the other
+ * one moves into the fold. When the ride has no stops in it they are the same number, and
+ * printing it twice is what the fold exists to avoid.
+ */
+val TrackStats.movingIsBasis: Boolean
+    get() = movingDurationSeconds > 0.0 &&
+        totalDurationSeconds - movingDurationSeconds >= STOPPED_TIME_WORTH_SPLITTING
+
+/** Below a second the two durations format identically, so there is nothing to tell apart. */
+private const val STOPPED_TIME_WORTH_SPLITTING = 1.0
 
 /**
  * Everything worth keeping that did not earn a place in the headline, on one line.
@@ -116,8 +137,10 @@ fun TrackDetails(
 ) {
     val formatters = LocalFormatters.current
     val details = buildList {
-        if (hasTime) {
-            add(stringResource(R.string.stat_moving) to Formatters.duration(stats.movingDurationSeconds))
+        // The duration the headline did not take. One of the two is up there already, and
+        // which one it is depends on whether the ride had any standing still in it.
+        if (hasTime && stats.movingIsBasis) {
+            add(stringResource(R.string.stat_elapsed) to Formatters.duration(stats.totalDurationSeconds))
         }
         if (hasElevation) {
             add(stringResource(R.string.stat_ascent) to formatters.elevation(stats.ascentMeters))

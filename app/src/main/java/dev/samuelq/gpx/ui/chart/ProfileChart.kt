@@ -68,6 +68,8 @@ private const val BreakWashAlpha = 0.10f
 fun ProfileChart(
     series: ChartSeries,
     xScale: Scale,
+    /** From [yScale]. Passed in so the caller can label it to the precision of its step. */
+    yScale: Scale,
     formatX: (Float) -> String,
     formatY: (Float) -> String,
     selectedIndex: Int?,
@@ -98,6 +100,15 @@ fun ProfileChart(
      * a reader following a line should not have to look down at the axis to have both.
      */
     formatPosition: ((Float) -> String)? = null,
+    /**
+     * Whether this chart draws the x axis, or leaves it to the one below.
+     *
+     * Every chart in a stack is plotted against the same domain - that is what makes the
+     * scrubber mean one thing across all of them - so a tick band under each is the same
+     * row of numbers printed twice. The lowest chart keeps it and the rest give the space
+     * back to their plots.
+     */
+    showXAxis: Boolean = true,
     plotHeight: Dp = 164.dp,
 ) {
     val chartColors = LocalChartColors.current
@@ -108,21 +119,25 @@ fun ProfileChart(
         color = chartColors.label,
     )
 
-    val yScale = remember(series) { series.yScale() }
-
     // Labels are measured during composition, not while drawing: their width decides the
     // gutter, the gutter decides the plot rect, and the pointer handler needs that same
     // rect to map a touch back to a sample.
     val render = remember(
         series, xScale, yScale, formatX, formatY, labelStyle, highlightIndex, highlightLabel,
-        breakLabel,
+        breakLabel, showXAxis,
     ) {
         ChartRender(
             series = series,
             xScale = xScale,
             yScale = yScale,
             yTicks = yScale.ticks.map { textMeasurer.measure(formatY(it), labelStyle) },
-            xTicks = xScale.ticks.map { textMeasurer.measure(formatX(it), labelStyle) },
+            // Nothing measured is nothing drawn, so a chart that has given its axis away
+            // needs no further say in the matter.
+            xTicks = if (!showXAxis) {
+                emptyList()
+            } else {
+                xScale.ticks.map { textMeasurer.measure(formatX(it), labelStyle) }
+            },
             highlightIndex = highlightIndex,
             highlightLayout = highlightLabel?.let { textMeasurer.measure(it, labelStyle) },
             breaks = series.breaks().map { (from, to) ->
@@ -135,14 +150,14 @@ fun ProfileChart(
         )
     }
 
-    val geometry = remember(render, density) {
+    val geometry = remember(render, density, showXAxis) {
         val gutter = render.yTicks.maxOfOrNull { it.size.width }?.toFloat() ?: 0f
         with(density) {
             ChartGeometry(
                 gutterPx = gutter,
                 plotLeft = gutter + LabelGap.toPx(),
                 topPad = if (render.highlightLayout != null) HighlightBand.toPx() else 4.dp.toPx(),
-                bottomBand = AxisBand.toPx(),
+                bottomBand = if (showXAxis) AxisBand.toPx() else 0f,
                 rightPad = RightPad.toPx(),
                 labelGap = LabelGap.toPx(),
             )
@@ -152,7 +167,7 @@ fun ProfileChart(
     Box(
         modifier
             .fillMaxWidth()
-            .height(plotHeight + AxisBand)
+            .height(plotHeight + if (showXAxis) AxisBand else 0.dp)
             .semantics { this.contentDescription = contentDescription },
     ) {
         StaticLayer(render, geometry, chartColors)
@@ -423,18 +438,6 @@ private class ChartGeometry(
     }
 }
 
-private fun ChartSeries.yScale(): Scale {
-    var min = Float.POSITIVE_INFINITY
-    var max = Float.NEGATIVE_INFINITY
-    for (value in y) {
-        if (value.isNaN()) continue
-        if (value < min) min = value
-        if (value > max) max = value
-    }
-    if (!min.isFinite() || !max.isFinite()) return Scale(0f, 1f, floatArrayOf(0f, 1f))
-    return niceScale(min, max, zeroBased)
-}
-
 private fun Rect.xFor(value: Float, scale: Scale): Float =
     left + ((value - scale.min) / scale.span) * width
 
@@ -555,8 +558,10 @@ private fun DrawScope.drawHighlight(
     drawCircle(surface, markerRadius + ring, Offset(x, y))
     drawCircle(series.color, markerRadius, Offset(x, y))
 
+    // Kept inside the plot rather than inside the canvas: clamped to zero, a peak in the
+    // first few samples put its label out over the y axis, on top of the tick numbers.
     val labelX = (x - layout.size.width / 2f)
-        .coerceIn(0f, (plot.right - layout.size.width).coerceAtLeast(0f))
+        .coerceIn(plot.left, (plot.right - layout.size.width).coerceAtLeast(plot.left))
     val above = y - markerRadius - ring - layout.size.height - 2f
     // Flip below the marker rather than let the label run off the top of the plot.
     val labelY = if (above >= 0f) above else y + markerRadius + ring + 2f

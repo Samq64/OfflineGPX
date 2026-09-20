@@ -43,10 +43,40 @@ class FormattersTest {
     /** Axis ticks are bare numbers - the section heading carries the unit, once. */
     @Test
     fun `axis forms carry no unit`() {
-        assertEquals("5.0", metric.distanceAxis(5000f, en))
-        assertEquals("3.1", imperial.distanceAxis(5000f, en))
-        assertEquals("1,000", metric.elevationAxis(1000f, en))
-        assertEquals("3,281", imperial.elevationAxis(1000f, en))
+        assertEquals("5.0", metric.distanceAxis(5000f, 1, en))
+        assertEquals("3.1", imperial.distanceAxis(5000f, 1, en))
+        assertEquals("1,000", metric.elevationAxis(1000f, 0, en))
+        assertEquals("3,281", imperial.elevationAxis(1000f, 0, en))
+    }
+
+    /**
+     * Whole metres are right for a mountain and wrong for a towpath: at half-metre ticks
+     * the integer form labels 9.5 and 10.0 both "10".
+     */
+    @Test
+    fun `elevation ticks resolve the gap between them`() {
+        val flat = metric.elevationAxisFor(0.5f, en)
+        assertEquals(listOf("9.0", "9.5", "10.0"), listOf(9f, 9.5f, 10f).map(flat))
+
+        val hilly = metric.elevationAxisFor(100f, en)
+        assertEquals(listOf("0", "100", "1,000"), listOf(0f, 100f, 1000f).map(hilly))
+    }
+
+    /**
+     * The whole point of taking the step: at one decimal a 50 m step labels two ticks
+     * "0.1", which is a chart quietly lying about where its own gridlines are.
+     */
+    @Test
+    fun `distance ticks resolve the gap between them`() {
+        val short = metric.distanceAxisFor(50f, en)
+        assertEquals(listOf("0.00", "0.05", "0.10", "0.15"), listOf(0f, 50f, 100f, 150f).map(short))
+
+        val long = metric.distanceAxisFor(5000f, en)
+        assertEquals(listOf("0", "5", "10"), listOf(0f, 5000f, 10000f).map(long))
+
+        // Miles are the smaller unit, so the same ground needs one more decimal to split.
+        val miles = imperial.distanceAxisFor(50f, en)
+        assertEquals(listOf("0.00", "0.03", "0.06"), listOf(0f, 50f, 100f).map(miles))
     }
 
     @Test

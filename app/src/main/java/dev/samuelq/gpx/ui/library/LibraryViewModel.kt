@@ -13,6 +13,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -24,6 +25,9 @@ sealed interface LibraryEvent {
     data object ImportFailed : LibraryEvent
     data object ExportFailed : LibraryEvent
     data object Exported : LibraryEvent
+
+    /** [written] of [requested] tracks reached the folder. */
+    data class ExportedAll(val written: Int, val requested: Int) : LibraryEvent
     data object RenameFailed : LibraryEvent
 }
 
@@ -35,8 +39,14 @@ sealed interface LibraryEvent {
 @Stable
 class LibraryViewModel(private val repository: TrackRepository) : ViewModel() {
 
+    /** What the user has typed into the search field. Blank means they have not. */
+    private val _query = MutableStateFlow("")
+    val query: StateFlow<String> = _query.asStateFlow()
+
     /**
-     * Null until the first query comes back, which is not the same as empty.
+     * The rows to show: everything, filtered by [query].
+     *
+     * Null until the first read comes back, which is not the same as empty.
      *
      * Starting at `emptyList()` meant the screen rendered "No tracks yet" for the first
      * frames of its own entry animation and then replaced it with the list - a full
@@ -44,8 +54,14 @@ class LibraryViewModel(private val repository: TrackRepository) : ViewModel() {
      * arriving. `WhileSubscribed` keeps this warm for five seconds, so only the first open
      * ever sees the null.
      */
-    val tracks: StateFlow<List<TrackEntity>?> = repository.tracks
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+    val tracks: StateFlow<List<TrackEntity>?> =
+        combine(repository.tracks, _query) { tracks, query ->
+            tracks.filter { it.matches(query) }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    fun search(query: String) {
+        _query.value = query
+    }
 
     /** Ids ticked for a batch action. Empty means the list is in its normal mode. */
     private val _selection = MutableStateFlow<Set<Long>>(emptySet())
@@ -99,6 +115,29 @@ class LibraryViewModel(private val repository: TrackRepository) : ViewModel() {
         }
     }
 
+    /** The filenames a pending batch will be written under, by row id. */
+    private var exportingAll: Map<Long, String> = emptyMap()
+
+    fun beginExportAll(names: Map<Long, String>) {
+        exportingAll = names
+    }
+
+    fun finishExportAll(folder: Uri?) {
+        val names = exportingAll
+        exportingAll = emptyMap()
+        if (folder == null || names.isEmpty()) return
+        viewModelScope.launch {
+            repository.exportAll(names, folder.toString()).fold(
+                // Reported as a count because it is one: a folder the app could write some
+                // of is a likelier outcome than one it could write none of, and "Exported"
+                // over a batch that half-landed is the kind of lie that costs a ride.
+                onSuccess = { _events.send(LibraryEvent.ExportedAll(it, names.size)) },
+                onFailure = { _events.send(LibraryEvent.ExportFailed) },
+            )
+            clearSelection()
+        }
+    }
+
     fun rename(id: Long, name: String) {
         viewModelScope.launch {
             repository.rename(id, name).onFailure { _events.send(LibraryEvent.RenameFailed) }
@@ -128,4 +167,18 @@ class LibraryViewModel(private val repository: TrackRepository) : ViewModel() {
             initializer { LibraryViewModel(appContainer.trackRepository) }
         }
     }
+}
+
+/**
+ * Whether a row answers to what was typed.
+ *
+ * Both names, not just the one on screen: an import keeps the filename it arrived under
+ * even after it is renamed, and "the file I downloaded in March" is exactly the sort of
+ * thing someone searches a list of rides for.
+ */
+private fun TrackEntity.matches(query: String): Boolean {
+    val needle = query.trim()
+    if (needle.isEmpty()) return true
+    return trackName?.contains(needle, ignoreCase = true) == true ||
+        displayName.contains(needle, ignoreCase = true)
 }

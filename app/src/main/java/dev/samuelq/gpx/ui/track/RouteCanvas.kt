@@ -87,7 +87,45 @@ class RoutePath(
     val sourceIndices: IntArray,
     /** Indices into [xs] where a new polyline starts. The route is never drawn across these. */
     val runStarts: IntArray,
+    /** The part of the unit square these points actually occupy. */
+    val extent: RouteExtent,
 )
+
+/**
+ * The box a set of routes occupies in unit space.
+ *
+ * The projection normalises to a square whose longer side the content fills and whose
+ * shorter side it does not - a north-south ride is a sliver a thousandth of a unit wide
+ * sitting in a unit-wide box of nothing. This is the part that is drawn, and therefore the
+ * part a fit has to frame.
+ */
+@Immutable
+class RouteExtent(val left: Float, val top: Float, val right: Float, val bottom: Float) {
+
+    val width: Float get() = right - left
+    val height: Float get() = bottom - top
+    val centerX: Float get() = (left + right) / 2f
+    val centerY: Float get() = (top + bottom) / 2f
+
+    /** One point, or none: there is no shape here to scale to. */
+    val isDegenerate: Boolean get() = width <= 0f && height <= 0f
+
+    fun union(other: RouteExtent) = RouteExtent(
+        left = minOf(left, other.left),
+        top = minOf(top, other.top),
+        right = maxOf(right, other.right),
+        bottom = maxOf(bottom, other.bottom),
+    )
+
+    companion object {
+        /** The whole unit square, for when there is nothing drawn to measure. */
+        val Full = RouteExtent(0f, 0f, 1f, 1f)
+    }
+}
+
+/** What every layer covers between them, which is what the fit has to hold. */
+fun routeExtentOf(layers: List<RouteLayer>): RouteExtent =
+    layers.map { it.path.extent }.reduceOrNull(RouteExtent::union) ?: RouteExtent.Full
 
 /** One route on the canvas, with the identity a tap should resolve to. */
 @Immutable
@@ -166,6 +204,10 @@ fun routePathOf(
 
     var lastX = Float.NaN
     var lastY = Float.NaN
+    var minKeptX = Float.POSITIVE_INFINITY
+    var maxKeptX = Float.NEGATIVE_INFINITY
+    var minKeptY = Float.POSITIVE_INFINITY
+    var maxKeptY = Float.NEGATIVE_INFINITY
 
     for (i in points.indices) {
         val x = (((points[i].longitude * cosLat) - midX) / span + 0.5).toFloat()
@@ -181,6 +223,10 @@ fun routePathOf(
         keptX += x
         keptY += y
         keptIndex += i
+        if (x < minKeptX) minKeptX = x
+        if (x > maxKeptX) maxKeptX = x
+        if (y < minKeptY) minKeptY = y
+        if (y > maxKeptY) maxKeptY = y
         lastX = x
         lastY = y
     }
@@ -190,6 +236,9 @@ fun routePathOf(
         ys = keptY.toFloatArray(),
         sourceIndices = keptIndex.toIntArray(),
         runStarts = runs.toIntArray(),
+        // Measured over the points that survived decimation, because those are the ones
+        // that get drawn.
+        extent = RouteExtent(minKeptX, minKeptY, maxKeptX, maxKeptY),
     )
 }
 
@@ -213,6 +262,18 @@ fun RouteCanvas(
     onSelect: ((trackId: Long, index: Int) -> Unit)? = null,
     /** A tap that landed on no route. With a camera to move, empty canvas is now common. */
     onSelectNothing: (() -> Unit)? = null,
+    /**
+     * The layer whose last drawn point is where the recorder is standing, or null when
+     * nothing is being recorded.
+     *
+     * Worth its own mark rather than being left as the end of a line: at the start of a
+     * recording there is no line yet - one fix is a polyline with nothing to draw between -
+     * and a map that shows nothing at all for the first minute reads as a map that is not
+     * working. It is also the one point on the canvas that is about *now* rather than about
+     * something that already happened, which is worth saying in more ink than a vertex.
+     */
+    puckLayerId: Long? = null,
+    puckColor: Color = Color.Unspecified,
     camera: MapCamera = MapCamera.Fitted,
     onCameraChange: ((MapCamera) -> Unit)? = null,
     /**
@@ -228,6 +289,7 @@ fun RouteCanvas(
     val insets = remember(contentPadding, layoutDirection, density) {
         Insets.of(contentPadding, density, layoutDirection)
     }
+    val extent = remember(layers) { routeExtentOf(layers) }
 
     // Nothing below keys a gesture detector on anything that moves. A pinch changes the
     // camera every frame and a recording changes the layers every few seconds; restarting
@@ -236,6 +298,7 @@ fun RouteCanvas(
     val currentCamera by rememberUpdatedState(camera)
     val currentLayers by rememberUpdatedState(layers)
     val currentInsets by rememberUpdatedState(insets)
+    val currentExtent by rememberUpdatedState(extent)
     val select by rememberUpdatedState(onSelect)
     val selectNothing by rememberUpdatedState(onSelectNothing)
     val moveCamera by rememberUpdatedState(onCameraChange)
@@ -256,7 +319,7 @@ fun RouteCanvas(
                 detectTapGestures { offset ->
                     val hit = currentLayers.pick(
                         at = offset,
-                        geometry = size.toGeometry(currentInsets, currentCamera),
+                        geometry = size.toGeometry(currentInsets, currentCamera, currentExtent),
                         reach = reach,
                     )
                     if (hit == null) selectNothing?.invoke() else select?.invoke(hit.first, hit.second)
@@ -272,15 +335,20 @@ fun RouteCanvas(
                             zoomChange = zoomChange,
                             viewport = size,
                             insets = currentInsets,
+                            extent = currentExtent,
                         )
                     )
                 }
             },
     ) {
-        val geometry = size.toGeometry(insets, camera)
+        val geometry = size.toGeometry(insets, camera, extent)
         layers.forEach { drawRoute(it.path, geometry, it.color) }
         markerAt?.let { (layer, at) ->
             drawMarker(layer.path, at, geometry, markerColor, markerRingColor)
+        }
+        // Last, so where the recorder is now is never underneath where it has been.
+        layers.firstOrNull { it.trackId == puckLayerId }?.let {
+            drawPuck(it.path, geometry, puckColor, markerRingColor)
         }
     }
 }
@@ -328,12 +396,14 @@ fun followingCamera(
     contentPadding: PaddingValues,
     density: Density,
     layoutDirection: LayoutDirection,
+    /** Across every layer, not just [path]'s: the fit this has to agree with is the shared one. */
+    extent: RouteExtent,
 ): MapCamera {
     if (path.xs.isEmpty() || viewport.width <= 0f || viewport.height <= 0f) return camera
 
     val at = path.sourceIndices.indexOfNearest(sourceIndex) ?: return camera
     val insets = Insets.of(contentPadding, density, layoutDirection)
-    val geometry = geometryOf(viewport.width, viewport.height, insets, camera)
+    val geometry = geometryOf(viewport.width, viewport.height, insets, camera, extent)
 
     val x = geometry.x(path.xs[at])
     val y = geometry.y(path.ys[at])
@@ -372,8 +442,8 @@ private val FOLLOW_MARGIN = 32.dp
 /** Where the unit square lands on the canvas, kept square so the shape is not stretched. */
 private class RouteGeometry(val left: Float, val top: Float, val scale: Float)
 
-private fun Size.toGeometry(insets: Insets, camera: MapCamera): RouteGeometry =
-    geometryOf(width, height, insets, camera)
+private fun Size.toGeometry(insets: Insets, camera: MapCamera, extent: RouteExtent): RouteGeometry =
+    geometryOf(width, height, insets, camera, extent)
 
 /**
  * The same fit, from a pointer input scope.
@@ -382,18 +452,41 @@ private fun Size.toGeometry(insets: Insets, camera: MapCamera): RouteGeometry =
  * [Size]; both describe the same box, so hit testing and drawing must agree on it - and
  * now that the camera moves the picture, they must agree on that too.
  */
-private fun IntSize.toGeometry(insets: Insets, camera: MapCamera): RouteGeometry =
-    geometryOf(width.toFloat(), height.toFloat(), insets, camera)
+private fun IntSize.toGeometry(
+    insets: Insets,
+    camera: MapCamera,
+    extent: RouteExtent,
+): RouteGeometry = geometryOf(width.toFloat(), height.toFloat(), insets, camera, extent)
 
-/** The fitted placement, before any camera. */
-private fun fittedGeometry(width: Float, height: Float, insets: Insets): RouteGeometry {
+/**
+ * The fitted placement, before any camera.
+ *
+ * Scaled against the box the routes occupy rather than the unit square that box sits in.
+ * The two are the same for a route as wide as it is tall and nowhere near it for anything
+ * else: an out-and-back up a valley normalises to a sliver, and fitting its *square* to the
+ * narrow side of a tall phone spends two thirds of the window on the empty ground either
+ * side of the line. Still one scale for both axes, so the shape is never stretched - this
+ * only picks the largest scale that still holds the drawn box.
+ */
+private fun fittedGeometry(
+    width: Float,
+    height: Float,
+    insets: Insets,
+    extent: RouteExtent,
+): RouteGeometry {
     val availableWidth = max(1f, width - insets.left - insets.right)
     val availableHeight = max(1f, height - insets.top - insets.bottom)
-    val side = max(1f, minOf(availableWidth, availableHeight))
+    // A zero-width extent divides to infinity, which `minOf` then discards in favour of
+    // the other axis - which is the right answer for a route running due north.
+    val scale = if (extent.isDegenerate) {
+        max(1f, minOf(availableWidth, availableHeight))
+    } else {
+        minOf(availableWidth / extent.width, availableHeight / extent.height)
+    }
     return RouteGeometry(
-        left = insets.left + (availableWidth - side) / 2f,
-        top = insets.top + (availableHeight - side) / 2f,
-        scale = side,
+        left = insets.left + availableWidth / 2f - extent.centerX * scale,
+        top = insets.top + availableHeight / 2f - extent.centerY * scale,
+        scale = scale,
     )
 }
 
@@ -402,8 +495,9 @@ private fun geometryOf(
     height: Float,
     insets: Insets,
     camera: MapCamera,
+    extent: RouteExtent,
 ): RouteGeometry {
-    val fitted = fittedGeometry(width, height, insets)
+    val fitted = fittedGeometry(width, height, insets, extent)
     if (camera.isFitted) return fitted
 
     // Zoom about the middle of the canvas, then translate. Doing it in that order is what
@@ -431,6 +525,7 @@ private fun MapCamera.nudged(
     zoomChange: Float,
     viewport: IntSize,
     insets: Insets,
+    extent: RouteExtent,
 ): MapCamera {
     val width = viewport.width.toFloat()
     val height = viewport.height.toFloat()
@@ -459,6 +554,7 @@ private fun MapCamera.nudged(
             zoom = newZoom,
             viewport = Size(width, height),
             insets = insets,
+            extent = extent,
         ),
     )
 }
@@ -469,28 +565,33 @@ private fun MapCamera.nudged(
  * Clamped against the uncovered box rather than the whole canvas: bigger than that box,
  * the routes have to keep covering it; smaller, they have to stay inside it. Either way
  * they cannot be flung off the edge or parked under the sheet.
+ *
+ * The routes, not the unit square they are normalised into - which for a long thin ride is
+ * mostly empty, and clamping that would let the line itself slide out of view behind a
+ * rule that thought it was still holding something.
  */
 private fun clampedPan(
     pan: Offset,
     zoom: Float,
     viewport: Size,
     insets: Insets,
+    extent: RouteExtent,
 ): Offset {
     val centerX = viewport.width / 2f
     val centerY = viewport.height / 2f
-    val fitted = fittedGeometry(viewport.width, viewport.height, insets)
+    val fitted = fittedGeometry(viewport.width, viewport.height, insets, extent)
     val scale = fitted.scale * zoom
-    val zoomedLeft = centerX + (fitted.left - centerX) * zoom
-    val zoomedTop = centerY + (fitted.top - centerY) * zoom
+    val zoomedLeft = centerX + (fitted.x(extent.left) - centerX) * zoom
+    val zoomedTop = centerY + (fitted.y(extent.top) - centerY) * zoom
 
     return Offset(
         x = pan.x.clampBetween(
             insets.left - zoomedLeft,
-            (viewport.width - insets.right) - (zoomedLeft + scale),
+            (viewport.width - insets.right) - (zoomedLeft + extent.width * scale),
         ),
         y = pan.y.clampBetween(
             insets.top - zoomedTop,
-            (viewport.height - insets.bottom) - (zoomedTop + scale),
+            (viewport.height - insets.bottom) - (zoomedTop + extent.height * scale),
         ),
     )
 }
@@ -532,6 +633,32 @@ private fun DrawScope.drawMarker(
     drawCircle(ringColor, 7.dp.toPx(), center)
     drawCircle(color, 5.dp.toPx(), center)
 }
+
+/**
+ * Where the recorder is standing, at the live end of its line.
+ *
+ * Bigger than the scrub marker and wearing a halo, because the two mean different things
+ * and land on the same canvas: one points at a moment in a ride that is over, this one is
+ * the only thing on screen that is about right now. Not animated - the pulse in the
+ * recording bar already says the recorder is alive, and a ticking canvas would redraw every
+ * route on the map to move one dot.
+ */
+private fun DrawScope.drawPuck(
+    route: RoutePath,
+    geometry: RouteGeometry,
+    color: Color,
+    ringColor: Color,
+) {
+    val at = route.xs.lastIndex
+    if (at < 0) return
+    val center = Offset(geometry.x(route.xs[at]), geometry.y(route.ys[at]))
+    drawCircle(color.copy(alpha = PuckHaloAlpha), 14.dp.toPx(), center)
+    drawCircle(ringColor, 8.dp.toPx(), center)
+    drawCircle(color, 6.dp.toPx(), center)
+}
+
+/** Enough to read as a halo against the map, not enough to compete with the line. */
+private const val PuckHaloAlpha = 0.24f
 
 /** How far from a line a tap still counts as being on it. About a fingertip. */
 private val TapReach = 40.dp

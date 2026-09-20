@@ -38,6 +38,12 @@ class ChartSeries(
 @Immutable
 class Scale(val min: Float, val max: Float, val ticks: FloatArray) {
     val span: Float get() = (max - min).takeIf { it > 0f } ?: 1f
+
+    /**
+     * The gap between ticks, which is what decides how precisely they have to be labelled:
+     * a formatter coarser than the step prints two neighbouring ticks the same.
+     */
+    val step: Float get() = if (ticks.size >= 2) ticks[1] - ticks[0] else span
 }
 
 /**
@@ -103,6 +109,24 @@ private fun niceStep(range: Float, targetTicks: Int): Float {
         else -> 10f
     }
     return factor * magnitude
+}
+
+/**
+ * The vertical domain a series needs, ignoring the samples that were never recorded.
+ *
+ * Public, and computed by the caller rather than inside the chart, because the labels the
+ * axis needs depend on its step - the same reason the x scale has always been passed in.
+ */
+fun ChartSeries.yScale(): Scale {
+    var min = Float.POSITIVE_INFINITY
+    var max = Float.NEGATIVE_INFINITY
+    for (value in y) {
+        if (value.isNaN()) continue
+        if (value < min) min = value
+        if (value > max) max = value
+    }
+    if (!min.isFinite() || !max.isFinite()) return Scale(0f, 1f, floatArrayOf(0f, 1f))
+    return niceScale(min, max, zeroBased)
 }
 
 /**
