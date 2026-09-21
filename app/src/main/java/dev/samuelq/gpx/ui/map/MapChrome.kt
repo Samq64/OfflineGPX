@@ -1,37 +1,27 @@
 package dev.samuelq.gpx.ui.map
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Text
-import androidx.compose.material3.TooltipBox
-import androidx.compose.material3.TooltipDefaults
-import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import dev.samuelq.gpx.R
 import dev.samuelq.gpx.core.model.UnitSystem
 import dev.samuelq.gpx.ui.format.LocalFormatters
-import kotlinx.coroutines.launch
 import kotlin.math.floor
 import kotlin.math.log10
 import kotlin.math.pow
@@ -51,29 +41,54 @@ import kotlin.math.roundToInt
  */
 @Composable
 fun ScaleBar(
-    metersPerPixel: Double,
+    /**
+     * The live scale, passed as state rather than as a number.
+     *
+     * The camera republishes this on every frame of a pan, and it is read here - inside the
+     * one composable that draws from it - so that a pinch recomposes a bar and not the
+     * screen the bar is sitting on.
+     */
+    metersPerPixel: State<Double>,
     modifier: Modifier = Modifier,
 ) {
-    if (metersPerPixel <= 0.0 || !metersPerPixel.isFinite()) return
-
     val formatters = LocalFormatters.current
     val density = LocalDensity.current
     val color = MaterialTheme.colorScheme.onSurfaceVariant
 
     val maxWidthPx = with(density) { MaxBarWidth.toPx() }
-    val rounded = roundDistance(metersPerPixel * maxWidthPx, formatters.units)
-    val barWidth = with(density) { (rounded / metersPerPixel).toFloat().toDp() }
-    if (barWidth <= 0.dp) return
+
+    // Snapped behind a `derivedStateOf`, so what this composable actually observes is the
+    // *rounded* distance and its width. Those change a handful of times during a pinch,
+    // while the scale behind them changes on every frame - and re-measuring "500 m" into
+    // the same glyphs sixty times a second is the kind of work that shows up as a dropped
+    // frame somewhere else entirely.
+    val snapped by remember(metersPerPixel, maxWidthPx, formatters.units, density) {
+        derivedStateOf {
+            val scale = metersPerPixel.value
+            if (scale <= 0.0 || !scale.isFinite()) {
+                null
+            } else {
+                val rounded = roundDistance(scale * maxWidthPx, formatters.units)
+                SnappedScale(
+                    meters = rounded,
+                    width = with(density) { (rounded / scale).toFloat().toDp() },
+                )
+            }
+        }
+    }
+
+    val bar = snapped ?: return
+    if (bar.width <= 0.dp) return
 
     Column(modifier = modifier, horizontalAlignment = Alignment.Start) {
         Text(
-            text = scaleLabel(rounded, formatters.units),
+            text = scaleLabel(bar.meters, formatters.units),
             style = MaterialTheme.typography.labelSmall,
             color = color,
         )
         // Drawn rather than composed from boxes: it is three lines, and a Canvas keeps it
         // to one node instead of four.
-        Canvas(Modifier.width(barWidth).height(BarHeight)) {
+        Canvas(Modifier.width(bar.width).height(BarHeight)) {
             val stroke = with(density) { 1.5.dp.toPx() }
             val top = size.height - stroke / 2f
             drawLine(color, Offset(0f, top), Offset(size.width, top), stroke, StrokeCap.Square)
@@ -87,6 +102,17 @@ fun ScaleBar(
         }
     }
 }
+
+/**
+ * A round distance and the width it occupies: everything the bar redraws from.
+ *
+ * A data class because `derivedStateOf` compares its result structurally to decide whether
+ * anything downstream has to run again. Without equality every frame of a pinch would
+ * produce a new-looking value, and the derivation would be an expensive way to change
+ * nothing.
+ */
+@Immutable
+private data class SnappedScale(val meters: Double, val width: Dp)
 
 /**
  * The snapped distance as a whole number and a unit.
@@ -131,59 +157,15 @@ internal fun roundDistance(maxMeters: Double, units: UnitSystem): Double {
     return snapped * power * unit
 }
 
-/**
- * OpenStreetMap's credit, behind a tap.
- *
- * The licence requires the attribution to be shown, not to be permanently in the way, and
- * a map this small needs its corners. MapLibre's own attribution control is switched off
- * in favour of this: it is the same information in less space, and its tooltip can say
- * where the data came from in words rather than opening a browser at a licence page
- * nobody reads.
- */
-@OptIn(ExperimentalMaterial3Api::class)
+/** The scale bar, tucked into its own corner over the map. */
 @Composable
-fun AttributionBadge(modifier: Modifier = Modifier) {
-    val state = rememberTooltipState()
-    val scope = rememberCoroutineScope()
-
-    TooltipBox(
-        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
-        tooltip = { PlainTooltip { Text(stringResource(R.string.map_attribution)) } },
-        state = state,
-        modifier = modifier,
-    ) {
-        IconButton(
-            onClick = { scope.launch { state.show() } },
-            modifier = Modifier.size(BadgeSize),
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.Info,
-                contentDescription = stringResource(R.string.map_attribution_show),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(BadgeIconSize),
-            )
-        }
-    }
-}
-
-/** The scale bar and the credit, which share a corner and a baseline. */
-@Composable
-fun MapChrome(metersPerPixel: Double, modifier: Modifier = Modifier) {
-    Row(
-        modifier = modifier.padding(start = 12.dp),
-        verticalAlignment = Alignment.Bottom,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        ScaleBar(metersPerPixel)
-        AttributionBadge()
-    }
+fun MapChrome(metersPerPixel: State<Double>, modifier: Modifier = Modifier) {
+    ScaleBar(metersPerPixel, modifier = modifier.padding(start = 12.dp))
 }
 
 /** Wide enough to be worth reading, narrow enough to leave the map alone. */
 internal val MaxBarWidth = 96.dp
 private val BarHeight = 6.dp
-private val BadgeSize = 28.dp
-private val BadgeIconSize = 16.dp
 
 private const val METERS_PER_MILE = 1609.344
 private const val METERS_PER_FOOT = 0.3048

@@ -5,12 +5,12 @@ import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
-/** Where a track's points live, and therefore who owns the file. */
+/** Where a track came from. Both are an app-private file now; this is only their history. */
 enum class TrackSource {
-    /** A file the user owns elsewhere, reached through a persisted SAF grant. */
+    /** Copied in from a file the user picked elsewhere. */
     IMPORTED,
 
-    /** A file this app wrote into its own storage. Deleting the row deletes the file. */
+    /** Written by this app's own recorder. */
     RECORDED,
 }
 
@@ -18,13 +18,17 @@ enum class TrackSource {
  * One row per track, over both sources, because the library lists them together and the
  * stats screens want them in one query.
  *
- * Holds no geometry - see the README. [location] points at a GPX file: a SAF URI for
- * [TrackSource.IMPORTED], an app-private path for [TrackSource.RECORDED]. Everything else
- * is summary, denormalised so a list row never reparses a file.
+ * Holds no geometry - see the README. [location] points at a GPX file: an app-private path
+ * for either [TrackSource], since an import is copied in rather than read where the user
+ * left it - the same reasoning `MapStore` copies a basemap in for, applied here so a
+ * recording and an import are the same kind of thing to the rest of this class. Everything
+ * else is summary, denormalised so a list row never reparses a file.
  */
 @Entity(
     tableName = "tracks",
-    // Re-importing the same file updates the existing row rather than duplicating it.
+    // Not load-bearing any more - two imports never land on the same generated path - but
+    // still worth having as a constraint an app-private naming bug would trip rather than
+    // silently overwrite a row.
     indices = [Index(value = ["location"], unique = true)],
 )
 data class TrackEntity(

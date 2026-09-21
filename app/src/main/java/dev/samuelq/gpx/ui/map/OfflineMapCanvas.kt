@@ -15,8 +15,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
@@ -32,9 +34,11 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import dev.samuelq.gpx.core.model.TrackPoint
+import dev.samuelq.gpx.core.model.UnitSystem
 import dev.samuelq.gpx.ui.format.LocalFormatters
 import dev.samuelq.gpx.data.map.OfflineMap
-import dev.samuelq.gpx.data.map.PmtilesHeader
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngBounds
@@ -55,7 +59,8 @@ import org.maplibre.geojson.FeatureCollection
 import org.maplibre.geojson.LineString
 import org.maplibre.geojson.Point
 import org.maplibre.geojson.Polygon
-import kotlin.math.abs
+import kotlin.math.floor
+import kotlin.math.pow
 import kotlin.math.roundToInt
 
 /**
@@ -73,7 +78,51 @@ class RouteOverlay(
     /** Indices into [points] where a new polyline starts. Never drawn across. */
     val segmentStartIndices: IntArray,
     val color: Color,
-)
+) {
+    /**
+     * The box this route occupies, measured once and kept.
+     *
+     * Framing used to walk every position of every route on every change - during a
+     * recording, all of them every few seconds - and build a `LatLng` per point to do it.
+     * Four numbers is the whole answer, and for a route that has not changed it is an
+     * answer that was already known. Lazy because most overlays are never framed against.
+     *
+     * `PUBLICATION` rather than a lock: two threads racing here would each compute the same
+     * four numbers from the same immutable points, so the only cost of a race is doing it
+     * twice, and the only thing worth ruling out is a half-built answer escaping.
+     */
+    val bounds: RouteBounds? by lazy(LazyThreadSafetyMode.PUBLICATION) { RouteBounds.of(points) }
+}
+
+/** A route's extent, as the four numbers a camera fit actually needs. */
+@Immutable
+class RouteBounds(
+    val southLatitude: Double,
+    val westLongitude: Double,
+    val northLatitude: Double,
+    val eastLongitude: Double,
+) {
+    companion object {
+        /** Null for no points at all: an empty route has no box, not a box of zero size. */
+        fun of(points: List<TrackPoint>): RouteBounds? {
+            if (points.isEmpty()) return null
+            var south = Double.POSITIVE_INFINITY
+            var west = Double.POSITIVE_INFINITY
+            var north = Double.NEGATIVE_INFINITY
+            var east = Double.NEGATIVE_INFINITY
+            // Indexed, and doubles rather than objects: this is the one place that touches
+            // every position of every drawn route, so it allocates nothing at all.
+            for (i in points.indices) {
+                val point = points[i]
+                if (point.latitude < south) south = point.latitude
+                if (point.latitude > north) north = point.latitude
+                if (point.longitude < west) west = point.longitude
+                if (point.longitude > east) east = point.longitude
+            }
+            return RouteBounds(south, west, north, east)
+        }
+    }
+}
 
 /**
  * Routes over an offline basemap, or over nothing if none is imported.
@@ -95,6 +144,14 @@ fun OfflineMapCanvas(
     basemaps: List<OfflineMap>,
     contentDescription: String,
     modifier: Modifier = Modifier,
+    /**
+     * The recording drawing itself, kept apart from [routes] on purpose.
+     *
+     * It changes every few seconds and they do not. Passed separately so that growth costs
+     * only its own geometry: in one list, adding a metre of line to the ride in progress
+     * meant rebuilding every position of every other track on the map with it.
+     */
+    liveRoute: RouteOverlay? = null,
     /** Which route the sheet is showing, drawn heavier than the rest. */
     focusedTrackId: Long? = null,
     /** Highlighted point within [focusedTrackId]'s route, as an index into its points. */
@@ -131,27 +188,54 @@ fun OfflineMapCanvas(
     var hasFramed by remember { mutableStateOf(false) }
 
     // Kept here as well as reported outwards, because the graph paper is drawn from it:
-    // a grid square is one scale-bar length, so the two always agree.
-    var metersPerPixel by remember { mutableDoubleStateOf(0.0) }
+    // a square is a round distance on the ground, which takes the same scale the bar takes.
+    //
+    // Held as a state object rather than read through `by`, and deliberately not read
+    // anywhere in this function: the camera writes it on every frame of a pan, and a
+    // composition that read it would rebuild this whole canvas sixty times a second to
+    // find out that the grid had not changed.
+    val metersPerPixel = remember { mutableDoubleStateOf(0.0) }
+
+    /**
+     * The camera's zoom, for the grid alone, and read in the same deferred way.
+     *
+     * The graph paper needs it because MapLibre does not draw a background pattern at the
+     * size the image is: it tiles patterns in tile space, so between one integer zoom and
+     * the next the image is stretched by up to a factor of two. See [gridSquarePx], which
+     * takes it back out again.
+     */
+    val cameraZoom = remember { mutableDoubleStateOf(0.0) }
     val units = LocalFormatters.current.units
 
     val currentRoutes by rememberUpdatedState(routes)
+    val currentLiveRoute by rememberUpdatedState(liveRoute)
     val select by rememberUpdatedState(onSelect)
     val reportScale by rememberUpdatedState(onScaleChange)
     val selectNothing by rememberUpdatedState(onSelectNothing)
 
-    // One grid square is exactly one scale-bar length, so the graph paper stops being
-    // decoration and becomes something you can count across. Rounded to whole pixels
-    // because that is the unit the pattern is drawn in, and because it means the bitmap is
-    // rebuilt only when it would actually look different rather than on every frame of a
-    // pinch.
-    val gridSquarePx = with(density) {
-        if (metersPerPixel <= 0.0 || !metersPerPixel.isFinite()) {
-            FallbackGridSquare.roundToPx()
-        } else {
-            val span = roundDistance(metersPerPixel * MaxBarWidth.toPx(), units)
-            (span / metersPerPixel).roundToInt().coerceIn(MinGridPx, MaxGridPx)
-        }
+    // A grid square is a round distance on the ground, so the graph paper stops being
+    // decoration and becomes something you can count across. Sized against its own target
+    // rather than against the scale bar: the two were one number, which meant the bar could
+    // not be made wider or narrower without redrawing every square on the screen, and the
+    // grid could not be loosened without lying about the distance the bar names.
+    val targetGridPx = with(density) { TargetGridSquare.toPx() }
+    val fallbackGridPx = with(density) { FallbackGridSquare.roundToPx() }
+    var gridSquare by remember(fallbackGridPx) { mutableIntStateOf(fallbackGridPx) }
+
+    // Derived in an effect rather than in the composition, so what recomposition sees is
+    // the square and not the scale behind it. A pinch moves the scale continuously and the
+    // square a handful of times; `snapshotFlow` publishes only the changes, so the pattern
+    // bitmap is rebuilt when it would actually look different.
+    LaunchedEffect(targetGridPx, fallbackGridPx, units) {
+        snapshotFlow {
+            gridSquarePx(
+                metersPerPixel = metersPerPixel.doubleValue,
+                zoom = cameraZoom.doubleValue,
+                targetPx = targetGridPx,
+                units = units,
+                fallbackPx = fallbackGridPx,
+            )
+        }.collect { gridSquare = it }
     }
 
     val insets = remember(contentPadding, layoutDirection, density) {
@@ -181,18 +265,21 @@ fun OfflineMapCanvas(
                 // gesture has a use here that a pinch does not already cover.
                 isRotateGesturesEnabled = false
                 isTiltGesturesEnabled = false
-                // Both of MapLibre's own badges are off. The OpenStreetMap credit the
-                // licence asks for is still shown - see AttributionBadge, which says the
-                // same thing in a corner the map can spare.
+                // Both of MapLibre's own badges are off. What an imported archive says
+                // about its own data is listed per-map on the settings screen instead -
+                // see PmtilesMetadata - since the app ships no maps of its own to credit
+                // and cannot tell a MapLibre style what it does not know either.
                 isAttributionEnabled = false
                 isLogoEnabled = false
             }
             // Both, not just idle: the bar has to track a pinch while it happens, or it
             // reads as broken for as long as the finger is down.
             val publishScale = {
-                val latitude = ready.cameraPosition.target?.latitude ?: 0.0
+                val camera = ready.cameraPosition
+                val latitude = camera.target?.latitude ?: 0.0
                 val scale = ready.projection.getMetersPerPixelAtLatitude(latitude)
-                metersPerPixel = scale
+                metersPerPixel.doubleValue = scale
+                cameraZoom.doubleValue = camera.zoom
                 reportScale(scale)
             }
             ready.addOnCameraMoveListener(publishScale)
@@ -200,7 +287,7 @@ fun OfflineMapCanvas(
             publishScale()
 
             ready.addOnMapClickListener { tapped ->
-                val hit = ready.pick(tapped, currentRoutes)
+                val hit = ready.pick(tapped, currentRoutes, currentLiveRoute)
                 if (hit == null) selectNothing() else select(hit.first, hit.second)
                 true
             }
@@ -235,28 +322,51 @@ fun OfflineMapCanvas(
         }
     }
 
-    LaunchedEffect(style, gridSquarePx, backgroundColor, gridColor) {
-        style?.addGridBackground(gridSquarePx, backgroundColor, gridColor)
+    LaunchedEffect(style, gridSquare, backgroundColor, gridColor) {
+        style?.addGridBackground(gridSquare, backgroundColor, gridColor)
     }
 
     // --- What is drawn -------------------------------------------------------------
 
+    // Every one of these builds its GeoJSON off the main thread. A position becomes a
+    // `Point` holding a list of two boxed doubles, so a long ride is a few hundred thousand
+    // allocations - work that belongs nowhere near the frame the user is looking at. The
+    // handover back is on the composition's own dispatcher, because a source is the
+    // renderer's and the renderer is the main thread's.
     LaunchedEffect(style, basemaps) {
         val loaded = style ?: return@LaunchedEffect
-        loaded.getSourceAs<GeoJsonSource>(SOURCE_COVERAGE)
-            ?.setGeoJson(basemaps.toCoverageOutline())
-        loaded.getSourceAs<GeoJsonSource>(SOURCE_MASK)?.setGeoJson(basemaps.toOutsideMask())
+        val (outline, mask) = withContext(Dispatchers.Default) {
+            basemaps.toCoverageOutline() to basemaps.toOutsideMask()
+        }
+        loaded.getSourceAs<GeoJsonSource>(SOURCE_COVERAGE)?.setGeoJson(outline)
+        loaded.getSourceAs<GeoJsonSource>(SOURCE_MASK)?.setGeoJson(mask)
     }
 
     LaunchedEffect(style, routes, focusedTrackId) {
         val loaded = style ?: return@LaunchedEffect
-        (loaded.getSourceAs<GeoJsonSource>(SOURCE_ROUTES))
-            ?.setGeoJson(routes.toFeatureCollection(focusedTrackId))
+        val collection = withContext(Dispatchers.Default) {
+            routes.toFeatureCollection(focusedTrackId)
+        }
+        loaded.getSourceAs<GeoJsonSource>(SOURCE_ROUTES)?.setGeoJson(collection)
     }
 
-    LaunchedEffect(style, routes, puckTrackId) {
+    // Its own effect, which is the whole point of its own source: this runs every few
+    // seconds for the length of a ride and touches nothing but the ride.
+    LaunchedEffect(style, liveRoute) {
         val loaded = style ?: return@LaunchedEffect
-        val at = routes.firstOrNull { it.trackId == puckTrackId }?.points?.lastOrNull()
+        val collection = withContext(Dispatchers.Default) {
+            listOfNotNull(liveRoute).toFeatureCollection(focusedTrackId = null)
+        }
+        loaded.getSourceAs<GeoJsonSource>(SOURCE_TRACE)?.setGeoJson(collection)
+    }
+
+    LaunchedEffect(style, routes, liveRoute, puckTrackId) {
+        val loaded = style ?: return@LaunchedEffect
+        // The recording is the usual answer here and is no longer in `routes`, so it is
+        // asked first; a saved track can still wear the puck when one is being replayed.
+        val overlay = liveRoute?.takeIf { it.trackId == puckTrackId }
+            ?: routes.firstOrNull { it.trackId == puckTrackId }
+        val at = overlay?.points?.lastOrNull()
         loaded.getSourceAs<GeoJsonSource>(SOURCE_PUCK)?.setGeoJson(at.toFeatureCollection())
     }
 
@@ -271,7 +381,9 @@ fun OfflineMapCanvas(
 
     // What there is to look at: every track and every shown map. This is both what the
     // opening view frames and the box the camera is afterwards kept inside.
-    val extent = remember(routes, basemaps) { extentOf(routes, basemaps) }
+    val extent = remember(routes, liveRoute, basemaps) {
+        extentOf(routes, liveRoute, basemaps)
+    }
 
     LaunchedEffect(map, extent, insets) {
         val ready = map ?: return@LaunchedEffect
@@ -398,6 +510,60 @@ private fun Style.addGridBackground(squarePx: Int, background: Color, line: Colo
 }
 
 /**
+ * The side of the pattern tile, in whole pixels, such that a square measures the largest
+ * round distance that still fits [targetPx] across the screen.
+ *
+ * Snapped on the same 1-2-5 ladder the scale bar uses, but against its own target, so the
+ * two agree about what a round distance *is* without being the same distance. The ladder
+ * is what keeps the result usable at any zoom: consecutive rungs are at most 2.5x apart, so
+ * the square is always between roughly 40% and 100% of the target however far out the
+ * camera goes, and a clamp that would have turned it back into an arbitrary distance is
+ * never needed.
+ *
+ * The tile is then made *smaller* than the square it is meant to draw, by [stretchAt]. A
+ * background pattern is tiled in tile space rather than screen space, so MapLibre draws the
+ * image at up to twice its own size depending on where the camera sits between two integer
+ * zooms - which means the square was only ever a round distance at the zooms that happen to
+ * be whole numbers. Measured on a device: at zoom 9.48 a 129px tile drew a 180px square.
+ * Dividing it out is what makes "one square is 500 m" true at the zoom you are actually at.
+ *
+ * Whole pixels because that is the unit the pattern bitmap is drawn in, and because it
+ * means the bitmap is rebuilt only when it would actually look different rather than on
+ * every frame of a pinch.
+ */
+internal fun gridSquarePx(
+    metersPerPixel: Double,
+    zoom: Double,
+    targetPx: Float,
+    units: UnitSystem,
+    fallbackPx: Int,
+): Int {
+    if (metersPerPixel <= 0.0 || !metersPerPixel.isFinite() || targetPx <= 0f) return fallbackPx
+    val span = roundDistance(metersPerPixel * targetPx, units)
+    // Guards the degenerate scales - a span that underflowed to zero, or one so large that
+    // the division rounds past what a bitmap can be - rather than any ordinary zoom.
+    val square = (span / metersPerPixel / stretchAt(zoom)).roundToInt()
+    return if (square in 1..MaxGridBitmapPx) square else fallbackPx
+}
+
+/**
+ * How much larger than itself MapLibre will draw the pattern at this [zoom].
+ *
+ * `2^(zoom - floor(zoom))`, which is the tile-space tiling falling out as a factor - but
+ * quantised to [STRETCH_STEPS] steps of the octave rather than followed exactly. Followed
+ * exactly it would change on every frame of a pinch, and every change is a new bitmap and a
+ * fresh upload to the renderer; at eight steps the square is never more than about 4% from
+ * the distance it claims, and the paper is redrawn eight times in a doubling of scale
+ * rather than sixty times a second.
+ */
+private fun stretchAt(zoom: Double): Double {
+    if (!zoom.isFinite()) return 1.0
+    val fraction = zoom - floor(zoom)
+    val quantised = (fraction * STRETCH_STEPS).roundToInt() / STRETCH_STEPS.toDouble()
+    return 2.0.pow(quantised)
+}
+
+/**
  * One tile of the grid.
  *
  * Drawn on the top and left edges only. A line on all four would be drawn twice over
@@ -423,15 +589,21 @@ private fun gridTile(squarePx: Int, background: Color, line: Color): Bitmap {
 /**
  * The sources and layers the routes are drawn from, added once per style load.
  *
- * One source for every route rather than one per track: a colour is a feature property and
- * a width is an expression over one, so a hundred tracks are still one layer and one draw.
- * The alternative - a source and a layer per track - re-enters native code once per track
- * on every change, which during a recording is every few seconds.
+ * One source for every *saved* route rather than one per track: a colour is a feature
+ * property and a width is an expression over one, so a hundred tracks are still one layer
+ * and one draw. The alternative - a source and a layer per track - re-enters native code
+ * once per track on every change.
+ *
+ * The recording is the one exception, and it is the reason the rule has one: it changes
+ * every few seconds and the saved tracks do not, so sharing a source with them would mean
+ * rebuilding every position of every visible ride to add a metre of line to one of them.
+ * It gets its own source and its own layer, drawn directly over theirs.
  */
 private fun Style.addRouteLayers(marker: Color, markerRing: Color, puck: Color, coverage: Color) {
     addSource(GeoJsonSource(SOURCE_MASK))
     addSource(GeoJsonSource(SOURCE_COVERAGE))
     addSource(GeoJsonSource(SOURCE_ROUTES))
+    addSource(GeoJsonSource(SOURCE_TRACE))
     addSource(GeoJsonSource(SOURCE_MARKER))
     addSource(GeoJsonSource(SOURCE_PUCK))
 
@@ -471,6 +643,14 @@ private fun Style.addRouteLayers(marker: Color, markerRing: Color, puck: Color, 
         PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
         PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
     )
+    // Same paint, read the same way: the recording is drawn no differently for living in
+    // its own source, and a reader should not be able to tell which layer a line is in.
+    val trace = LineLayer(LAYER_TRACE, SOURCE_TRACE).withProperties(
+        PropertyFactory.lineColor(Expression.get(PROPERTY_COLOR)),
+        PropertyFactory.lineWidth(Expression.get(PROPERTY_WIDTH)),
+        PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+        PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+    )
     // Under the labels, not over them. Layers draw in the order they are added, so simply
     // appending put a 6px route line across every place name on the map. A route is a
     // thick opaque stroke and text is the one thing it must never cover: the name is how
@@ -479,15 +659,17 @@ private fun Style.addRouteLayers(marker: Color, markerRing: Color, puck: Color, 
     // Falls back to appending when there is no basemap, because then there are no label
     // layers to sit beneath and the route is the only thing on screen.
     // Each insert lands immediately below the labels, so adding them in this order stacks
-    // them mask - outline - routes, with every one of them still under the text.
+    // them mask - outline - routes - trace, with every one of them still under the text.
     if (getLayer(MapStyle.lowestLabelLayer(0)) != null) {
         addLayerBelow(mask, MapStyle.lowestLabelLayer(0))
         addLayerBelow(coverageOutline, MapStyle.lowestLabelLayer(0))
         addLayerBelow(routes, MapStyle.lowestLabelLayer(0))
+        addLayerBelow(trace, MapStyle.lowestLabelLayer(0))
     } else {
         // No basemap: there is nothing to mask and no labels to sit beneath.
         addLayer(coverageOutline)
         addLayer(routes)
+        addLayer(trace)
     }
 
     // Bigger than the scrub marker and wearing a halo: the two land on the same map and
@@ -677,6 +859,7 @@ private fun TrackPoint?.toFeatureCollection(): FeatureCollection =
 private fun MapLibreMap.pick(
     tapped: LatLng,
     routes: List<RouteOverlay>,
+    liveRoute: RouteOverlay?,
 ): Pair<Long, Int>? {
     val screen = projection.toScreenLocation(tapped)
     val box = RectF(
@@ -685,11 +868,16 @@ private fun MapLibreMap.pick(
         screen.x + TAP_REACH_PX,
         screen.y + TAP_REACH_PX,
     )
-    val trackId = queryRenderedFeatures(box, LAYER_ROUTES)
+    // Both layers, because the recording is drawn in its own. A tap on it resolves to a
+    // track id the caller ignores - which is the point: it is not a selection, and it is
+    // not the bare map either, so it must not read as a request to close the sheet.
+    val trackId = queryRenderedFeatures(box, LAYER_ROUTES, LAYER_TRACE)
         .firstNotNullOfOrNull { it.getNumberProperty(PROPERTY_TRACK_ID)?.toLong() }
         ?: return null
 
-    val route = routes.firstOrNull { it.trackId == trackId } ?: return null
+    val route = liveRoute?.takeIf { it.trackId == trackId }
+        ?: routes.firstOrNull { it.trackId == trackId }
+        ?: return null
     val index = route.points.indexOfNearest(tapped) ?: return null
     return trackId to index
 }
@@ -724,72 +912,49 @@ private fun List<TrackPoint>.indexOfNearest(target: LatLng): Int? {
  * Null when there is neither - a fresh install with no tracks and no map, where there is
  * nothing to frame and nothing to keep the camera inside of.
  */
-private fun extentOf(routes: List<RouteOverlay>, basemaps: List<OfflineMap>): LatLngBounds? {
-    val builder = LatLngBounds.Builder()
-    var count = 0
+internal fun extentOf(
+    routes: List<RouteOverlay>,
+    liveRoute: RouteOverlay?,
+    basemaps: List<OfflineMap>,
+): LatLngBounds? {
+    var south = Double.POSITIVE_INFINITY
+    var west = Double.POSITIVE_INFINITY
+    var north = Double.NEGATIVE_INFINITY
+    var east = Double.NEGATIVE_INFINITY
 
-    routes.forEach { route ->
-        route.points.forEach {
-            builder.include(LatLng(it.latitude, it.longitude))
-            count++
-        }
+    // A box of boxes, in four doubles. Each route already knows its own extent, so this no
+    // longer walks a ride of 30,000 positions - let alone every ride on the map, every
+    // time the one being recorded grows.
+    for (route in routes) {
+        val bounds = route.bounds ?: continue
+        if (bounds.southLatitude < south) south = bounds.southLatitude
+        if (bounds.northLatitude > north) north = bounds.northLatitude
+        if (bounds.westLongitude < west) west = bounds.westLongitude
+        if (bounds.eastLongitude > east) east = bounds.eastLongitude
     }
-    basemaps.forEach { map ->
-        builder.include(LatLng(map.header.minLatitude, map.header.minLongitude))
-        builder.include(LatLng(map.header.maxLatitude, map.header.maxLongitude))
-        count += 2
+    liveRoute?.bounds?.let { bounds ->
+        if (bounds.southLatitude < south) south = bounds.southLatitude
+        if (bounds.northLatitude > north) north = bounds.northLatitude
+        if (bounds.westLongitude < west) west = bounds.westLongitude
+        if (bounds.eastLongitude > east) east = bounds.eastLongitude
     }
-    // A single position has no box, and LatLngBounds rejects a degenerate one - which is a
-    // throw rather than an empty map, so it has to be caught here.
-    if (count < 2) return null
-    return runCatching { builder.build() }.getOrNull()
-}
-
-/** Frames what an archive covers, which is the next best thing to framing a ride. */
-private fun MapLibreMap.frame(header: PmtilesHeader, insets: Insets) {
-    val bounds = LatLngBounds.Builder()
-        .include(LatLng(header.minLatitude, header.minLongitude))
-        .include(LatLng(header.maxLatitude, header.maxLongitude))
-        .build()
-    moveCamera(
-        CameraUpdateFactory.newLatLngBounds(
-            bounds,
-            insets.left + EDGE_PADDING_PX,
-            insets.top + EDGE_PADDING_PX,
-            insets.right + EDGE_PADDING_PX,
-            insets.bottom + EDGE_PADDING_PX,
-        )
-    )
-}
-
-/** Frames every route, keeping the padded edges clear. */
-private fun MapLibreMap.frame(routes: List<RouteOverlay>, insets: Insets) {
-    val positions = routes.flatMap { route ->
-        route.points.map { LatLng(it.latitude, it.longitude) }
-    }
-    if (positions.isEmpty()) return
-
-    // A ride that never left one spot has no box to fit. LatLngBounds rejects a degenerate
-    // one, so this is not an optimisation - it is the difference between a map and a throw.
-    val spansGround = positions.any {
-        abs(it.latitude - positions[0].latitude) > DEGENERATE_DEGREES ||
-            abs(it.longitude - positions[0].longitude) > DEGENERATE_DEGREES
-    }
-    if (!spansGround) {
-        moveCamera(CameraUpdateFactory.newLatLngZoom(positions[0], SINGLE_POINT_ZOOM))
-        return
+    for (map in basemaps) {
+        val header = map.header
+        if (header.minLatitude < south) south = header.minLatitude
+        if (header.maxLatitude > north) north = header.maxLatitude
+        if (header.minLongitude < west) west = header.minLongitude
+        if (header.maxLongitude > east) east = header.maxLongitude
     }
 
-    val bounds = LatLngBounds.Builder().includes(positions).build()
-    moveCamera(
-        CameraUpdateFactory.newLatLngBounds(
-            bounds,
-            insets.left + EDGE_PADDING_PX,
-            insets.top + EDGE_PADDING_PX,
-            insets.right + EDGE_PADDING_PX,
-            insets.bottom + EDGE_PADDING_PX,
-        )
-    )
+    if (!south.isFinite() || !north.isFinite() || !west.isFinite() || !east.isFinite()) return null
+    // A single position is not a box. There is nothing to fit a camera to and nothing to
+    // pen it inside of - and penning it inside a point is worse than leaving it free, so
+    // this is the same "nothing to frame" answer as having no routes at all.
+    if (north == south && east == west) return null
+
+    return runCatching {
+        LatLngBounds.from(latNorth = north, lonEast = east, latSouth = south, lonWest = west)
+    }.getOrNull()
 }
 
 /**
@@ -833,12 +998,14 @@ private fun Color.css(): String = String.format("#%06X", 0xFFFFFF and toArgb())
 private const val SOURCE_MASK = "coverage-mask"
 private const val SOURCE_COVERAGE = "coverage"
 private const val SOURCE_ROUTES = "routes"
+private const val SOURCE_TRACE = "trace"
 private const val SOURCE_MARKER = "route-marker"
 private const val SOURCE_PUCK = "route-puck"
 
 private const val LAYER_MASK = "coverage-mask-fill"
 private const val LAYER_COVERAGE = "coverage-outline"
 private const val LAYER_ROUTES = "routes-line"
+private const val LAYER_TRACE = "trace-line"
 private const val LAYER_MARKER = "route-marker-circle"
 private const val LAYER_PUCK = "route-puck-circle"
 private const val LAYER_PUCK_HALO = "route-puck-halo"
@@ -864,9 +1031,20 @@ private const val IMAGE_GRID = "grid"
 /** Used only before the map has reported a scale to size the squares from. */
 private val FallbackGridSquare = 48.dp
 
-/** Below this the grid is a mesh; above it there is barely a grid on screen at all. */
-private const val MinGridPx = 24
-private const val MaxGridPx = 512
+/**
+ * How wide a square wants to be, before the ladder of round distances has its say.
+ *
+ * The grid's own number, not the scale bar's. It is a texture as much as a measure, so it
+ * reads at a size the bar - which has a label to hold and a corner to stay out of - has no
+ * reason to share. Snapping always lands at or below this, and never below about 40% of it.
+ */
+private val TargetGridSquare = 64.dp
+
+/** A sanity bound on the pattern bitmap, not a bound on the grid: see [gridSquarePx]. */
+private const val MaxGridBitmapPx = 4096
+
+/** Steps per octave the pattern's zoom stretch is corrected in. See [stretchAt]. */
+private const val STRETCH_STEPS = 8
 
 /** Line weight as a fraction of the square, so the grid keeps its proportions at any density. */
 private const val GRID_LINE_DIVISOR = 48f
@@ -875,12 +1053,6 @@ private const val GRID_LINE_DIVISOR = 48f
 private const val TAP_REACH_PX = 44f
 private const val FOLLOW_MARGIN_PX = 96f
 private const val EDGE_PADDING_PX = 64
-
-/** Closer together than this and there is no box worth fitting - about 10 metres. */
-private const val DEGENERATE_DEGREES = 1e-4
-
-/** What a single position is shown at, since it implies no scale of its own. */
-private const val SINGLE_POINT_ZOOM = 14.0
 
 /** How far past an archive's deepest zoom the camera may still go. */
 private const val OVERZOOM_ALLOWANCE = 2

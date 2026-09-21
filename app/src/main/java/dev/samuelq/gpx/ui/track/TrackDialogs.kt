@@ -79,7 +79,7 @@ fun TrackNameDialog(
 }
 
 /**
- * The one confirmation in the app, for the one action nothing can undo.
+ * Confirms before a track (or forty) is gone for good.
  *
  * Shown from the library's row menu, its selection bar and the map's sheet, so one track
  * and forty go through the same question wherever it is asked. What is actually destroyed

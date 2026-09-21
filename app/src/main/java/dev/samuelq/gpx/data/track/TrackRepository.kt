@@ -27,7 +27,7 @@ class LoadedTrack(
 
 /** Why a file could not be turned into a [LoadedTrack]. The UI maps these to messages. */
 sealed class TrackLoadException(message: String, cause: Throwable? = null) : Exception(message, cause) {
-    /** Gone, renamed, or the persisted permission grant was revoked. */
+    /** Gone, renamed, or (for a transient, one-shot URI) no longer granted. */
     class Unreadable(message: String, cause: Throwable? = null) : TrackLoadException(message, cause)
 
     /** Readable, but not GPX. */
@@ -57,11 +57,12 @@ interface TrackRepository {
     val visibleTracks: Flow<List<TrackEntity>>
 
     /**
-     * Persists the SAF grant, reads the file, and indexes it. Returns the row id, which is
-     * what navigation carries.
+     * Copies [location] into app-private storage, reads it, and indexes the copy. Returns
+     * the row id, which is what navigation carries.
      *
-     * Re-importing a file already in the library updates that row instead of adding a
-     * second one.
+     * Picking the same file again makes a second copy and a second row, the same as
+     * recording twice does - there is no dedupe, because there is nothing to dedupe against
+     * once the app is no longer holding onto the original file at all.
      */
     suspend fun import(location: String): Result<Long>
 
@@ -125,9 +126,8 @@ interface TrackRepository {
     /**
      * Renames a track. A blank [name] clears it, falling the row back to its filename.
      *
-     * For a recording the GPX on disk is rewritten too, so an export carries the name the
-     * user gave it. An imported file is never modified - it is the user's, and an app that
-     * edits files it was only asked to read is a bad neighbour.
+     * The GPX on disk is rewritten too, whichever source it came from, so an export
+     * carries the name the user gave it rather than the one the file arrived with.
      */
     suspend fun rename(id: Long, name: String): Result<Unit>
 

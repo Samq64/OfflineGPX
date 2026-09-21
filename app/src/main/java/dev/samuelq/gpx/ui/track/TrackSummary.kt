@@ -13,6 +13,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -85,21 +86,33 @@ private val RowHeight = 48.dp
 @Composable
 fun trackHeadline(stats: TrackStats, hasTime: Boolean): List<Stat> {
     val formatters = LocalFormatters.current
-    return buildList {
-        add(Stat(stringResource(R.string.axis_distance), formatters.distance(stats.distanceMeters)))
-        if (hasTime) {
-            val moving = stats.movingIsBasis
-            add(
-                Stat(
-                    label = stringResource(if (moving) R.string.stat_moving else R.string.stat_duration),
-                    value = Formatters.duration(
-                        if (moving) stats.movingDurationSeconds else stats.totalDurationSeconds
-                    ),
+    val moving = hasTime && stats.movingIsBasis
+
+    // Labels resolved first, then the row built once. These numbers are about the whole
+    // ride and change when the ride does - but the sheet around them recomposes on every
+    // frame of a chart scrub, and without this each of those frames re-ran the formatters
+    // to arrive at the same three strings.
+    val distanceLabel = stringResource(R.string.axis_distance)
+    val timeLabel = stringResource(if (moving) R.string.stat_moving else R.string.stat_duration)
+    val speedLabel = stringResource(R.string.stat_avg_speed)
+    val pointsLabel = stringResource(R.string.stat_points)
+
+    return remember(stats, hasTime, formatters, distanceLabel, timeLabel, speedLabel, pointsLabel) {
+        buildList {
+            add(Stat(distanceLabel, formatters.distance(stats.distanceMeters)))
+            if (hasTime) {
+                add(
+                    Stat(
+                        label = timeLabel,
+                        value = Formatters.duration(
+                            if (moving) stats.movingDurationSeconds else stats.totalDurationSeconds
+                        ),
+                    )
                 )
-            )
-            add(Stat(stringResource(R.string.stat_avg_speed), formatters.speed(stats.averageSpeedMps)))
-        } else {
-            add(Stat(stringResource(R.string.stat_points), Formatters.count(stats.pointCount)))
+                add(Stat(speedLabel, formatters.speed(stats.averageSpeedMps)))
+            } else {
+                add(Stat(pointsLabel, Formatters.count(stats.pointCount)))
+            }
         }
     }
 }
@@ -136,18 +149,32 @@ fun TrackDetails(
     modifier: Modifier = Modifier,
 ) {
     val formatters = LocalFormatters.current
-    val details = buildList {
-        // The duration the headline did not take. One of the two is up there already, and
-        // which one it is depends on whether the ride had any standing still in it.
-        if (hasTime && stats.movingIsBasis) {
-            add(stringResource(R.string.stat_elapsed) to Formatters.duration(stats.totalDurationSeconds))
-        }
-        if (hasElevation) {
-            add(stringResource(R.string.stat_ascent) to formatters.elevation(stats.ascentMeters))
-            add(stringResource(R.string.stat_descent) to formatters.elevation(stats.descentMeters))
-        }
-        if (hasTime) {
-            add(stringResource(R.string.stat_points) to Formatters.count(stats.pointCount))
+
+    val elapsedLabel = stringResource(R.string.stat_elapsed)
+    val ascentLabel = stringResource(R.string.stat_ascent)
+    val descentLabel = stringResource(R.string.stat_descent)
+    val pointsLabel = stringResource(R.string.stat_points)
+
+    // Built once per track rather than once per recomposition, for the reason given in
+    // [trackHeadline]: a scrub redraws this sheet many times a second and none of these
+    // figures is about the scrub.
+    val details = remember(
+        stats, hasTime, hasElevation, formatters,
+        elapsedLabel, ascentLabel, descentLabel, pointsLabel,
+    ) {
+        buildList {
+            // The duration the headline did not take. One of the two is up there already,
+            // and which one depends on whether the ride had any standing still in it.
+            if (hasTime && stats.movingIsBasis) {
+                add(elapsedLabel to Formatters.duration(stats.totalDurationSeconds))
+            }
+            if (hasElevation) {
+                add(ascentLabel to formatters.elevation(stats.ascentMeters))
+                add(descentLabel to formatters.elevation(stats.descentMeters))
+            }
+            if (hasTime) {
+                add(pointsLabel to Formatters.count(stats.pointCount))
+            }
         }
     }
 

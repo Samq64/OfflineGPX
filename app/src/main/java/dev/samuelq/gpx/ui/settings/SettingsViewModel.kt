@@ -71,6 +71,7 @@ class SettingsViewModel(
                         MapImportError.UNREADABLE -> SettingsMessage.MapUnreadable
                         MapImportError.NOT_AN_ARCHIVE -> SettingsMessage.MapWrongFormat
                         MapImportError.NO_SPACE -> SettingsMessage.MapNoSpace
+                        MapImportError.OVERLAPS -> SettingsMessage.MapOverlaps
                     }
                 }
             )
@@ -83,22 +84,6 @@ class SettingsViewModel(
             _messages.send(SettingsMessage.MapDeleted)
         }
     }
-
-    /**
-     * Shows or hides one map, saying so when the request could not be honoured.
-     *
-     * The refusal is the interesting case: two archives over the same ground would be two
-     * renderings of the same place drawn on top of each other, and there is no stacking
-     * order that makes that readable.
-     */
-    fun useMap(map: OfflineMap, active: Boolean) {
-        if (!mapStore.setActive(map, active)) {
-            viewModelScope.launch { _messages.send(SettingsMessage.MapOverlaps) }
-        }
-    }
-
-    /** The shown map that prevents [map] from being shown, if any. */
-    fun blockedBy(map: OfflineMap): OfflineMap? = mapStore.blockedBy(map)
 
     /** Reported when nothing on the device can open the "where to get maps" link. */
     fun reportNoBrowser() {

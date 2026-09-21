@@ -16,18 +16,17 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -42,6 +41,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -88,6 +88,10 @@ fun SettingsScreen(
     val formatters = LocalFormatters.current
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
+    // Held rather than deleted straight from the row: a big archive is exactly the kind of
+    // thing a mis-tap in a list shouldn't cost, and re-importing one is a real trip back to
+    // wherever the file came from, not a rename undone in a second tap.
+    var deletingMap by remember { mutableStateOf<OfflineMap?>(null) }
 
     // OpenDocument rather than GetContent: this takes a persistable read grant on exactly
     // the file picked, which is all the access a copy needs and less than GetContent hands
@@ -148,12 +152,9 @@ fun SettingsScreen(
 
             MapsSection(
                 maps = maps,
-                activeFileNames = settings.activeMapFiles,
                 importing = importing,
                 onImport = { importer.launch(PMTILES_MIME_TYPES) },
-                onUse = viewModel::useMap,
-                blockedBy = viewModel::blockedBy,
-                onDelete = viewModel::deleteMap,
+                onDelete = { deletingMap = it },
                 onOpenHelp = {
                     // The app has no INTERNET permission and does not need one to do
                     // this: handing a URL to whatever handles web pages is an intent,
@@ -264,6 +265,32 @@ fun SettingsScreen(
             Spacer(Modifier.height(24.dp))
         }
     }
+
+    deletingMap?.let { map ->
+        AlertDialog(
+            onDismissRequest = { deletingMap = null },
+            title = { Text(stringResource(R.string.settings_maps_delete_title)) },
+            text = { Text(stringResource(R.string.settings_maps_delete_body, map.displayName)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.deleteMap(map)
+                        deletingMap = null
+                    },
+                ) {
+                    Text(
+                        text = stringResource(R.string.library_delete),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deletingMap = null }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            },
+        )
+    }
 }
 
 /**
@@ -279,11 +306,8 @@ fun SettingsScreen(
 @Composable
 private fun MapsSection(
     maps: List<OfflineMap>,
-    activeFileNames: Set<String>,
     importing: Boolean,
     onImport: () -> Unit,
-    onUse: (OfflineMap, Boolean) -> Unit,
-    blockedBy: (OfflineMap) -> OfflineMap?,
     onDelete: (OfflineMap) -> Unit,
     onOpenHelp: () -> Unit,
 ) {
@@ -332,16 +356,7 @@ private fun MapsSection(
             )
         } else {
             maps.forEach { map ->
-                val active = map.file.name in activeFileNames
-                MapRow(
-                    map = map,
-                    active = active,
-                    // Only computed for maps that are off: a shown map is never blocked,
-                    // and asking would find itself.
-                    blocker = if (active) null else blockedBy(map),
-                    onUse = { onUse(map, !active) },
-                    onDelete = { onDelete(map) },
-                )
+                MapRow(map = map, onDelete = { onDelete(map) })
             }
         }
     }
@@ -359,33 +374,21 @@ private fun MapsSection(
 @Composable
 private fun MapRow(
     map: OfflineMap,
-    active: Boolean,
-    blocker: OfflineMap?,
-    onUse: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    val detail = if (blocker != null) {
-        // The reason it cannot be shown is more use than its size, and this is the only
-        // place there is room to give it.
-        stringResource(R.string.settings_maps_blocked, blocker.displayName)
-    } else {
-        stringResource(
-            R.string.settings_maps_detail,
-            android.text.format.Formatter.formatShortFileSize(
-                LocalContext.current, map.sizeBytes,
-            ),
-            if (map.header.isVector) {
-                stringResource(R.string.settings_maps_zoom_to, map.header.maxZoom)
-            } else {
-                stringResource(R.string.settings_maps_raster)
-            },
-        )
-    }
+    val detail = stringResource(
+        R.string.settings_maps_detail,
+        android.text.format.Formatter.formatShortFileSize(LocalContext.current, map.sizeBytes),
+        if (map.header.isVector) {
+            stringResource(R.string.settings_maps_zoom_to, map.header.maxZoom)
+        } else {
+            stringResource(R.string.settings_maps_raster)
+        },
+    )
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .toggleable(value = active, enabled = blocker == null, onValueChange = { onUse() })
             .padding(horizontal = ScreenPadding, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -402,6 +405,16 @@ private fun MapRow(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            // Only when the archive says so itself. The app fetches nothing and ships no
+            // maps, so it has no source of its own to credit and nothing worth guessing at
+            // for a file that does not declare one.
+            map.attribution?.let { attribution ->
+                Text(
+                    text = stringResource(R.string.settings_maps_attribution, attribution),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
 
         IconButton(onClick = onDelete) {
@@ -410,15 +423,6 @@ private fun MapRow(
                 contentDescription = stringResource(R.string.settings_maps_delete),
             )
         }
-
-        // A switch, and on the trailing edge, because that is already what "show this on
-        // the map" looks like in the track list. Two controls for one idea would be two
-        // things to learn.
-        Switch(
-            checked = active,
-            enabled = blocker == null,
-            onCheckedChange = { onUse() },
-        )
     }
 }
 

@@ -32,7 +32,10 @@ class PmtilesHeader(
     val rootDirectoryOffset: Long = 0,
     val rootDirectoryLength: Long = 0,
     val leafDirectoriesOffset: Long = 0,
-    /** 1 = none, 2 = gzip. Applies to the directories, not the tiles. */
+    /** Where the archive's own JSON metadata lives, for [PmtilesMetadata] to read. */
+    val jsonMetadataOffset: Long = 0,
+    val jsonMetadataLength: Long = 0,
+    /** 1 = none, 2 = gzip. Applies to the directories and the metadata, not the tiles. */
     val internalCompression: Int = 0,
 ) {
 
@@ -62,6 +65,8 @@ class PmtilesHeader(
         private const val OFFSET_SPEC_VERSION = 7
         private const val OFFSET_ROOT_DIR = 8
         private const val OFFSET_ROOT_DIR_LENGTH = 16
+        private const val OFFSET_JSON_METADATA = 24
+        private const val OFFSET_JSON_METADATA_LENGTH = 32
         private const val OFFSET_LEAF_DIRS = 40
         private const val OFFSET_INTERNAL_COMPRESSION = 97
         private const val OFFSET_TILE_TYPE = 99
@@ -129,6 +134,8 @@ class PmtilesHeader(
                 rootDirectoryOffset = buffer.getLong(OFFSET_ROOT_DIR),
                 rootDirectoryLength = buffer.getLong(OFFSET_ROOT_DIR_LENGTH),
                 leafDirectoriesOffset = buffer.getLong(OFFSET_LEAF_DIRS),
+                jsonMetadataOffset = buffer.getLong(OFFSET_JSON_METADATA),
+                jsonMetadataLength = buffer.getLong(OFFSET_JSON_METADATA_LENGTH),
                 internalCompression = bytes[OFFSET_INTERNAL_COMPRESSION].toInt() and 0xFF,
             )
         }

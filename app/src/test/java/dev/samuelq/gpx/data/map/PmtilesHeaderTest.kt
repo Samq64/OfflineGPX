@@ -45,6 +45,13 @@ class PmtilesHeaderTest {
         assertEquals(45.15, header.minLatitude, 1e-6)
         assertEquals(-75.40, header.maxLongitude, 1e-6)
         assertEquals(45.60, header.maxLatitude, 1e-6)
+
+        // The metadata block sits directly after the root directory, and the leaf
+        // directories directly after that - which is also a check that the length read
+        // is not off by a field, since a wrong one here would make the next offset wrong.
+        assertEquals(header.rootDirectoryOffset + header.rootDirectoryLength, header.jsonMetadataOffset)
+        assertEquals(3291, header.jsonMetadataOffset)
+        assertEquals(1179, header.jsonMetadataLength)
     }
 
     @Test

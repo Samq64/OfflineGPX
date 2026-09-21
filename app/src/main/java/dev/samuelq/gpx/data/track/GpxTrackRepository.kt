@@ -1,7 +1,6 @@
 package dev.samuelq.gpx.data.track
 
 import android.content.Context
-import android.content.Intent
 import android.database.Cursor
 import android.net.Uri
 import android.provider.DocumentsContract
@@ -20,9 +19,13 @@ import dev.samuelq.gpx.data.gpx.GpxWriter
 import dev.samuelq.gpx.data.record.RecordingService
 import dev.samuelq.gpx.data.record.RecordingWal
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileNotFoundException
@@ -41,7 +44,24 @@ class GpxTrackRepository(
 
     private val appContext = context.applicationContext
 
+    /**
+     * Holds the shared table observer, and nothing else.
+     *
+     * The repository is a singleton for the life of the process, so this never needs
+     * cancelling; `WhileSubscribed` is what stops the query running with nobody watching.
+     */
+    private val scope = CoroutineScope(SupervisorJob() + io)
+
     private val recordingsDir: File get() = RecordingService.recordingsDir(appContext)
+
+    /**
+     * Where a copy of every imported GPX lives. App-private, same as [recordingsDir]: an
+     * import used to be read where it sat, behind a persisted SAF grant, but that made an
+     * imported track a different kind of thing from a recorded one - one file the app owns
+     * outright and one it only ever borrows. Copying it in once, at import, means every
+     * track in the library is the same kind of thing afterwards.
+     */
+    private val importsDir: File get() = File(appContext.filesDir, "imports").apply { mkdirs() }
 
     /**
      * Single-entry cache: re-entering a track the user just looked at would otherwise
@@ -51,35 +71,45 @@ class GpxTrackRepository(
     @Volatile
     private var cached: Pair<String, LoadedTrack>? = null
 
-    override val tracks: Flow<List<TrackEntity>> get() = dao.observeByRecent()
+    /**
+     * One query behind both views of the table.
+     *
+     * The map watches the visible rows and the library watches all of them, and each used
+     * to open its own observer on the same statement - so a single write ran the query
+     * twice and woke two collectors with two identical lists. Shared, with a grace period
+     * long enough to survive a rotation or a hop to the settings screen and back.
+     */
+    private val recent: Flow<List<TrackEntity>> = dao.observeByRecent()
+        .shareIn(scope, SharingStarted.WhileSubscribed(SHARE_GRACE_MILLIS), replay = 1)
+
+    override val tracks: Flow<List<TrackEntity>> get() = recent
 
     // Reversed, so the most recently touched track is drawn last and lands on top - the
     // same order the list shows, walked back to front.
     override val visibleTracks: Flow<List<TrackEntity>> =
-        dao.observeByRecent().map { all -> all.filter(TrackEntity::visible).asReversed() }
+        recent.map { all -> all.filter(TrackEntity::visible).asReversed() }
 
     override suspend fun import(location: String): Result<Long> = withContext(io) {
         runCatching {
             val uri = Uri.parse(location)
-            takePersistablePermission(uri)
-
             val displayName = displayNameOf(uri)
-            val loaded = read(location, displayName, LoadedTrack.TRANSIENT_ID)
-            val now = System.currentTimeMillis()
+            val destination = File(importsDir, uniqueImportName(displayName))
 
-            // Look the row up rather than relying on @Upsert to resolve the unique index:
-            // upsert falls back to updating by primary key, which an id of 0 would miss.
-            val existing = dao.byLocation(location)
-            val existingId = existing?.id
+            // Copied before it is parsed, and deleted again if either step fails - the
+            // same order MapStore's import validates a basemap in, for the same reason:
+            // the only bytes worth trusting are the ones that were kept, and a copy that
+            // never became a usable track should not be left taking up space.
+            val loaded = runCatching {
+                copyToPrivateStorage(uri, destination)
+                read(destination.absolutePath, displayName, LoadedTrack.TRANSIENT_ID)
+            }.onFailure { destination.delete() }.getOrThrow()
+
+            val now = System.currentTimeMillis()
             val stats = loaded.profile.stats
             val entity = TrackEntity(
-                id = existingId ?: 0,
-                // Re-importing keeps the colour it already had; a track changing hue
-                // because it was opened twice would be baffling.
-                colorIndex = existing?.colorIndex ?: nextColorIndex(),
-                visible = existing?.visible ?: true,
+                colorIndex = nextColorIndex(),
                 source = TrackSource.IMPORTED,
-                location = location,
+                location = destination.absolutePath,
                 displayName = displayName,
                 trackName = stats.name,
                 startedAtEpochMillis = stats.startedAt?.toEpochMilli(),
@@ -91,10 +121,9 @@ class GpxTrackRepository(
                 descentMeters = stats.descentMeters,
                 pointCount = stats.pointCount,
             )
-            val insertedId = dao.upsert(entity)
-            val id = existingId ?: insertedId
+            val id = dao.upsert(entity)
 
-            cached = location to LoadedTrack(
+            cached = destination.absolutePath to LoadedTrack(
                 id = id,
                 displayName = displayName,
                 track = loaded.track,
@@ -103,6 +132,16 @@ class GpxTrackRepository(
             )
             id
         }.recoverFailure()
+    }
+
+    /** Copies [source] into [destination], or throws if nothing could be read from it. */
+    private fun copyToPrivateStorage(source: Uri, destination: File) {
+        val copied = appContext.contentResolver.openInputStream(source)?.use { input ->
+            destination.outputStream().use { output -> input.copyTo(output) }
+        }
+        if (copied == null) {
+            throw TrackLoadException.Unreadable("No provider could open $source")
+        }
     }
 
     override suspend fun open(id: Long): Result<LoadedTrack> = withContext(io) {
@@ -267,19 +306,18 @@ class GpxTrackRepository(
                 ?: throw TrackLoadException.Unreadable("No track with id $id")
             val trimmed = name.trim().takeIf(String::isNotEmpty)
 
-            if (entity.source == TrackSource.RECORDED) {
-                // Rewrite via a temp file: a crash partway through would otherwise leave
-                // the recording truncated, which is the one outcome worth engineering out.
-                val file = File(entity.location)
-                val parsed = file.inputStream().use(parser::parse)
-                val temp = File(file.parentFile, "${file.name}.tmp")
-                temp.outputStream().use { writer.write(parsed.copy(name = trimmed), it) }
-                if (!temp.renameTo(file)) {
-                    temp.delete()
-                    throw TrackLoadException.Unreadable("Could not rewrite ${file.name}")
-                }
-                if (cached?.first == entity.location) cached = null
+            // The file on disk is rewritten too, for either source: both are this app's
+            // own copy now, and an export is a byte copy of that file rather than a
+            // re-serialisation - so a rename that never touched it would not survive one.
+            val file = File(entity.location)
+            val parsed = file.inputStream().use(parser::parse)
+            val temp = File(file.parentFile, "${file.name}.tmp")
+            temp.outputStream().use { writer.write(parsed.copy(name = trimmed), it) }
+            if (!temp.renameTo(file)) {
+                temp.delete()
+                throw TrackLoadException.Unreadable("Could not rewrite ${file.name}")
             }
+            if (cached?.first == entity.location) cached = null
 
             dao.setTrackName(id, trimmed)
         }.recoverFailure()
@@ -304,7 +342,7 @@ class GpxTrackRepository(
     }
 
     override suspend fun clearAll() = withContext(io) {
-        // Read the rows before dropping them: releasing the grants needs their locations.
+        // Read the rows before dropping them: deleting their files needs their locations.
         val all = dao.all()
         cached = null
         dao.deleteAll()
@@ -370,40 +408,9 @@ class GpxTrackRepository(
                 ?: throw TrackLoadException.Unreadable("No provider could open $location")
         }
 
-    /** The user's file stays theirs; a recording is ours, so its file goes with the row. */
+    /** Both sources are this app's own file now, so deleting the row deletes it. */
     private fun releaseOrDelete(entity: TrackEntity) {
-        when (entity.source) {
-            TrackSource.IMPORTED -> releasePersistablePermission(Uri.parse(entity.location))
-            TrackSource.RECORDED -> runCatching { File(entity.location).delete() }
-        }
-    }
-
-    /**
-     * Converts the picker's one-session grant into one that survives a reboot, so a
-     * library row still works tomorrow. This is why the app needs no storage permission:
-     * the grant covers exactly the file the user chose.
-     */
-    private fun takePersistablePermission(uri: Uri) {
-        try {
-            appContext.contentResolver.takePersistableUriPermission(
-                uri,
-                Intent.FLAG_GRANT_READ_URI_PERMISSION,
-            )
-        } catch (e: SecurityException) {
-            // Expected for URIs never offered as persistable. The file still opens now.
-            Log.d(TAG, "Grant for $uri is not persistable", e)
-        }
-    }
-
-    private fun releasePersistablePermission(uri: Uri) {
-        try {
-            appContext.contentResolver.releasePersistableUriPermission(
-                uri,
-                Intent.FLAG_GRANT_READ_URI_PERMISSION,
-            )
-        } catch (e: SecurityException) {
-            Log.d(TAG, "No persisted grant to release for $uri", e)
-        }
+        runCatching { File(entity.location).delete() }
     }
 
     private fun displayNameOf(uri: Uri): String = queryDisplayName(uri)
@@ -421,17 +428,45 @@ class GpxTrackRepository(
         null
     }
 
+    /**
+     * A name in [importsDir] that is not already taken, keeping the picked file's own name
+     * where possible. The same reasoning as `MapStore`'s equivalent, and the same shape:
+     * two rides both called `track.gpx` are two different rides, not one file re-imported.
+     */
+    private fun uniqueImportName(displayName: String): String {
+        val base = displayName
+            .substringAfterLast('/')
+            .let { if (it.endsWith(".gpx", ignoreCase = true)) it.dropLast(4) else it }
+            .replace(UNSAFE_FILENAME_CHARACTERS, "_")
+            .take(MAX_IMPORT_NAME_LENGTH)
+            .ifBlank { "track" }
+
+        var candidate = "$base.gpx"
+        var suffix = 2
+        while (File(importsDir, candidate).exists()) {
+            candidate = "$base ($suffix).gpx"
+            suffix++
+        }
+        return candidate
+    }
+
     private companion object {
         const val TAG = "GpxTrackRepository"
 
         /** Matches `routePalette()` in the theme. Six, then hues repeat. */
         const val ROUTE_PALETTE_SIZE = 6
 
+        /** Long enough to cover a rotation or a trip to another screen and back. */
+        const val SHARE_GRACE_MILLIS = 5_000L
+
         /** 9 km/h. Above a brisk walk, well below a bicycle. */
         const val WALKING_SPEED_CEILING_MPS = 2.5
 
         /** What a provider is told an exported track is, so it files it as one. */
         const val GPX_MIME = "application/gpx+xml"
+
+        const val MAX_IMPORT_NAME_LENGTH = 80
+        val UNSAFE_FILENAME_CHARACTERS = Regex("""[\\/:*?"<>|]""")
 
         /** Sortable, unambiguous, and legible as a filename once exported. */
         private val FILE_STAMP: DateTimeFormatter =
@@ -446,8 +481,9 @@ class GpxTrackRepository(
                 is TrackLoadException -> e
                 is GpxParseException -> TrackLoadException.Invalid(e.message ?: "Not valid GPX", e)
                 is FileNotFoundException -> TrackLoadException.Unreadable("File no longer exists", e)
-                // A persisted grant can be revoked by a reboot on some providers, or by
-                // the user clearing the picker's permissions.
+                // Only a transient, one-shot URI reaches this any more - an import's own
+                // copy needs no grant - and that one-shot access can still be revoked or
+                // the provider can vanish before the read finishes.
                 is SecurityException ->
                     TrackLoadException.Unreadable("No longer permitted to read this file", e)
 

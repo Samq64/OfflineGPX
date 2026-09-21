@@ -67,7 +67,17 @@ object TrackAnalyzer {
     fun analyze(track: Track, minGapSeconds: Double = MIN_GAP_SECONDS): TrackProfile {
         val points = track.points
         val size = points.size
-        val starts = breaksAt(points, track.segmentStartIndices, minGapSeconds)
+
+        // A track is only treated as timed if *every* point has a timestamp. Partially
+        // timed files exist, but interpolating the gaps would invent speeds that were
+        // never measured, so they are treated as untimed and the speed chart says so.
+        val hasTime = size > 1 && points.all { it.time != null }
+        // Gap detection reads the same timestamps the rest of the profile is about to
+        // ignore, so a partially timed file must not have breaks inserted from a signal
+        // it is otherwise treated as not having.
+        val starts =
+            if (hasTime) breaksAt(points, track.segmentStartIndices, minGapSeconds)
+            else track.segmentStartIndices
         val ends = IntArray(starts.size) { i -> if (i + 1 < starts.size) starts[i + 1] else size }
 
         val elapsed = FloatArray(size)
@@ -75,10 +85,6 @@ object TrackAnalyzer {
         val elevation = FloatArray(size)
         val speed = FloatArray(size)
 
-        // A track is only treated as timed if *every* point has a timestamp. Partially
-        // timed files exist, but interpolating the gaps would invent speeds that were
-        // never measured, so they are treated as untimed and the speed chart says so.
-        val hasTime = size > 1 && points.all { it.time != null }
         val startedAt = points.firstOrNull()?.time
         var hasElevation = false
 
@@ -270,6 +276,14 @@ object TrackAnalyzer {
      * The window is clamped to the enclosing segment: spanning a signal-loss gap would
      * divide a distance that excludes the gap by a duration that includes it, reporting a
      * speed far below the real one right where the track resumes.
+     *
+     * Both edges of the window only ever move forwards, because `elapsed` is monotonic - so
+     * they are carried from one sample to the next rather than re-found from scratch. The
+     * search used to restart at `i` every time, which is linear per sample and therefore
+     * quadratic per segment whenever the clock does not advance: a file that stamps a whole
+     * run with one timestamp - which the monotonic clamp above also produces from
+     * out-of-order ones - made every sample walk the entire run, and a 30k-point import sat
+     * there for minutes.
      */
     private fun computeSpeed(
         starts: IntArray,
@@ -282,10 +296,13 @@ object TrackAnalyzer {
         for (segment in starts.indices) {
             val start = starts[segment]
             val end = ends[segment]
+            var lo = start
+            var hi = start
             for (i in start until end) {
-                var lo = i
-                while (lo > start && elapsed[i] - elapsed[lo - 1] <= half) lo--
-                var hi = i
+                // The trailing edge may not fall behind the sample itself: a window is
+                // centred on `i`, and `hi` is only ever carried forward from the last one.
+                if (hi < i) hi = i
+                while (lo < i && elapsed[i] - elapsed[lo] > half) lo++
                 while (hi < end - 1 && elapsed[hi + 1] - elapsed[i] <= half) hi++
 
                 val dt = elapsed[hi] - elapsed[lo]

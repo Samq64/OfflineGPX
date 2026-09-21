@@ -142,4 +142,20 @@ class GpxParserTest {
         assertNull(GpxParser.parseGpxTime("last tuesday"))
         assertNull(GpxParser.parseGpxTime(""))
     }
+
+    /**
+     * The spelling now decides which parser is used, rather than each being tried until one
+     * stops throwing. These are the shapes that decision has to tell apart - in particular
+     * a zone sign, which only ever appears after the `T`, against the date's own hyphens.
+     */
+    @Test
+    fun `picks a parser from the spelling rather than by trial and error`() {
+        val expected = Instant.parse("2026-05-01T08:00:00Z")
+        assertEquals(expected, GpxParser.parseGpxTime("2026-05-01T05:00:00-03:00"))
+        assertEquals(expected, GpxParser.parseGpxTime("2026-05-01T10:30:00.000+02:30"))
+        assertEquals(expected, GpxParser.parseGpxTime("2026-05-01T08:00:00.000"))
+        // A date that is only a date has no `T` to look past, and is not a timestamp.
+        assertNull(GpxParser.parseGpxTime("2026-05-01"))
+        assertNull(GpxParser.parseGpxTime("2026-05-01T08:00:00+"))
+    }
 }

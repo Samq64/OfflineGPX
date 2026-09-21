@@ -23,6 +23,8 @@ class OfflineMap(
      * unless it was cut from one. Empty when it could not be determined.
      */
     val coverage: Coverage = Coverage.None,
+    /** What the archive itself says its data came from, or null if it does not say. */
+    val attribution: String? = null,
 ) {
     /** The filename without its extension, which is whatever the user named the download. */
     val displayName: String get() = file.nameWithoutExtension
@@ -52,6 +54,9 @@ enum class MapImportError {
 
     /** There is not enough free space to copy it. */
     NO_SPACE,
+
+    /** It covers ground a map already shown covers, and two renderings of it cannot stack. */
+    OVERLAPS,
 }
 
 sealed interface MapImportResult {
@@ -113,6 +118,7 @@ class MapStore(
                         header = header,
                         sizeBytes = file.length(),
                         coverage = PmtilesCoverage.read(file, header),
+                        attribution = PmtilesMetadata.readAttribution(file, header),
                     )
                 }
             }
@@ -174,19 +180,21 @@ class MapStore(
                 header = header,
                 sizeBytes = destination.length(),
                 coverage = PmtilesCoverage.read(destination, header),
+                attribution = PmtilesMetadata.readAttribution(destination, header),
             )
-            refresh()
-            // Shown straight away unless it would sit on top of something already shown.
-            // Importing a map and then having to go and switch it on is a second step with
-            // no other answer - but silently stacking two versions of the same town is
-            // worse than making the user choose.
-            if (_maps.value.none { it.file.name != map.file.name && it.overlaps(map) &&
-                    it.file.name in settings.settings.value.activeMapFiles }
-            ) {
-                settings.setActiveMapFiles(
-                    settings.settings.value.activeMapFiles + destination.name
-                )
+
+            // Rejected outright rather than imported and left off: there is no toggle to
+            // switch it on later, so a map that cannot be shown yet would just be a copy
+            // taking up space with no way to ever become the one that is drawn. Deleting
+            // the map already on screen and reimporting is the way to swap one in.
+            val activeMaps = _maps.value.filter { it.file.name in settings.settings.value.activeMapFiles }
+            if (activeMaps.any { it.overlaps(map) }) {
+                destination.delete()
+                return@withContext MapImportResult.Failed(MapImportError.OVERLAPS)
             }
+
+            refresh()
+            settings.setActiveMapFiles(settings.settings.value.activeMapFiles + destination.name)
             MapImportResult.Imported(map)
         }
 
@@ -194,35 +202,6 @@ class MapStore(
         map.file.delete()
         // refresh() clears the selection if this was it.
         refresh()
-    }
-
-    /**
-     * Shows or hides [map], refusing to show one that would sit on top of another.
-     *
-     * Overlapping is refused rather than resolved. Two archives covering the same ground
-     * are two renderings of the same place drawn over each other - doubled coastlines,
-     * doubled labels, roads that disagree where their cut dates differ - and no stacking
-     * order makes that legible. Keeping them disjoint is what lets several maps be drawn
-     * at once without the style needing to arbitrate between them at all.
-     *
-     * @return false when nothing changed because [map] overlaps something already shown.
-     */
-    fun setActive(map: OfflineMap, active: Boolean): Boolean {
-        val current = settings.settings.value.activeMapFiles
-        if (!active) {
-            settings.setActiveMapFiles(current - map.file.name)
-            return true
-        }
-        if (map.file.name in current) return true
-        if (blockedBy(map, current) != null) return false
-        settings.setActiveMapFiles(current + map.file.name)
-        return true
-    }
-
-    /** The shown map that stops [map] from being shown, if there is one. */
-    fun blockedBy(map: OfflineMap, shown: Set<String> = settings.settings.value.activeMapFiles):
-        OfflineMap? = _maps.value.firstOrNull { other ->
-        other.file.name != map.file.name && other.file.name in shown && other.overlaps(map)
     }
 
     /**

@@ -31,12 +31,14 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomSheetScaffold
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -137,14 +139,24 @@ fun MapScreen(
     // above in its title and in nothing else.
     var renamingId by remember { mutableStateOf<Long?>(null) }
     var deletingId by remember { mutableStateOf<Long?>(null) }
-    // Metres to a screen pixel, republished by the map as the camera moves.
-    var metersPerPixel by remember { mutableDoubleStateOf(0.0) }
+    // Metres to a screen pixel, republished by the map on every frame of a pan or a pinch.
+    //
+    // Held as a state object and never read here: the scale bar is the only thing that
+    // wants it, and reading it in this scope would recompose the map, the controls and the
+    // empty state sixty times a second along with it. `ScaleBar` reads it where it draws.
+    val metersPerPixel = remember { mutableDoubleStateOf(0.0) }
 
     // CreateDocument rather than a share sheet: the destination is picked through SAF, so
     // the file lands where the user chose and the app needs no storage permission.
     val exporter = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/gpx+xml")
     ) { destination -> viewModel.finishExport(destination?.toString()) }
+
+    // Same picker the track list offers, reachable from the empty state too: a first-run
+    // map has nothing worth tapping into a list for yet.
+    val trackImporter = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri -> uri?.let(viewModel::importTrack) }
 
     // The camera belongs to MapLibre now - pinch, fling, the pan clamp and the projection
     // were all this file's problem and are none of its business any more. What is kept is
@@ -170,6 +182,7 @@ fun MapScreen(
     val exportFailed = stringResource(R.string.library_export_failed)
     val renameFailed = stringResource(R.string.library_rename_failed)
     val hidden = stringResource(R.string.track_hidden)
+    val importFailed = stringResource(R.string.library_import_failed)
 
     // Replaces whatever is on screen rather than queueing behind it: these are answers to
     // a tap that just happened, and a stale one arriving four seconds later is a lie.
@@ -215,6 +228,7 @@ fun MapScreen(
                     MapMessage.ExportFailed -> exportFailed
                     MapMessage.RenameFailed -> renameFailed
                     MapMessage.Hidden -> hidden
+                    MapMessage.ImportFailed -> importFailed
                 }
             )
         }
@@ -323,7 +337,12 @@ fun MapScreen(
 
     // Positions, not shapes. There is no shared projection to normalise into any more -
     // the map has one, it is Web Mercator, and it agrees with the tiles underneath.
-    val overlays = remember(state.entities, state.geometry, trace, focusedTrack, palette, liveColor) {
+    //
+    // The recording is deliberately *not* in this list. It grows every few seconds and the
+    // saved tracks do not, so keeping them together meant every track on the map being
+    // rebuilt - and handed to the renderer again - to add a few metres of line to one of
+    // them. See OfflineMapCanvas's `liveRoute`.
+    val overlays = remember(state.entities, state.geometry, focusedTrack, palette) {
         val drawable = state.entities.mapNotNull { entity ->
             state.geometry[entity.id]?.let { entity to it }
         }
@@ -354,16 +373,19 @@ fun MapScreen(
                     )
                 )
             }
-            if (trace.points.isNotEmpty()) {
-                add(
-                    RouteOverlay(
-                        trackId = LIVE_TRACK_ID,
-                        points = trace.points,
-                        segmentStartIndices = trace.segmentStartIndices,
-                        color = liveColor,
-                    )
-                )
-            }
+        }
+    }
+
+    val liveOverlay = remember(trace, liveColor) {
+        if (trace.points.isEmpty()) {
+            null
+        } else {
+            RouteOverlay(
+                trackId = LIVE_TRACK_ID,
+                points = trace.points,
+                segmentStartIndices = trace.segmentStartIndices,
+                color = liveColor,
+            )
         }
     }
 
@@ -419,10 +441,12 @@ fun MapScreen(
             TopAppBar(
                 title = {
                     Text(
-                        if (state.entities.isEmpty()) {
-                            stringResource(R.string.app_name)
-                        } else {
-                            pluralStringResource(
+                        when {
+                            // The welcome screen, not "shown": there is nothing imported
+                            // yet to be counted, so the app's own name goes there instead.
+                            state.totalCount == 0 -> stringResource(R.string.app_name)
+                            state.entities.isEmpty() -> stringResource(R.string.map_none_shown)
+                            else -> pluralStringResource(
                                 R.plurals.map_shown,
                                 state.entities.size,
                                 state.entities.size,
@@ -504,6 +528,7 @@ fun MapScreen(
             // should see where they are, not an empty state telling them the app is empty.
             OfflineMapCanvas(
                 routes = overlays,
+                liveRoute = liveOverlay,
                 basemaps = basemaps,
                 contentDescription = stringResource(R.string.map_description),
                 focusedTrackId = focusedTrack?.id,
@@ -532,12 +557,23 @@ fun MapScreen(
                 landColor = MaterialTheme.colorScheme.surfaceContainerLowest,
                 labelColor = MaterialTheme.colorScheme.onSurface,
                 gridColor = MaterialTheme.colorScheme.outlineVariant,
-                onScaleChange = { metersPerPixel = it },
+                onScaleChange = { metersPerPixel.doubleValue = it },
                 modifier = Modifier.fillMaxSize(),
             )
 
+            // Nothing on the map to measure a scale bar against, and nothing under the
+            // empty-state card for it to sit over either.
+            //
+            // Only the true first-run case, not "every track happens to be hidden": that is
+            // a state the user put the map in on purpose, from the track list, and it gets
+            // the bare map back rather than a card telling them what they already know.
+            val mapIsEmpty = overlays.isEmpty() && liveOverlay == null &&
+                !state.loading && basemaps.isEmpty() && state.totalCount == 0
+
             when {
-                overlays.isNotEmpty() -> Unit
+                // A recording in progress counts as something to look at, the same as any
+                // other line on the map - it simply lives in its own overlay now.
+                overlays.isNotEmpty() || liveOverlay != null -> Unit
 
                 state.loading -> Box(Modifier.fillMaxSize(), Alignment.Center) {
                     LinearProgressIndicator(Modifier.padding(32.dp))
@@ -545,20 +581,25 @@ fun MapScreen(
 
                 // Only over a blank map. With a basemap imported there is something to
                 // look at, and a card explaining the app is empty would be covering it.
-                basemaps.isEmpty() -> EmptyState(
-                    hasHiddenTracks = state.totalCount > 0,
+                mapIsEmpty -> EmptyState(
+                    onImportMap = onOpenSettings,
+                    onImportTrack = { trackImporter.launch(arrayOf("*/*")) },
                     modifier = Modifier.fillMaxSize(),
                 )
 
                 else -> Unit
             }
 
-            MapChrome(
-                metersPerPixel = metersPerPixel,
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(bottom = sheetInset + 4.dp),
-            )
+            if (!mapIsEmpty) {
+                MapChrome(
+                    // The state, not its value: see where it is declared. The bar re-reads it
+                    // as the camera moves; nothing up here has to.
+                    metersPerPixel = metersPerPixel,
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(bottom = sheetInset + 4.dp),
+                )
+            }
 
             Column(
                 modifier = Modifier
@@ -592,9 +633,11 @@ fun MapScreen(
                         onResume = recorder::resume,
                         onStop = recorder::stop,
                         onDiscard = { confirmDiscard = true },
-                        // The sheet owns the bottom edge when it is up, so the bar only
-                        // needs to clear the system bars when it is not.
-                        applyNavigationBarPadding = !hasFocus,
+                        // The enclosing Column already pads its bottom edge by sheetInset,
+                        // which covers the nav bar itself whenever the sheet isn't focused.
+                        // Padding again in here as well left an empty, transparent strip
+                        // between the bar and the screen edge with the map showing through it.
+                        applyNavigationBarPadding = false,
                     )
                 }
             }
@@ -700,11 +743,16 @@ private fun CompactDragHandle() {
 
 @Composable
 private fun EmptyState(
-    hasHiddenTracks: Boolean,
+    onImportMap: () -> Unit,
+    onImportTrack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier = modifier.padding(32.dp),
+        // Opaque: this sits over OfflineMapCanvas, which always paints its grid
+        // placeholder underneath, blank basemap or not.
+        modifier = modifier
+            .background(MaterialTheme.colorScheme.surfaceContainerLowest)
+            .padding(32.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -713,12 +761,18 @@ private fun EmptyState(
             style = MaterialTheme.typography.titleMedium,
         )
         Text(
-            text = stringResource(
-                if (hasHiddenTracks) R.string.map_empty_hidden else R.string.map_empty_body
-            ),
+            text = stringResource(R.string.map_empty_body),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = onImportMap) {
+                Text(stringResource(R.string.map_empty_import_map))
+            }
+            Button(onClick = onImportTrack) {
+                Text(stringResource(R.string.map_empty_import_track))
+            }
+        }
     }
 }
 

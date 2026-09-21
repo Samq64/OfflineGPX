@@ -32,9 +32,6 @@ interface TrackDao {
     @Query("SELECT * FROM tracks WHERE id = :id")
     suspend fun byId(id: Long): TrackEntity?
 
-    @Query("SELECT * FROM tracks WHERE location = :location")
-    suspend fun byLocation(location: String): TrackEntity?
-
     @Upsert
     suspend fun upsert(track: TrackEntity): Long
 

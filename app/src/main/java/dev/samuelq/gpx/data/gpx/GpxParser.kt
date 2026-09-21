@@ -111,11 +111,20 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
     }
 
     private fun readSegment(parser: XmlPullParser): TrackSegment? {
+        val depth = parser.depth
         val points = mutableListOf<TrackPoint>()
         forEachChild(parser) {
             when (parser.name) {
                 TAG_TRKPT -> readPoint(parser)?.let {
-                    if (points.size < MAX_POINTS_PER_SEGMENT) points += it else skipRest(parser)
+                    if (points.size < MAX_POINTS_PER_SEGMENT) {
+                        points += it
+                    } else {
+                        // forEachChild is inline, so this returns from readSegment itself
+                        // rather than just the lambda, leaving the parser on this
+                        // <trkseg>'s own END_TAG exactly as a normal exit would.
+                        skipRest(parser, depth)
+                        return TrackSegment(points)
+                    }
                 }
 
                 else -> skip(parser)
@@ -174,9 +183,18 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
         }
     }
 
-    /** Escape hatch for a file that blows past [MAX_POINTS_PER_SEGMENT]. */
-    private fun skipRest(parser: XmlPullParser) {
-        while (parser.eventType != XmlPullParser.END_DOCUMENT) parser.next()
+    /**
+     * Escape hatch for a segment that blows past [MAX_POINTS_PER_SEGMENT]: consumes the
+     * remainder of the enclosing element (whose depth is [depth]) and stops, rather than
+     * running to the end of the document and silently dropping every track after it.
+     */
+    private fun skipRest(parser: XmlPullParser, depth: Int) {
+        while (true) {
+            when (parser.next()) {
+                XmlPullParser.END_TAG -> if (parser.depth <= depth) return
+                XmlPullParser.END_DOCUMENT -> return
+            }
+        }
     }
 
     private fun readText(parser: XmlPullParser): String {
@@ -217,23 +235,40 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
          * GPX says ISO 8601 UTC, but exporters disagree: most write `2024-05-01T08:12:03Z`,
          * some attach an offset, a few omit the zone. A timestamp matching none is dropped,
          * downgrading the track to untimed rather than failing the file.
+         *
+         * The spelling is *looked at* before a parser is chosen, rather than the three being
+         * tried in turn until one stops throwing. This runs once per track point, and a
+         * file written with local offsets - every export from several popular apps - took a
+         * filled-in stack trace per point to find that out: tens of thousands of exceptions
+         * thrown and discarded to read a file that was never malformed.
          */
         internal fun parseGpxTime(raw: String): Instant? {
             val text = raw.trim()
             if (text.isEmpty()) return null
             return try {
-                Instant.parse(text)
-            } catch (_: DateTimeParseException) {
-                try {
-                    OffsetDateTime.parse(text).toInstant()
-                } catch (_: DateTimeParseException) {
-                    try {
-                        LocalDateTime.parse(text).toInstant(ZoneOffset.UTC)
-                    } catch (_: DateTimeParseException) {
-                        null
-                    }
+                when {
+                    // `Z`, and only `Z`, is what Instant.parse accepts of the three.
+                    text.endsWith('Z') || text.endsWith('z') -> Instant.parse(text)
+                    hasOffset(text) -> OffsetDateTime.parse(text).toInstant()
+                    else -> LocalDateTime.parse(text).toInstant(ZoneOffset.UTC)
                 }
+            } catch (_: DateTimeParseException) {
+                null
             }
+        }
+
+        /**
+         * Whether a timestamp carries a `+hh:mm` or `-hh:mm` zone.
+         *
+         * Looked for in the time part only: the date's own separators are hyphens, so
+         * anything that simply searched for a minus sign would call every date an offset.
+         */
+        private fun hasOffset(text: String): Boolean {
+            val timeStart = text.indexOf('T').takeIf { it >= 0 } ?: return false
+            for (i in timeStart + 1 until text.length) {
+                if (text[i] == '+' || text[i] == '-') return true
+            }
+            return false
         }
     }
 }

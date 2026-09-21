@@ -1,5 +1,6 @@
 package dev.samuelq.gpx.ui.map
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
@@ -16,7 +17,10 @@ import dev.samuelq.gpx.ui.track.FocusedTrack
 import dev.samuelq.gpx.ui.track.TrackRef
 import dev.samuelq.gpx.ui.track.toTrackMessageRes
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -27,7 +31,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /** Something the map should say, once. The words are the screen's business. */
-enum class MapMessage { Exported, ExportFailed, RenameFailed, Hidden }
+enum class MapMessage { Exported, ExportFailed, RenameFailed, Hidden, ImportFailed }
 
 /** Visible tracks, with their geometry once it has been read off disk. */
 data class MapUiState(
@@ -103,6 +107,15 @@ class MapViewModel(
         viewModelScope.launch {
             repository.tracks.collect { all ->
                 _state.value = _state.value.copy(all = all)
+                // The sheet has no other way to find out that the track it is showing, or
+                // still loading, was deleted from somewhere that is not this screen - the
+                // library, a batch delete, another device entirely. Without this it stays
+                // open over a row that no longer exists, a stale readout of a track that is
+                // already gone.
+                val focusedId = (requested as? TrackRef.Saved)?.id
+                if (focusedId != null && all.none { it.id == focusedId }) {
+                    focus(null)
+                }
             }
         }
     }
@@ -128,6 +141,22 @@ class MapViewModel(
 
     fun retryFocus() {
         if (requested != null) reload()
+    }
+
+    /**
+     * Imports a `.gpx` file straight from the empty state, and opens what it brought in.
+     *
+     * The same [TrackRepository.import] the track list uses - there is only one way into
+     * the library - but focused here instead of navigated to, since a first-run map has
+     * nowhere else worth sending the user to look at it.
+     */
+    fun importTrack(uri: Uri) {
+        viewModelScope.launch {
+            repository.import(uri.toString()).fold(
+                onSuccess = { focus(TrackRef.Saved(it)) },
+                onFailure = { _messages.trySend(MapMessage.ImportFailed) },
+            )
+        }
     }
 
     /**
@@ -186,13 +215,23 @@ class MapViewModel(
      *
      * Hiding and re-showing a track is a toggle in a list, so it has to be cheap; without
      * this cache each toggle would reparse every visible track's points.
+     *
+     * The missing ones are read at the same time rather than one after another. Each is a
+     * file read, an XML parse and an analysis of tens of thousands of points, and they have
+     * nothing to say to each other - waiting for the first before starting the second only
+     * made the first map of the day take as long as the sum of every track on it.
      */
     private suspend fun loadMissing(entities: List<TrackEntity>) {
         val wanted = entities.map { it.id }.toSet()
-        var geometry = _state.value.geometry.filterKeys { it in wanted }
+        val kept = _state.value.geometry.filterKeys { it in wanted }
+        val missing = wanted - kept.keys
 
-        for (id in wanted - geometry.keys) {
-            repository.geometry(id).onSuccess { geometry = geometry + (id to it) }
+        val loaded = coroutineScope {
+            missing.map { id -> async { repository.geometry(id).getOrNull() } }.awaitAll()
+        }
+
+        val geometry = kept + missing.zip(loaded).mapNotNull { (id, track) ->
+            track?.let { id to it }
         }
         _state.value = _state.value.copy(geometry = geometry, loading = false)
     }

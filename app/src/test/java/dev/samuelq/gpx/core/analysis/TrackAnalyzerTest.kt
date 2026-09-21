@@ -199,6 +199,22 @@ class TrackAnalyzerTest {
     }
 
     @Test
+    fun `a partially timed track is not split by a gap it otherwise ignores`() {
+        val track = rideWithGap(gapSeconds = 600)
+        val points = track.segments[0].points.toMutableList()
+        // One missing timestamp is enough to make the whole track untimed - and the gap
+        // used to be found anyway, because gap detection ran on the raw timestamps before
+        // that all-or-nothing rule was applied to anything else.
+        points[0] = points[0].copy(time = null)
+        val profile = TrackAnalyzer.analyze(
+            Track(name = "gap", description = null, segments = listOf(TrackSegment(points)))
+        )
+
+        assertFalse(profile.hasTime)
+        assertEquals(listOf(0), profile.segmentStartIndices.toList())
+    }
+
+    @Test
     fun `a break is not counted as moving time`() {
         val profile = TrackAnalyzer.analyze(rideWithGap(gapSeconds = 600))
 
@@ -265,5 +281,89 @@ class TrackAnalyzerTest {
         val sparse = straightRun(count = 30, metersPerSecond = 8.0, secondsBetween = 60)
         val profile = TrackAnalyzer.analyze(sparse, minGapSeconds = 10.0)
         assertEquals(listOf(0), profile.segmentStartIndices.toList())
+    }
+
+    /**
+     * The speed window is carried from sample to sample rather than re-found. This checks
+     * it against the definition it replaced - the widest centred window inside the segment
+     * that spans no more than half the window either side - at every sample of a file with
+     * breaks, varying intervals and a stalled clock in it.
+     */
+    @Test
+    fun `the carried speed window agrees with a search at every sample`() {
+        val track = awkwardlyTimedRide()
+        val profile = TrackAnalyzer.analyze(track)
+        val half = (TrackAnalyzer.SPEED_WINDOW_SECONDS / 2.0).toFloat()
+        val starts = profile.segmentStartIndices
+
+        assertTrue(starts.size > 1, "the fixture is meant to contain a break")
+
+        for (segment in starts.indices) {
+            val start = starts[segment]
+            val end = if (segment + 1 < starts.size) starts[segment + 1] else profile.speedMps.size
+            for (i in start until end) {
+                var lo = i
+                while (lo > start && profile.elapsedSeconds[i] - profile.elapsedSeconds[lo - 1] <= half) lo--
+                var hi = i
+                while (hi < end - 1 && profile.elapsedSeconds[hi + 1] - profile.elapsedSeconds[i] <= half) hi++
+
+                val dt = profile.elapsedSeconds[hi] - profile.elapsedSeconds[lo]
+                val expected = if (dt > 0f) {
+                    maxOf(0f, (profile.distanceMeters[hi] - profile.distanceMeters[lo]) / dt)
+                } else {
+                    0f
+                }
+                assertEquals(expected, profile.speedMps[i], 1e-4f, "sample $i")
+            }
+        }
+    }
+
+    /**
+     * A file that stamps thousands of points with one time - some exporters do, and the
+     * monotonic clamp produces the same shape from out-of-order stamps. The window search
+     * this replaced walked the whole run for every sample of it, so analysing a ride of
+     * this size took minutes; the bound is loose enough to be about the algorithm and not
+     * about the machine.
+     */
+    @Test
+    fun `a stalled clock does not make analysis quadratic`() {
+        val step = 1.0 / metersPerDegreeLatitude
+        val points = (0 until 30_000).map { i ->
+            TrackPoint(latitude = i * step, longitude = 8.0, elevation = null, time = start)
+        }
+        val track = Track(name = null, description = null, segments = listOf(TrackSegment(points)))
+
+        val elapsed = kotlin.system.measureTimeMillis {
+            val profile = TrackAnalyzer.analyze(track)
+            // No time passed, so there is no speed to report - only a finite one.
+            assertEquals(0f, profile.speedMps[15_000])
+        }
+        assertTrue(elapsed < 5_000, "analysis took ${elapsed}ms")
+    }
+
+    /** Uneven intervals, a stalled stretch and a real break, in one file. */
+    private fun awkwardlyTimedRide(): Track {
+        val step = 10.0 / metersPerDegreeLatitude
+        var seconds = 0L
+        val points = (0 until 120).map { i ->
+            seconds += when {
+                // A run of samples sharing one timestamp.
+                i in 30..39 -> 0L
+                // A silence long enough for the analyser to cut the track here.
+                i == 80 -> 600L
+                // Longer than the window is wide, but not long enough to be a break: the
+                // sample either side of this has nothing to average with.
+                i % 17 == 0 -> 20L
+                i % 7 == 0 -> 3L
+                else -> 1L
+            }
+            TrackPoint(
+                latitude = i * step,
+                longitude = 8.0,
+                elevation = null,
+                time = start.plusSeconds(seconds),
+            )
+        }
+        return Track(name = null, description = null, segments = listOf(TrackSegment(points)))
     }
 }
