@@ -172,8 +172,10 @@ map. A scale bar reads the camera's live scale and is drawn over it.
 
 The basemap style is deliberately plain: earth, one green for anything vegetated, water
 (always blue, regardless of theme), buildings (a landmark on a country road), and roads
-with their names. Urban tint and finer landuse distinctions are left out — this is a place
-to read a route against, not a general-purpose map.
+and surface rail with their names. Sidewalks and crossings are filtered out - pavement
+this app already draws as the road beside it, not a trail of their own. Urban tint and
+finer landuse distinctions are left out — this is a place to read a route against, not a
+general-purpose map.
 
 ## Design decisions worth knowing
 

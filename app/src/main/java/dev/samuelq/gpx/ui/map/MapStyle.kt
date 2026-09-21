@@ -160,8 +160,9 @@ object MapStyle {
             fill("buildings-$index", source, "buildings", land.shifted(0.16f, dark).css()),
 
             // Roads, quietest first, so a motorway is never buried under a service road.
-            // `aerialway`, `ferry`, `pier`, `rail` and `aeroway` also live in this schema
-            // and are deliberately not drawn - a hiking map has no use for a runway.
+            // `aerialway`, `ferry`, `pier` and `aeroway` also live in this schema and are
+            // deliberately not drawn - a hiking map has no use for a runway. Rail is drawn;
+            // see roads-rail below.
             line(
                 id = "roads-minor-$index",
                 source = source,
@@ -179,18 +180,34 @@ object MapStyle {
                 filter = kindIsOneOf("highway", "major_road"),
             ),
 
+            // A tighter, evener dash than a path's - closer to the tick marks a rail line
+            // is conventionally drawn with, and different enough from a path's longer dash
+            // that the two don't read as the same kind of line at a glance. Light rail and
+            // narrow-gauge included; subway is not - it runs underground, so drawing it is
+            // drawing a line over ground it never actually crosses.
+            line(
+                id = "roads-rail-$index",
+                source = source,
+                sourceLayer = "roads",
+                color = land.shifted(0.55f, dark).css(),
+                widths = listOf(11 to 0.5f, 14 to 1f, 17 to 3f),
+                filter = kindIsOneOf("rail", "light_rail", "narrow_gauge"),
+                dashes = listOf(1f, 1f),
+            ),
+
             // Dashed, so a path reads as different from a road at a glance rather than by
-            // comparing two widths. A sidewalk is excluded by kind_detail rather than kind:
-            // it's the pavement beside a street this app already draws as a road, not a
-            // trail in its own right, and drawing both doubled every street in town. An
-            // untagged path (no kind_detail at all) isn't caught by this and still shows.
+            // comparing two widths. Sidewalks and crossings are excluded by kind_detail
+            // rather than kind: both are pavement this app already draws as the road beside
+            // it, not a trail in their own right, and drawing both doubled every street in
+            // town. An untagged path (no kind_detail at all) isn't caught by this and still
+            // shows.
             line(
                 id = "roads-path-$index",
                 source = source,
                 sourceLayer = "roads",
                 color = pathBrown(dark),
                 widths = listOf(12 to 1f, 14 to 2.5f, 17 to 7f),
-                filter = allOf(kindIsOneOf("path"), isNotKindDetail("sidewalk")),
+                filter = allOf(kindIsOneOf("path"), isNotKindDetailOneOf("sidewalk", "crossing")),
                 dashes = listOf(2f, 1.2f),
                 opacity = 0.85,
             ),
@@ -411,14 +428,16 @@ object MapStyle {
         .put(type)
 
     /**
-     * `["!=", ["get","kind_detail"], value]`. A feature with no `kind_detail` at all is
-     * `null != value`, which MapLibre treats as true - so this only ever excludes the one
-     * sub-kind named, never anything the archive left untagged.
+     * `["match", ["get","kind_detail"], [values...], false, true]` - false when
+     * `kind_detail` is one of [values], true otherwise. A feature with no `kind_detail` at
+     * all never matches a listed one, so this only ever excludes the sub-kinds named.
      */
-    private fun isNotKindDetail(value: String): JSONArray = JSONArray()
-        .put("!=")
+    private fun isNotKindDetailOneOf(vararg values: String): JSONArray = JSONArray()
+        .put("match")
         .put(JSONArray().put("get").put("kind_detail"))
-        .put(value)
+        .put(JSONArray().apply { values.forEach(::put) })
+        .put(false)
+        .put(true)
 
     /**
      * `["within", <polygon>]` - true for features inside the archive's box. Labels need
