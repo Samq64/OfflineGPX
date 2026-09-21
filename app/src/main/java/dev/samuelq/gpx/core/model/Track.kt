@@ -49,4 +49,28 @@ data class Track(
     }
 
     val isEmpty: Boolean get() = points.isEmpty()
+
+    /**
+     * Keeps only the points in [range] - global indices into [points] - for trimming or
+     * splitting a track. A segment entirely outside [range] is dropped; one straddling
+     * either edge is cut down to what's left. A break the recorder already made is not
+     * healed by this: two segments that both survive a cut stay two segments.
+     */
+    fun slice(range: IntRange): Track {
+        var offset = 0
+        val sliced = segments.mapNotNull { segment ->
+            val segmentStart = offset
+            val segmentEnd = offset + segment.points.size
+            offset = segmentEnd
+
+            val from = maxOf(range.first, segmentStart)
+            val until = minOf(range.last + 1, segmentEnd)
+            if (from >= until) {
+                null
+            } else {
+                TrackSegment(segment.points.subList(from - segmentStart, until - segmentStart).toList())
+            }
+        }
+        return copy(segments = sliced)
+    }
 }

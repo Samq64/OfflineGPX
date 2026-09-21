@@ -73,7 +73,7 @@ class GpxWriter(private val newSerializer: () -> XmlSerializer = DEFAULT_SERIALI
     companion object {
         private const val ENCODING = "UTF-8"
         private const val NAMESPACE = "http://www.topografix.com/GPX/1/1"
-        private const val CREATOR = "GPX Viewer"
+        private const val CREATOR = "Offline GPX"
 
         /** GPX 1.1 wants ISO 8601 in UTC, which is what [Instant] renders by default. */
         private val TIMESTAMP: DateTimeFormatter = DateTimeFormatter.ISO_INSTANT

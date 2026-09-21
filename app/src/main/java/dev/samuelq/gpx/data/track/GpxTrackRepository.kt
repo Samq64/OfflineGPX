@@ -282,16 +282,100 @@ class GpxTrackRepository(
             // file, not a re-serialisation, so a rename that never touched it wouldn't survive one.
             val file = File(entity.location)
             val parsed = file.inputStream().use(parser::parse)
-            val temp = File(file.parentFile, "${file.name}.tmp")
-            temp.outputStream().use { writer.write(parsed.copy(name = trimmed), it) }
-            if (!temp.renameTo(file)) {
-                temp.delete()
-                throw TrackLoadException.Unreadable("Could not rewrite ${file.name}")
-            }
+            rewriteFile(file, parsed.copy(name = trimmed))
             if (cached?.first == entity.location) cached = null
 
             dao.setTrackName(id, trimmed)
         }.recoverFailure()
+    }
+
+    override suspend fun trim(id: Long, keep: IntRange): Result<Unit> = withContext(io) {
+        runCatching {
+            val entity = dao.byId(id)
+                ?: throw TrackLoadException.Unreadable("No track with id $id")
+            val file = File(entity.location)
+            val parsed = file.inputStream().use(parser::parse)
+            val kept = parsed.slice(keep)
+            if (kept.isEmpty) throw TrackLoadException.Empty("Trimming would leave no points")
+
+            rewriteFile(file, kept)
+            if (cached?.first == entity.location) cached = null
+
+            dao.upsert(entity.withSummary(TrackAnalyzer.analyze(kept)))
+        }.recoverFailure()
+    }
+
+    override suspend fun split(id: Long, at: Int): Result<Long> = withContext(io) {
+        runCatching {
+            val entity = dao.byId(id)
+                ?: throw TrackLoadException.Unreadable("No track with id $id")
+            val file = File(entity.location)
+            val parsed = file.inputStream().use(parser::parse)
+            val before = parsed.slice(0..(at - 1))
+            val after = parsed.slice(at..parsed.points.lastIndex)
+            if (before.isEmpty || after.isEmpty) {
+                throw TrackLoadException.Empty("Nothing on one side of that point")
+            }
+
+            // Beside the original, so a recording splits into two recordings and an import
+            // into two imports - the new half is exactly as much this app's own file as
+            // the original already was.
+            val newFile = uniqueSiblingName(file)
+            rewriteFile(file, before)
+            newFile.outputStream().use { writer.write(after, it) }
+            if (cached?.first == entity.location) cached = null
+
+            dao.upsert(entity.withSummary(TrackAnalyzer.analyze(before)))
+
+            val afterEntity = entity
+                .withSummary(TrackAnalyzer.analyze(after))
+                .copy(
+                    id = 0,
+                    colorIndex = nextColorIndex(),
+                    location = newFile.absolutePath,
+                    displayName = newFile.name,
+                    lastOpenedAtEpochMillis = System.currentTimeMillis(),
+                )
+            dao.upsert(afterEntity)
+        }.recoverFailure()
+    }
+
+    /** [entity] with its summary columns re-derived from [profile] - not its id or source. */
+    private fun TrackEntity.withSummary(profile: TrackProfile): TrackEntity {
+        val stats = profile.stats
+        return copy(
+            trackName = stats.name,
+            startedAtEpochMillis = stats.startedAt?.toEpochMilli(),
+            distanceMeters = stats.distanceMeters,
+            movingSeconds = stats.movingDurationSeconds,
+            totalSeconds = stats.totalDurationSeconds,
+            ascentMeters = stats.ascentMeters,
+            descentMeters = stats.descentMeters,
+            pointCount = stats.pointCount,
+        )
+    }
+
+    /** Writes [track] to [file] via a temp file, so a crash mid-write never truncates it. */
+    private fun rewriteFile(file: File, track: Track) {
+        val temp = File(file.parentFile, "${file.name}.tmp")
+        temp.outputStream().use { writer.write(track, it) }
+        if (!temp.renameTo(file)) {
+            temp.delete()
+            throw TrackLoadException.Unreadable("Could not rewrite ${file.name}")
+        }
+    }
+
+    /** A name beside [original] that isn't taken, for the half a split doesn't keep [original]'s name for. */
+    private fun uniqueSiblingName(original: File): File {
+        val dir = original.parentFile ?: importsDir
+        val base = original.nameWithoutExtension
+        var suffix = 2
+        var candidate = File(dir, "$base ($suffix).gpx")
+        while (candidate.exists()) {
+            suffix++
+            candidate = File(dir, "$base ($suffix).gpx")
+        }
+        return candidate
     }
 
     override suspend fun setVisible(ids: List<Long>, visible: Boolean) = withContext(io) {

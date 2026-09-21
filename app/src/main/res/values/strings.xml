@@ -47,7 +47,6 @@
     <string name="settings_maps_delete">Delete map</string>
     <string name="settings_maps_delete_title">Delete this map?</string>
     <string name="settings_maps_delete_body">"%1$s" will be removed from the device. You\'ll need to import it again to use it here.</string>
-    <string name="settings_maps_failed_overlap">That map overlaps one already shown. Delete it first.</string>
     <!-- Size, then how far it zooms. "2.4 MB · to zoom 15" -->
     <string name="settings_maps_detail">%1$s · %2$s</string>
     <string name="settings_maps_zoom_to">to zoom %1$d</string>
@@ -140,8 +139,10 @@
     <string name="track_manage">Manage this track</string>
     <string name="track_hide">Hide</string>
     <string name="track_hidden">Hidden. Show it again from the track list.</string>
-    <string name="track_sheet_expand">Taller</string>
-    <string name="track_sheet_collapse">Shorter</string>
+    <string name="track_trim_start">Trim start</string>
+    <string name="track_trim_end">Trim end</string>
+    <string name="track_split">Split here</string>
+    <string name="track_edit_failed">Couldn\'t change that track.</string>
     <string name="track_error_title">Couldn\'t open this file</string>
     <string name="track_error_invalid">This file isn\'t valid GPX.</string>
     <string name="track_error_empty">This GPX file has no track points.</string>

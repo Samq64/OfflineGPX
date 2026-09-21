@@ -100,6 +100,11 @@ reached by scrolling). Dragging a chart moves the marker on the route; tapping t
 moves the chart crosshairs, because `TrackProfile` shares its indices with the track's
 lat/lon.
 
+Once a point is picked, three more things become possible: trim the start away, trim the
+end away, or split the track into two rows at that point. All three rewrite the GPX file
+in place (or, for a split, write a second file beside it) and re-derive the row's summary
+from what's left — the file is the source of truth, not the database row.
+
 ### A track is a GPX file; Room only indexes it
 
 Room doesn't store points. Both a recording and an import are written or copied into
@@ -152,15 +157,15 @@ is a wrong number presented as a real one.
 
 MapLibre Native renders a basemap from a `.pmtiles` archive the user supplies through the
 file picker — the app fetches nothing and ships no maps of its own. An archive is copied
-into app-private storage at import (validated first; deleted again if it fails to parse or
-would overlap a map already shown).
+into app-private storage at import (validated first; deleted again if it fails to parse).
 
 Coverage is read from the tile directory, not trusted from the header's bounding box, which
-is a lie for anything cut from a drawn polygon rather than a bbox. Overlapping maps are
-refused outright rather than resolved — two archives over the same ground are two renderings
-of one place stacked, and no z-order makes that legible; deleting the one on screen and
-re-importing is how you swap one in. Attribution, if the archive's own metadata carries one,
-is listed on the settings screen; the app has no source of its own to credit.
+is a lie for anything cut from a drawn polygon rather than a bbox. Two archives over the
+same ground are two renderings of one place stacked, and no z-order makes that legible, so
+importing a map that overlaps one already shown deletes the older one — newer supersedes
+older automatically, rather than refusing the import and making the user delete the old one
+by hand. Attribution, if the archive's own metadata carries one, is listed on the settings
+screen; the app has no source of its own to credit.
 
 `GpxApplication` tells MapLibre it's offline before any map exists — its
 `ConnectivityReceiver` calls `getActiveNetworkInfo()` unguarded, which throws without
@@ -171,9 +176,9 @@ The camera is MapLibre's: pinch, fling, and a pan clamp to the fit of every trac
 map. A scale bar reads the camera's live scale and is drawn over it.
 
 The basemap style is deliberately plain: earth, one green for anything vegetated, water
-(always blue, regardless of theme), and roads with their names. Buildings, urban tint and
-finer landuse distinctions are left out — this is a place to read a route against, not a
-general-purpose map.
+(always blue, regardless of theme), buildings (a landmark on a country road), and roads
+with their names. Urban tint and finer landuse distinctions are left out — this is a place
+to read a route against, not a general-purpose map.
 
 ## Design decisions worth knowing
 

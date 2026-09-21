@@ -28,7 +28,6 @@ enum class SettingsMessage {
     MapUnreadable,
     MapWrongFormat,
     MapNoSpace,
-    MapOverlaps,
     NoBrowser,
 }
 
@@ -71,7 +70,6 @@ class SettingsViewModel(
                         MapImportError.UNREADABLE -> SettingsMessage.MapUnreadable
                         MapImportError.NOT_AN_ARCHIVE -> SettingsMessage.MapWrongFormat
                         MapImportError.NO_SPACE -> SettingsMessage.MapNoSpace
-                        MapImportError.OVERLAPS -> SettingsMessage.MapOverlaps
                     }
                 }
             )

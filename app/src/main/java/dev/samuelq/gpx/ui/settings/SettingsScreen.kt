@@ -98,7 +98,6 @@ fun SettingsScreen(
     val wrongFormat = stringResource(R.string.settings_maps_failed_format)
     val noSpace = stringResource(R.string.settings_maps_failed_space)
     val noBrowser = stringResource(R.string.settings_maps_no_browser)
-    val overlaps = stringResource(R.string.settings_maps_failed_overlap)
 
     LaunchedEffect(viewModel) {
         viewModel.messages.collect { message ->
@@ -110,7 +109,6 @@ fun SettingsScreen(
                     SettingsMessage.MapUnreadable -> unreadable
                     SettingsMessage.MapWrongFormat -> wrongFormat
                     SettingsMessage.MapNoSpace -> noSpace
-                    SettingsMessage.MapOverlaps -> overlaps
                     SettingsMessage.NoBrowser -> noBrowser
                 }
             )

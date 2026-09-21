@@ -31,8 +31,8 @@ class OfflineMap(
 
     /**
      * True if this and [other] cover any of the same ground. Compared as bounding boxes,
-     * not true coverage - deliberately conservative, so a false "overlaps" costs a refusal
-     * rather than two maps drawn on top of each other.
+     * not true coverage - deliberately conservative, so a false "overlaps" costs a
+     * needlessly superseded map rather than two maps drawn on top of each other.
      */
     fun overlaps(other: OfflineMap): Boolean =
         header.minLongitude < other.header.maxLongitude &&
@@ -51,9 +51,6 @@ enum class MapImportError {
 
     /** There is not enough free space to copy it. */
     NO_SPACE,
-
-    /** It covers ground a map already shown covers, and two renderings of it cannot stack. */
-    OVERLAPS,
 }
 
 sealed interface MapImportResult {
@@ -169,13 +166,13 @@ class MapStore(
                 attribution = PmtilesMetadata.readAttribution(destination, header),
             )
 
-            // Rejected outright rather than imported and left off: there's no toggle to
-            // switch it on later, so it would just be a copy that can never be drawn.
+            // Superseded rather than refused: a newer map over the same ground replaces
+            // whichever shown one it overlaps, since two renderings of the same place
+            // stacked is still not a thing any z-order makes legible. Resolved here instead
+            // of asking the user to go delete the old one first - refresh() below notices
+            // the deleted files are gone and drops them from the active set on its own.
             val activeMaps = _maps.value.filter { it.file.name in settings.settings.value.activeMapFiles }
-            if (activeMaps.any { it.overlaps(map) }) {
-                destination.delete()
-                return@withContext MapImportResult.Failed(MapImportError.OVERLAPS)
-            }
+            activeMaps.filter { it.overlaps(map) }.forEach { it.file.delete() }
 
             refresh()
             settings.setActiveMapFiles(settings.settings.value.activeMapFiles + destination.name)

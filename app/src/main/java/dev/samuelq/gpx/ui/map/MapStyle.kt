@@ -96,11 +96,13 @@ object MapStyle {
     /**
      * A walking and cycling basemap, in the Protomaps schema: `earth`, `landuse`, `water`,
      * `roads`, with `roads` carrying `kind` (footway/cycleway/bridleway/path all collapse
-     * to `path`). An archive in another schema draws a blank basemap with routes still on
-     * top - the file is fine, this style just doesn't know it.
+     * to `path`) and, more finely, `kind_detail` - which is what tells a sidewalk apart
+     * from the trail it runs beside, both otherwise `kind: path`. An archive in another
+     * schema draws a blank basemap with routes still on top - the file is fine, this style
+     * just doesn't know it.
      *
-     * Deliberately plain: one green for anything vegetated, no buildings or urban tint.
-     * Water and paths are the two things worth reading at a glance; the rest is context.
+     * Deliberately plain otherwise: one green for anything vegetated, no urban landuse
+     * tint. Water, paths and buildings are worth reading at a glance; the rest is context.
      */
     private fun groundLayers(
         index: Int,
@@ -152,6 +154,11 @@ object MapStyle {
                 filter = isGeometry("LineString"),
             ),
 
+            // A lone building is a landmark on a country road - "the farmhouse" or "the
+            // barn" is how a route gets described - so this wants to read as a shape, not
+            // vanish as texture the way dense urban infill would if it were this dark.
+            fill("buildings-$index", source, "buildings", land.shifted(0.16f, dark).css()),
+
             // Roads, quietest first, so a motorway is never buried under a service road.
             // `aerialway`, `ferry`, `pier`, `rail` and `aeroway` also live in this schema
             // and are deliberately not drawn - a hiking map has no use for a runway.
@@ -173,14 +180,17 @@ object MapStyle {
             ),
 
             // Dashed, so a path reads as different from a road at a glance rather than by
-            // comparing two widths.
+            // comparing two widths. A sidewalk is excluded by kind_detail rather than kind:
+            // it's the pavement beside a street this app already draws as a road, not a
+            // trail in its own right, and drawing both doubled every street in town. An
+            // untagged path (no kind_detail at all) isn't caught by this and still shows.
             line(
                 id = "roads-path-$index",
                 source = source,
                 sourceLayer = "roads",
                 color = pathBrown(dark),
                 widths = listOf(12 to 1f, 14 to 2.5f, 17 to 7f),
-                filter = JSONArray().put("==").put(JSONArray().put("get").put("kind")).put("path"),
+                filter = allOf(kindIsOneOf("path"), isNotKindDetail("sidewalk")),
                 dashes = listOf(2f, 1.2f),
                 opacity = 0.85,
             ),
@@ -399,6 +409,16 @@ object MapStyle {
         .put("==")
         .put(JSONArray().put("geometry-type"))
         .put(type)
+
+    /**
+     * `["!=", ["get","kind_detail"], value]`. A feature with no `kind_detail` at all is
+     * `null != value`, which MapLibre treats as true - so this only ever excludes the one
+     * sub-kind named, never anything the archive left untagged.
+     */
+    private fun isNotKindDetail(value: String): JSONArray = JSONArray()
+        .put("!=")
+        .put(JSONArray().put("get").put("kind_detail"))
+        .put(value)
 
     /**
      * `["within", <polygon>]` - true for features inside the archive's box. Labels need
