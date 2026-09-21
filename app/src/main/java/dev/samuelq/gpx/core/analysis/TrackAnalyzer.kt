@@ -58,23 +58,19 @@ object TrackAnalyzer {
     const val GAP_INTERVAL_MULTIPLE = 10.0
 
     /**
-     * @param minGapSeconds the shortest silence that can be a break. A parameter rather
-     *   than a constant so the rule can be tested at both ends of it; not a setting,
-     *   because it decides where a track is cut and therefore what its distance and moving
-     *   time are, which every stored summary in the library would then have to be
-     *   recomputed against.
+     * @param minGapSeconds the shortest silence that can be a break. A parameter rather than
+     *   a constant so the rule is testable at both ends; not a setting, since changing it
+     *   would re-cut every stored track's distance and moving time.
      */
     fun analyze(track: Track, minGapSeconds: Double = MIN_GAP_SECONDS): TrackProfile {
         val points = track.points
         val size = points.size
 
-        // A track is only treated as timed if *every* point has a timestamp. Partially
-        // timed files exist, but interpolating the gaps would invent speeds that were
-        // never measured, so they are treated as untimed and the speed chart says so.
+        // Timed only if *every* point has a timestamp - interpolating a partial file's gaps
+        // would invent speeds never measured, so it's treated as untimed instead.
         val hasTime = size > 1 && points.all { it.time != null }
-        // Gap detection reads the same timestamps the rest of the profile is about to
-        // ignore, so a partially timed file must not have breaks inserted from a signal
-        // it is otherwise treated as not having.
+        // An untimed track must not have breaks inserted from a signal it's otherwise
+        // treated as not having.
         val starts =
             if (hasTime) breaksAt(points, track.segmentStartIndices, minGapSeconds)
             else track.segmentStartIndices
@@ -214,22 +210,12 @@ object TrackAnalyzer {
     /**
      * The file's own segment boundaries, plus one wherever the clock jumps.
      *
-     * A dismounted break is usually not in the file as a break. Auto-pause, smart
-     * recording and a rider who simply stopped all produce one long interval between two
-     * ordinary-looking points, and everything downstream then treats it as travel: the
-     * speed chart draws a straight line from the speed going in to the speed coming out,
-     * so a ten-minute coffee stop reads as ten minutes at riding pace and never touches
-     * zero; moving time counts every second of it; and the route is drawn as if the rider
-     * took the straight line between the two.
-     *
-     * Splitting there says what is actually known - that nothing was recorded in between -
-     * and every consumer of [TrackProfile.segmentStartIndices] already handles it, because
-     * signal loss has always meant the same thing. The distance across the gap is dropped
-     * along with it, which is the honest answer to "which way did they go": unknown.
-     *
-     * Deliberately not interpolating a stop instead. Drawing speed down to zero and back
-     * would be inventing two decelerations and their timing, which is a guess dressed as a
-     * measurement - the same reason a partially timed file is treated as untimed.
+     * A dismounted break usually isn't recorded as one - auto-pause and smart recording
+     * leave one long, ordinary-looking interval, which untouched reads as riding straight
+     * through the stop at speed. Splitting there says what's actually known (nothing was
+     * recorded) rather than interpolating a stop, which would invent decelerations nobody
+     * measured. Every consumer of [TrackProfile.segmentStartIndices] already handles a
+     * split this way, since signal loss has always meant the same thing.
      */
     private fun breaksAt(
         points: List<TrackPoint>,
@@ -271,19 +257,12 @@ object TrackAnalyzer {
     private const val MIN_INTERVALS_FOR_GAPS = 8
 
     /**
-     * Centred finite difference of distance over [SPEED_WINDOW_SECONDS].
+     * Centred finite difference of distance over [SPEED_WINDOW_SECONDS], clamped to the
+     * enclosing segment so the window never spans a signal-loss gap.
      *
-     * The window is clamped to the enclosing segment: spanning a signal-loss gap would
-     * divide a distance that excludes the gap by a duration that includes it, reporting a
-     * speed far below the real one right where the track resumes.
-     *
-     * Both edges of the window only ever move forwards, because `elapsed` is monotonic - so
-     * they are carried from one sample to the next rather than re-found from scratch. The
-     * search used to restart at `i` every time, which is linear per sample and therefore
-     * quadratic per segment whenever the clock does not advance: a file that stamps a whole
-     * run with one timestamp - which the monotonic clamp above also produces from
-     * out-of-order ones - made every sample walk the entire run, and a 30k-point import sat
-     * there for minutes.
+     * Both edges only move forward, carried from one sample to the next rather than
+     * re-found from scratch - `elapsed` is monotonic, so re-searching from `i` every time is
+     * quadratic whenever the clock doesn't advance (e.g. a run stamped with one timestamp).
      */
     private fun computeSpeed(
         starts: IntArray,

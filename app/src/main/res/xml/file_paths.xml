@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Covers both data/recordings and data/imports - the only two places a track's GPX
+     file lives, both directly under files-dir. -->
+<paths>
+    <files-path name="tracks" path="." />
+</paths>

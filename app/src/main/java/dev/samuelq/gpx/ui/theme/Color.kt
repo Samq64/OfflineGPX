@@ -86,16 +86,10 @@ internal val StaticDarkColors = darkColorScheme(
 )
 
 /**
- * The categorical set the map overlays routes with.
- *
- * A different job from [ChartColors]: there, colour encodes *which quantity* and the two
- * hues are fixed for that reason. Here it encodes *which track*, which is an arbitrary
- * identity with no meaning to preserve, so the set only has to stay mutually
- * distinguishable - including for a colourblind reader, which is why these are separated
- * by lightness as well as hue rather than being six evenly spaced rainbow steps.
- *
- * Six, then it repeats. Past about six overlaid routes the canvas is unreadable whatever
- * the palette does, and the answer is to hide some in the list.
+ * The categorical set the map overlays routes with. Unlike [ChartColors], colour here
+ * encodes *which track* (arbitrary identity), so the set only has to stay mutually
+ * distinguishable - separated by lightness as well as hue for colourblind readability.
+ * Six, then it repeats; past that the canvas is unreadable regardless.
  */
 private val RoutePaletteLight = listOf(
     Blue450,
@@ -122,12 +116,9 @@ fun routePalette(): List<Color> =
     if (androidx.compose.foundation.isSystemInDarkTheme()) RoutePaletteDark else RoutePaletteLight
 
 /**
- * Colours the charts draw with, held apart from the Material scheme deliberately.
- *
- * These two hues were checked for lightness band, chroma floor, CVD separation and
- * contrast against both surfaces; a wallpaper-derived palette guarantees none of that, and
- * could land on two hues a colourblind reader cannot tell apart. Chrome follows the
- * wallpaper; data does not.
+ * Colours the charts draw with, held apart from the Material scheme - these two hues were
+ * checked for lightness, chroma, CVD separation and contrast, which a wallpaper-derived
+ * palette guarantees none of. Chrome follows the wallpaper; data does not.
  */
 data class ChartColors(
     val speed: Color,

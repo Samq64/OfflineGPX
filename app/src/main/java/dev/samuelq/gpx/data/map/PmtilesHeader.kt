@@ -7,18 +7,13 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 /**
- * What a PMTiles archive says about itself, read from its first 127 bytes.
+ * What a PMTiles archive says about itself, read from its first 127 bytes at import: its
+ * coverage and zoom range (neither is in the filename), whether the style needs a vector or
+ * raster layer, and whether it's an archive at all before it becomes a blank map.
  *
- * Worth reading at import rather than trusting the file extension, for three reasons. It
- * is the only way to tell the user anything true about a file they just picked - where it
- * covers and how far it zooms are the two questions anyone has about an offline map, and
- * neither is in the filename. It is how the style knows whether to build a vector or a
- * raster layer, which are not interchangeable. And it rejects a file that is not an archive
- * at all before it becomes a blank map and a bug report.
- *
- * Field offsets are from the PMTiles v3 spec and are verified against real archives cut
- * with go-pmtiles; the parse below is a fixed-size record, not a format reader, and it
- * deliberately stops at the header rather than walking the tile directories.
+ * Field offsets are from the PMTiles v3 spec, verified against archives cut with
+ * go-pmtiles. This is a fixed-size record read, not a format reader - it stops at the
+ * header rather than walking the tile directories.
  */
 class PmtilesHeader(
     val tileType: TileType,
@@ -40,12 +35,8 @@ class PmtilesHeader(
 ) {
 
     /**
-     * How the tiles inside are encoded, which decides what kind of layer can draw them.
-     *
-     * [MVT] is a vector archive and needs a style that knows its schema. The image types
-     * are pre-drawn and need no schema at all - any raster archive renders with the same
-     * two lines of style - which is why they are worth supporting even though the maps
-     * this app is really aimed at are vector.
+     * How the tiles inside are encoded. [MVT] is vector and needs a style that knows its
+     * schema; the image types are pre-drawn and render with the same two lines of style.
      */
     enum class TileType { MVT, PNG, JPEG, WEBP, AVIF, UNKNOWN }
 
@@ -81,12 +72,9 @@ class PmtilesHeader(
         private const val COORDINATE_SCALE = 1e7
 
         /**
-         * Reads [file]'s header, or null if it is not a PMTiles v3 archive.
-         *
-         * Null rather than an exception for a bad file: "the file you picked is not a map"
-         * is an ordinary answer to an ordinary mistake, not an error condition. A genuine
-         * IO failure is also folded into it - at this point the only caller is an import
-         * that is about to fail either way, and it has one message for both.
+         * Reads [file]'s header, or null if it's not a PMTiles v3 archive. Null rather than
+         * an exception - "not a map" is an ordinary answer, not an error condition - and a
+         * genuine IO failure is folded into the same null since the caller fails either way.
          */
         fun read(file: File): PmtilesHeader? = try {
             RandomAccessFile(file, "r").use { handle ->

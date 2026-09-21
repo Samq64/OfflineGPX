@@ -12,15 +12,10 @@ class GpxApplication : Application() {
     override fun onCreate() {
         super.onCreate()
 
-        // Before anything can ask for a map. MapLibre expects to live in an app that has
-        // ACCESS_NETWORK_STATE, and its ConnectivityReceiver calls getActiveNetworkInfo()
-        // with no guard - which throws SecurityException here, because the merged manifest
-        // has that permission stripped. Overriding the connectivity state makes the
-        // override the answer and the ConnectivityManager call unreachable, both from
-        // isConnected() and from the CONNECTIVITY_CHANGE broadcast it registers for.
-        //
-        // It is also true: with no INTERNET permission this process cannot open a socket,
-        // so "not connected" is a statement of fact rather than a workaround.
+        // Before anything can ask for a map. MapLibre's ConnectivityReceiver calls
+        // getActiveNetworkInfo() unguarded, which throws without ACCESS_NETWORK_STATE - a
+        // permission this app strips. Also just true: with no INTERNET this process can't
+        // open a socket anyway.
         MapLibre.getInstance(this)
         MapLibre.setConnected(false)
 

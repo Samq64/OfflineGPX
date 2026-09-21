@@ -16,13 +16,9 @@ import kotlinx.coroutines.flow.callbackFlow
 import java.time.Instant
 
 /**
- * Raw GPS fixes, straight from the platform.
- *
- * Deliberately not `FusedLocationProviderClient`: that lives in `play-services-location`,
- * which drags in Google's stack and is exactly the kind of dependency this app's
- * permission argument exists to avoid. `GPS_PROVIDER` at 1 Hz is what the analyzer wants
- * anyway - it does its own smoothing, and the fused provider's sensor blending would only
- * hide the noise the speed window is designed to handle.
+ * Raw GPS fixes, straight from the platform. Deliberately not
+ * `FusedLocationProviderClient`, which lives in `play-services-location` and drags in
+ * Google's stack; `GPS_PROVIDER` at 1 Hz is what the analyzer's own smoothing wants anyway.
  */
 class LocationSource(context: Context) {
 
@@ -82,14 +78,7 @@ class LocationSource(context: Context) {
     private companion object {
         const val DEFAULT_INTERVAL_MILLIS = 1000L
 
-        /**
-         * Everything is passed on, believable or not.
-         *
-         * Filtering here would be filtering in the wrong place: a reading the recorder
-         * throws away is still a second that passed, and this class has no idea what the
-         * recorder is counting. It reports what the hardware said, including how much the
-         * hardware trusts itself.
-         */
+        /** Everything is passed on, believable or not - filtering is [FixFilter]'s job. */
         fun Location.toFix() = Fix(
             point = TrackPoint(
                 latitude = latitude,

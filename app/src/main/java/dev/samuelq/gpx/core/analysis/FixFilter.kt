@@ -7,9 +7,8 @@ import kotlin.math.max
 /**
  * One raw reading from the positioning hardware, before anything decides to believe it.
  *
- * Distinct from [TrackPoint], which is what the recorder has decided to write down.
- * [accuracyMeters] is the whole reason for the distinction: it is the difference between a
- * position and a guess, and GPX has nowhere to put it.
+ * Distinct from [TrackPoint], which is what the recorder has decided to write down; GPX has
+ * nowhere to put [accuracyMeters].
  */
 data class Fix(
     val point: TrackPoint,
@@ -20,35 +19,16 @@ data class Fix(
 /**
  * Decides which fixes are a position and which are noise.
  *
- * Without this a phone sitting on a table records a ride. A stationary consumer GPS does
- * not report the same coordinate twice; it wanders inside its error circle, and a 1 Hz
- * stream of that wander is a few metres of "movement" every second, which is several km/h
- * of speed and hundreds of metres of distance per hour - none of which happened. Smoothing
- * the speed afterwards cannot undo it, because by then the distance has already been
- * accumulated from noise.
+ * Without this a phone sitting on a table records a ride: a stationary GPS wanders inside
+ * its own error circle, and 1 Hz of that wander is speed and distance that never happened.
+ * Two rules: a fix less accurate than [maxAccuracyMeters] isn't a position at all, and a fix
+ * that hasn't moved further than its own error circle (floored at [minDisplacementMeters])
+ * hasn't been shown to have moved.
  *
- * Two rules, in order:
- *
- *  - A fix whose own accuracy is worse than [maxAccuracyMeters] is not a position at all.
- *    Indoors that is most of them, which is why recording indoors should look like waiting
- *    for a fix rather than like a slow walk.
- *  - A fix that has not moved further than the error circle it arrived with has not been
- *    shown to have moved. The floor is the accuracy itself, never below
- *    [minDisplacementMeters]: believing a 3m step reported with +/-30m of confidence is
- *    believing the noise.
- *
- * A reading that fails the second rule is still a reading. Rather than drop it, the filter
- * hands back the *last known position* carrying the new timestamp - the device is recorded
- * as having stayed put, which is precisely what was measured. Only readings that fail the
- * first rule, where nothing at all can be concluded, produce nothing.
- *
- * That distinction decides what a stop looks like everywhere downstream. Dropping the
- * readings leaves a silence, and a silence has to be *inferred* back into a stop by
- * [TrackAnalyzer] and then drawn as a hole in the chart. Keeping them means the position
- * stops changing while time carries on, so the speed line walks down to zero, sits there,
- * and walks back up - with nothing invented, because a point that repeats a coordinate is
- * a claim the measurement actually supports. One per [stillIntervalSeconds] is enough to
- * carry that: an hour's coffee stop is 360 points rather than 3,600.
+ * A reading that fails only the second rule still comes back, as the *last known position*
+ * stamped with the new time, once per [stillIntervalSeconds] - so a stop reads downstream as
+ * the speed line decaying to zero and sitting there, rather than as a silence [TrackAnalyzer]
+ * has to infer and draw as a gap.
  */
 class FixFilter(
     private val maxAccuracyMeters: Double = MAX_ACCURACY_METERS,
@@ -74,19 +54,15 @@ class FixFilter(
     }
 
     /**
-     * The point to record, or null if this reading establishes nothing worth writing.
-     *
-     * Not always *this* fix: a believable reading that has not moved yields the last known
-     * position stamped with the new time. The caller can treat both the same - a repeated
-     * coordinate adds no distance by construction, so nothing downstream has to know which
-     * kind it got.
+     * The point to record, or null if this reading establishes nothing worth writing. Not
+     * always *this* fix - see class doc.
      */
     fun pointFor(fix: Fix): TrackPoint? {
         val accuracy = fix.accuracyMeters
         lastAccuracyMeters = accuracy
 
-        // A source that reports no accuracy at all still gets the displacement floor; it
-        // is only the accuracy *test* that needs a number.
+        // Only the accuracy test needs a number; a source reporting none still gets the
+        // displacement floor.
         if (accuracy != null && accuracy > maxAccuracyMeters) return null
 
         val at = fix.point.time
@@ -110,9 +86,8 @@ class FixFilter(
             return fix.point
         }
 
-        // Stationary. The anchor does not move - two small steps in the same direction
-        // must still add up against where the device actually was, not against the last
-        // thing written down.
+        // Stationary. The anchor doesn't move, so two small steps in the same direction
+        // still add up against where the device actually was.
         if (at == null) return null
         val sinceRecorded = lastRecordedAt
             ?.let { (at.toEpochMilli() - it.toEpochMilli()) / 1000.0 }
@@ -124,13 +99,7 @@ class FixFilter(
     }
 
     companion object {
-        /**
-         * Worse than this and the fix cannot tell a parked phone from a moving one.
-         *
-         * A clear outdoor GPS fix is 3-10m. 25m is a generous indoor or urban-canyon
-         * reading, and the point at which the displacement rule would be rejecting
-         * everything short of a sprint anyway.
-         */
+        /** Worse than this and the fix can't tell a parked phone from a moving one. */
         const val MAX_ACCURACY_METERS = 25.0
 
         /** The floor under the accuracy rule, for the rare very confident fix. */
@@ -140,11 +109,9 @@ class FixFilter(
         const val MAX_PLAUSIBLE_SPEED_MPS = 50.0
 
         /**
-         * How often a stationary device is written down.
-         *
-         * Matched to [TrackAnalyzer.SPEED_WINDOW_SECONDS] so the speed window always has a
-         * sample to work with, and comfortably under [TrackAnalyzer.MIN_GAP_SECONDS] so a
-         * stop is never mistaken for the silence it used to be.
+         * How often a stationary device is written down. Matched to
+         * [TrackAnalyzer.SPEED_WINDOW_SECONDS] so the speed window always has a sample, and
+         * comfortably under [TrackAnalyzer.MIN_GAP_SECONDS] so a stop isn't mistaken for a gap.
          */
         const val STILL_INTERVAL_SECONDS = 10.0
 

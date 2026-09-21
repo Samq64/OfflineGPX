@@ -1,17 +1,11 @@
 package dev.samuelq.gpx.core.analysis
 
 /**
- * Live speed, over the same window the analyzer differentiates the saved track with.
+ * Live speed, over the same window [TrackAnalyzer] differentiates the saved track with, so
+ * the two never disagree about the same ride.
  *
- * The recorder used to divide the last hop by the last interval, which is the naive
- * derivative [TrackAnalyzer] exists specifically not to use: at 1 Hz it swings
- * by several km/h between adjacent points, so the number on screen disagreed with the
- * chart drawn from the very same ride a minute later.
- *
- * Fed on *every* reading rather than every recorded point, including the ones the filter
- * threw away. That is what lets it fall back to zero when you stop: distance stops growing
- * while time does not, so the quotient decays instead of freezing at whatever you were
- * doing when the last point was committed.
+ * Fed on *every* reading, including ones the filter threw away - that's what lets it decay
+ * to zero when you stop, rather than freezing at the last committed point's speed.
  */
 class SpeedWindow(private val windowSeconds: Double = TrackAnalyzer.SPEED_WINDOW_SECONDS) {
 

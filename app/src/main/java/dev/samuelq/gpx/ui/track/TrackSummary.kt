@@ -31,12 +31,8 @@ import dev.samuelq.gpx.ui.format.tabularFigures
 class Stat(val label: String, val value: String)
 
 /**
- * The line of numbers the sheet leads with, at whatever height it is sitting.
- *
- * The value leads and the label follows: the reader came for the number. This is the whole
- * track and stays the whole track; what a scrubber is pointing at is drawn on the chart
- * that is being scrubbed, beside the mark, where there is no question which series it
- * belongs to.
+ * The line of numbers the sheet leads with. Value leads, label follows - the reader came
+ * for the number. Always the whole track; a scrubbed value is drawn on its own chart instead.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -44,9 +40,8 @@ fun StatRow(
     stats: List<Stat>,
     modifier: Modifier = Modifier,
 ) {
-    // A FlowRow rather than a Row: wide units, a long duration and a large font scale can
-    // each use the width up on their own, and wrapping beats a Row's only other option,
-    // which is to clip.
+    // A FlowRow, not a Row: wide units or a large font scale can eat the width, and
+    // wrapping beats clipping.
     FlowRow(
         modifier = modifier.fillMaxWidth().heightIn(min = RowHeight),
         horizontalArrangement = Arrangement.spacedBy(24.dp),
@@ -75,23 +70,17 @@ fun StatRow(
 private val RowHeight = 48.dp
 
 /**
- * The three readings that answer "what was this ride", and no fourth.
- *
- * Max speed used to sit here too and does not any more: the speed chart marks and labels
- * its own peak a few hundred pixels below, and printing the same figure twice on one
- * screen is the sheet paying rent in height for nothing.
- *
- * The duration is whichever one the average speed was measured over - see [movingIsBasis].
+ * The three readings that answer "what was this ride", and no fourth - max speed isn't
+ * here since the speed chart already marks and labels its own peak. The duration shown is
+ * whichever one the average speed was measured over; see [movingIsBasis].
  */
 @Composable
 fun trackHeadline(stats: TrackStats, hasTime: Boolean): List<Stat> {
     val formatters = LocalFormatters.current
     val moving = hasTime && stats.movingIsBasis
 
-    // Labels resolved first, then the row built once. These numbers are about the whole
-    // ride and change when the ride does - but the sheet around them recomposes on every
-    // frame of a chart scrub, and without this each of those frames re-ran the formatters
-    // to arrive at the same three strings.
+    // Labels resolved first, then the row built once - the sheet recomposes on every scrub
+    // frame, and these numbers don't change with the scrub.
     val distanceLabel = stringResource(R.string.axis_distance)
     val timeLabel = stringResource(if (moving) R.string.stat_moving else R.string.stat_duration)
     val speedLabel = stringResource(R.string.stat_avg_speed)
@@ -118,15 +107,10 @@ fun trackHeadline(stats: TrackStats, hasTime: Boolean): List<Stat> {
 }
 
 /**
- * Whether the headline should read the moving time rather than the wall clock.
- *
- * The average speed is distance over *moving* time, the way every tracker reports it. Put
- * the wall clock next to it and the row does not reconcile: a ride with a long lunch reads
- * 8 km, 2:30, 18 km/h, and the reader is left to work out which of the three is lying -
- * none of them is, but the one number that would explain it is folded away under Details.
- * So the time on this row is the time the speed beside it was measured over, and the other
- * one moves into the fold. When the ride has no stops in it they are the same number, and
- * printing it twice is what the fold exists to avoid.
+ * Whether the headline should read moving time rather than the wall clock. Average speed
+ * is distance over *moving* time; pairing it with the wall clock instead would make a ride
+ * with a long lunch read as three numbers that don't reconcile. The other duration moves
+ * into the fold - the same number as this one when there were no stops, hence the fold.
  */
 val TrackStats.movingIsBasis: Boolean
     get() = movingDurationSeconds > 0.0 &&
@@ -136,10 +120,8 @@ val TrackStats.movingIsBasis: Boolean
 private const val STOPPED_TIME_WORTH_SPLITTING = 1.0
 
 /**
- * Everything worth keeping that did not earn a place in the headline, on one line.
- *
- * Reached only by opening the sheet, which is the right price for it: these are the
- * numbers you go looking for, not the ones you glance at.
+ * Everything worth keeping that didn't earn a place in the headline - numbers you go
+ * looking for, not ones you glance at, so opening the sheet is the right price.
  */
 @Composable
 fun TrackDetails(
@@ -155,16 +137,13 @@ fun TrackDetails(
     val descentLabel = stringResource(R.string.stat_descent)
     val pointsLabel = stringResource(R.string.stat_points)
 
-    // Built once per track rather than once per recomposition, for the reason given in
-    // [trackHeadline]: a scrub redraws this sheet many times a second and none of these
-    // figures is about the scrub.
+    // Built once per track, not per recomposition - same reason as [trackHeadline].
     val details = remember(
         stats, hasTime, hasElevation, formatters,
         elapsedLabel, ascentLabel, descentLabel, pointsLabel,
     ) {
         buildList {
-            // The duration the headline did not take. One of the two is up there already,
-            // and which one depends on whether the ride had any standing still in it.
+            // The duration the headline didn't take; see [movingIsBasis] for which one that is.
             if (hasTime && stats.movingIsBasis) {
                 add(elapsedLabel to Formatters.duration(stats.totalDurationSeconds))
             }

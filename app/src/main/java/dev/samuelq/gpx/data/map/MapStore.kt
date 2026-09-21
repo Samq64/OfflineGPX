@@ -30,12 +30,9 @@ class OfflineMap(
     val displayName: String get() = file.nameWithoutExtension
 
     /**
-     * True if this and [other] cover any of the same ground.
-     *
-     * Compared as bounding boxes rather than true coverage, deliberately. Two polygon
-     * extracts whose boxes touch but whose shapes do not would be rejected as overlapping,
-     * which is the conservative direction: the cost is an occasional refusal the user has
-     * to work around, where the other direction costs two maps drawn on top of each other.
+     * True if this and [other] cover any of the same ground. Compared as bounding boxes,
+     * not true coverage - deliberately conservative, so a false "overlaps" costs a refusal
+     * rather than two maps drawn on top of each other.
      */
     fun overlaps(other: OfflineMap): Boolean =
         header.minLongitude < other.header.maxLongitude &&
@@ -67,16 +64,12 @@ sealed interface MapImportResult {
 /**
  * The offline maps on this device.
  *
- * Copied into app-private storage rather than read where they sit. A basemap is read by
- * random access on every frame - PMTiles is a byte-range format and the renderer seeks
- * around inside it constantly - and a SAF document is a stream through another process
- * with no promise of still being there tomorrow. The copy costs the file's size once and
- * buys a path the native renderer can open directly, which is the only shape MapLibre's
- * `pmtiles://file://` accepts.
+ * Copied into app-private storage rather than read where they sit: PMTiles is a byte-range
+ * format the renderer seeks around in constantly, and a SAF document is a stream through
+ * another process with no promise of still being there tomorrow. MapLibre's
+ * `pmtiles://file://` needs a real path anyway.
  *
- * Nothing here ever fetches anything. Maps arrive through the system file picker or they
- * do not arrive; the app has no network permission and this class has no idea a network
- * exists.
+ * Nothing here fetches anything - maps arrive through the file picker or not at all.
  */
 class MapStore(
     context: Context,
@@ -95,12 +88,8 @@ class MapStore(
     val maps: StateFlow<List<OfflineMap>> = _maps.asStateFlow()
 
     /**
-     * The maps the renderer should draw, in a stable order.
-     *
-     * Resolved from the stored filenames rather than held as objects: the selection
-     * survives in settings, and a file can be deleted out from under it by a restore or by
-     * the maps list. A name that no longer resolves simply is not drawn, which is a state
-     * the map screen already has to handle.
+     * The maps the renderer should draw. Resolved from stored filenames, not held as
+     * objects, since the selection lives in settings and a file can vanish out from under it.
      */
     val active: Flow<List<OfflineMap>> =
         combine(_maps, settings.settings) { maps, current ->
@@ -135,12 +124,9 @@ class MapStore(
     }
 
     /**
-     * Copies the document at [uri] into private storage and reads its header.
-     *
-     * Validated *after* the copy rather than before it. Checking first would mean reading
-     * the stream twice, and SAF makes no promise that a second open returns the same bytes
-     * - so the only header worth trusting is the one read from the file that was kept.
-     * A file that fails validation is deleted again before this returns.
+     * Copies the document at [uri] into private storage and reads its header, deleting the
+     * copy again if it fails validation. Validated after the copy, not before - SAF makes
+     * no promise a second open returns the same bytes.
      */
     suspend fun import(uri: Uri, suggestedName: String?): MapImportResult =
         withContext(Dispatchers.IO) {
@@ -183,10 +169,8 @@ class MapStore(
                 attribution = PmtilesMetadata.readAttribution(destination, header),
             )
 
-            // Rejected outright rather than imported and left off: there is no toggle to
-            // switch it on later, so a map that cannot be shown yet would just be a copy
-            // taking up space with no way to ever become the one that is drawn. Deleting
-            // the map already on screen and reimporting is the way to swap one in.
+            // Rejected outright rather than imported and left off: there's no toggle to
+            // switch it on later, so it would just be a copy that can never be drawn.
             val activeMaps = _maps.value.filter { it.file.name in settings.settings.value.activeMapFiles }
             if (activeMaps.any { it.overlaps(map) }) {
                 destination.delete()

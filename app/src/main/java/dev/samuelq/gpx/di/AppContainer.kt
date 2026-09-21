@@ -51,22 +51,16 @@ class AppContainer(context: Context) {
     val mapStore by lazy { MapStore(appContext, settingsRepository) }
 
     /**
-     * Rescues a ride whose process died before it was stopped.
-     *
-     * Runs once per launch, off the main thread. The write-ahead log is only worth writing
-     * if something reads it back, and this is that something - without it a crash mid-ride
-     * leaves a complete log that nothing ever turns into a track.
+     * Rescues a ride whose process died before it was stopped. Runs once per launch, off
+     * the main thread.
      */
     fun recoverAbandonedRecording() {
         applicationScope.launch { trackRepository.recoverAbandonedRecording() }
     }
 
     /**
-     * Reads the maps directory once at launch, off the main thread.
-     *
-     * Eager because the map screen is the first thing shown and its basemap comes from
-     * here: doing it lazily would mean a frame of routes on an empty background before the
-     * tiles appear, every launch.
+     * Reads the maps directory once at launch, off the main thread. Eager, since the map
+     * screen is shown first - lazy loading would flash an empty background before tiles appear.
      */
     fun loadOfflineMaps() {
         applicationScope.launch { mapStore.refresh() }

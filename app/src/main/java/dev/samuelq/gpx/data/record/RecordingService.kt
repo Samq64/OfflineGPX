@@ -62,10 +62,8 @@ class RecordingService : Service() {
     private var lastAccuracyMeters: Double? = null
 
     /**
-     * What counts as having moved, and how fast. Both live for one recording, and the
-     * filter is built from the settings as they stood when that recording started -
-     * changing a threshold mid-ride would make the first half and the second half of one
-     * track mean different things.
+     * Built from settings as they stood when the recording started - a threshold changed
+     * mid-ride would make the two halves of one track mean different things.
      */
     private var filter = FixFilter()
     private val speedWindow = SpeedWindow()
@@ -169,14 +167,8 @@ class RecordingService : Service() {
     }
 
     /**
-     * One reading. Two separate questions: is this a position, and how long has it been?
-     *
-     * They used to be the same question, which is why a phone on a table recorded a ride -
-     * every wander inside the error circle was committed as travel. Only [FixFilter] now
-     * decides what is travel; time, speed and the moving clock advance on every reading,
-     * believed or not, because a second passed either way. A reading that did not move
-     * still comes back as a point - the last position, stamped now - so a stop is written
-     * into the file as a stop rather than left as a hole for the analyser to infer.
+     * One reading. [FixFilter] alone decides what counts as travel; time, speed and the
+     * moving clock advance on every reading regardless, because a second passed either way.
      */
     private fun onFix(fix: Fix) {
         if (paused) return
@@ -214,19 +206,9 @@ class RecordingService : Service() {
     }
 
     /**
-     * What pause is actually for, now that a stop detects itself.
-     *
-     * [FixFilter] already drops a stationary phone's wander, so a dismounted break leaves
-     * a silence in the log that the analyser splits on without being told. Pause is not
-     * needed for that any more, and it used to do nothing else: the receiver stayed on at
-     * 1 Hz and every fix was thrown away, which is the worst of both outcomes - you lose
-     * the data *and* the battery.
-     *
-     * So it stops sampling outright. That is the thing auto-detection cannot do: a long
-     * stop with the GPS off is the difference between a lunch that costs nothing and one
-     * that costs an hour of receiver. It also writes a real segment break, which is the
-     * other thing an inferred gap is not - a `<trkseg>` boundary travels with the file to
-     * whatever reads it next, where our rule about medians does not.
+     * Stops sampling outright, which is the one thing auto-detection (a dismounted break
+     * already leaves a silence the analyser splits on) cannot do: save the battery, and
+     * write a real `<trkseg>` boundary that travels with the file to whatever reads it next.
      */
     private fun pause() {
         if (paused) return
@@ -285,10 +267,8 @@ class RecordingService : Service() {
                     log?.close()
                     val file = log?.file
                     val track = file?.let { RecordingWal.recover(it, name = null) }
-                    // Nothing in the log at all, or fixes that never went anywhere. A
-                    // library row for either is a track with no route, no speed and no
-                    // profile - three empty charts and a name. Both are far more likely
-                    // since the fix filter arrived, and neither is the user's decision,
+                    // Nothing in the log, or fixes that never went anywhere - either way a
+                    // library row of three empty charts, and neither the user's decision,
                     // so neither is called "discarded".
                     if (track == null || distanceMeters < MIN_SAVEABLE_DISTANCE_METERS) {
                         file?.delete()
@@ -457,12 +437,9 @@ class RecordingService : Service() {
         private const val TRACE_PUBLISH_EVERY = 5
 
         /**
-         * Below this a recording is not a track.
-         *
-         * Not zero, because a handful of accepted fixes that happened to clear the
-         * displacement floor is the same nothing as none at all - a few metres of line
-         * and three empty charts. Shared with the crash-recovery path, which must not
-         * resurrect what a clean stop would have thrown away.
+         * Below this a recording is not a track - not zero, since a handful of fixes that
+         * happened to clear the displacement floor is the same nothing as none at all.
+         * Shared with crash recovery, which must not resurrect what a clean stop would toss.
          */
         const val MIN_SAVEABLE_DISTANCE_METERS = 10.0
 

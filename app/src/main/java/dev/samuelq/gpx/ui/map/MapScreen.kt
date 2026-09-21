@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -72,7 +71,6 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.samuelq.gpx.R
-import dev.samuelq.gpx.data.db.TrackSource
 import dev.samuelq.gpx.data.record.RecordingEvent
 import dev.samuelq.gpx.data.record.RecordingState
 import dev.samuelq.gpx.ui.record.RecordViewModel
@@ -88,19 +86,14 @@ import dev.samuelq.gpx.ui.track.TrackSheetError
 import dev.samuelq.gpx.ui.track.TrackSheetLoading
 import dev.samuelq.gpx.ui.track.TrackSheetPeekHeight
 import dev.samuelq.gpx.ui.track.editableTrackName
-import dev.samuelq.gpx.ui.track.exportFileName
+import dev.samuelq.gpx.ui.track.shareTrackIntent
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
 /**
- * The whole app, near enough: every track the user has chosen to show, overlaid; the one
- * they are looking at in a sheet over it; and the one being recorded drawing itself among
- * them.
- *
- * There is no dedicated track screen any more. A second screen meant redrawing the same
- * route on a second canvas, losing every other track off the side of it, and a back stack
- * entry for what is really a selection. Tapping a route selects it, the sheet says what it
- * is, and swiping the sheet away deselects it - the sheet and the selection are one fact.
+ * The whole app, near enough: every track chosen to show, overlaid; the one being looked
+ * at in a sheet over it; the one being recorded drawing itself among them. No dedicated
+ * track screen - a tapped route is a selection, and the sheet and the selection are one fact.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -139,18 +132,10 @@ fun MapScreen(
     // above in its title and in nothing else.
     var renamingId by remember { mutableStateOf<Long?>(null) }
     var deletingId by remember { mutableStateOf<Long?>(null) }
-    // Metres to a screen pixel, republished by the map on every frame of a pan or a pinch.
-    //
-    // Held as a state object and never read here: the scale bar is the only thing that
-    // wants it, and reading it in this scope would recompose the map, the controls and the
-    // empty state sixty times a second along with it. `ScaleBar` reads it where it draws.
+    // Metres to a screen pixel, republished by the map every frame of a pan or pinch. Held
+    // as a state object and never read here - reading it in this scope would recompose the
+    // whole screen sixty times a second; `ScaleBar` reads it where it draws.
     val metersPerPixel = remember { mutableDoubleStateOf(0.0) }
-
-    // CreateDocument rather than a share sheet: the destination is picked through SAF, so
-    // the file lands where the user chose and the app needs no storage permission.
-    val exporter = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/gpx+xml")
-    ) { destination -> viewModel.finishExport(destination?.toString()) }
 
     // Same picker the track list offers, reachable from the empty state too: a first-run
     // map has nothing worth tapping into a list for yet.
@@ -158,16 +143,12 @@ fun MapScreen(
         ActivityResultContracts.OpenDocument()
     ) { uri -> uri?.let(viewModel::importTrack) }
 
-    // The camera belongs to MapLibre now - pinch, fling, the pan clamp and the projection
-    // were all this file's problem and are none of its business any more. What is kept is
-    // the policy: frame everything once at a cold start, and never move on a selection,
-    // because a map that rearranges itself when you tap something is a map you have to
-    // re-read rather than one you were already looking at.
+    // The camera belongs to MapLibre now. This file only keeps the policy: frame once at a
+    // cold start, never move on a selection - a map that rearranges on a tap is one you
+    // have to re-read.
     //
-    // Distance by default. On a time axis every stop is a hole as wide as the stop was,
-    // which on a ride with a long lunch is most of the chart; on a distance axis a stop
-    // takes no width at all, because no distance passed during it. Time is one tap away
-    // for when the stops are the thing you came to look at.
+    // Distance by default: on a time axis a stop is a hole as wide as the stop was, most
+    // of the chart on a long lunch; on a distance axis it's no width at all.
     var preferTimeAxis by rememberSaveable { mutableStateOf(false) }
 
     val focusedTrack = (focused as? FocusedTrack.Ready)?.track
@@ -178,8 +159,6 @@ fun MapScreen(
     val locationDenied = stringResource(R.string.record_location_denied)
     val preciseRequired = stringResource(R.string.record_precise_required)
     val discarded = stringResource(R.string.record_discarded)
-    val exported = stringResource(R.string.library_exported)
-    val exportFailed = stringResource(R.string.library_export_failed)
     val renameFailed = stringResource(R.string.library_rename_failed)
     val hidden = stringResource(R.string.track_hidden)
     val importFailed = stringResource(R.string.library_import_failed)
@@ -224,8 +203,6 @@ fun MapScreen(
         viewModel.messages.collect { message ->
             say(
                 when (message) {
-                    MapMessage.Exported -> exported
-                    MapMessage.ExportFailed -> exportFailed
                     MapMessage.RenameFailed -> renameFailed
                     MapMessage.Hidden -> hidden
                     MapMessage.ImportFailed -> importFailed
@@ -254,16 +231,9 @@ fun MapScreen(
 
     // --- The sheet -----------------------------------------------------------------
 
-    // Three heights, not two. Peek answers "what is this"; the middle one answers "what
-    // happened" while keeping the route in view beside the numbers; and full is for
-    // reading the charts themselves, where the map has stopped being the point.
-    //
-    // Material's sheet only has three values and one of them is Hidden, so the third
-    // detent is not an anchor - it is the *content's* max height changing, which moves the
-    // Expanded anchor the sheet is already settled at. Animating the height makes that a
-    // slide rather than a jump, because the anchor is recomputed on each frame's measure.
-    var sheetAtFullHeight by rememberSaveable { mutableStateOf(false) }
-
+    // Two heights: peek ("what is this") and expanded ("what happened", route still
+    // visible, charts one scroll away). Material's sheet has a third value, Hidden, which
+    // is what lets it go away entirely and give the map back.
     val sheetState = rememberStandardBottomSheetState(
         initialValue = SheetValue.Hidden,
         // The point of the redesign: it can go away entirely and give the map back.
@@ -273,60 +243,39 @@ fun MapScreen(
     val hasFocus = focused != FocusedTrack.None
 
     LaunchedEffect(hasFocus) {
-        // Guarded rather than unconditional: the sheet starts hidden, and asking it to
-        // hide before it has been laid out is asking for an anchor that does not exist.
+        // Guarded, not unconditional: the sheet starts hidden, and hiding it before layout
+        // asks for an anchor that doesn't exist.
         if (hasFocus) sheetState.partialExpand()
         else if (sheetState.currentValue != SheetValue.Hidden) sheetState.hide()
-        // Letting go of the track lets go of the offer to name it. Otherwise a prompt that
-        // never got the chance to open would be waiting to ambush the next time that same
-        // track was opened, hours later, from the list.
+        // Letting go of the track lets go of the offer to name it, so a stale prompt can't
+        // ambush the next time that track is opened.
         if (!hasFocus) namingId = null
     }
 
-    // Swiped away by hand: the selection follows the sheet rather than lingering as an
-    // invisible bit of state with a marker still on the route.
+    // Swiped away by hand: the selection follows the sheet rather than lingering as
+    // invisible state with a marker still on the route.
     //
-    // `drop(1)`, because a `snapshotFlow` opens by reporting where it already is, and where
-    // the sheet already is on the frame the map is composed is Hidden. Undropped, that reads
-    // as a dismissal and clears the focus - including the one the effect above it has just
-    // set from the list. Opening a track from the library therefore worked only when a sheet
-    // happened to be open when you left the map, and did nothing at all when one wasn't.
+    // `drop(1)`: `snapshotFlow` opens by reporting where the sheet already is (Hidden on
+    // the composing frame), which undropped reads as a dismissal and clears a focus the
+    // effect above had just set from the list.
     LaunchedEffect(sheetState) {
         snapshotFlow { sheetState.currentValue }.drop(1).collect { value ->
             if (value == SheetValue.Hidden) viewModel.focus(null)
-            // Dragging the sheet down past the middle gives the map back for good: the
-            // next expand starts from the middle again rather than leaping to full.
-            if (value != SheetValue.Expanded) sheetAtFullHeight = false
         }
     }
 
-    /**
-     * One step taller, and from the top back to the bottom.
-     *
-     * A button rather than a fourth drag anchor, which the platform sheet cannot express.
-     * Dragging still does what it did - peek, middle, or down and away - and this is the
-     * only way to reach the third height, so it has to be visible rather than inferred.
-     */
-    fun stepSheetHeight() {
+    /** The title's chevron: expand from the peek, or collapse back to it. */
+    fun toggleSheetHeight() {
         scope.launch {
-            when {
-                sheetState.currentValue != SheetValue.Expanded -> sheetState.expand()
-                !sheetAtFullHeight -> sheetAtFullHeight = true
-                else -> {
-                    sheetAtFullHeight = false
-                    sheetState.partialExpand()
-                }
-            }
+            if (sheetState.currentValue == SheetValue.Expanded) sheetState.partialExpand()
+            else sheetState.expand()
         }
     }
 
-    // Back steps down before it closes. Dropping from a full-height sheet straight to
-    // nothing throws away two gestures' worth of intent in one press; from the peek, where
-    // there is nothing left to give back, it closes.
+    // Back steps down before it closes: dropping an expanded sheet straight to nothing
+    // throws away a gesture's worth of intent in one press.
     BackHandler(enabled = hasFocus) {
         if (sheetState.currentValue == SheetValue.Expanded) {
-            // `sheetAtFullHeight` is cleared by the collector once the sheet settles, so
-            // the height and the anchor never animate against each other.
             scope.launch { sheetState.partialExpand() }
         } else {
             viewModel.focus(null)
@@ -335,13 +284,10 @@ fun MapScreen(
 
     // --- What the canvas draws, and how much room it has ---------------------------
 
-    // Positions, not shapes. There is no shared projection to normalise into any more -
-    // the map has one, it is Web Mercator, and it agrees with the tiles underneath.
-    //
-    // The recording is deliberately *not* in this list. It grows every few seconds and the
-    // saved tracks do not, so keeping them together meant every track on the map being
-    // rebuilt - and handed to the renderer again - to add a few metres of line to one of
-    // them. See OfflineMapCanvas's `liveRoute`.
+    // Positions, not shapes - the map has its own Web Mercator projection now. The
+    // recording is deliberately *not* in this list: it grows every few seconds and the
+    // saved tracks don't, so keeping them together meant rebuilding every track on the map
+    // to add a few metres to one of them. See OfflineMapCanvas's `liveRoute`.
     val overlays = remember(state.entities, state.geometry, focusedTrack, palette) {
         val drawable = state.entities.mapNotNull { entity ->
             state.geometry[entity.id]?.let { entity to it }
@@ -390,17 +336,9 @@ fun MapScreen(
     }
 
     val windowHeight = with(density) { LocalWindowInfo.current.containerSize.height.toDp() }
-    val expandedHeight = windowHeight * SheetMaxHeightFraction
-    // Up to just under the top bar. Taller and the sheet slides behind chrome it cannot
-    // scroll out of the way.
-    val fullHeight = windowHeight -
-        WindowInsets.statusBars.asPaddingValues().calculateTopPadding() -
-        TopAppBarHeight
-
-    val sheetMaxHeight by animateDpAsState(
-        targetValue = if (sheetAtFullHeight) fullHeight else expandedHeight,
-        label = "sheetMaxHeight",
-    )
+    // The sheet's one expanded height. The content column scrolls inside it, so the charts
+    // are always reachable without needing a taller anchor to grow into.
+    val sheetMaxHeight = windowHeight * SheetMaxHeightFraction
 
     val navigationBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val sheetInset by animateDpAsState(
@@ -417,10 +355,7 @@ fun MapScreen(
     val coveredHeight by animateDpAsState(
         targetValue = when {
             !hasFocus -> maxOf(navigationBarInset, controlsHeight + navigationBarInset)
-            // Deliberately the middle height even when the sheet is full: at full there
-            // is no map left to fit a route into, and freezing it here means coming back
-            // down does not have to re-fit anything.
-            sheetState.currentValue == SheetValue.Expanded -> expandedHeight
+            sheetState.currentValue == SheetValue.Expanded -> sheetMaxHeight
             else -> maxOf(TrackSheetPeekHeight, sheetInset + controlsHeight)
         },
         label = "coveredHeight",
@@ -486,23 +421,24 @@ fun MapScreen(
                     loaded = current.track,
                     routeColor = palette[current.track.colorIndex % palette.size],
                     maxHeight = sheetMaxHeight,
-                    atFullHeight = sheetAtFullHeight,
-                    onStepHeight = ::stepSheetHeight,
+                    expanded = sheetState.currentValue == SheetValue.Expanded,
+                    onToggleHeight = ::toggleSheetHeight,
                     selectedIndex = selectedIndex,
                     onSelectedIndexChange = { selectedIndex = it },
                     useTimeAxis = preferTimeAxis && current.track.profile.hasTime,
                     onAxisChange = { preferTimeAxis = it },
                     // Null for a file opened from an intent: it has no row to rename,
-                    // hide or delete, and the export it could offer is a copy of a file
-                    // the user already has.
+                    // hide or delete, and sharing it would just hand the file back to
+                    // itself.
                     actions = state.entity(current.track.id)?.let { entity ->
-                        remember(entity.id, entity.displayName) {
+                        remember(entity.id, entity.displayName, entity.location) {
                             TrackActions(
                                 onRename = { renamingId = entity.id },
-                                onExport = {
-                                    viewModel.beginExport(entity.id)
-                                    exporter.launch(
-                                        exportFileName(entity.trackName, entity.displayName)
+                                onShare = {
+                                    context.startActivity(
+                                        shareTrackIntent(
+                                            context, entity.location, entity.trackName, entity.displayName,
+                                        )
                                     )
                                 },
                                 onHide = {
@@ -556,23 +492,18 @@ fun MapScreen(
                 backgroundColor = MaterialTheme.colorScheme.surfaceContainerLowest,
                 landColor = MaterialTheme.colorScheme.surfaceContainerLowest,
                 labelColor = MaterialTheme.colorScheme.onSurface,
-                gridColor = MaterialTheme.colorScheme.outlineVariant,
                 onScaleChange = { metersPerPixel.doubleValue = it },
                 modifier = Modifier.fillMaxSize(),
             )
 
-            // Nothing on the map to measure a scale bar against, and nothing under the
-            // empty-state card for it to sit over either.
-            //
-            // Only the true first-run case, not "every track happens to be hidden": that is
-            // a state the user put the map in on purpose, from the track list, and it gets
-            // the bare map back rather than a card telling them what they already know.
+            // Only the true first-run case, not "every track happens to be hidden" - that's
+            // a state the user chose on purpose, and gets the bare map back, not a card.
             val mapIsEmpty = overlays.isEmpty() && liveOverlay == null &&
                 !state.loading && basemaps.isEmpty() && state.totalCount == 0
 
             when {
-                // A recording in progress counts as something to look at, the same as any
-                // other line on the map - it simply lives in its own overlay now.
+                // A recording in progress counts as something to look at too - it just
+                // lives in its own overlay.
                 overlays.isNotEmpty() || liveOverlay != null -> Unit
 
                 state.loading -> Box(Modifier.fillMaxSize(), Alignment.Center) {
@@ -592,8 +523,7 @@ fun MapScreen(
 
             if (!mapIsEmpty) {
                 MapChrome(
-                    // The state, not its value: see where it is declared. The bar re-reads it
-                    // as the camera moves; nothing up here has to.
+                    // The state, not its value - the bar re-reads it as the camera moves.
                     metersPerPixel = metersPerPixel,
                     modifier = Modifier
                         .align(Alignment.BottomStart)
@@ -608,11 +538,9 @@ fun MapScreen(
                     .padding(bottom = sheetInset)
                     .onSizeChanged { controlsHeight = with(density) { it.height.toDp() } },
             ) {
-                // Still no reset button, though the reason has changed: a real map has a
-                // whole world to be lost in rather than a unit square to pinch back out
-                // of, so "show me everything again" is no longer the same gesture that
-                // left. It is now a missing feature rather than a deliberate omission -
-                // worth adding as a control that frames the visible tracks.
+                // Still no reset button. A real map has a whole world to be lost in rather
+                // than a unit square to pinch back out of - worth adding as a "frame
+                // everything" control, but currently a missing feature, not a choice.
                 if (recording !is RecordingState.Active) {
                     Box(
                         modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -634,9 +562,8 @@ fun MapScreen(
                         onStop = recorder::stop,
                         onDiscard = { confirmDiscard = true },
                         // The enclosing Column already pads its bottom edge by sheetInset,
-                        // which covers the nav bar itself whenever the sheet isn't focused.
-                        // Padding again in here as well left an empty, transparent strip
-                        // between the bar and the screen edge with the map showing through it.
+                        // which covers the nav bar when the sheet isn't focused - padding
+                        // again here left an empty strip with the map showing through it.
                         applyNavigationBarPadding = false,
                     )
                 }
@@ -645,8 +572,7 @@ fun MapScreen(
     }
 
     // Only once the track has been read back, which is what knows the name to offer. The
-    // prompt that follows a recording and the one reached from the menu are the same
-    // dialog; only the title tells the reader which of the two brought it up.
+    // post-recording prompt and the menu's rename share this dialog; only the title differs.
     focusedTrack?.takeIf { it.id == namingId || it.id == renamingId }?.let { track ->
         val justRecorded = track.id == namingId
         TrackNameDialog(
@@ -668,9 +594,6 @@ fun MapScreen(
 
     deletingId?.let { id ->
         DeleteTrackDialog(
-            // What is actually destroyed differs by source, and that is the difference
-            // the user cares about: a recording only exists here.
-            deletesFiles = state.entity(id)?.source == TrackSource.RECORDED,
             count = 1,
             onDismiss = { deletingId = null },
             onConfirm = {
@@ -713,14 +636,10 @@ private const val LIVE_TRACK_ID = Long.MIN_VALUE
 private val MapEdgePadding = 24.dp
 
 /**
- * The middle height: the most of the window the sheet takes when simply expanded. A sheet
- * that covers the map the moment you open it is not a sheet, it is a screen that arrived
- * by sliding - so covering it all is a third state you ask for, not the one you land on.
+ * The sheet's expanded height. A sheet that covers the map the moment it opens is a screen
+ * wearing a slide animation, not a sheet - the route stays visible above it.
  */
 private const val SheetMaxHeightFraction = 0.58f
-
-/** Material's default, and what the scaffold's own top bar occupies above the sheet. */
-private val TopAppBarHeight = 64.dp
 
 /**
  * Half the height of the Material handle, which spends 44 of its 48dp on padding. Every
@@ -748,8 +667,8 @@ private fun EmptyState(
     modifier: Modifier = Modifier,
 ) {
     Column(
-        // Opaque: this sits over OfflineMapCanvas, which always paints its grid
-        // placeholder underneath, blank basemap or not.
+        // Opaque: this sits over OfflineMapCanvas's own flat background, blank basemap
+        // or not.
         modifier = modifier
             .background(MaterialTheme.colorScheme.surfaceContainerLowest)
             .padding(32.dp),
@@ -777,16 +696,9 @@ private fun EmptyState(
 }
 
 /**
- * Asks for what is missing on the tap that starts a recording, and nothing before it.
- *
- * No screen in between explaining itself first: the system dialog already names what is
- * being asked for, a page of reassurance ahead of it is one more tap between the user and
- * the thing they pressed a button to do, and refusal is answered where it happens.
- *
- * Android 12+ ignores a fine-location request that does not also name coarse, so both are
- * listed - the pairing is the platform's, not a second capability this app wants.
- * Notifications are requested alongside because a foreground service the user cannot see
- * is worse than one they can, but recording works without that grant.
+ * Asks for what is missing on the tap that starts a recording, nothing before it - no
+ * screen explaining itself first. Coarse is listed alongside fine because Android 12+
+ * ignores a fine request without it; notifications are requested but not required.
  */
 private fun androidx.activity.compose.ManagedActivityResultLauncher<Array<String>, Map<String, Boolean>>.requestThenStart(
     context: Context,

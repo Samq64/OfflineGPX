@@ -4,16 +4,15 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <!--
-      Files - tracks and offline map regions alike - come through SAF, which grants access
-      to exactly the one file the user picked. There is no storage permission and never
-      will be.
+      Files - tracks and offline map archives alike - are picked through SAF, then copied
+      into app-private storage. No persisted grant is kept and there is no storage
+      permission.
 
       What recording costs, and nothing beyond it:
         ACCESS_FINE_LOCATION       the only way to sample a position.
-        ACCESS_COARSE_LOCATION     not wanted. Android 12+ ignores a fine request that
-                                   does not also name coarse, so it has to be declared.
-                                   The app refuses to record on an approximate-only grant
-                                   rather than produce numbers that look real and are not.
+        ACCESS_COARSE_LOCATION     not wanted, but Android 12+ ignores a fine request that
+                                   does not also name coarse. Recording refuses to start on
+                                   an approximate-only grant.
         FOREGROUND_SERVICE(_LOCATION)  sampling with the screen off, visibly.
         POST_NOTIFICATIONS         so the recording notification is actually seen.
                                    Recording still works if this is refused.
@@ -117,6 +116,18 @@
             android:name=".data.record.RecordingService"
             android:exported="false"
             android:foregroundServiceType="location" />
+
+        <!-- Grants a one-shot read to a track's own GPX file for the share sheet, without
+             making app-private storage generally readable. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 
 </manifest>

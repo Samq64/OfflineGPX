@@ -80,33 +80,20 @@ fun ProfileChart(
     highlightIndex: Int = -1,
     highlightLabel: String? = null,
     /**
-     * Names a gap in the data, given its width in x units, or null to leave it unnamed.
-     *
-     * A break in the line is the honest thing to draw - nothing was recorded, so nothing
-     * is drawn - but an unexplained hole reads as a rendering fault rather than as a fact
-     * about the ride. On a distance axis a stop is zero wide and there is nothing to say;
-     * on a time axis it is ten minutes of empty chart and needs a word.
+     * Names a gap in the data, given its width in x units, or null to leave it unnamed. An
+     * unexplained hole otherwise reads as a rendering fault rather than a fact about the ride.
      */
     breakLabel: ((Float) -> String)? = null,
     /**
      * The scrubbed value *with* its unit, for the tooltip. Distinct from [formatY], which
-     * labels bare axis ticks - a tick reads in the column of ticks above and below it, a
-     * tooltip is read on its own and has to say what it is.
+     * labels bare axis ticks read in a column, not on their own.
      */
     formatValue: ((Float) -> String)? = null,
-    /**
-     * The scrubbed position with its unit. Shown in the same tooltip as the value, ahead
-     * of it and in the label colour: where you are is the context for what is there, and
-     * a reader following a line should not have to look down at the axis to have both.
-     */
+    /** The scrubbed position with its unit, shown in the same tooltip ahead of the value. */
     formatPosition: ((Float) -> String)? = null,
     /**
-     * Whether this chart draws the x axis, or leaves it to the one below.
-     *
-     * Every chart in a stack is plotted against the same domain - that is what makes the
-     * scrubber mean one thing across all of them - so a tick band under each is the same
-     * row of numbers printed twice. The lowest chart keeps it and the rest give the space
-     * back to their plots.
+     * Whether this chart draws the x axis, or leaves it to the one below - every chart in
+     * a stack shares one domain, so only the lowest needs to print it.
      */
     showXAxis: Boolean = true,
     plotHeight: Dp = 164.dp,
@@ -186,11 +173,8 @@ fun ProfileChart(
 }
 
 /**
- * Everything that depends only on the data.
- *
- * Split into its own composable with exclusively stable parameters so that Compose skips
- * it while the scrubber moves. Without that boundary, each frame of a drag would recreate
- * the `drawWithCache` lambda and rebuild a path of tens of thousands of points.
+ * Everything that depends only on the data. Split out with exclusively stable parameters
+ * so Compose skips it while the scrubber moves, rather than rebuilding the path every frame.
  */
 @Composable
 private fun StaticLayer(
@@ -246,13 +230,8 @@ private fun StaticLayer(
 }
 
 /**
- * A hairline, a dot, and what they are pointing at - cheap enough to redraw on every
- * pointer move.
- *
- * The readings used to live in a row at the top of the sheet, which meant reading a value
- * off a chart involved looking somewhere else entirely, and put the number for the chart
- * you were *not* touching next to the one you were. On the chart, beside the mark, there
- * is no question which series a figure belongs to.
+ * A hairline, a dot, and what they are pointing at, drawn beside the mark rather than in a
+ * row elsewhere - cheap enough to redraw on every pointer move.
  */
 @Composable
 private fun ScrubberLayer(
@@ -335,14 +314,8 @@ private fun ScrubberLayer(
 
 /**
  * Where you are and what is there, boxed above the mark and flipped below it rather than
- * allowed off the top.
- *
- * One box rather than two readings in two places: the position used to sit in the axis
- * band under the crosshair, which is where an x label belongs but is not where the eye is
- * when it is following a line. Stacked rather than run together: two figures on one line
- * have to be read apart before either can be read, and the box is narrow enough at this
- * width to stay out of the way. Opaque, because it sits over the line it is describing and
- * a wash would leave the digits competing with a stroke running through them.
+ * allowed off the top. Stacked, not run together, so the two figures read apart. Opaque,
+ * since it sits over the line it describes.
  */
 private fun DrawScope.drawTooltip(
     text: AnnotatedString,
@@ -476,11 +449,8 @@ private fun buildPaths(
 }
 
 /**
- * A wash over each gap, labelled where there is room for it.
- *
- * Deliberately not a line drawn down to zero and back: that would invent two decelerations
- * and put timings on them that were never measured. The band says the one true thing -
- * there is no data here - and the label says how much of it there is not.
+ * A wash over each gap, labelled where there's room. Deliberately not a line drawn down to
+ * zero and back, which would invent decelerations that were never measured.
  */
 private fun DrawScope.drawBreaks(render: ChartRender, plot: Rect, color: Color) {
     for (gap in render.breaks) {
@@ -534,10 +504,9 @@ private fun DrawScope.drawAxisLabels(render: ChartRender, plot: Rect, geometry: 
 }
 
 /**
- * Direct-labels exactly one point, the extreme. Labels work because they are sparing; a
- * number beside every point of a 30k-point line is noise, and the scrubber reaches the
- * rest. The label wears a text token rather than the series colour - the mark beside it
- * carries the identity, and a light hue is illegible as type.
+ * Direct-labels exactly one point, the extreme - a number beside every point would be
+ * noise, and the scrubber reaches the rest. The label uses a text token, not the series
+ * colour, since a light hue is illegible as type.
  */
 private fun DrawScope.drawHighlight(
     render: ChartRender,

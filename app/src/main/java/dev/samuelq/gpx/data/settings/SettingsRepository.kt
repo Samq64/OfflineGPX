@@ -10,12 +10,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * Everything the user can change, with the defaults the app shipped with.
- *
- * The three recording numbers are not cosmetic: they are the thresholds that decide what
- * counts as a position at all, and the defaults are a judgement about a phone in a jersey
- * pocket rather than a measurement. Someone with a better antenna, or riding somewhere
- * with no sky, needs different ones - which is the whole argument for exposing them.
+ * Everything the user can change, with the defaults the app shipped with. The recording
+ * thresholds are judgements about a phone in a jersey pocket, not measurements - which is
+ * why they're exposed rather than fixed.
  */
 data class Settings(
     val units: UnitSystem = UnitSystem.METRIC,
@@ -27,16 +24,9 @@ data class Settings(
     val minDisplacementMeters: Double = FixFilter.MIN_DISPLACEMENT_METERS,
 
     /**
-     * Filenames of the offline basemaps to draw under the routes.
-     *
-     * Names rather than paths: the directory is the app's own and moves with it between
-     * installs and devices, and a stored absolute path would survive a restore pointing at
-     * a data directory that no longer exists. Empty is the shipped state - this app comes
-     * with no maps and no way to fetch one.
-     *
-     * A set rather than one name because adjacent areas are the normal case: a town and
-     * the park next to it are two files and one journey. They are only ever allowed to be
-     * non-overlapping, which is what keeps this from needing a stacking order.
+     * Filenames (not paths - the directory is the app's own) of the offline basemaps to
+     * draw. A set because adjacent areas are the normal case; only ever non-overlapping,
+     * which is what keeps this from needing a stacking order.
      */
     val activeMapFiles: Set<String> = emptySet(),
 
@@ -51,12 +41,8 @@ data class Settings(
 }
 
 /**
- * Settings, on disk.
- *
- * `SharedPreferences` rather than DataStore: this is three scalars read once at startup and
- * written when a slider stops moving, and DataStore would be a new dependency, a new
- * coroutine scope and a serializer to carry them. The first read is on the calling thread,
- * which is the documented cost and is a few hundred microseconds for a file this size.
+ * Settings, on disk. `SharedPreferences` rather than DataStore: this is three scalars read
+ * once at startup, and DataStore would be a new dependency for no benefit at this size.
  */
 class SettingsRepository(context: Context) {
 
@@ -83,11 +69,8 @@ class SettingsRepository(context: Context) {
     }
 
     /**
-     * Back to the shipped defaults - which deliberately does not touch the imported maps.
-     *
-     * Resetting settings is about the numbers above. Silently dropping a 90 MB file the
-     * user had to leave the app to obtain would be a deletion wearing a reset's clothes,
-     * and the maps section has its own delete for when that is what was meant.
+     * Back to shipped defaults - deliberately leaves imported maps alone. Dropping a large
+     * file the user went and obtained would be a deletion wearing a reset's clothes.
      */
     fun resetToDefaults() = update {
         val activeMaps = read().activeMapFiles

@@ -75,7 +75,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.samuelq.gpx.R
 import dev.samuelq.gpx.data.db.TrackEntity
-import dev.samuelq.gpx.data.db.TrackSource
 import dev.samuelq.gpx.ui.format.Formatters
 import dev.samuelq.gpx.ui.format.LocalFormatters
 import dev.samuelq.gpx.ui.theme.routePalette
@@ -83,16 +82,13 @@ import dev.samuelq.gpx.ui.track.DeleteTrackDialog
 import dev.samuelq.gpx.ui.track.TrackNameDialog
 import dev.samuelq.gpx.ui.track.editableTrackName
 import dev.samuelq.gpx.ui.track.exportFileName
+import dev.samuelq.gpx.ui.track.shareTrackIntent
 import java.time.Instant
 
 
 /**
- * Where tracks are managed rather than read.
- *
- * Import lives here instead of on the map because the app makes its own GPX files now -
- * bringing one in from elsewhere is the rarer thing, and the map's one action should be
- * the common one. Long-press starts a selection, which exists for deleting several
- * tracks at once - visibility is a switch on every row and an all-at-once pair in the menu.
+ * Where tracks are managed rather than read. Long-press starts a selection, for deleting
+ * several tracks at once; visibility is a switch per row plus an all-at-once pair in the menu.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -123,9 +119,9 @@ fun LibraryScreen(
 
     val importFailed = stringResource(R.string.library_import_failed)
     val exportFailed = stringResource(R.string.library_export_failed)
-    val exported = stringResource(R.string.library_exported)
     val renameFailed = stringResource(R.string.library_rename_failed)
-    val resources = LocalContext.current.resources
+    val context = LocalContext.current
+    val resources = context.resources
     // A count, and a different sentence when it is not the count that was asked for.
     val exportedAll: (Int, Int) -> String = { written, requested ->
         if (written == requested) {
@@ -141,12 +137,6 @@ fun LibraryScreen(
         uri?.let(viewModel::import)
     }
 
-    // CreateDocument rather than a share sheet: the user picks the destination through
-    // SAF, so the file lands where they chose and the app needs no storage permission.
-    val exporter = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/gpx+xml")
-    ) { destination -> viewModel.finishExport(destination) }
-
     // A folder for a batch, because there is no one file forty tracks could be. Still a
     // place the user pointed at by hand, and the grant is not persisted.
     val folderExporter = rememberLauncherForActivityResult(
@@ -159,7 +149,6 @@ fun LibraryScreen(
                 is LibraryEvent.Open -> onOpenTrack(event.id)
                 LibraryEvent.ImportFailed -> snackbarHostState.showSnackbar(importFailed)
                 LibraryEvent.ExportFailed -> snackbarHostState.showSnackbar(exportFailed)
-                LibraryEvent.Exported -> snackbarHostState.showSnackbar(exported)
                 is LibraryEvent.ExportedAll -> snackbarHostState.showSnackbar(
                     exportedAll(event.written, event.requested)
                 )
@@ -204,10 +193,8 @@ fun LibraryScreen(
                         }
                     },
                     actions = {
-                        // Same condition as the overflow beside it: there is nothing
-                        // to search in an empty library, and no threshold beyond that -
-                        // an icon that appears once you own eight tracks is a rule the
-                        // user has to discover to trust.
+                        // Same condition as the overflow beside it: nothing to search in
+                        // an empty library, no threshold beyond that.
                         if (loaded == null || tracks.isNotEmpty()) {
                             IconButton(onClick = { searching = true }) {
                                 Icon(Icons.Default.Search, stringResource(R.string.library_search))
@@ -276,19 +263,18 @@ fun LibraryScreen(
                         selected = track.id in selection,
                         selectionActive = selection.isNotEmpty(),
                         onOpen = {
-                            // Opening a hidden track shows it. It used to be drawn as a
-                            // one-off that vanished when the sheet closed, which made
-                            // "hidden" mean two different things depending on how you got
-                            // there - and left the switch saying off about a line that
-                            // was plainly on the map.
+                            // Opening a hidden track shows it, rather than drawing it as a
+                            // one-off that vanishes with the sheet and leaves the switch
+                            // saying off about a line plainly on the map.
                             if (!track.visible) viewModel.setVisible(listOf(track.id), true)
                             onOpenTrack(track.id)
                         },
                         onToggleSelected = { viewModel.toggleSelected(track.id) },
                         onToggleVisible = { viewModel.setVisible(listOf(track.id), !track.visible) },
-                        onExport = {
-                            viewModel.beginExport(track)
-                            exporter.launch(exportFileName(track.trackName, track.displayName))
+                        onShare = {
+                            context.startActivity(
+                                shareTrackIntent(context, track.location, track.trackName, track.displayName)
+                            )
                         },
                         onRename = { renaming = track },
                         onDelete = { deleting = setOf(track.id) },
@@ -314,9 +300,6 @@ fun LibraryScreen(
 
     if (deleting.isNotEmpty()) {
         DeleteTrackDialog(
-            // What is actually being destroyed differs by source, and the difference is
-            // the one the user cares about: a recording only exists here.
-            deletesFiles = tracks.any { it.id in deleting && it.source == TrackSource.RECORDED },
             count = deleting.size,
             onDismiss = { deleting = emptySet() },
             onConfirm = {
@@ -330,22 +313,10 @@ fun LibraryScreen(
 /**
  * The bar that replaces the title while rows are ticked.
  *
- * Select-all is a tri-state checkbox rather than an icon, because there is no icon for it:
- * `material-icons-core` carries no `select_all` or `done_all`, and the nearest thing in it
- * is a bare tick, which in a bar next to a bin reads as "confirm" rather than "everything".
- * Pulling in `material-icons-extended` for one glyph is the trade the dependency note
- * already refuses.
- *
- * A checkbox is the better control anyway, and not as a consolation. It *shows* whether
- * everything is selected, which no icon can, and it toggles - so deselecting all stops
- * being a thing you can only do by leaving selection mode entirely. Indeterminate is the
- * honest state for a partial selection and the one people already know from every mail
- * client.
- *
- * Show and hide are not here at all. Every row already carries a switch with a full touch
- * target, and show-all and hide-all sit in the list's own menu; a third way to do it, only
- * reachable by first long-pressing something, was a row in a menu nobody needed to open.
- * What a selection is actually for is deleting several things at once.
+ * Select-all is a tri-state checkbox rather than an icon - `material-icons-core` has no
+ * `select_all`, and a checkbox also *shows* whether everything is selected and toggles,
+ * which no icon can. Show/hide aren't here: every row already has a switch, and
+ * show-all/hide-all live in the list's own menu.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -398,16 +369,15 @@ private fun TrackRow(
     onOpen: () -> Unit,
     onToggleSelected: () -> Unit,
     onToggleVisible: () -> Unit,
-    onExport: () -> Unit,
+    onShare: () -> Unit,
     onRename: () -> Unit,
     onDelete: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val formatters = LocalFormatters.current
 
-    // Built once per row, not once per composition. Three `String.format` calls each, and
-    // the first use of a localized `DateTimeFormatter` loads its locale data - which is
-    // exactly the kind of work that lands on the frames of an entry animation.
+    // Built once per row, not once per composition - a localized `DateTimeFormatter`'s
+    // first use loads locale data, which otherwise lands on the entry animation's frames.
     val summary = remember(track, formatters) {
         buildString {
             append(formatters.distance(track.distanceMeters))
@@ -469,9 +439,8 @@ private fun TrackRow(
                         IconButton(onClick = { menuOpen = true }) {
                             Icon(Icons.Default.MoreVert, stringResource(R.string.library_more))
                         }
-                        // Only once it is wanted. Composed unconditionally this was a
-                        // transition object and a popup's worth of setup per row, for a
-                        // menu almost none of them will ever show.
+                        // Only composed once wanted - unconditionally, it's a transition
+                        // object and a popup's worth of setup per row.
                         if (menuOpen) DropdownMenu(
                             expanded = true,
                             onDismissRequest = { menuOpen = false },
@@ -484,10 +453,10 @@ private fun TrackRow(
                                 },
                             )
                             DropdownMenuItem(
-                                text = { Text(stringResource(R.string.library_export)) },
+                                text = { Text(stringResource(R.string.library_share)) },
                                 onClick = {
                                     menuOpen = false
-                                    onExport()
+                                    onShare()
                                 },
                             )
                             HorizontalDivider()
@@ -547,11 +516,8 @@ private fun NoMatches(query: String, modifier: Modifier = Modifier) {
 }
 
 /**
- * The title replaced by a field, which is where a list searches itself.
- *
- * Not a Material `SearchBar`: that one is a surface that expands over the screen to offer
- * suggestions and recent queries, and there is nothing here to suggest - the whole library
- * is already on screen behind it, filtering as you type.
+ * The title replaced by a field. Not a Material `SearchBar` - that expands over the screen
+ * to offer suggestions, and there's nothing here to suggest; the library filters as you type.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

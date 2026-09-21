@@ -1,5 +1,7 @@
 package dev.samuelq.gpx.ui.track
 
+import android.content.Context
+import android.content.Intent
 import androidx.annotation.StringRes
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
@@ -22,19 +24,14 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.core.content.FileProvider
 import dev.samuelq.gpx.R
+import java.io.File
 
 /**
- * Names a track, wherever the naming happens.
- *
- * One dialog for the rename in the library and the prompt that follows a recording, because
- * they are the same act: the difference is only what brought the user here, which is what
- * [titleRes] says. Shared mostly so the rule about suffixes lives in one place - see
- * [editableTrackName].
- *
- * Opens focused with the current name selected, so the first keystroke replaces it. The
- * default the app guessed is worth showing - it is often right, and it says what will be
- * kept if the dialog is dismissed - but it is not worth clearing by hand before typing.
+ * Names a track, wherever the naming happens. One dialog for library rename and the
+ * post-recording prompt - the same act, differing only in [titleRes]. Opens focused with
+ * the current name selected, so the first keystroke replaces it.
  */
 @Composable
 fun TrackNameDialog(
@@ -79,17 +76,11 @@ fun TrackNameDialog(
 }
 
 /**
- * Confirms before a track (or forty) is gone for good.
- *
- * Shown from the library's row menu, its selection bar and the map's sheet, so one track
- * and forty go through the same question wherever it is asked. What is actually destroyed
- * differs by source, and that difference is the part the user cares about: a recording only
- * exists here.
+ * Confirms before a track (or forty) is gone for good - shown from the library's row menu,
+ * selection bar, and the map's sheet, so one and forty go through the same question.
  */
 @Composable
 fun DeleteTrackDialog(
-    /** True when at least one of them is a recording, whose file goes with the row. */
-    deletesFiles: Boolean,
     count: Int,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
@@ -97,17 +88,7 @@ fun DeleteTrackDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(pluralStringResource(R.plurals.library_delete_title, count, count)) },
-        text = {
-            Text(
-                stringResource(
-                    if (deletesFiles) {
-                        R.string.library_delete_body_recorded
-                    } else {
-                        R.string.library_delete_body_imported
-                    }
-                )
-            )
-        },
+        text = { Text(stringResource(R.string.library_delete_body)) },
         confirmButton = {
             TextButton(onClick = onConfirm) {
                 Text(
@@ -123,12 +104,8 @@ fun DeleteTrackDialog(
 }
 
 /**
- * What to put in the field for editing.
- *
- * The track's own name if it has one, and otherwise the filename it was imported under -
- * without the extension. `.gpx` is how the file is stored, not what the track is called,
- * and offering it as the starting point for a name invites every track in the library to
- * be called something dot gpx.
+ * What to put in the field for editing: the track's own name, or the imported filename
+ * without its extension - `.gpx` is how the file is stored, not what the track is called.
  */
 fun editableTrackName(trackName: String?, displayName: String): String =
     trackName?.takeIf(String::isNotBlank) ?: displayName.dropGpxSuffix()
@@ -138,12 +115,8 @@ private fun String.dropGpxSuffix(): String =
     if (endsWith(GPX, ignoreCase = true)) dropLast(GPX.length) else this
 
 /**
- * What to offer the export picker.
- *
- * The track's own name with the suffix put back on, not the name it is filed under here: a
- * recording is stored as a sortable timestamp because nothing reads a list of those, but
- * the file the user is about to put in their own Documents folder should be called what
- * they called the ride.
+ * What to offer the export picker: the track's own name with the suffix restored, not the
+ * sortable-timestamp filename it's stored under.
  */
 fun exportFileName(trackName: String?, displayName: String): String =
     editableTrackName(trackName, displayName).ensureGpxSuffix()
@@ -151,5 +124,23 @@ fun exportFileName(trackName: String?, displayName: String): String =
 /** The suffix belongs to the filename, and is put back at the one moment the two meet. */
 fun String.ensureGpxSuffix(): String =
     if (endsWith(GPX, ignoreCase = true)) this else "$this$GPX"
+
+/**
+ * A chooser Intent for a track's own GPX file - straight off disk, through a [FileProvider]
+ * grant scoped to that one file, since app-private storage isn't otherwise readable by
+ * another app.
+ */
+fun shareTrackIntent(context: Context, location: String, trackName: String?, displayName: String): Intent {
+    val uri = FileProvider.getUriForFile(
+        context, "${context.packageName}.fileprovider", File(location),
+    )
+    val send = Intent(Intent.ACTION_SEND).apply {
+        type = "application/gpx+xml"
+        putExtra(Intent.EXTRA_STREAM, uri)
+        putExtra(Intent.EXTRA_TITLE, exportFileName(trackName, displayName))
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    return Intent.createChooser(send, null)
+}
 
 private const val GPX = ".gpx"

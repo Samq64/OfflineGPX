@@ -23,19 +23,15 @@ import kotlinx.coroutines.launch
 sealed interface LibraryEvent {
     data class Open(val id: Long) : LibraryEvent
     data object ImportFailed : LibraryEvent
+    /** The batch export to a folder failed outright - see [ExportedAll] for a partial one. */
     data object ExportFailed : LibraryEvent
-    data object Exported : LibraryEvent
 
     /** [written] of [requested] tracks reached the folder. */
     data class ExportedAll(val written: Int, val requested: Int) : LibraryEvent
     data object RenameFailed : LibraryEvent
 }
 
-/**
- * `@Stable` so the lambdas a row captures can be memoised by the compiler. The one mutable
- * property here, [exporting], is never read during composition - it is handed to the
- * document picker and read back when it returns - so nothing in the UI can go stale.
- */
+/** `@Stable` so a row's captured lambdas can be memoised. */
 @Stable
 class LibraryViewModel(private val repository: TrackRepository) : ViewModel() {
 
@@ -44,15 +40,9 @@ class LibraryViewModel(private val repository: TrackRepository) : ViewModel() {
     val query: StateFlow<String> = _query.asStateFlow()
 
     /**
-     * The rows to show: everything, filtered by [query].
-     *
-     * Null until the first read comes back, which is not the same as empty.
-     *
-     * Starting at `emptyList()` meant the screen rendered "No tracks yet" for the first
-     * frames of its own entry animation and then replaced it with the list - a full
-     * content swap mid-slide, which reads as the animation stuttering rather than as data
-     * arriving. `WhileSubscribed` keeps this warm for five seconds, so only the first open
-     * ever sees the null.
+     * The rows to show, filtered by [query]. Null until the first read comes back, which
+     * is not the same as empty - starting at `emptyList()` flashed "No tracks yet" during
+     * the entry animation before the real list swapped in.
      */
     val tracks: StateFlow<List<TrackEntity>?> =
         combine(repository.tracks, _query) { tracks, query ->
@@ -68,15 +58,11 @@ class LibraryViewModel(private val repository: TrackRepository) : ViewModel() {
     val selection: StateFlow<Set<Long>> = _selection.asStateFlow()
 
     /**
-     * One-shot events, not state: a Channel so an id is delivered exactly once and a
-     * rotation cannot re-trigger the navigation or re-show the error.
+     * One-shot events, not state - a Channel delivers each exactly once, so a rotation
+     * can't re-trigger navigation or re-show an error.
      */
     private val _events = Channel<LibraryEvent>(Channel.BUFFERED)
     val events: Flow<LibraryEvent> = _events.receiveAsFlow()
-
-    /** The track a pending export will write, held across the document-picker round trip. */
-    var exporting: TrackEntity? = null
-        private set
 
     fun toggleSelected(id: Long) {
         _selection.value = _selection.value.let { if (id in it) it - id else it + id }
@@ -99,22 +85,6 @@ class LibraryViewModel(private val repository: TrackRepository) : ViewModel() {
         }
     }
 
-    fun beginExport(track: TrackEntity) {
-        exporting = track
-    }
-
-    fun finishExport(destination: Uri?) {
-        val track = exporting ?: return
-        exporting = null
-        if (destination == null) return
-        viewModelScope.launch {
-            repository.export(track.id, destination.toString()).fold(
-                onSuccess = { _events.send(LibraryEvent.Exported) },
-                onFailure = { _events.send(LibraryEvent.ExportFailed) },
-            )
-        }
-    }
-
     /** The filenames a pending batch will be written under, by row id. */
     private var exportingAll: Map<Long, String> = emptyMap()
 
@@ -128,9 +98,7 @@ class LibraryViewModel(private val repository: TrackRepository) : ViewModel() {
         if (folder == null || names.isEmpty()) return
         viewModelScope.launch {
             repository.exportAll(names, folder.toString()).fold(
-                // Reported as a count because it is one: a folder the app could write some
-                // of is a likelier outcome than one it could write none of, and "Exported"
-                // over a batch that half-landed is the kind of lie that costs a ride.
+                // A count, not a boolean: a half-written folder is likelier than all-or-nothing.
                 onSuccess = { _events.send(LibraryEvent.ExportedAll(it, names.size)) },
                 onFailure = { _events.send(LibraryEvent.ExportFailed) },
             )
@@ -170,11 +138,8 @@ class LibraryViewModel(private val repository: TrackRepository) : ViewModel() {
 }
 
 /**
- * Whether a row answers to what was typed.
- *
- * Both names, not just the one on screen: an import keeps the filename it arrived under
- * even after it is renamed, and "the file I downloaded in March" is exactly the sort of
- * thing someone searches a list of rides for.
+ * Whether a row answers to what was typed. Checks both names, not just the one on screen -
+ * an import keeps the filename it arrived under even after a rename.
  */
 private fun TrackEntity.matches(query: String): Boolean {
     val needle = query.trim()

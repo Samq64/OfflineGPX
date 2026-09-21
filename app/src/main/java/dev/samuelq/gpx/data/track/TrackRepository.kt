@@ -15,8 +15,7 @@ class LoadedTrack(
     val profile: TrackProfile,
     /**
      * The row's slot in the route palette, carried through so a track is the same colour
-     * wherever it is drawn. Without it the detail screen picked its own hue and every
-     * track was blue there while the list and the map agreed on something else.
+     * wherever it's drawn.
      */
     val colorIndex: Int = 0,
 ) {
@@ -38,11 +37,8 @@ sealed class TrackLoadException(message: String, cause: Throwable? = null) : Exc
 }
 
 /**
- * The single way the app gets at track data.
- *
- * The UI depends on this rather than on the GPX parser, so a track's source is not baked
- * into the screens. That is the seam recording uses: a recorder produces the same [Track]
- * and adds a write method here, and the chart screens carry on unchanged.
+ * The single way the app gets at track data, so a track's source is never baked into a
+ * screen - the seam recording uses to add a write method here without touching the charts.
  */
 interface TrackRepository {
 
@@ -51,18 +47,14 @@ interface TrackRepository {
 
     /**
      * What the map draws: [tracks] filtered to the visible ones and reversed, so the most
-     * recently touched is painted last and lands on top of the pile. The list and the map
-     * therefore agree by construction rather than by two orderings kept in step.
+     * recently touched is painted last and lands on top.
      */
     val visibleTracks: Flow<List<TrackEntity>>
 
     /**
      * Copies [location] into app-private storage, reads it, and indexes the copy. Returns
-     * the row id, which is what navigation carries.
-     *
-     * Picking the same file again makes a second copy and a second row, the same as
-     * recording twice does - there is no dedupe, because there is nothing to dedupe against
-     * once the app is no longer holding onto the original file at all.
+     * the row id. No dedupe - picking the same file twice makes two rows, like recording
+     * twice does.
      */
     suspend fun import(location: String): Result<Long>
 
@@ -75,33 +67,14 @@ interface TrackRepository {
     suspend fun saveRecording(track: Track, startedAt: Instant): Result<Long>
 
     /**
-     * Rescues a recording whose process died before it could be stopped.
-     *
-     * The write-ahead log only earns its place if something reads it back, so this runs
-     * once at startup. Returns the new row id, or null when there was nothing to recover.
+     * Rescues a recording whose process died before it could be stopped. Runs once at
+     * startup; returns the new row id, or null when there was nothing to recover.
      */
     suspend fun recoverAbandonedRecording(): Long?
 
     /**
-     * Copies a track's GPX to [destination], a document the user chose through SAF.
-     *
-     * The point of recording into GPX rather than a table: what the app has on disk is
-     * already the file the user wants, so this is a byte copy and not a serializer that
-     * could disagree with the recorder.
-     */
-    suspend fun export(id: Long, destination: String): Result<Unit>
-
-    /**
-     * Writes several tracks into [treeUri], a folder the user chose through SAF, under the
-     * [names] they are given here. Returns how many of them landed.
-     *
-     * A folder rather than a file, because there is no such thing as one destination for
-     * forty tracks: the alternatives were a zip - a container the user then has to undo -
-     * or forty trips through the document picker. The grant is still SAF and still pointed
-     * at by hand, and it is deliberately not persisted: it lasts the one export.
-     *
-     * Counts rather than fails: one unwritable name should not cost the other thirty-nine,
-     * so a track that cannot be created is skipped and the total says so.
+     * Writes several tracks into [treeUri], a folder chosen through SAF, under the [names]
+     * given here. Returns how many landed - one unwritable name doesn't cost the rest.
      */
     suspend fun exportAll(names: Map<Long, String>, treeUri: String): Result<Int>
 
@@ -112,11 +85,8 @@ interface TrackRepository {
     suspend fun openTransient(location: String): Result<LoadedTrack>
 
     /**
-     * Reads a track's geometry without recording that it was opened.
-     *
-     * The map draws every visible track, which is not the same as the user looking at any
-     * of them - routing that through [open] would rewrite the whole list's sort order on
-     * every redraw.
+     * Reads a track's geometry without recording that it was opened - the map drawing a
+     * track isn't the user looking at it, and [open] would rewrite the sort order every redraw.
      */
     suspend fun geometry(id: Long): Result<LoadedTrack>
 

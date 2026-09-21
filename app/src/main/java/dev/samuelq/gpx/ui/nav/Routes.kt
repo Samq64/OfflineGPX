@@ -3,16 +3,8 @@ package dev.samuelq.gpx.ui.nav
 import kotlinx.serialization.Serializable
 
 /**
- * Where the app can be.
- *
- * Type-safe routes: navigation-compose serialises these into the back stack entry's
- * arguments, so nothing here is ever concatenated into a path string. That is what the
- * hand-rolled back stack got wrong - it encoded destinations space-separated, which a URI
- * containing a literal space silently decoded as the wrong screen after process death.
- *
- * A track is not among them. It used to be, which made looking at one a place you travelled
- * to and came back from; it is a selection on the map now, and selections do not belong on
- * a back stack.
+ * Where the app can be. Type-safe routes rather than a path string, and a track is
+ * deliberately not among them - it's a selection on the map now, not a place you travel to.
  */
 
 /** Home. Every track the user has chosen to show, overlaid, plus whichever one is open. */

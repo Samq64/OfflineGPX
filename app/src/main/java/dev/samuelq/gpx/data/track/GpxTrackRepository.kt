@@ -45,39 +45,31 @@ class GpxTrackRepository(
     private val appContext = context.applicationContext
 
     /**
-     * Holds the shared table observer, and nothing else.
-     *
-     * The repository is a singleton for the life of the process, so this never needs
-     * cancelling; `WhileSubscribed` is what stops the query running with nobody watching.
+     * Holds the shared table observer. Never needs cancelling - the repository is a
+     * process-lifetime singleton; `WhileSubscribed` stops the query when nobody's watching.
      */
     private val scope = CoroutineScope(SupervisorJob() + io)
 
     private val recordingsDir: File get() = RecordingService.recordingsDir(appContext)
 
     /**
-     * Where a copy of every imported GPX lives. App-private, same as [recordingsDir]: an
-     * import used to be read where it sat, behind a persisted SAF grant, but that made an
-     * imported track a different kind of thing from a recorded one - one file the app owns
-     * outright and one it only ever borrows. Copying it in once, at import, means every
-     * track in the library is the same kind of thing afterwards.
+     * App-private copy of every imported GPX, same as [recordingsDir] - a recording and an
+     * import are both files this app owns outright, not borrowed via a grant.
      */
     private val importsDir: File get() = File(appContext.filesDir, "imports").apply { mkdirs() }
 
     /**
      * Single-entry cache: re-entering a track the user just looked at would otherwise
-     * reparse 30k points for a visible stall. One entry, because the sheet shows one track
-     * and an unbounded map would hold every track the user opened.
+     * reparse tens of thousands of points for a visible stall. One entry, since the sheet
+     * shows one track at a time.
      */
     @Volatile
     private var cached: Pair<String, LoadedTrack>? = null
 
     /**
-     * One query behind both views of the table.
-     *
-     * The map watches the visible rows and the library watches all of them, and each used
-     * to open its own observer on the same statement - so a single write ran the query
-     * twice and woke two collectors with two identical lists. Shared, with a grace period
-     * long enough to survive a rotation or a hop to the settings screen and back.
+     * One query behind both views of the table, shared rather than each opening its own
+     * observer on the same statement (which woke two collectors per write). Grace period
+     * long enough to survive a rotation or a trip to settings and back.
      */
     private val recent: Flow<List<TrackEntity>> = dao.observeByRecent()
         .shareIn(scope, SharingStarted.WhileSubscribed(SHARE_GRACE_MILLIS), replay = 1)
@@ -95,10 +87,8 @@ class GpxTrackRepository(
             val displayName = displayNameOf(uri)
             val destination = File(importsDir, uniqueImportName(displayName))
 
-            // Copied before it is parsed, and deleted again if either step fails - the
-            // same order MapStore's import validates a basemap in, for the same reason:
-            // the only bytes worth trusting are the ones that were kept, and a copy that
-            // never became a usable track should not be left taking up space.
+            // Copied before it's parsed, deleted again if either step fails - same order
+            // MapStore validates a basemap in, so nothing unusable is left taking up space.
             val loaded = runCatching {
                 copyToPrivateStorage(uri, destination)
                 read(destination.absolutePath, displayName, LoadedTrack.TRANSIENT_ID)
@@ -170,9 +160,8 @@ class GpxTrackRepository(
                 val displayName = recordingFileName(startedAt)
                 val file = File(recordingsDir, displayName)
 
-                // Named before it is written, so the name is inside the GPX and survives
-                // an export. The filename stays the sortable stamp - that is for the
-                // filesystem, and nobody reads a list of those.
+                // Named before it's written, so the name is inside the GPX and survives an
+                // export. The filename itself stays the sortable stamp - nobody reads those.
                 val named = if (track.name.isNullOrBlank()) {
                     track.copy(name = defaultName(profile.stats))
                 } else {
@@ -213,9 +202,8 @@ class GpxTrackRepository(
             return@withContext null
         }
 
-        // The same bar a clean stop applies. A crash must not resurrect a recording that
-        // pressing Stop would have thrown away - the log is the only difference between
-        // the two, and it is not a difference the user made.
+        // The same bar a clean stop applies: a crash must not resurrect what pressing Stop
+        // would have thrown away.
         if (TrackAnalyzer.analyze(track).stats.distanceMeters <
             RecordingService.MIN_SAVEABLE_DISTANCE_METERS
         ) {
@@ -225,22 +213,6 @@ class GpxTrackRepository(
 
         val startedAt = track.segments.firstOrNull()?.points?.firstOrNull()?.time ?: Instant.now()
         saveRecording(track, startedAt).getOrNull()?.also { log.delete() }
-    }
-
-    override suspend fun export(id: Long, destination: String): Result<Unit> = withContext(io) {
-        runCatching {
-            val entity = dao.byId(id)
-                ?: throw TrackLoadException.Unreadable("No track with id $id")
-
-            val output = appContext.contentResolver.openOutputStream(Uri.parse(destination))
-                ?: throw TrackLoadException.Unreadable("Could not write to $destination")
-
-            // A copy, not a re-serialisation: what is on disk is already correct GPX, and
-            // regenerating it would let the exported file drift from the stored one.
-            output.use { sink -> openStream(entity.location).use { it.copyTo(sink) } }
-            // copyTo returns the byte count; the caller only needs to know it worked.
-            Unit
-        }.recoverFailure()
     }
 
     override suspend fun exportAll(names: Map<Long, String>, treeUri: String): Result<Int> =
@@ -306,9 +278,8 @@ class GpxTrackRepository(
                 ?: throw TrackLoadException.Unreadable("No track with id $id")
             val trimmed = name.trim().takeIf(String::isNotEmpty)
 
-            // The file on disk is rewritten too, for either source: both are this app's
-            // own copy now, and an export is a byte copy of that file rather than a
-            // re-serialisation - so a rename that never touched it would not survive one.
+            // Rewritten on disk too, for either source: export is a byte copy of this
+            // file, not a re-serialisation, so a rename that never touched it wouldn't survive one.
             val file = File(entity.location)
             val parsed = file.inputStream().use(parser::parse)
             val temp = File(file.parentFile, "${file.name}.tmp")
@@ -350,16 +321,9 @@ class GpxTrackRepository(
     }
 
     /**
-     * What a recording is called before anyone renames it.
-     *
-     * "2026-09-19T110233.gpx" is a filename, not a name - it sorts, and that is all it
-     * does for a reader scanning a list. The time of day is what people actually reach for
-     * ("the ride on Sunday morning"), and the row underneath already carries the date, the
-     * distance and the duration, so the headline does not have to repeat any of them.
-     *
-     * Walk or ride is inferred from average moving speed. The two are far enough apart -
-     * hiking is 3-6 km/h and cycling 15-30 - that a threshold between them is safe, and a
-     * wrong guess costs one rename.
+     * What a recording is called before anyone renames it: time of day plus walk-or-ride,
+     * inferred from average moving speed (hiking 3-6 km/h, cycling 15-30, safely apart). A
+     * wrong guess costs one rename; the row underneath already carries date/distance/duration.
      */
     private fun defaultName(stats: dev.samuelq.gpx.core.analysis.TrackStats): String {
         val zoned = (stats.startedAt ?: Instant.now()).atZone(ZoneId.systemDefault())
@@ -380,7 +344,10 @@ class GpxTrackRepository(
     /** Round-robin over the palette, so a handful of tracks rarely collide on a hue. */
     private suspend fun nextColorIndex(): Int = dao.count() % ROUTE_PALETTE_SIZE
 
-    /** Reads and analyses whatever [location] points at, SAF URI or app-private path. */
+    /**
+     * Reads and analyses whatever [location] points at: an app-private path, or a
+     * transient `content://` URI for [openTransient].
+     */
     private fun read(
         location: String,
         displayName: String,
@@ -429,9 +396,8 @@ class GpxTrackRepository(
     }
 
     /**
-     * A name in [importsDir] that is not already taken, keeping the picked file's own name
-     * where possible. The same reasoning as `MapStore`'s equivalent, and the same shape:
-     * two rides both called `track.gpx` are two different rides, not one file re-imported.
+     * A name in [importsDir] not already taken, keeping the picked file's own name where
+     * possible - same reasoning as `MapStore`'s equivalent.
      */
     private fun uniqueImportName(displayName: String): String {
         val base = displayName
@@ -481,9 +447,8 @@ class GpxTrackRepository(
                 is TrackLoadException -> e
                 is GpxParseException -> TrackLoadException.Invalid(e.message ?: "Not valid GPX", e)
                 is FileNotFoundException -> TrackLoadException.Unreadable("File no longer exists", e)
-                // Only a transient, one-shot URI reaches this any more - an import's own
-                // copy needs no grant - and that one-shot access can still be revoked or
-                // the provider can vanish before the read finishes.
+                // Only a transient, one-shot URI reaches this - an import's own copy needs
+                // no grant - and that access can still be revoked mid-read.
                 is SecurityException ->
                     TrackLoadException.Unreadable("No longer permitted to read this file", e)
 

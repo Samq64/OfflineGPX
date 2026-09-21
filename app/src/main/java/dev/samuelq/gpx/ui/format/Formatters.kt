@@ -16,15 +16,8 @@ import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 
 /**
- * Every number the user sees.
- *
- * The analysis layer is SI-only and stays that way, so switching units is this class and
- * nothing else - which was the standing promise, and is why it is a class now rather than
- * an object. One instance per unit system, held in [LocalFormatters], so a call site never
- * has to pass the preference around or know it exists.
- *
- * The axis lambdas are instance properties rather than functions for a reason spelled out
- * at the bottom: the charts key their layout on lambda identity.
+ * Every number the user sees. The analysis layer is SI-only, so switching units is this
+ * class and nothing else. One instance per unit system, held in [LocalFormatters].
  */
 @Immutable
 class Formatters(val units: UnitSystem) {
@@ -36,12 +29,7 @@ class Formatters(val units: UnitSystem) {
     val speedUnit: String get() = if (metric) "km/h" else "mph"
     val elevationUnit: String get() = if (metric) "m" else "ft"
 
-    /**
-     * The small unit below the large one, so a 400m walk is not "0.40 km".
-     *
-     * The imperial break is a tenth of a mile rather than a whole one: 0.9 miles in feet
-     * is a four-digit number nobody reads as a distance.
-     */
+    /** The small unit below the large one, so a 400m walk isn't "0.40 km". */
     fun distance(meters: Double, locale: Locale = Locale.getDefault()): String = when {
         meters.isNaN() -> EMPTY
         metric -> when {
@@ -63,10 +51,8 @@ class Formatters(val units: UnitSystem) {
     }
 
     /**
-     * Compact axis form: bare kilometres or miles, no unit (the axis title carries it).
-     *
-     * [decimals] rather than a rule about the value's own magnitude, because what has to be
-     * resolved is the gap between one tick and the next: see [distanceAxisFor].
+     * Compact axis form: bare kilometres or miles, no unit. [decimals] is keyed to the gap
+     * between ticks, not the value's own magnitude - see [distanceAxisFor].
      */
     fun distanceAxis(
         meters: Float,
@@ -79,15 +65,9 @@ class Formatters(val units: UnitSystem) {
     )
 
     /**
-     * Tick labels for a distance axis whose ticks stand [stepMeters] apart.
-     *
-     * The precision comes from the step, not from the values. A 170 m walk gets ticks every
-     * 50 m, and one decimal of a kilometre prints both 50 and 100 as "0.1" - two different
-     * places on the axis wearing the same label, which is worse than a long number because
-     * the reader cannot tell it has happened.
-     *
-     * Returned as a lambda because the charts key their measured layout on its identity: it
-     * has to change when the axis does and not once per recomposition.
+     * Tick labels for a distance axis whose ticks stand [stepMeters] apart. Precision comes
+     * from the step, not the value - otherwise two different ticks can print the same label.
+     * Returned as a lambda since the charts key their layout on its identity.
      */
     fun distanceAxisFor(stepMeters: Float, locale: Locale = Locale.getDefault()): (Float) -> String {
         val decimals = axisDecimals(
@@ -138,12 +118,9 @@ class Formatters(val units: UnitSystem) {
     }
 
     /**
-     * Tick labels for an elevation axis whose ticks stand [stepMeters] apart.
-     *
-     * Whole metres are right for a mountain and wrong for a towpath: a track that never
-     * leaves a two-metre band gets half-metre ticks, and rounding those to integers labels
-     * five gridlines 9, 10, 10, 11, 11. Same rule as [distanceAxisFor] - the step decides
-     * the precision, because the step is what the reader is being asked to tell apart.
+     * Tick labels for an elevation axis whose ticks stand [stepMeters] apart. Same rule as
+     * [distanceAxisFor]: whole metres are right for a mountain, wrong for a towpath's
+     * half-metre ticks.
      */
     fun elevationAxisFor(stepMeters: Float, locale: Locale = Locale.getDefault()): (Float) -> String {
         val decimals = axisDecimals(elevationIn(abs(stepMeters).toDouble()))
@@ -157,11 +134,9 @@ class Formatters(val units: UnitSystem) {
         if (metric) meters else meters * FEET_PER_METER
 
     /**
-     * Stable singletons, not `this::speedAxis` at the call site: a reference to a function
-     * with default arguments becomes a *new* lambda every recomposition, which would
-     * defeat the chart's `remember` keys and rebuild its path on every scrub frame. They
-     * change identity when the unit system does, which is exactly when the axis labels
-     * need redrawing.
+     * Stable singletons, not `this::speedAxis` at the call site - a bound reference to a
+     * default-arg function is a new lambda every recomposition, defeating the chart's
+     * `remember` keys.
      */
     val SpeedAxis: (Float) -> String = { speedAxis(it) }
     val ElevationAxis: (Float) -> String = { elevationAxis(it) }
@@ -177,10 +152,8 @@ class Formatters(val units: UnitSystem) {
         const val MAX_AXIS_DECIMALS = 3
 
         /**
-         * How many decimals it takes to tell one tick from the next one up.
-         *
-         * Steps come off the 1-2-5 progression, so this is simply where the step sits
-         * against the decimal point: 5 and 2 need none, 0.5 needs one, 0.05 needs two.
+         * How many decimals it takes to tell one tick from the next: steps come off the
+         * 1-2-5 progression, so this is just where the step sits against the decimal point.
          */
         private fun axisDecimals(step: Double): Int =
             if (step > 0.0 && step.isFinite()) {
@@ -238,10 +211,8 @@ class Formatters(val units: UnitSystem) {
 }
 
 /**
- * The unit system in force, for everything that renders a number.
- *
- * Static because it changes about once in the life of an install: when it does, the whole
- * tree below it should redraw, and no call site should pay to observe it in the meantime.
+ * The unit system in force. Static because it changes about once in the life of an
+ * install, so no call site should pay to observe it in the meantime.
  */
 val LocalFormatters = staticCompositionLocalOf { Formatters.Metric }
 

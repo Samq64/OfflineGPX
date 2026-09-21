@@ -39,12 +39,9 @@ import dev.samuelq.gpx.ui.format.LocalFormatters
 import dev.samuelq.gpx.ui.format.tabularFigures
 
 /**
- * The live recording, docked under the map.
- *
- * Two rows and no more: the route drawing itself on the canvas above is the interesting
- * part, and a recorder that ate the map to show three numbers would be trading the thing
- * you want to look at for the thing you already know. Everything here is read at arm's
- * length, so the numbers stay large even though the bar is short.
+ * The live recording, docked under the map. Two rows and no more - the route drawing
+ * itself above is the interesting part, and a recorder that ate the map would trade the
+ * thing you want to look at for numbers you already know.
  */
 @Composable
 fun RecordingBar(
@@ -95,9 +92,8 @@ fun RecordingBar(
                 )
             }
 
-            // Nothing recorded yet has two very different causes, and the accuracy is the
-            // only thing that tells them apart: a cold start settles in seconds, a phone
-            // indoors never will. Saying which saves the user waiting for the wrong one.
+            // Nothing recorded yet has two causes accuracy tells apart: a cold start
+            // settles in seconds, a phone indoors never will.
             val poorSignal = state.accuracyMeters?.takeIf { it > state.accuracyLimitMeters }
 
             Text(
@@ -150,9 +146,8 @@ fun RecordingBar(
 }
 
 /**
- * The one piece of decoration in the app, and it earns its place: a recorder that is
- * running and one that is paused have to be told apart at a glance, and a pulse says it
- * without a word of text.
+ * The one piece of decoration in the app: a pulse tells running and paused apart at a
+ * glance, without a word of text.
  */
 @Composable
 private fun RecordingDot(paused: Boolean) {

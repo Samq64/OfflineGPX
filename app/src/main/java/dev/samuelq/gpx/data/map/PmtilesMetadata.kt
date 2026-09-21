@@ -14,12 +14,9 @@ import java.util.zip.GZIPInputStream
  * The one field this app reads out of an archive's own JSON metadata block.
  *
  * The app ships no maps and fetches nothing, so it has no idea where an imported archive's
- * data actually came from - the "Map data © OpenStreetMap contributors" badge this
- * replaced was a guess dressed as a fact, true only because most free .pmtiles extracts
- * happen to be cut from OSM. `attribution` is the mbtiles/tippecanoe convention every
- * mainstream pmtiles builder (go-pmtiles, tilemaker, planetiler, protomaps.com) already
- * writes into this block, so reading it back is the only honest way to credit a source that
- * could just as easily be a satellite provider or a national survey.
+ * data came from. `attribution` is the mbtiles/tippecanoe convention every mainstream
+ * pmtiles builder already writes into this block, so reading it back is the only honest way
+ * to credit whatever source it actually is.
  */
 object PmtilesMetadata {
 
@@ -68,11 +65,8 @@ object PmtilesMetadata {
     }
 
     /**
-     * The convention this field follows is mbtiles/tippecanoe's, which is an HTML fragment
-     * rather than plain text - typically the exact string Leaflet's own OSM layer defaults
-     * to, `&copy; <a href="...">OpenStreetMap</a> contributors`. This app has no HTML
-     * renderer to hand it to, only a `Text`, so both the markup and the entity that markup
-     * leans on for its own copyright symbol have to be turned into plain characters here.
+     * The mbtiles/tippecanoe convention is an HTML fragment, not plain text, and this app
+     * only has a `Text` to put it in - so both markup and entities need stripping here.
      */
     private fun stripHtml(text: String): String = decodeEntities(text.replace(HTML_TAG, ""))
 

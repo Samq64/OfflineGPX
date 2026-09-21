@@ -27,11 +27,8 @@ import dev.samuelq.gpx.ui.settings.SettingsScreen
 import dev.samuelq.gpx.ui.track.TrackRef
 
 /**
- * Three destinations, and that is the whole app.
- *
- * A track is not one of them any more - it is a selection on the map, shown in a sheet
- * there. What is left is the map, the list that curates it and the settings, which is few
- * enough that back means one thing: close what is open, then leave.
+ * Three destinations. A track isn't one - it's a selection on the map, shown in a sheet
+ * there - so back means one thing: close what's open, then leave.
  */
 @Composable
 fun GpxApp(
@@ -56,13 +53,8 @@ fun GpxApp(
 
     CompositionLocalProvider(LocalFormatters provides formatters) {
         // No BackHandler here: NavHost owns the back stack, so back at the root exits and
-        // predictive back works without the app intercepting the gesture. The map has one
-        // of its own, for the sheet, which is a different question.
-        //
-        // Slide, in and out, rather than the cross-fade navigation-compose defaults to.
-        // A fade says "something changed"; a slide says where it went and how to get back,
-        // which is the whole job of the animation - and the predictive back gesture drags
-        // `popExit` directly, so the peel-back under your thumb is this one.
+        // predictive back isn't intercepted. Slide rather than navigation-compose's default
+        // cross-fade, since predictive back drags `popExit` directly.
         NavHost(
             navController = navController,
             startDestination = MapRoute,
@@ -103,12 +95,9 @@ fun GpxApp(
 private val NavigationSpec = tween<IntOffset>(durationMillis = 300)
 
 /**
- * A track handed to the map from somewhere else, as one bundle-safe value.
- *
- * Two separate keys for "a row" and "a URI" would have a third state - both set - that
- * means nothing, so the discriminator rides along with the value. It is parsed back with
- * a single [substringAfter], not split on a separator that could appear inside a URI; that
- * is the mistake the old space-separated back stack made.
+ * A track handed to the map from somewhere else, as one bundle-safe value. The
+ * discriminator rides along with the value rather than using two separate keys, which would
+ * have a meaningless third state where both are set.
  */
 private object FocusRequest {
     const val KEY = "focus"
@@ -127,11 +116,8 @@ private object FocusRequest {
 }
 
 /**
- * Shows a track on the map, from wherever the caller is.
- *
- * The map is the start destination, so it is always on the stack and always the thing to
- * come back to - which makes this a pop rather than a navigate, and means opening a track
- * from the list never leaves a second copy of anything behind.
+ * Shows a track on the map, from wherever the caller is. A pop rather than a navigate,
+ * since the map is always on the stack.
  */
 private fun NavController.focusOnMap(request: String) {
     getBackStackEntry(MapRoute).savedStateHandle[FocusRequest.KEY] = request
@@ -139,11 +125,7 @@ private fun NavController.focusOnMap(request: String) {
 }
 
 /**
- * Navigate, but never onto a copy of where we already are.
- *
- * Without this a double tap - or one gesture that fires the same callback twice - pushes
- * the same destination twice, and the back gesture then animates the screen you are on
- * peeling back to reveal itself. That reads as a broken gesture rather than as a duplicate
- * entry, which is why it took so long to spot.
+ * Navigate, but never onto a copy of where we already are - a double tap otherwise pushes
+ * a duplicate entry that back then peels away to reveal itself.
  */
 private fun NavController.open(route: Any) = navigate(route) { launchSingleTop = true }

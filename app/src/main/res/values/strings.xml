@@ -64,7 +64,7 @@
 
     <string name="library_title">Tracks</string>
     <string name="library_import">Open GPX file</string>
-    <string name="library_export">Export…</string>
+    <string name="library_share">Share…</string>
     <string name="library_export_all">Export to a folder…</string>
     <string name="library_search">Search tracks</string>
     <string name="library_search_hint">Search tracks</string>
@@ -81,16 +81,14 @@
         <item quantity="one">Delete this track?</item>
         <item quantity="other">Delete %d tracks?</item>
     </plurals>
-    <string name="library_delete_body_imported">The file itself is left where it is. This app only forgets about it.</string>
-    <string name="library_delete_body_recorded">Recordings are stored by this app and will be deleted from the device. Imported files are left where they are.</string>
+    <string name="library_delete_body">This app\'s copy of each file is deleted from the device. An imported track can be added back by importing it again; a recording cannot be recovered.</string>
     <string name="library_select_all">Select all</string>
     <string name="library_clear_selection">Clear selection</string>
     <string name="library_selected">%d selected</string>
     <string name="library_empty_title">No tracks yet</string>
     <string name="library_empty_body">Record one, or open a .gpx file. Files are read only when you pick them, and this app has no internet access.</string>
     <string name="library_import_failed">Couldn\'t open that file.</string>
-    <string name="library_export_failed">Couldn\'t export that track.</string>
-    <string name="library_exported">Exported.</string>
+    <string name="library_export_failed">Couldn\'t export to that folder.</string>
     <plurals name="library_exported_all">
         <item quantity="one">Exported %1$d track.</item>
         <item quantity="other">Exported %1$d tracks.</item>

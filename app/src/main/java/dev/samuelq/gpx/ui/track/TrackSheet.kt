@@ -63,48 +63,36 @@ private val SheetPadding = 20.dp
 
 /**
  * Everything the sheet shows above the fold: the handle, the name, one row of numbers.
- *
- * Anything taller peeks at a chart heading with no chart under it, which is the worst row
- * the sheet has - a label for something you cannot see, bought with a third of the map.
+ * Anything taller peeks at a chart heading with no chart under it.
  */
 val TrackSheetPeekHeight = 128.dp
 
 /**
- * Everything the sheet can do to the track it is showing.
- *
- * Null for a track that arrived through an intent: it has no row in the library, so there
- * is nothing to rename, hide or delete, and the sheet leaves the menu off entirely rather
- * than offering four actions that would all have to refuse.
+ * Everything the sheet can do to the track it is showing. Null for a track that arrived
+ * through an intent - no library row, so the sheet leaves the menu off rather than
+ * offering four actions that would all have to refuse.
  */
 @Immutable
 class TrackActions(
     val onRename: () -> Unit,
-    val onExport: () -> Unit,
+    val onShare: () -> Unit,
     val onHide: () -> Unit,
     val onDelete: () -> Unit,
 )
 
 /**
- * What the map knows about the track it is focused on.
- *
- * A sheet rather than a screen: the route is already drawn on the map behind it, and
- * sending the reader somewhere else to see its numbers meant redrawing the same line on a
- * second canvas and losing every other track off the side of it.
- *
- * Height is the only thing that hides anything here. There used to be a fold as well - a
- * Details button that opened the secondary numbers - which meant two disclosure systems
- * stacked on one surface: the sheet was already taller-or-shorter, and the button was
- * shorter-or-taller inside it. Worse, at the peek height it opened onto content below the
- * bottom of the screen, so pressing it appeared to do nothing but turn an arrow over. Now
- * the column simply runs on, and dragging is what reveals more of it.
+ * What the map knows about the track it is focused on. A sheet rather than a screen: the
+ * route is already drawn on the map behind it. Height is the only thing that hides
+ * anything - there's no separate fold/details button stacking a second disclosure system
+ * on top of the sheet's own; the column just runs on, and dragging reveals more of it.
  */
 @Composable
 fun TrackSheet(
     loaded: LoadedTrack,
     routeColor: Color,
     maxHeight: Dp,
-    atFullHeight: Boolean,
-    onStepHeight: () -> Unit,
+    expanded: Boolean,
+    onToggleHeight: () -> Unit,
     selectedIndex: Int?,
     onSelectedIndexChange: (Int?) -> Unit,
     useTimeAxis: Boolean,
@@ -128,9 +116,8 @@ fun TrackSheet(
         if (useTimeAxis) formatters.DurationAxis else formatters.distanceAxisFor(xScale.step)
     }
 
-    // With units, unlike the axis formatters: a tick is read in a column of ticks, a
-    // tooltip is read on its own and has to say what it is. Remembered because the chart
-    // keys its measured layout on the identity of these.
+    // With units, unlike the axis formatters, since a tooltip is read on its own. Remembered
+    // because the chart keys its measured layout on the identity of these.
     val speedValue: (Float) -> String =
         remember(formatters) { { formatters.speed(it.toDouble()) } }
     val elevationValue: (Float) -> String =
@@ -154,11 +141,8 @@ fun TrackSheet(
         Modifier
             .fillMaxWidth()
             .heightIn(max = maxHeight)
-            // A tap anywhere that is not a chart goes back to the whole-track numbers.
-            // The charts and the buttons consume their own taps, so this only ever sees
-            // the ones that landed on nothing - which is exactly when "never mind" is
-            // what the reader meant. It replaces a clear button that sat directly under
-            // the sheet's own close icon, two X's deep.
+            // A tap anywhere not a chart goes back to the whole-track numbers - charts and
+            // buttons consume their own taps, so this only sees ones that landed on nothing.
             .pointerInput(Unit) {
                 detectTapGestures { onSelectedIndexChange(null) }
             }
@@ -167,15 +151,13 @@ fun TrackSheet(
         SheetTitle(
             name = loaded.track.name?.takeIf(String::isNotBlank) ?: loaded.displayName,
             routeColor = routeColor,
-            atFullHeight = atFullHeight,
-            onStepHeight = onStepHeight,
+            expanded = expanded,
+            onToggleHeight = onToggleHeight,
             actions = actions,
             modifier = Modifier.padding(start = SheetPadding, end = 4.dp),
         )
 
-        // Always the whole track. It used to be swapped out for the scrubbed values,
-        // which put the reading for the chart you were not touching beside the one you
-        // were, and made reading a value off a chart a matter of looking somewhere else.
+        // Always the whole track - scrubbed values live on the charts themselves instead.
         StatRow(
             stats = trackHeadline(stats, profile.hasTime),
             modifier = Modifier.padding(start = SheetPadding, end = 8.dp),
@@ -192,9 +174,8 @@ fun TrackSheet(
         ) {
             HorizontalDivider(Modifier.padding(horizontal = SheetPadding, vertical = 8.dp))
 
-            // Date, elapsed time, ascent, descent and point count: the answers you go
-            // looking for rather than the ones you glance at, which is why they are the
-            // first thing under the fold and not on the row above it.
+            // Date, elapsed time, ascent, descent, point count: answers you go looking
+            // for rather than glance at, hence under the fold and not the row above it.
             Column(Modifier.padding(horizontal = SheetPadding, vertical = 4.dp)) {
                 TrackDetails(
                     stats = stats,
@@ -310,23 +291,18 @@ fun TrackSheet(
 }
 
 /**
- * The name, in the swatch the map and the list already know it by.
+ * The name, in the swatch the map and the list already know it by - not decoration, but
+ * the only thing tying these numbers to one line among several overlaid routes.
  *
- * It used to live in a top app bar that this sheet does not have. The colour is not
- * decoration: with several routes overlaid it is the only thing tying these numbers to one
- * of the lines behind them.
- *
- * No close button any more. The sheet is dragged away, tapped away on the bare map, and
- * backed away out of - three ways out already - and the icon was spending a permanent slot
- * in the one row that is on screen at every height to offer a fourth. The slot went to the
- * menu instead, which is the thing that had nowhere else to live.
+ * No close button: dragged away, tapped away on the bare map, backed out of - three ways
+ * out already, so the slot went to the menu instead.
  */
 @Composable
 private fun SheetTitle(
     name: String,
     routeColor: Color,
-    atFullHeight: Boolean,
-    onStepHeight: () -> Unit,
+    expanded: Boolean,
+    onToggleHeight: () -> Unit,
     actions: TrackActions?,
     modifier: Modifier = Modifier,
 ) {
@@ -344,11 +320,9 @@ private fun SheetTitle(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
-        // Back in the title, because it is the one row on screen at every height, and it
-        // is the only way to reach the third height - the platform sheet has no fourth
-        // drag anchor to put it on.
-        IconButton(onClick = onStepHeight) {
-            if (atFullHeight) {
+        // In the title since it's the one row on screen at every height.
+        IconButton(onClick = onToggleHeight) {
+            if (expanded) {
                 Icon(
                     Icons.Default.KeyboardArrowDown,
                     stringResource(R.string.track_sheet_collapse),
@@ -365,12 +339,8 @@ private fun SheetTitle(
 }
 
 /**
- * Rename, export, hide, delete - the whole of managing a track, behind one glyph.
- *
- * A menu rather than four controls, and here rather than only in the library: these are
- * things you decide about a ride while you are looking at it, and the sheet is where you
- * are looking at it. Four buttons would have cost the sheet a row it does not have; one
- * icon costs a slot that the close button was using for a gesture you already have.
+ * Rename, export, hide, delete - the whole of managing a track, behind one glyph. Also
+ * here, not just in the library, since these are decisions made while looking at the ride.
  */
 @Composable
 private fun TrackMenu(actions: TrackActions) {
@@ -389,10 +359,10 @@ private fun TrackMenu(actions: TrackActions) {
                 },
             )
             DropdownMenuItem(
-                text = { Text(stringResource(R.string.library_export)) },
+                text = { Text(stringResource(R.string.library_share)) },
                 onClick = {
                     open = false
-                    actions.onExport()
+                    actions.onShare()
                 },
             )
             // Takes the line off the map and the sheet with it, which is the only reading

@@ -65,16 +65,10 @@ import kotlin.math.roundToInt
 private val ScreenPadding = 20.dp
 
 /**
- * The three things worth changing, each said in full.
- *
- * Two of these are signal-processing thresholds, which is not a thing a settings screen can
- * assume anyone knows. Both carry a sentence about what moving them actually costs, because
- * a number you can change without knowing what it does is a number you will change once and
- * never understand again.
- *
- * What is deliberately *not* here: the sampling rate, whose two ends are "worse route" and
- * "worse battery"; and the pause-detection threshold, which is about the file rather than
- * this device and would have to re-summarise the whole library every time it moved.
+ * The three things worth changing, each said in full - two are signal-processing
+ * thresholds, so both carry a sentence about what moving them costs. Deliberately absent:
+ * sampling rate (a fixed "worse route" vs "worse battery" trade) and the pause-detection
+ * threshold (a file property that would re-summarise the whole library on change).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -88,14 +82,12 @@ fun SettingsScreen(
     val formatters = LocalFormatters.current
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
-    // Held rather than deleted straight from the row: a big archive is exactly the kind of
-    // thing a mis-tap in a list shouldn't cost, and re-importing one is a real trip back to
-    // wherever the file came from, not a rename undone in a second tap.
+    // Held rather than deleted straight from the row: a mis-tap on a big archive costs a
+    // real trip back to wherever the file came from.
     var deletingMap by remember { mutableStateOf<OfflineMap?>(null) }
 
-    // OpenDocument rather than GetContent: this takes a persistable read grant on exactly
-    // the file picked, which is all the access a copy needs and less than GetContent hands
-    // over. No storage permission is involved either way.
+    // OpenDocument rather than GetContent: it grants read access to exactly the file
+    // picked, which is all a copy needs. No storage permission is involved either way.
     val importer = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri -> viewModel.importMap(uri, uri?.let { context.fileNameOf(it) }) }
@@ -156,9 +148,8 @@ fun SettingsScreen(
                 onImport = { importer.launch(PMTILES_MIME_TYPES) },
                 onDelete = { deletingMap = it },
                 onOpenHelp = {
-                    // The app has no INTERNET permission and does not need one to do
-                    // this: handing a URL to whatever handles web pages is an intent,
-                    // and the browser does the fetching in its own process.
+                    // Needs no INTERNET permission: handing a URL to whatever handles web
+                    // pages is an intent, and the browser fetches it in its own process.
                     val opened = runCatching {
                         context.startActivity(
                             Intent(Intent.ACTION_VIEW, MAP_HELP_URL.toUri())
@@ -201,9 +192,8 @@ fun SettingsScreen(
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
             SectionHeading(stringResource(R.string.settings_section_recording))
 
-            // Committed when the thumb is let go, not while it moves. A write per drag
-            // frame would be sixty disk writes a second, and every one of them republishes
-            // the settings the whole tree is reading.
+            // Committed when the thumb is let go, not while it moves - a write per drag
+            // frame would be sixty disk writes a second.
             var accuracy by remember(settings.maxAccuracyMeters) {
                 mutableFloatStateOf(settings.maxAccuracyMeters.toFloat())
             }
@@ -294,14 +284,9 @@ fun SettingsScreen(
 }
 
 /**
- * Where maps come from, which is the one thing this screen has to explain rather than
- * offer.
- *
- * There is no download button and there is not going to be one: the app holds no network
- * permission, which is the promise the whole thing is built on. So this says plainly that
- * maps arrive from elsewhere, links out to a page explaining how to get one, and opens the
- * system file picker. The link is a single constant because the right destination is still
- * an open question - nothing here endorses a source, and no map ships with the app.
+ * Where maps come from - explained, not offered. No download button, since the app holds
+ * no network permission: this says plainly that maps arrive from elsewhere, links to a
+ * page on how, and opens the file picker.
  */
 @Composable
 private fun MapsSection(
@@ -363,13 +348,8 @@ private fun MapsSection(
 }
 
 /**
- * One imported map: what it is called, and the two facts that decide whether it is the one
- * you want - how big it is, and how far it zooms.
- *
- * Both come from the archive's own header rather than from the filename, because the
- * filename is whatever the download was called and says nothing about coverage. Zoom is
- * the more useful of the two: a map that stops at z12 is a map with no streets on it, and
- * that is not visible any other way until you are standing outside in the wrong place.
+ * One imported map: its name, plus the two facts that decide if it's the one you want -
+ * size and zoom depth, both from the archive's own header rather than the filename.
  */
 @Composable
 private fun MapRow(
@@ -405,9 +385,8 @@ private fun MapRow(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            // Only when the archive says so itself. The app fetches nothing and ships no
-            // maps, so it has no source of its own to credit and nothing worth guessing at
-            // for a file that does not declare one.
+            // Only when the archive says so itself - the app has no source of its own to
+            // credit.
             map.attribution?.let { attribution ->
                 Text(
                     text = stringResource(R.string.settings_maps_attribution, attribution),
@@ -427,10 +406,8 @@ private fun MapRow(
 }
 
 /**
- * The name the provider gives a document, for naming the copy after it.
- *
- * Null when the provider declines to say, which is normal for some file managers - the
- * store falls back to its own name then rather than failing an import over a label.
+ * The name the provider gives a document, for naming the copy after it. Null when the
+ * provider declines to say; the store then falls back to its own name.
  */
 private fun Context.fileNameOf(uri: Uri): String? = runCatching {
     contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
@@ -440,37 +417,22 @@ private fun Context.fileNameOf(uri: Uri): String? = runCatching {
 }.getOrNull()
 
 /**
- * What the picker will accept.
- *
- * PMTiles has no registered MIME type, so providers hand these over as
- * `application/octet-stream` and nothing else will match. The wildcard is there because a
- * file manager that types it as something else would otherwise be unable to offer the file
- * at all; the import validates the header regardless of what the picker claimed.
+ * What the picker will accept. PMTiles has no registered MIME type, so providers hand
+ * these over as `application/octet-stream`; the wildcard covers a file manager that types
+ * it as something else. Import validates the header regardless of what the picker claimed.
  */
 private val PMTILES_MIME_TYPES = arrayOf("application/octet-stream", "*/*")
 
 /**
- * Where to go to get a map file.
- *
- * Provisional, and the one line to change when a page written here replaces it. It points
- * at a third-party tool that cuts an area of any size straight to a download - which is
- * the workflow this app needs and which nothing official provides - rather than at
- * documentation the reader would then have to act on.
- *
- * Worth knowing about what it points at: extracts are cut from Protomaps daily builds, so
- * the schema matches the style in [dev.samuelq.gpx.ui.map.MapStyle] and an imported file
- * will render rather than come up blank. It is also one person's instance with per-client
- * rate limits, which is the reason this is a constant and not a promise.
- *
- * Nothing is fetched on the user's behalf either way: this opens a browser through an
- * intent, and the app holds no network permission.
+ * Where to go to get a map file. Provisional - a third-party tool that cuts an area
+ * straight to a download, since nothing official provides that workflow. Extracts are cut
+ * from Protomaps daily builds, matching the schema [dev.samuelq.gpx.ui.map.MapStyle]
+ * expects. Opened through a browser intent; nothing is fetched on the app's behalf.
  */
 private const val MAP_HELP_URL = "https://pmtiles.samruff.dev/"
 
-// No `steps`: a discrete slider draws a tick per step, and a metre-per-step range of
-// ninety-five of them is a dotted line, not a scale. The track is continuous and the
-// value is rounded to a whole metre when the thumb is let go - which is the only place
-// the roundness was ever visible.
+// No `steps`: a discrete slider over ~95 metre-steps draws a dotted line, not a scale. The
+// track is continuous; the value rounds to a whole metre only when the thumb is released.
 
 private fun ClosedFloatingPointRange<Double>.toFloatRange(): ClosedFloatingPointRange<Float> =
     start.toFloat()..endInclusive.toFloat()

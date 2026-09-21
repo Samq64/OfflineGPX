@@ -26,12 +26,8 @@ sealed interface RecordingState {
         /** Null until the first fix lands - GPS takes a few seconds to settle outdoors. */
         val currentSpeedMps: Double?,
         /**
-         * Accuracy of the last reading, believed or not.
-         *
-         * Shown while nothing has been recorded yet, because "waiting for a fix" and
-         * "getting fixes, none of them good enough to be a position" look identical from
-         * the outside and mean very different things - the first is a cold start, the
-         * second is being indoors.
+         * Accuracy of the last reading, believed or not - lets the UI distinguish a cold
+         * start from fixes that just aren't good enough, which look identical otherwise.
          */
         val accuracyMeters: Double? = null,
         /** The limit [accuracyMeters] is being judged against, since the user can move it. */
@@ -70,12 +66,9 @@ sealed interface RecordingEvent {
 }
 
 /**
- * The single place the service and the UI meet.
- *
- * The service owns the recording and cannot be bound to from a composable without a lot of
- * ceremony, so it publishes here instead and the screen just observes. Held by
- * [dev.samuelq.gpx.di.AppContainer], so it outlives any screen - the state has to survive
- * the user leaving the app mid-ride, which is the normal case rather than the edge one.
+ * The single place the service and the UI meet: the service publishes here rather than
+ * being bound to from a composable, and [dev.samuelq.gpx.di.AppContainer] holds it so state
+ * survives the user leaving the app mid-ride.
  */
 class RecordingController {
 
@@ -99,10 +92,8 @@ class RecordingController {
     }
 
     /**
-     * Deliberately not suspending. Half the events worth sending are sent on the way out -
-     * the service refusing to start, or shutting down - and a `send` from a scope that is
-     * about to be cancelled is an event the user never hears about. The channel is
-     * buffered, so this only drops if nothing has collected for 64 events.
+     * Deliberately not suspending: many of these fire while the service is shutting down,
+     * and a `send` from a scope about to be cancelled would be an event nobody hears.
      */
     internal fun emit(event: RecordingEvent) {
         _events.trySend(event)

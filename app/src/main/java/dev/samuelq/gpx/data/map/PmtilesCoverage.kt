@@ -35,28 +35,16 @@ class CoverageEdge(
 )
 
 /**
- * The true shape of an archive's coverage, read from its tile directories.
- *
- * The header only carries a *bounding box*, which is a lie for any extract that was cut
- * from a drawn polygon rather than a rectangle - and drawing a polygon is the normal way
- * to cut a park or a valley. Measured against real files, a bbox extract of Perth fills
- * 100% of its declared box while a polygon extract of the Kingston region fills 56%: the
- * other 44% is ground the rectangle claimed and the file does not have.
- *
- * So the outline is computed from the tiles themselves. Every tile present at the deepest
- * zoom is a square of known extent; an edge of one of those squares is on the boundary
- * exactly when the neighbouring square is absent. That gives the real outline for any
- * shape without needing to union polygons, and it is cheap: the Kingston extract is 16,208
- * tiles and 770 boundary edges.
+ * The true shape of an archive's coverage, read from its tile directories rather than
+ * trusted from the header's bounding box - which is a lie for any extract cut from a drawn
+ * polygon rather than a rectangle. Computed from the tiles present at the deepest zoom: an
+ * edge of a tile is on the boundary exactly when its neighbour is absent.
  */
 object PmtilesCoverage {
 
     /**
-     * Reads [file]'s coverage boundary, or an empty list if it cannot be determined.
-     *
-     * Empty is a usable answer everywhere it is used - it simply means no outline is drawn -
-     * so a directory this cannot parse degrades to the map without an annotation rather
-     * than to an error.
+     * Reads [file]'s coverage boundary. Empty if it can't be determined - a directory this
+     * can't parse degrades to a map with no outline rather than an error.
      */
     fun read(file: File, header: PmtilesHeader): Coverage = try {
         RandomAccessFile(file, "r").use { handle ->
@@ -123,11 +111,8 @@ object PmtilesCoverage {
     private class Entry(val tileId: Long, val runLength: Long, val length: Long, val offset: Long)
 
     /**
-     * A v3 directory: a count, then four columns of varints.
-     *
-     * Columnar rather than row-wise, which is why this reads the whole of one field before
-     * starting the next. Tile ids are delta-encoded, and an offset of zero means "directly
-     * after the previous entry" rather than "byte zero".
+     * A v3 directory: a count, then four columns of varints (columnar, not row-wise). Tile
+     * ids are delta-encoded; an offset of zero means "directly after the previous entry".
      */
     private fun parseDirectory(bytes: ByteArray): List<Entry> {
         val cursor = Cursor(bytes)
@@ -169,11 +154,8 @@ object PmtilesCoverage {
     private class Tile(val zoom: Int, val x: Long, val y: Long)
 
     /**
-     * A tile id back to zoom, x and y.
-     *
-     * PMTiles orders tiles along a Hilbert curve rather than row by row, which is what
-     * makes a bounding-box extract a handful of long byte runs instead of thousands of
-     * scattered reads. The cost is that recovering x and y means walking the curve.
+     * A tile id back to zoom, x and y. PMTiles orders tiles along a Hilbert curve rather
+     * than row by row, so recovering x/y means walking the curve.
      */
     private fun tileIdToZxy(id: Long): Tile? {
         var accumulated = 0L
@@ -217,11 +199,8 @@ object PmtilesCoverage {
     }
 
     /**
-     * The edges of [tiles] that have no neighbour on the other side.
-     *
-     * Four checks per tile and no geometry library: an edge between two present tiles is
-     * interior and is skipped, so what survives is exactly the outline - including the
-     * outlines of any holes, which a polygon union would have had to be careful about.
+     * The edges of [tiles] with no neighbour on the other side - four checks per tile, no
+     * geometry library, and it falls out correct for holes too.
      */
     private fun boundaryOf(tiles: Set<Long>, zoom: Int): List<CoverageEdge> {
         val edges = ArrayList<CoverageEdge>()
@@ -249,13 +228,8 @@ object PmtilesCoverage {
     }
 
     /**
-     * The covered tiles collapsed into horizontal runs, one rectangle each.
-     *
-     * This is what lets the mask be exact for a shape that is not a rectangle. Cutting
-     * sixteen thousand individual tile squares out of a world polygon would be absurd;
-     * collapsing each row to its contiguous spans turns the Kingston extract into a couple
-     * of hundred rectangles, which is nothing. Runs in adjacent rows share edges exactly,
-     * so they tile without seams.
+     * The covered tiles collapsed into horizontal runs, one rectangle each - what lets the
+     * mask be exact for a non-rectangular shape without cutting every tile individually.
      */
     private fun runsOf(tiles: Set<Long>, zoom: Int): List<CoverageRun> {
         val side = 1L shl zoom

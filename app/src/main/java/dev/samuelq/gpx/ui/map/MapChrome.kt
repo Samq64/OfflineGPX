@@ -28,25 +28,15 @@ import kotlin.math.pow
 import kotlin.math.roundToInt
 
 /**
- * How far across the map a hundred-odd points of screen actually is.
- *
- * Worth having on a map you cannot pan out of and then back into for reference: an offline
- * extract has no surrounding context to judge distance against, and "is that ridge two
- * kilometres away or twenty" is the question a bar answers instantly and a zoom level
- * does not.
- *
- * The bar snaps to a round distance and changes *width* to match, rather than keeping a
- * fixed width and showing an awkward number. A bar labelled 500 m is worth reading; one
- * labelled 437 m is a measurement of the bar rather than of the ground.
+ * How far across the map a hundred-odd points of screen actually is - useful on an offline
+ * extract with no surrounding context to judge distance against. Snaps to a round distance
+ * and changes width to match, rather than showing an awkward number at a fixed width.
  */
 @Composable
 fun ScaleBar(
     /**
-     * The live scale, passed as state rather than as a number.
-     *
-     * The camera republishes this on every frame of a pan, and it is read here - inside the
-     * one composable that draws from it - so that a pinch recomposes a bar and not the
-     * screen the bar is sitting on.
+     * The live scale, passed as state rather than a number, and read only here - so a
+     * pinch recomposes the bar and not the screen it sits on.
      */
     metersPerPixel: State<Double>,
     modifier: Modifier = Modifier,
@@ -57,11 +47,8 @@ fun ScaleBar(
 
     val maxWidthPx = with(density) { MaxBarWidth.toPx() }
 
-    // Snapped behind a `derivedStateOf`, so what this composable actually observes is the
-    // *rounded* distance and its width. Those change a handful of times during a pinch,
-    // while the scale behind them changes on every frame - and re-measuring "500 m" into
-    // the same glyphs sixty times a second is the kind of work that shows up as a dropped
-    // frame somewhere else entirely.
+    // Snapped behind a `derivedStateOf`: the rounded distance changes a handful of times
+    // during a pinch, where the raw scale changes every frame.
     val snapped by remember(metersPerPixel, maxWidthPx, formatters.units, density) {
         derivedStateOf {
             val scale = metersPerPixel.value
@@ -104,22 +91,15 @@ fun ScaleBar(
 }
 
 /**
- * A round distance and the width it occupies: everything the bar redraws from.
- *
- * A data class because `derivedStateOf` compares its result structurally to decide whether
- * anything downstream has to run again. Without equality every frame of a pinch would
- * produce a new-looking value, and the derivation would be an expensive way to change
- * nothing.
+ * A round distance and the width it occupies. A data class so `derivedStateOf`'s
+ * structural equality can skip a downstream rebuild when nothing actually changed.
  */
 @Immutable
 private data class SnappedScale(val meters: Double, val width: Dp)
 
 /**
- * The snapped distance as a whole number and a unit.
- *
- * Not the general distance formatter, which is built for readouts and carries a decimal:
- * a bar is snapped to 1, 2 or 5 at some power precisely so that it can be labelled exactly,
- * and "200.0 km" undoes that by implying a precision the bar does not have.
+ * The snapped distance as a whole number and a unit - not the general distance formatter,
+ * whose decimal would imply a precision a snapped bar doesn't have.
  */
 private fun scaleLabel(meters: Double, units: UnitSystem): String = when {
     units == UnitSystem.METRIC && meters >= 1000 -> "${(meters / 1000).roundToInt()} km"
@@ -129,11 +109,8 @@ private fun scaleLabel(meters: Double, units: UnitSystem): String = when {
 }
 
 /**
- * The largest round distance that still fits, in whichever units are on show.
- *
- * 1, 2 and 5 at every power, which is what every map scale has used forever - the steps
- * are close enough that the bar is never much shorter than the space it has, and each one
- * is a number you can halve or double in your head.
+ * The largest round distance that still fits: 1, 2 and 5 at every power, as every map
+ * scale has used forever.
  */
 internal fun roundDistance(maxMeters: Double, units: UnitSystem): Double {
     if (maxMeters <= 0.0) return 0.0

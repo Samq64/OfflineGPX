@@ -232,15 +232,13 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
         }
 
         /**
-         * GPX says ISO 8601 UTC, but exporters disagree: most write `2024-05-01T08:12:03Z`,
-         * some attach an offset, a few omit the zone. A timestamp matching none is dropped,
-         * downgrading the track to untimed rather than failing the file.
+         * GPX says ISO 8601 UTC, but exporters disagree: most write a `Z` suffix, some an
+         * offset, a few neither. A timestamp matching none is dropped, downgrading the
+         * track to untimed rather than failing the file.
          *
-         * The spelling is *looked at* before a parser is chosen, rather than the three being
-         * tried in turn until one stops throwing. This runs once per track point, and a
-         * file written with local offsets - every export from several popular apps - took a
-         * filled-in stack trace per point to find that out: tens of thousands of exceptions
-         * thrown and discarded to read a file that was never malformed.
+         * The spelling is looked at before a parser is chosen, rather than trying all three
+         * until one stops throwing - this runs once per point, and try/catch on every local-
+         * offset file (most exporters) meant a filled-in stack trace per point.
          */
         internal fun parseGpxTime(raw: String): Instant? {
             val text = raw.trim()
