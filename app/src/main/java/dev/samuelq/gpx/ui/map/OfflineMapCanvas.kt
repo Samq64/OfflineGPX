@@ -827,7 +827,7 @@ private const val FOLLOW_MARGIN_PX = 96f
 private const val EDGE_PADDING_PX = 64
 
 /** How far past the edge of the data the pan clamp allows, as a fraction of its own span. */
-private const val PAN_OVERSHOOT_FRACTION = 0.10
+private const val PAN_OVERSHOOT_FRACTION = 0.05
 
 /** How far past an archive's deepest zoom the camera may still go. */
 private const val OVERZOOM_ALLOWANCE = 2
