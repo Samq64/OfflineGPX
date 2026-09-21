@@ -14,6 +14,7 @@
     <string name="map_empty_import_map">Import map</string>
     <string name="map_empty_import_track">Import track</string>
     <string name="map_none_shown">No tracks shown</string>
+    <string name="map_hidden_hint">Show a track from the list</string>
     <!-- How many of the imported tracks are currently drawn on the map, not the library's total. -->
     <plurals name="map_shown">
         <item quantity="one">%d track shown</item>

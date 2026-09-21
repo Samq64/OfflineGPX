@@ -472,6 +472,9 @@ fun MapScreen(
                 routes = overlays,
                 liveRoute = liveOverlay,
                 basemaps = basemaps,
+                // So the cold-start frame waits for tracks rather than settling on the
+                // basemap the moment before they arrive and never getting a second look.
+                tracksLoading = state.loading,
                 contentDescription = stringResource(R.string.map_description),
                 focusedTrackId = focusedTrack?.id,
                 selectedIndex = selectedIndex,
@@ -507,6 +510,16 @@ fun MapScreen(
             val mapIsEmpty = overlays.isEmpty() && liveOverlay == null &&
                 !state.loading && basemaps.isEmpty() && state.totalCount == 0
 
+            // Tracks exist, none are shown, and there's no basemap - a blank canvas with
+            // nothing to explain why. Chosen on purpose (from the list), so this earns a
+            // small hint rather than the first-run card re-explaining the whole app.
+            val allHidden = overlays.isEmpty() && liveOverlay == null &&
+                !state.loading && basemaps.isEmpty() && state.totalCount > 0
+
+            // There has to be something to measure against - a basemap or a drawn route -
+            // or the bar is reading a scale off a blank rectangle.
+            val hasContent = overlays.isNotEmpty() || liveOverlay != null || basemaps.isNotEmpty()
+
             when {
                 // A recording in progress counts as something to look at too - it just
                 // lives in its own overlay.
@@ -524,10 +537,15 @@ fun MapScreen(
                     modifier = Modifier.fillMaxSize(),
                 )
 
+                allHidden -> ShowTracksHint(
+                    onClick = onOpenList,
+                    modifier = Modifier.align(Alignment.Center),
+                )
+
                 else -> Unit
             }
 
-            if (!mapIsEmpty) {
+            if (hasContent) {
                 MapChrome(
                     // The state, not its value - the bar re-reads it as the camera moves.
                     metersPerPixel = metersPerPixel,
@@ -698,6 +716,18 @@ private fun EmptyState(
                 Text(stringResource(R.string.map_empty_import_track))
             }
         }
+    }
+}
+
+/**
+ * The one state with nothing at all on screen: every track hidden, no basemap. Not the
+ * first-run card - the user did this on purpose from the list, and already knows what the
+ * app is - just a way back that doesn't require remembering the list icon exists.
+ */
+@Composable
+private fun ShowTracksHint(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    TextButton(onClick = onClick, modifier = modifier) {
+        Text(stringResource(R.string.map_hidden_hint))
     }
 }
 

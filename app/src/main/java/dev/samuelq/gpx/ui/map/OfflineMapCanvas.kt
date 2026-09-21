@@ -117,6 +117,13 @@ fun OfflineMapCanvas(
     contentDescription: String,
     modifier: Modifier = Modifier,
     /**
+     * True while [routes] might still be missing tracks whose geometry hasn't finished
+     * loading. Only matters for the cold-start frame: without it, an empty [routes] on the
+     * first frame would be read as "no tracks, frame the basemap instead" and latch there,
+     * with no second chance once the real tracks land a moment later.
+     */
+    tracksLoading: Boolean = false,
+    /**
      * The recording drawing itself, kept apart from [routes] since it changes every few
      * seconds and they don't - growth this way costs only its own geometry.
      */
@@ -286,8 +293,8 @@ fun OfflineMapCanvas(
 
     // --- Where it is looked at from ------------------------------------------------
 
-    // Every track and every shown map: both what the opening view frames and the box the
-    // camera is kept inside afterwards.
+    // Every track and every shown map, unioned - the box the camera is kept inside and the
+    // zoom-out floor are both about what's there at all, not what the view opens on.
     val extent = remember(routes, liveRoute, basemaps) {
         extentOf(routes, liveRoute, basemaps)
     }
@@ -315,17 +322,41 @@ fun OfflineMapCanvas(
             ready.setMinZoomPreference(floor.coerceAtMost(ceiling))
         }
         ready.setMaxZoomPreference(ceiling)
-        ready.setLatLngBoundsForCameraTarget(extent)
+        // Panning can push the near edge of everything there is up to PAN_OVERSHOOT_FRACTION
+        // off screen, not clamped dead against it - a hard wall exactly at the last point
+        // reads as the map being broken, not as having reached the edge of the data. Sized
+        // against the extent's own span, which is exact at the zoomed-out fit and only ever
+        // more generous zoomed in, never less.
+        ready.setLatLngBoundsForCameraTarget(extent.padded(PAN_OVERSHOOT_FRACTION))
+    }
 
-        if (!hasFramed) {
-            // Tracks frame the view when there are any; failing that, the shown maps do.
-            ready.moveCamera(
-                CameraUpdateFactory.newLatLngBounds(
-                    extent, padding[0], padding[1], padding[2], padding[3],
-                )
+    // What the view opens on: the tracks, if there are any - almost always what someone
+    // opened the app to look at, with a basemap as context rather than the point. Falls
+    // back to the shown maps' own extent only once we know there is nothing recorded or
+    // imported yet; while tracksLoading is true, routes may simply not have arrived yet,
+    // and framing the basemap now would mean never getting a second chance to frame the
+    // tracks once they do.
+    val initialExtent = remember(routes, liveRoute, basemaps) {
+        extentOf(routes, liveRoute, emptyList()) ?: extentOf(emptyList(), null, basemaps)
+    }
+
+    LaunchedEffect(map, initialExtent, tracksLoading, insets) {
+        val ready = map ?: return@LaunchedEffect
+        if (hasFramed || tracksLoading) return@LaunchedEffect
+        val target = initialExtent ?: return@LaunchedEffect
+
+        val padding = intArrayOf(
+            insets.left + EDGE_PADDING_PX,
+            insets.top + EDGE_PADDING_PX,
+            insets.right + EDGE_PADDING_PX,
+            insets.bottom + EDGE_PADDING_PX,
+        )
+        ready.moveCamera(
+            CameraUpdateFactory.newLatLngBounds(
+                target, padding[0], padding[1], padding[2], padding[3],
             )
-            hasFramed = true
-        }
+        )
+        hasFramed = true
     }
 
     // Scrubbing a chart moves the marker; moves the camera the least it can rather than
@@ -711,6 +742,20 @@ internal fun extentOf(
 }
 
 /**
+ * [this] expanded outward by [fraction] of its own span on every side, for a pan clamp
+ * that stops just past the edge of the data rather than dead against it - flush against it
+ * reads as the map having broken, not as having reached the edge.
+ */
+private fun LatLngBounds.padded(fraction: Double): LatLngBounds = runCatching {
+    LatLngBounds.from(
+        latNorth = (latNorth + latitudeSpan * fraction).coerceAtMost(MERCATOR_LIMIT),
+        lonEast = lonEast + longitudeSpan * fraction,
+        latSouth = (latSouth - latitudeSpan * fraction).coerceAtLeast(-MERCATOR_LIMIT),
+        lonWest = lonWest - longitudeSpan * fraction,
+    )
+}.getOrDefault(this)
+
+/**
  * Pans the least it can to bring [target] inside the uncovered box, or not at all -
  * expressed as a camera-centre move so the amount moved equals the amount out of bounds.
  */
@@ -780,6 +825,9 @@ private const val MERCATOR_LIMIT = 85.051129
 private const val TAP_REACH_PX = 44f
 private const val FOLLOW_MARGIN_PX = 96f
 private const val EDGE_PADDING_PX = 64
+
+/** How far past the edge of the data the pan clamp allows, as a fraction of its own span. */
+private const val PAN_OVERSHOOT_FRACTION = 0.10
 
 /** How far past an archive's deepest zoom the camera may still go. */
 private const val OVERZOOM_ALLOWANCE = 2
