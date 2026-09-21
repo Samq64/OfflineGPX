@@ -747,11 +747,13 @@ internal fun extentOf(
  * reads as the map having broken, not as having reached the edge.
  */
 private fun LatLngBounds.padded(fraction: Double): LatLngBounds = runCatching {
+    val latPad = latitudeSpan * fraction
+    val lonPad = longitudeSpan * fraction
     LatLngBounds.from(
-        latNorth = (latNorth + latitudeSpan * fraction).coerceAtMost(MERCATOR_LIMIT),
-        lonEast = lonEast + longitudeSpan * fraction,
-        latSouth = (latSouth - latitudeSpan * fraction).coerceAtLeast(-MERCATOR_LIMIT),
-        lonWest = lonWest - longitudeSpan * fraction,
+        latNorth = (northEast.latitude + latPad).coerceAtMost(MERCATOR_LIMIT),
+        lonEast = northEast.longitude + lonPad,
+        latSouth = (southWest.latitude - latPad).coerceAtLeast(-MERCATOR_LIMIT),
+        lonWest = southWest.longitude - lonPad,
     )
 }.getOrDefault(this)
 
