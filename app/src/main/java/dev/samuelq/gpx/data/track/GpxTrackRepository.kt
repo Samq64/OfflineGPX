@@ -301,7 +301,9 @@ class GpxTrackRepository(
             rewriteFile(file, kept)
             if (cached?.first == entity.location) cached = null
 
+            // upsert() returns the row id, which the caller already knows.
             dao.upsert(entity.withSummary(TrackAnalyzer.analyze(kept)))
+            Unit
         }.recoverFailure()
     }
 
