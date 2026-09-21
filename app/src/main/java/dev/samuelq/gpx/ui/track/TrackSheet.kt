@@ -67,8 +67,8 @@ val TrackSheetPeekHeight = 128.dp
 
 /**
  * Everything the sheet can do to the track it is showing. Null for a track that arrived
- * through an intent - no library row, so the sheet leaves the menu off (and the cut/split
- * row that needs one) rather than offering actions that would all have to refuse.
+ * through an intent - no library row, so the sheet leaves the menu off rather than
+ * offering actions that would all have to refuse.
  */
 @Immutable
 class TrackActions(
@@ -76,12 +76,6 @@ class TrackActions(
     val onShare: () -> Unit,
     val onHide: () -> Unit,
     val onDelete: () -> Unit,
-    /** Keeps the scrubbed point onward, discarding what came before it. */
-    val onTrimStart: (index: Int) -> Unit,
-    /** Keeps up to the scrubbed point, discarding what comes after it. */
-    val onTrimEnd: (index: Int) -> Unit,
-    /** Cuts the track in two at the scrubbed point - both halves survive, as two rows. */
-    val onSplit: (index: Int) -> Unit,
 )
 
 /**
@@ -162,17 +156,6 @@ fun TrackSheet(
             stats = trackHeadline(stats, profile.hasTime),
             modifier = Modifier.padding(start = SheetPadding, end = 8.dp),
         )
-
-        // Only while a point is actually selected, and only for a track with a row to
-        // rewrite - a file opened from an intent has nowhere to save a cut to.
-        if (selectedIndex != null && actions != null) {
-            CutActionsRow(
-                onTrimStart = { actions.onTrimStart(selectedIndex) },
-                onTrimEnd = { actions.onTrimEnd(selectedIndex) },
-                onSplit = { actions.onSplit(selectedIndex) },
-                modifier = Modifier.padding(start = SheetPadding, end = 8.dp),
-            )
-        }
 
         Column(
             modifier = Modifier
@@ -384,28 +367,6 @@ private fun TrackMenu(actions: TrackActions) {
                 },
             )
         }
-    }
-}
-
-/**
- * What to do with the scrubbed point, offered the moment one is picked rather than tucked
- * in the menu - cutting a track is a decision made while looking at exactly the point
- * where it happens, not something to go find a glyph for afterwards.
- *
- * Text buttons, not a menu: three destinations, always the same three, worth seeing at a
- * glance rather than opening to check.
- */
-@Composable
-private fun CutActionsRow(
-    onTrimStart: () -> Unit,
-    onTrimEnd: () -> Unit,
-    onSplit: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Row(modifier = modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        TextButton(onClick = onTrimStart) { Text(stringResource(R.string.track_trim_start)) }
-        TextButton(onClick = onTrimEnd) { Text(stringResource(R.string.track_trim_end)) }
-        TextButton(onClick = onSplit) { Text(stringResource(R.string.track_split)) }
     }
 }
 

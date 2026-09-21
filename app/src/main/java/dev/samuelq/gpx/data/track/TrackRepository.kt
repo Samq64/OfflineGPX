@@ -101,19 +101,6 @@ interface TrackRepository {
      */
     suspend fun rename(id: Long, name: String): Result<Unit>
 
-    /**
-     * Rewrites a track's file to keep only [keep] - global indices into its points - and
-     * re-derives the row's summary from what's left. Fails rather than writing an empty
-     * track if [keep] would leave nothing.
-     */
-    suspend fun trim(id: Long, keep: IntRange): Result<Unit>
-
-    /**
-     * Splits a track at [at]: points before stay under the existing row, points from [at]
-     * onward become a new file and a new row of the same source. Returns the new row's id.
-     */
-    suspend fun split(id: Long, at: Int): Result<Long>
-
     suspend fun setVisible(ids: List<Long>, visible: Boolean)
 
     suspend fun setAllVisible(visible: Boolean)

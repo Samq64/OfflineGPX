@@ -140,10 +140,6 @@
     <string name="track_manage">Manage this track</string>
     <string name="track_hide">Hide</string>
     <string name="track_hidden">Hidden. Show it again from the track list.</string>
-    <string name="track_trim_start">Trim start</string>
-    <string name="track_trim_end">Trim end</string>
-    <string name="track_split">Split here</string>
-    <string name="track_edit_failed">Couldn\'t change that track.</string>
     <string name="track_error_title">Couldn\'t open this file</string>
     <string name="track_error_invalid">This file isn\'t valid GPX.</string>
     <string name="track_error_empty">This GPX file has no track points.</string>

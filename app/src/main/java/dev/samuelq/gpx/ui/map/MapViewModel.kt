@@ -31,7 +31,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /** Something the map should say, once. The words are the screen's business. */
-enum class MapMessage { RenameFailed, Hidden, ImportFailed, EditFailed }
+enum class MapMessage { RenameFailed, Hidden, ImportFailed }
 
 /** Visible tracks, with their geometry once it has been read off disk. */
 data class MapUiState(
@@ -159,51 +159,6 @@ class MapViewModel(
                         geometry = _state.value.geometry + (id to cached.renamed(trimmed)),
                     )
                 }
-            }
-        }
-    }
-
-    /** Keeps [at] onward, dropping what came before it - a noisy GPS warm-up, typically. */
-    fun trimStart(id: Long, at: Int) {
-        val size = _state.value.geometry[id]?.profile?.size ?: return
-        viewModelScope.launch {
-            repository.trim(id, at until size).fold(
-                onSuccess = { refreshGeometry(id) },
-                onFailure = { _messages.trySend(MapMessage.EditFailed) },
-            )
-        }
-    }
-
-    /** Keeps up to [at], dropping what comes after it - a forgotten-to-stop tail. */
-    fun trimEnd(id: Long, at: Int) {
-        viewModelScope.launch {
-            repository.trim(id, 0..at).fold(
-                onSuccess = { refreshGeometry(id) },
-                onFailure = { _messages.trySend(MapMessage.EditFailed) },
-            )
-        }
-    }
-
-    /** Cuts the track in two at [at]. Both halves survive, as two rows. */
-    fun split(id: Long, at: Int) {
-        viewModelScope.launch {
-            repository.split(id, at).fold(
-                onSuccess = { refreshGeometry(id) },
-                onFailure = { _messages.trySend(MapMessage.EditFailed) },
-            )
-        }
-    }
-
-    /**
-     * Re-reads a row after a cut lands, rather than patching state in place - a cut changes
-     * the points themselves, not just a label next to them.
-     */
-    private suspend fun refreshGeometry(id: Long) {
-        repository.geometry(id).onSuccess { loaded ->
-            _state.value = _state.value.copy(geometry = _state.value.geometry + (id to loaded))
-            val focused = _focused.value
-            if (focused is FocusedTrack.Ready && focused.track.id == id) {
-                _focused.value = FocusedTrack.Ready(loaded)
             }
         }
     }

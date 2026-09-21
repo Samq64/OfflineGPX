@@ -100,11 +100,6 @@ reached by scrolling). Dragging a chart moves the marker on the route; tapping t
 moves the chart crosshairs, because `TrackProfile` shares its indices with the track's
 lat/lon.
 
-Once a point is picked, three more things become possible: trim the start away, trim the
-end away, or split the track into two rows at that point. All three rewrite the GPX file
-in place (or, for a split, write a second file beside it) and re-derive the row's summary
-from what's left — the file is the source of truth, not the database row.
-
 ### A track is a GPX file; Room only indexes it
 
 Room doesn't store points. Both a recording and an import are written or copied into

@@ -162,7 +162,6 @@ fun MapScreen(
     val renameFailed = stringResource(R.string.library_rename_failed)
     val hidden = stringResource(R.string.track_hidden)
     val importFailed = stringResource(R.string.library_import_failed)
-    val editFailed = stringResource(R.string.track_edit_failed)
 
     // Replaces whatever is on screen rather than queueing behind it: these are answers to
     // a tap that just happened, and a stale one arriving four seconds later is a lie.
@@ -207,7 +206,6 @@ fun MapScreen(
                     MapMessage.RenameFailed -> renameFailed
                     MapMessage.Hidden -> hidden
                     MapMessage.ImportFailed -> importFailed
-                    MapMessage.EditFailed -> editFailed
                 }
             )
         }
@@ -420,8 +418,8 @@ fun MapScreen(
                     useTimeAxis = preferTimeAxis && current.track.profile.hasTime,
                     onAxisChange = { preferTimeAxis = it },
                     // Null for a file opened from an intent: it has no row to rename,
-                    // hide, delete or cut, and sharing it would just hand the file back
-                    // to itself.
+                    // hide or delete, and sharing it would just hand the file back to
+                    // itself.
                     actions = state.entity(current.track.id)?.let { entity ->
                         remember(entity.id, entity.displayName, entity.location) {
                             TrackActions(
@@ -438,20 +436,6 @@ fun MapScreen(
                                     viewModel.focus(null)
                                 },
                                 onDelete = { deletingId = entity.id },
-                                // The marker no longer points at anything meaningful once
-                                // the cut lands, so the selection goes with it.
-                                onTrimStart = { at ->
-                                    viewModel.trimStart(entity.id, at)
-                                    selectedIndex = null
-                                },
-                                onTrimEnd = { at ->
-                                    viewModel.trimEnd(entity.id, at)
-                                    selectedIndex = null
-                                },
-                                onSplit = { at ->
-                                    viewModel.split(entity.id, at)
-                                    selectedIndex = null
-                                },
                             )
                         }
                     },
