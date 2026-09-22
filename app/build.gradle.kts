@@ -168,5 +168,6 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
 
     testImplementation(libs.kotlin.test.junit)
+    testImplementation(libs.mapsforge.map.awt)
     testImplementation(libs.kxml2)
 }

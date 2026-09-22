@@ -68,6 +68,11 @@ mapsforge-map-android = { group = "org.mapsforge", name = "mapsforge-map-android
 # layer talks to directly, so it is named.
 mapsforge-map-reader = { group = "org.mapsforge", name = "mapsforge-map-reader", version.ref = "mapsforge" }
 
+# Test-only: mapsforge's renderer for the desktop, which brings the same render-theme
+# parser the Android one uses. Lets the generated theme be parsed for real on the JVM,
+# where a malformed theme is an exception rather than a map that silently draws nothing.
+mapsforge-map-awt = { group = "org.mapsforge", name = "mapsforge-map-awt", version.ref = "mapsforge" }
+
 kotlin-test-junit = { group = "org.jetbrains.kotlin", name = "kotlin-test-junit", version.ref = "kotlin" }
 # Test-only: a real XmlPullParser so GpxParser is testable on the JVM without
 # Robolectric - android.jar's xmlpull classes are unimplemented stubs in unit tests.
