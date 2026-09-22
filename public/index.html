@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mapsforge Extract Tool</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  :root { color-scheme: dark; --bg:#14161a; --panel:#1c1f26; --line:#2c313b; --ink:#e6e8ec; --dim:#9aa3b2; --accent:#6ea8fe; }
+  * { box-sizing: border-box; }
+  body { margin:0; height:100vh; display:flex; font:14px/1.5 system-ui, sans-serif; background:var(--bg); color:var(--ink); }
+  #side { width:340px; flex:none; border-right:1px solid var(--line); display:flex; flex-direction:column; background:var(--panel); }
+  #map { flex:1; }
+  h1 { font-size:15px; margin:0; padding:14px 16px; border-bottom:1px solid var(--line); font-weight:600; }
+  .pad { padding:12px 16px; border-bottom:1px solid var(--line); }
+  .crumbs { font-size:12px; color:var(--dim); margin-bottom:8px; word-break:break-all; }
+  .crumbs a { color:var(--accent); text-decoration:none; cursor:pointer; }
+  ul { list-style:none; margin:0; padding:0; max-height:34vh; overflow:auto; }
+  li a { display:block; padding:5px 8px; border-radius:5px; color:var(--ink); text-decoration:none; cursor:pointer; }
+  li a:hover { background:#262b34; }
+  li a.map::after { content:' .map'; color:var(--dim); font-size:11px; }
+  button { width:100%; padding:9px; border:0; border-radius:6px; background:var(--accent); color:#0b0d10; font-weight:600; cursor:pointer; font-size:13px; }
+  button:disabled { background:#3a4150; color:#6d7688; cursor:default; }
+  button.ghost { background:transparent; border:1px solid var(--line); color:var(--ink); margin-bottom:8px; }
+  button.ghost.on { border-color:var(--accent); color:var(--accent); }
+  .meta { font-size:12px; color:var(--dim); }
+  .meta b { color:var(--ink); font-weight:500; }
+  code { font-size:11px; color:var(--dim); word-break:break-all; }
+</style>
+</head>
+<body>
+<div id="side">
+  <h1>Mapsforge Extract Tool</h1>
+  <div class="pad">
+    <div class="crumbs" id="crumbs"></div>
+    <ul id="tree"></ul>
+  </div>
+  <div class="pad">
+    <div class="meta" id="source">Pick a region to cut from.</div>
+  </div>
+  <div class="pad">
+    <button class="ghost" id="draw" disabled>Draw a rectangle</button>
+    <div class="meta" id="selection">No area selected.</div>
+  </div>
+  <div class="pad">
+    <button id="go" disabled>Extract .map</button>
+    <div class="meta" id="status" style="margin-top:8px"></div>
+  </div>
+</div>
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const map = L.map('map', { boxZoom: false }).setView([46, 8], 4);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 19, attribution: '&copy; OpenStreetMap contributors',
+}).addTo(map);
+
+const $ = (id) => document.getElementById(id);
+let path = '';          // where we are in the upstream tree
+let source = null;      // the chosen .map and its bbox
+let sourceBox = null;   // its outline on the map
+let selection = null;   // the rectangle being cut
+let bbox = null;
+
+async function api(route, params) {
+  const url = new URL(route, location.origin);
+  Object.entries(params ?? {}).forEach(([k, v]) => url.searchParams.set(k, v));
+  const response = await fetch(url);
+  const body = await response.json().catch(() => ({ error: response.statusText }));
+  if (!response.ok) throw new Error(body.error ?? 'request failed');
+  return body;
+}
+
+async function browse(next) {
+  path = next;
+  $('tree').innerHTML = '<li class="meta" style="padding:5px 8px">Loading…</li>';
+  const parts = path.split('/').filter(Boolean);
+  $('crumbs').innerHTML = ['<a data-to="">maps</a>', ...parts.map((p, i) =>
+    `<a data-to="${parts.slice(0, i + 1).join('/')}">${p}</a>`)].join(' / ');
+
+  const { directories, maps } = await api('/api/list', { path });
+  $('tree').innerHTML = [
+    ...directories.map((d) => `<li><a data-to="${path ? path + '/' : ''}${d}">${d}/</a></li>`),
+    ...maps.map((m) => `<li><a class="map" data-map="${path ? path + '/' : ''}${m}">${m.replace(/\.map$/, '')}</a></li>`),
+  ].join('') || '<li class="meta" style="padding:5px 8px">Empty.</li>';
+}
+
+document.addEventListener('click', async (event) => {
+  const link = event.target.closest('a');
+  if (!link) return;
+  event.preventDefault();
+  try {
+    if (link.dataset.to !== undefined) await browse(link.dataset.to);
+    else if (link.dataset.map) await choose(link.dataset.map);
+  } catch (error) { $('status').textContent = error.message; }
+});
+
+async function choose(mapPath) {
+  $('source').textContent = 'Reading header…';
+  source = await api('/api/source', { path: mapPath });
+  const b = source.bbox;
+  sourceBox?.remove();
+  sourceBox = L.rectangle([[b.minLat, b.minLon], [b.maxLat, b.maxLon]],
+    { color: '#6ea8fe', weight: 1, fillOpacity: 0.04, dashArray: '4 3' }).addTo(map);
+  map.fitBounds(sourceBox.getBounds(), { padding: [30, 30] });
+
+  const zooms = source.intervals.map((i) => `z${i.min}-${i.max}`).join(', ');
+  $('source').innerHTML = `<b>${mapPath}</b><br>${zooms}` +
+    (source.comment ? `<br><code>${source.comment}</code>` : '') +
+    `<br><span style="color:#6ea8fe">header read in ${source.requests} range requests</span>`;
+  $('draw').disabled = false;
+  update();
+}
+
+// --- Drawing -----------------------------------------------------------------
+
+let drawing = false, anchor = null;
+
+$('draw').onclick = () => {
+  drawing = !drawing;
+  $('draw').classList.toggle('on', drawing);
+  $('draw').textContent = drawing ? 'Drag on the map…' : 'Draw a rectangle';
+  map.dragging[drawing ? 'disable' : 'enable']();
+};
+
+map.on('mousedown', (event) => {
+  if (!drawing) return;
+  anchor = event.latlng;
+  selection?.remove();
+  selection = L.rectangle([anchor, anchor], { color: '#7ee787', weight: 2, fillOpacity: 0.12 }).addTo(map);
+});
+
+map.on('mousemove', (event) => {
+  if (drawing && anchor) selection.setBounds(L.latLngBounds(anchor, event.latlng));
+});
+
+map.on('mouseup', () => {
+  if (!drawing || !anchor) return;
+  anchor = null;
+  $('draw').click();
+  const b = selection.getBounds();
+  bbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map((n) => n.toFixed(6));
+  update();
+});
+
+function update() {
+  if (!bbox) return;
+  const [w, s, e, n] = bbox.map(Number);
+  const km = (a, b) => Math.abs(a - b) * 111.32;
+  const width = km(e, w) * Math.cos(((n + s) / 2) * Math.PI / 180);
+  $('selection').innerHTML =
+    `<b>${width.toFixed(1)} × ${km(n, s).toFixed(1)} km</b><br><code>${bbox.join(', ')}</code>`;
+  $('go').disabled = !source;
+}
+
+$('go').onclick = async () => {
+  $('go').disabled = true;
+  $('status').textContent = 'Cutting…';
+  const started = Date.now();
+  try {
+    const url = new URL('/api/extract', location.origin);
+    url.searchParams.set('path', source.path);
+    url.searchParams.set('bbox', bbox.join(','));
+    const response = await fetch(url);
+    if (!response.ok) throw new Error((await response.json()).error);
+
+    const blob = await response.blob();
+    const link = Object.assign(document.createElement('a'), {
+      href: URL.createObjectURL(blob),
+      download: response.headers.get('content-disposition')?.match(/"(.+)"/)?.[1] ?? 'extract.map',
+    });
+    link.click();
+    URL.revokeObjectURL(link.href);
+
+    $('status').innerHTML = `<b>${(blob.size / 1e6).toFixed(2)} MB</b> in ` +
+      `${((Date.now() - started) / 1000).toFixed(1)}s — ` +
+      `${response.headers.get('x-upstream-requests')} upstream range requests, ` +
+      `${(Number(response.headers.get('x-upstream-bytes')) / 1e6).toFixed(2)} MB read`;
+  } catch (error) {
+    $('status').textContent = error.message;
+  }
+  $('go').disabled = false;
+};
+
+browse('').catch((error) => { $('status').textContent = error.message; });
+</script>
+</body>
+</html>
