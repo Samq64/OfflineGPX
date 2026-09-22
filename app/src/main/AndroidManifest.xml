@@ -30,10 +30,9 @@
       every dependency's permissions, so a library can add INTERNET without anyone writing
       it. tools:node="remove" strips it back out.
 
-      This is no longer theoretical. MapLibre's own manifest declares all three of these,
-      and its ConnectivityReceiver calls getActiveNetworkInfo() unguarded - which throws
-      without ACCESS_NETWORK_STATE. GpxApplication answers that by telling MapLibre it is
-      offline before any map exists, which short-circuits the call it would otherwise make.
+      Nothing declares these today - mapsforge ships as plain jars with no manifest - so
+      these removals are standing guards rather than active repairs. They stay because the
+      cost is three lines and the failure they prevent is silent and permanent.
 
       Nothing here relies on anyone remembering to check: CheckNoNetworkPermissions in
       app/build.gradle.kts transforms the merged manifest and fails the build if any of the
@@ -42,9 +41,6 @@
     <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" tools:node="remove" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" tools:node="remove" />
-
-    <!-- Implied by the ACCESS_WIFI_STATE that MapLibre declares and this app removes. -->
-    <uses-feature android:name="android.hardware.wifi" tools:node="remove" />
 
     <!-- GPS is required for the recorder, but the viewer works on any device. -->
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />

@@ -143,7 +143,7 @@ fun SettingsScreen(
             MapsSection(
                 maps = maps,
                 importing = importing,
-                onImport = { importer.launch(PMTILES_MIME_TYPES) },
+                onImport = { importer.launch(MAP_MIME_TYPES) },
                 onDelete = { deletingMap = it },
                 onOpenHelp = {
                     // Needs no INTERNET permission: handing a URL to whatever handles web
@@ -347,7 +347,7 @@ private fun MapsSection(
 
 /**
  * One imported map: its name, plus the two facts that decide if it's the one you want -
- * size and zoom depth, both from the archive's own header rather than the filename.
+ * size and zoom depth, both from the file's own header rather than the filename.
  */
 @Composable
 private fun MapRow(
@@ -357,11 +357,7 @@ private fun MapRow(
     val detail = stringResource(
         R.string.settings_maps_detail,
         android.text.format.Formatter.formatShortFileSize(LocalContext.current, map.sizeBytes),
-        if (map.header.isVector) {
-            stringResource(R.string.settings_maps_zoom_to, map.header.maxZoom)
-        } else {
-            stringResource(R.string.settings_maps_raster)
-        },
+        stringResource(R.string.settings_maps_zoom_to, map.header.maxZoom),
     )
 
     Row(
@@ -415,19 +411,20 @@ private fun Context.fileNameOf(uri: Uri): String? = runCatching {
 }.getOrNull()
 
 /**
- * What the picker will accept. PMTiles has no registered MIME type, so providers hand
- * these over as `application/octet-stream`; the wildcard covers a file manager that types
- * it as something else. Import validates the header regardless of what the picker claimed.
+ * What the picker will accept. A mapsforge map file has no registered MIME type, so
+ * providers hand it over as `application/octet-stream`; the wildcard covers a file manager
+ * that types it as something else. Import validates the header regardless of what the
+ * picker claimed.
  */
-private val PMTILES_MIME_TYPES = arrayOf("application/octet-stream", "*/*")
+private val MAP_MIME_TYPES = arrayOf("application/octet-stream", "*/*")
 
 /**
- * Where to go to get a map file. Provisional - a third-party tool that cuts an area
- * straight to a download, since nothing official provides that workflow. Extracts are cut
- * from Protomaps daily builds, matching the schema [dev.samuelq.gpx.ui.map.MapStyle]
+ * Where to go to get a map file. Provisional - a tool that cuts an area straight to a
+ * download, since every other source of .map files ships whole countries. Extracts are cut
+ * from download.mapsforge.org, whose tag vocabulary [dev.samuelq.gpx.ui.map.MapRenderTheme]
  * expects. Opened through a browser intent; nothing is fetched on the app's behalf.
  */
-private const val MAP_HELP_URL = "https://pmtiles.samruff.dev/"
+private const val MAP_HELP_URL = "https://mapcut.samruff.dev/"
 
 // No `steps`: a discrete slider over ~95 metre-steps draws a dotted line, not a scale. The
 // track is continuous; the value rounds to a whole metre only when the thumb is released.

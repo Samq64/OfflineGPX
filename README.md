@@ -11,7 +11,7 @@ still being a real tool for cycling and hiking.
 
 | Permission | Status | Why |
 |---|---|---|
-| `INTERNET`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE` | **never** | stripped from the merged manifest, including MapLibre's own — basemaps come from files the user supplies, not from this app fetching anything |
+| `INTERNET`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE` | **never** | stripped from the merged manifest — basemaps come from files the user supplies, not from this app fetching anything |
 | storage | never | tracks and offline maps alike are copied from a one-shot SAF pick into app-private storage; no persisted grant, no storage permission |
 | camera, microphone, Bluetooth, contacts | never | no feature needs them |
 | `ACCESS_FINE_LOCATION`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_LOCATION` | **declared** | the irreducible cost of being a tracker; asked for on the tap that starts a recording, never at launch |
@@ -20,8 +20,7 @@ still being a real tool for cycling and hiking.
 
 `INTERNET` can't be requested lazily — once declared it's permanent — so it's kept out
 structurally rather than by vigilance. The manifest merger folds in every dependency's
-permissions (MapLibre declares three network ones of its own), so
-`AndroidManifest.xml` strips them back out with `tools:node="remove"`, and
+permissions, so `AndroidManifest.xml` strips them back out with `tools:node="remove"`, and
 `CheckNoNetworkPermissions` in `app/build.gradle.kts` fails the build if any survive into
 the merged manifest — wired as a manifest transform, so it can't be skipped by any build
 that produces an APK. Verify what shipped:
@@ -42,14 +41,18 @@ A permission added here must map to a feature a user can name.
 | Build | AGP 9.4.0 on Gradle 9.7.1, JDK 17 |
 | minSdk / targetSdk | 29 (Android 10) / 37 (Android 17) |
 
-Dependencies: AndroidX, Compose, Room, navigation-compose, kotlinx.serialization, MapLibre
-Native. The original no-dependency minimalism isn't the governing constraint any more — the
-permission budget is. A dependency earns its place by beating the hand-rolled code it
+Dependencies: AndroidX, Compose, Room, navigation-compose, kotlinx.serialization,
+mapsforge. The original no-dependency minimalism isn't the governing constraint any more —
+the permission budget is. A dependency earns its place by beating the hand-rolled code it
 replaces; what disqualifies one is pulling `INTERNET` into the merged manifest, or wanting a
-permission for a feature nobody asked for. MapLibre is the one dependency that costs real
-size — a hand-rolled Compose canvas rendered routes before it, and was dropped in its
-favour because it also did the projection, camera and hit-testing this app used to
-maintain itself.
+permission for a feature nobody asked for. Mapsforge ships as plain jars with no manifest
+and no native code, so it declares nothing and costs 3.3 MB of release APK against
+MapLibre's 49 MB of `libmaplibre.so` across four ABIs.
+
+Basemaps are mapsforge `.map` files. The format stores three base zooms (5/10/14) and
+renders the rest by scaling, where PMTiles stored a tile at every zoom — which is most of
+why the same ground is 4–6× smaller here. `tools/mapcut` cuts an area out of
+`download.mapsforge.org` by byte-copying tile blocks over HTTP range requests.
 
 Still hand-rolled: the charts (no library gives a shared-domain scrubber or an
 extreme-preserving per-column reduction), `GpxParser`/`GpxWriter` (streaming and tolerant,
@@ -66,13 +69,13 @@ core/            Pure Kotlin. No Android imports, directly unit-testable.
 data/
   gpx/           GpxParser + GpxWriter: streaming, tolerant of real-world GPX.
   db/            Room: one `tracks` row per track, summary only, no geometry.
-  map/           MapStore + PmtilesHeader/Coverage/Metadata: offline basemap archives.
+  map/           MapStore + MapFileHeader: offline basemap files.
   record/        LocationSource, RecordingWal, RecordingService, RecordingController.
   settings/      SettingsRepository: units and the three recording thresholds.
   track/         TrackRepository (interface) + GpxTrackRepository (Room + app-private files).
 ui/
   chart/         ChartMath, ProfileChart - the Canvas charts.
-  map/           MapScreen, OfflineMapCanvas (MapLibre), MapChrome (scale bar), MapStyle.
+  map/           MapScreen, OfflineMapCanvas (mapsforge), MapChrome (scale bar), MapRenderTheme.
   track/         TrackSheet + TrackDialogs + TrackSummary - the sheet a tapped route opens in.
   library/       Manage: import, export, rename, show/hide, batch delete.
   record/        RecordViewModel + RecordingBar, shown by the map. No screen of its own.

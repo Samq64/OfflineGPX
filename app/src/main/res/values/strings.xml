@@ -41,7 +41,7 @@
     <string name="settings_reset">Reset to defaults</string>
 
     <string name="settings_section_maps">Offline maps</string>
-    <string name="settings_maps_explanation">No internet access here, so maps come from a .pmtiles file you open. Without one, routes are drawn on a plain background.</string>
+    <string name="settings_maps_explanation">No internet access here, so maps come from a .map file you open. Without one, routes are drawn on a plain background.</string>
     <string name="settings_maps_import">Open map file</string>
     <!-- A direct link to a tool that cuts an extract, so an action, not a heading. -->
     <string name="settings_maps_where">Get maps</string>
@@ -52,14 +52,13 @@
     <!-- Size, then how far it zooms. "2.4 MB · to zoom 15" -->
     <string name="settings_maps_detail">%1$s · %2$s</string>
     <string name="settings_maps_zoom_to">to zoom %1$d</string>
-    <string name="settings_maps_raster">image tiles</string>
     <!-- What the archive's own metadata says about where its data came from. -->
     <string name="settings_maps_attribution">Data: %1$s</string>
     <string name="settings_maps_importing">Copying map…</string>
     <string name="settings_maps_imported">Map added.</string>
     <string name="settings_maps_deleted">Map deleted.</string>
     <string name="settings_maps_failed_unreadable">That file couldn\'t be read.</string>
-    <string name="settings_maps_failed_format">That isn\'t a PMTiles map file.</string>
+    <string name="settings_maps_failed_format">That isn\'t a mapsforge map file.</string>
     <string name="settings_maps_failed_space">Not enough free space for that map.</string>
     <string name="settings_maps_no_browser">No app on this device can open a web page.</string>
 

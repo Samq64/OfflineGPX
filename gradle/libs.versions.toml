@@ -29,11 +29,13 @@ serialization = "1.11.0"
 
 kxml2 = "2.3.0"
 
-# MapLibre Native. Its own manifest declares INTERNET, ACCESS_NETWORK_STATE,
-# ACCESS_WIFI_STATE and both location permissions; the app manifest strips the three
-# network ones and a build-time check fails the build if any of them ever comes back.
-# See the `no-network` task in app/build.gradle.kts.
-maplibre = "13.6.1"
+# Mapsforge. Renders the basemap from a .map file the user supplied.
+#
+# Published as plain jars rather than AARs, so it contributes no AndroidManifest and
+# therefore no permissions at all - CheckNoNetworkPermissions in app/build.gradle.kts now
+# guards against a future dependency rather than against this one. It is also pure Java
+# with no native libraries, which is where the APK size went.
+mapsforge = "0.25.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -61,7 +63,10 @@ androidx-room-compiler = { group = "androidx.room", name = "room-compiler", vers
 androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigation" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "serialization" }
 
-maplibre-android = { group = "org.maplibre.gl", name = "android-sdk", version.ref = "maplibre" }
+mapsforge-map-android = { group = "org.mapsforge", name = "mapsforge-map-android", version.ref = "mapsforge" }
+# The .map reader itself. Pulled in transitively too, but this is the artifact the data
+# layer talks to directly, so it is named.
+mapsforge-map-reader = { group = "org.mapsforge", name = "mapsforge-map-reader", version.ref = "mapsforge" }
 
 kotlin-test-junit = { group = "org.jetbrains.kotlin", name = "kotlin-test-junit", version.ref = "kotlin" }
 # Test-only: a real XmlPullParser so GpxParser is testable on the JVM without

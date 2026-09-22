@@ -3,7 +3,7 @@ package dev.samuelq.gpx.ui.map
 import androidx.compose.ui.graphics.Color
 import dev.samuelq.gpx.core.model.TrackPoint
 import dev.samuelq.gpx.data.map.OfflineMap
-import dev.samuelq.gpx.data.map.PmtilesHeader
+import dev.samuelq.gpx.data.map.MapFileHeader
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -32,15 +32,16 @@ class MapExtentTest {
         north: Double,
         east: Double,
     ) = OfflineMap(
-        file = File("test.pmtiles"),
-        header = PmtilesHeader(
-            tileType = PmtilesHeader.TileType.MVT,
+        file = File("test.map"),
+        header = MapFileHeader(
             minZoom = 0,
             maxZoom = 14,
             minLongitude = west,
             minLatitude = south,
             maxLongitude = east,
             maxLatitude = north,
+            tileSize = 256,
+            attribution = null,
         ),
         sizeBytes = 0,
     )
@@ -68,10 +69,10 @@ class MapExtentTest {
                 basemaps = listOf(basemap(south = -6.0, west = -2.0, north = 3.0, east = 6.0)),
             )
         )
-        assertEquals(-6.0, extent.latitudeSouth)
-        assertEquals(7.5, extent.latitudeNorth)
-        assertEquals(-2.0, extent.longitudeWest)
-        assertEquals(6.0, extent.longitudeEast)
+        assertEquals(-6.0, extent.minLatitude)
+        assertEquals(7.5, extent.maxLatitude)
+        assertEquals(-2.0, extent.minLongitude)
+        assertEquals(6.0, extent.maxLongitude)
     }
 
     @Test
@@ -79,8 +80,8 @@ class MapExtentTest {
         val extent = assertNotNull(
             extentOf(routes = emptyList(), liveRoute = route(1.0 to 1.0, 2.0 to 2.0), basemaps = emptyList())
         )
-        assertEquals(1.0, extent.latitudeSouth)
-        assertEquals(2.0, extent.latitudeNorth)
+        assertEquals(1.0, extent.minLatitude)
+        assertEquals(2.0, extent.maxLatitude)
     }
 
     @Test
@@ -110,7 +111,7 @@ class MapExtentTest {
                 basemaps = emptyList(),
             )
         )
-        assertEquals(51.5, extent.latitudeSouth)
-        assertEquals(52.0, extent.latitudeNorth)
+        assertEquals(51.5, extent.minLatitude)
+        assertEquals(52.0, extent.maxLatitude)
     }
 }

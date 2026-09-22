@@ -143,7 +143,7 @@ fun MapScreen(
         ActivityResultContracts.OpenDocument()
     ) { uri -> uri?.let(viewModel::importTrack) }
 
-    // The camera belongs to MapLibre now. This file only keeps the policy: frame once at a
+    // The camera belongs to the map view now. This file only keeps the policy: frame once at a
     // cold start, never move on a selection - a map that rearranges on a tap is one you
     // have to re-read.
     //

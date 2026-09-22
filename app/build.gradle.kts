@@ -13,9 +13,9 @@ plugins {
  * The app's one structural promise is that it cannot phone home, and that promise is kept
  * by an absence - which is exactly the kind of thing that goes missing quietly. The
  * manifest merger folds in every dependency's permissions, so a library bump can add
- * INTERNET without a line changing in this repo. MapLibre declares three network
- * permissions of its own and the app manifest strips all three; this is what notices when
- * a fourth appears, or when one of the removals is deleted by accident.
+ * INTERNET without a line changing in this repo. No current dependency declares one -
+ * mapsforge ships as jars with no manifest at all - so this now guards against the next
+ * dependency rather than the present ones, which is the point: it fires before a review does.
  *
  * Wired as a *transform* of the merged manifest rather than hung off `assemble`: a
  * transform is the only way to be unskippable. Every build that produces an APK produces
@@ -153,10 +153,10 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.kotlinx.serialization.json)
 
-    // Renders the basemap from a .pmtiles archive the user supplied. It can only ever read
-    // local files here: every network permission it declares is stripped from the merged
-    // manifest, and the build fails if one survives.
-    implementation(libs.maplibre.android)
+    // Renders the basemap from a .map file the user supplied. Ships as plain jars, so it
+    // declares no permissions of its own and has no manifest to merge.
+    implementation(libs.mapsforge.map.android)
+    implementation(libs.mapsforge.map.reader)
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)

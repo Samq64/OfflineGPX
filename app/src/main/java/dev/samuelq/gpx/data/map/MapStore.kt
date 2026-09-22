@@ -17,16 +17,12 @@ import java.util.concurrent.ConcurrentHashMap
 /** An offline basemap the user has imported, and what its header says about it. */
 class OfflineMap(
     val file: File,
-    val header: PmtilesHeader,
+    val header: MapFileHeader,
     val sizeBytes: Long,
-    /**
-     * The outline of what this archive actually contains, which is not its bounding box
-     * unless it was cut from one. Empty when it could not be determined.
-     */
-    val coverage: Coverage = Coverage.None,
-    /** What the archive itself says its data came from, or null if it does not say. */
-    val attribution: String? = null,
 ) {
+    /** What the file itself says its data came from, or null if it does not say. */
+    val attribution: String? get() = header.attribution
+
     /** The filename without its extension, which is whatever the user named the download. */
     val displayName: String get() = file.nameWithoutExtension
 
@@ -47,7 +43,7 @@ enum class MapImportError {
     /** The file could not be read through the content resolver at all. */
     UNREADABLE,
 
-    /** It was read, and it is not a PMTiles v3 archive. */
+    /** It was read, and it is not a mapsforge map file. */
     NOT_AN_ARCHIVE,
 
     /** There is not enough free space to copy it. */
@@ -62,9 +58,9 @@ sealed interface MapImportResult {
 /**
  * The offline maps on this device.
  *
- * Copied into app-private storage rather than read where they sit: PMTiles is a byte-range
- * format the renderer seeks around in constantly, and a SAF document is a stream through
- * another process. MapLibre's `pmtiles://file://` needs a real path anyway.
+ * Copied into app-private storage rather than read where they sit: a map file is seeked
+ * around in constantly as tiles are drawn, and a SAF document is a stream through another
+ * process. Mapsforge's `MapFile` needs a real path anyway.
  *
  * Nothing here fetches anything - maps arrive through the file picker or not at all.
  */
@@ -94,9 +90,8 @@ class MapStore(
         }
 
     /**
-     * What has already been read off each archive. The header is 127 bytes, but
-     * [PmtilesCoverage] walks every tile directory in the file to find the true outline -
-     * and that only changes when the file does, where this runs at every launch.
+     * What has already been read off each file. Only the header, which is small - but it
+     * only changes when the file does, where this runs at every launch.
      */
     private val readMaps = ConcurrentHashMap<Key, OfflineMap>()
 
@@ -179,16 +174,10 @@ class MapStore(
             MapImportResult.Imported(map)
         }
 
-    /** Everything read off one archive, or null if it is not a PMTiles v3 file at all. */
+    /** Everything read off one file, or null if it is not a mapsforge map file at all. */
     private fun read(file: File): OfflineMap? {
-        val header = PmtilesHeader.read(file) ?: return null
-        return OfflineMap(
-            file = file,
-            header = header,
-            sizeBytes = file.length(),
-            coverage = PmtilesCoverage.read(file, header),
-            attribution = PmtilesMetadata.readAttribution(file, header),
-        )
+        val header = MapFileHeader.read(file) ?: return null
+        return OfflineMap(file = file, header = header, sizeBytes = file.length())
     }
 
     suspend fun delete(map: OfflineMap) = withContext(Dispatchers.IO) {
@@ -200,7 +189,7 @@ class MapStore(
     /**
      * A name that is not already taken, keeping the user's if it is free.
      *
-     * Two maps called `ottawa.pmtiles` are two different areas someone downloaded a month
+     * Two maps called `ottawa.map` are two different areas someone downloaded a month
      * apart, and silently overwriting the first is the wrong answer to a name collision.
      */
     private fun uniqueName(suggested: String?): String {
@@ -222,7 +211,7 @@ class MapStore(
 
     private companion object {
         const val DIRECTORY = "maps"
-        const val EXTENSION = "pmtiles"
+        const val EXTENSION = "map"
         const val DEFAULT_NAME = "map"
         const val MAX_NAME_LENGTH = 80
 
