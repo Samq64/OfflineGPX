@@ -86,6 +86,18 @@ class MapViewModel(
     private var requested: TrackRef? = null
     private var focusJob: Job? = null
 
+    /**
+     * Where the camera was, last time this screen was on top of the stack. The map's own
+     * composition doesn't survive navigating away and back - a plain var here does, since
+     * this ViewModel is scoped to the route's back-stack entry, not the composition.
+     */
+    var lastCamera: CameraSnapshot? = null
+        private set
+
+    fun rememberCamera(camera: CameraSnapshot) {
+        lastCamera = camera
+    }
+
     init {
         viewModelScope.launch {
             repository.visibleTracks.collect { entities ->

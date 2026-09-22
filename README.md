@@ -168,7 +168,11 @@ screen; the app has no source of its own to credit.
 manifest.
 
 The camera is MapLibre's: pinch, fling, and a pan clamp to the fit of every track and shown
-map. A scale bar reads the camera's live scale and is drawn over it.
+map. A scale bar reads the camera's live scale and is drawn over it. The map's own
+composition doesn't survive navigating away to the library or settings and back -
+Compose Navigation only keeps the current destination composed - so the camera's last
+position is remembered in the ViewModel (which does survive) and restored directly on
+return, rather than re-fitting to the tracks or the map from nothing every time.
 
 The basemap style is deliberately plain: earth, one green for anything vegetated, water
 (always blue, regardless of theme), buildings (a landmark on a country road), and roads

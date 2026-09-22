@@ -486,6 +486,11 @@ fun MapScreen(
                 landColor = MaterialTheme.colorScheme.surfaceContainerLowest,
                 labelColor = MaterialTheme.colorScheme.onSurface,
                 onScaleChange = { metersPerPixel.doubleValue = it },
+                // The ViewModel outlives this composition, so the camera picks up exactly
+                // where it was left rather than re-fitting from nothing on every return to
+                // this screen.
+                initialCamera = viewModel.lastCamera,
+                onCameraChange = viewModel::rememberCamera,
                 modifier = Modifier.fillMaxSize(),
             )
 

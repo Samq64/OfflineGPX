@@ -105,6 +105,15 @@ class RouteBounds(
 }
 
 /**
+ * Where the camera is, in the two numbers worth remembering across a screen this
+ * composable doesn't survive - navigating away and back recomposes it from scratch, and
+ * without this the camera re-fits from nothing every time, discarding wherever the user
+ * had actually panned to.
+ */
+@Immutable
+data class CameraSnapshot(val latitude: Double, val longitude: Double, val zoom: Double)
+
+/**
  * Routes over an offline basemap, or over nothing if none is imported. Projection, camera
  * and hit-testing all belong to MapLibre now; what's kept here is app-specific - which
  * track a tap selects, where the scrubber's marker sits, and minimal camera movement while
@@ -146,6 +155,15 @@ fun OfflineMapCanvas(
     labelColor: Color = Color.Unspecified,
     /** Reports how far a screen pixel spans on the ground, for the scale bar. */
     onScaleChange: (metersPerPixel: Double) -> Unit = {},
+    /**
+     * Where to put the camera on the cold-start frame, if the caller already knows - a
+     * screen this composable doesn't survive navigating away from. Takes priority over
+     * fitting to tracks or maps; only a fresh instance with nothing remembered yet falls
+     * back to that.
+     */
+    initialCamera: CameraSnapshot? = null,
+    /** Reports the camera's own position on every move, for [initialCamera] next time. */
+    onCameraChange: (CameraSnapshot) -> Unit = {},
 ) {
     val density = LocalDensity.current
     val layoutDirection = LocalLayoutDirection.current
@@ -168,6 +186,7 @@ fun OfflineMapCanvas(
     val select by rememberUpdatedState(onSelect)
     val reportScale by rememberUpdatedState(onScaleChange)
     val selectNothing by rememberUpdatedState(onSelectNothing)
+    val reportCamera by rememberUpdatedState(onCameraChange)
 
     val insets = remember(contentPadding, layoutDirection, density) {
         with(density) {
@@ -201,15 +220,20 @@ fun OfflineMapCanvas(
                 isLogoEnabled = false
             }
             // Both, not just idle: the bar has to track a pinch while it happens.
-            val publishScale = {
-                val latitude = ready.cameraPosition.target?.latitude ?: 0.0
+            val publishCamera = {
+                val camera = ready.cameraPosition
+                val target = camera.target
+                val latitude = target?.latitude ?: 0.0
                 val scale = ready.projection.getMetersPerPixelAtLatitude(latitude)
                 metersPerPixel.doubleValue = scale
                 reportScale(scale)
+                if (target != null) {
+                    reportCamera(CameraSnapshot(target.latitude, target.longitude, camera.zoom))
+                }
             }
-            ready.addOnCameraMoveListener(publishScale)
-            ready.addOnCameraIdleListener(publishScale)
-            publishScale()
+            ready.addOnCameraMoveListener(publishCamera)
+            ready.addOnCameraIdleListener(publishCamera)
+            publishCamera()
 
             ready.addOnMapClickListener { tapped ->
                 val hit = ready.pick(tapped, currentRoutes, currentLiveRoute)
@@ -293,25 +317,31 @@ fun OfflineMapCanvas(
 
     // --- Where it is looked at from ------------------------------------------------
 
+    // Shared by both effects below - one is the ongoing zoom/pan clamp, the other a
+    // fallback frame used at most once per process (see initialCamera), and neither needs
+    // its own copy of the same four numbers.
+    val edgePadding = remember(insets) {
+        intArrayOf(
+            insets.left + EDGE_PADDING_PX,
+            insets.top + EDGE_PADDING_PX,
+            insets.right + EDGE_PADDING_PX,
+            insets.bottom + EDGE_PADDING_PX,
+        )
+    }
+
     // Every track and every shown map, unioned - the box the camera is kept inside and the
     // zoom-out floor are both about what's there at all, not what the view opens on.
     val extent = remember(routes, liveRoute, basemaps) {
         extentOf(routes, liveRoute, basemaps)
     }
 
-    LaunchedEffect(map, extent, insets) {
+    LaunchedEffect(map, extent, edgePadding) {
         val ready = map ?: return@LaunchedEffect
         if (extent == null) return@LaunchedEffect
 
         // Zooming out is limited to where everything is already on screen - beyond that is
         // nothing but flat background, with no way back.
-        val padding = intArrayOf(
-            insets.left + EDGE_PADDING_PX,
-            insets.top + EDGE_PADDING_PX,
-            insets.right + EDGE_PADDING_PX,
-            insets.bottom + EDGE_PADDING_PX,
-        )
-        val fitted = ready.getCameraForLatLngBounds(extent, padding)
+        val fitted = ready.getCameraForLatLngBounds(extent, edgePadding)
 
         // A cap on the way in too - MapLibre will happily magnify an archive's deepest
         // zoom thirty times over, drawing detail that doesn't exist convincingly.
@@ -330,30 +360,36 @@ fun OfflineMapCanvas(
         ready.setLatLngBoundsForCameraTarget(extent.padded(PAN_OVERSHOOT_FRACTION))
     }
 
-    // What the view opens on: the tracks, if there are any - almost always what someone
-    // opened the app to look at, with a basemap as context rather than the point. Falls
-    // back to the shown maps' own extent only once we know there is nothing recorded or
-    // imported yet; while tracksLoading is true, routes may simply not have arrived yet,
-    // and framing the basemap now would mean never getting a second chance to frame the
-    // tracks once they do.
+    // Only reached once per process at most: the moment a camera is ever remembered (see
+    // initialCamera below), every later visit to this screen - even after navigating away
+    // and back - skips straight past it. Tracks first, since that's almost always what
+    // someone opened the app to look at; falls back to the shown maps' own extent only
+    // once tracksLoading says there is nothing recorded or imported yet, rather than
+    // guessing before routes has had a chance to arrive.
     val initialExtent = remember(routes, liveRoute, basemaps) {
         extentOf(routes, liveRoute, emptyList()) ?: extentOf(emptyList(), null, basemaps)
     }
 
-    LaunchedEffect(map, initialExtent, tracksLoading, insets) {
+    LaunchedEffect(map, initialCamera, initialExtent, tracksLoading, edgePadding) {
         val ready = map ?: return@LaunchedEffect
-        if (hasFramed || tracksLoading) return@LaunchedEffect
+        if (hasFramed) return@LaunchedEffect
+
+        val remembered = initialCamera
+        if (remembered != null) {
+            ready.moveCamera(
+                CameraUpdateFactory.newLatLngZoom(
+                    LatLng(remembered.latitude, remembered.longitude), remembered.zoom,
+                )
+            )
+            hasFramed = true
+            return@LaunchedEffect
+        }
+        if (tracksLoading) return@LaunchedEffect
         val target = initialExtent ?: return@LaunchedEffect
 
-        val padding = intArrayOf(
-            insets.left + EDGE_PADDING_PX,
-            insets.top + EDGE_PADDING_PX,
-            insets.right + EDGE_PADDING_PX,
-            insets.bottom + EDGE_PADDING_PX,
-        )
         ready.moveCamera(
             CameraUpdateFactory.newLatLngBounds(
-                target, padding[0], padding[1], padding[2], padding[3],
+                target, edgePadding[0], edgePadding[1], edgePadding[2], edgePadding[3],
             )
         )
         hasFramed = true
