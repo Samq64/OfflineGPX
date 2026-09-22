@@ -47,6 +47,8 @@ import org.mapsforge.map.layer.overlay.Circle
 import org.mapsforge.map.layer.overlay.Polygon
 import org.mapsforge.map.layer.overlay.Polyline
 import org.mapsforge.map.layer.renderer.TileRendererLayer
+import org.mapsforge.map.model.DisplayModel
+import org.mapsforge.map.model.common.Observer
 import org.mapsforge.map.reader.MapFile
 import org.mapsforge.map.rendertheme.XmlRenderTheme
 import org.mapsforge.map.rendertheme.XmlRenderThemeMenuCallback
@@ -238,18 +240,37 @@ fun OfflineMapCanvas(
 
     DisposableEffect(mapView) {
         val position = mapView.model.mapViewPosition
-        val observer = {
+        // Explicitly an Observer, not a Kotlin lambda: removeObserver has to be handed the
+        // same instance addObserver got, and a function value converted at each call site
+        // would be two different objects and a leak per recomposition.
+        val observer = Observer {
             val centre = position.center
             val zoom = position.zoom
             val mapSize = MercatorProjection.getMapSizeWithScaleFactor(
                 position.scaleFactor, mapView.model.displayModel.tileSize,
             )
             reportScale(MercatorProjection.calculateGroundResolution(centre.latitude, mapSize))
-            reportCamera(CameraSnapshot(centre.latitude, centre.longitude, zoom))
+            // Not before the first frame is placed. Until then the position is mapsforge's
+            // own default - the whole world - and remembering that as "where the user was"
+            // is both wrong and, since it feeds back in as initialCamera, self-fulfilling.
+            if (hasFramed) reportCamera(CameraSnapshot(centre.latitude, centre.longitude, zoom))
         }
         position.addObserver(observer)
-        observer()
+        observer.onChange()
         onDispose { position.removeObserver(observer) }
+    }
+
+    // The size the map is actually laid out at. Observed rather than read off the view:
+    // the first composition runs before any layout, so the camera effects below would see
+    // 0 x 0, bail, and never be asked again - which is a map stuck at whole-world zoom.
+    var viewSize by remember { mutableStateOf<Dimension?>(null) }
+
+    DisposableEffect(mapView) {
+        val dimension = mapView.model.mapViewDimension
+        val observer = Observer { viewSize = dimension.dimension }
+        dimension.addObserver(observer)
+        viewSize = dimension.dimension
+        onDispose { dimension.removeObserver(observer) }
     }
 
     // --- The basemap ----------------------------------------------------------------
@@ -264,10 +285,12 @@ fun OfflineMapCanvas(
         // Land under the tiles, not painted by them: the render theme's background is
         // transparent so ground no imported file covers reads as empty rather than as land.
         groups.land.replaceWith(
-            basemaps.map { map -> boxPolygon(map, landColor) }
+            basemaps.map { map -> boxPolygon(map, landColor) },
+            mapView.model.displayModel,
         )
         groups.outline.replaceWith(
-            basemaps.map { map -> outlinePolyline(map, labelColor) }
+            basemaps.map { map -> outlinePolyline(map, labelColor) },
+            mapView.model.displayModel,
         )
         mapView.setBackgroundColor(backgroundColor.toArgb())
 
@@ -314,7 +337,7 @@ fun OfflineMapCanvas(
     // thousand LatLong allocations, which don't belong on the frame the user sees.
     LaunchedEffect(groups, routes, focusedTrackId) {
         val built = withContext(Dispatchers.Default) { routes.toPolylines(focusedTrackId) }
-        groups.routes.replaceWith(built)
+        groups.routes.replaceWith(built, mapView.model.displayModel)
     }
 
     // Its own effect: runs every few seconds for the length of a ride, touching nothing else.
@@ -322,7 +345,7 @@ fun OfflineMapCanvas(
         val built = withContext(Dispatchers.Default) {
             listOfNotNull(liveRoute).toPolylines(focusedTrackId = null)
         }
-        groups.trace.replaceWith(built)
+        groups.trace.replaceWith(built, mapView.model.displayModel)
     }
 
     LaunchedEffect(groups, routes, liveRoute, puckTrackId, focusedTrackId, selectedIndex) {
@@ -345,7 +368,8 @@ fun OfflineMapCanvas(
                 }
                 // Last, so the point being read about is never underneath anything.
                 if (markerAt != null) add(circle(markerAt, MARKER_RADIUS, markerColor, markerRingColor))
-            }
+            },
+            mapView.model.displayModel,
         )
     }
 
@@ -357,7 +381,7 @@ fun OfflineMapCanvas(
         extentOf(routes, liveRoute, basemaps)
     }
 
-    LaunchedEffect(mapView, extent, insets, basemaps) {
+    LaunchedEffect(mapView, extent, insets, basemaps, viewSize) {
         if (extent == null) return@LaunchedEffect
         val position = mapView.model.mapViewPosition
 
@@ -369,7 +393,7 @@ fun OfflineMapCanvas(
 
         // Zooming out is limited to where everything is already on screen - beyond that is
         // nothing but flat background, with no way back.
-        val dimension = mapView.dimensionOrNull(insets)
+        val dimension = viewSize.usable(insets)
         if (dimension != null) {
             val floor = LatLongUtils.zoomForBounds(dimension, extent, mapView.model.displayModel.tileSize)
             position.zoomLevelMin = minOf(floor.toInt(), ceiling).toByte()
@@ -384,7 +408,7 @@ fun OfflineMapCanvas(
         if (bounds == null) return@DisposableEffect onDispose { }
         val position = mapView.model.mapViewPosition
         var clamping = false
-        val observer = {
+        val observer = Observer {
             // setCenter notifies observers again; without this the clamp re-enters itself.
             if (!clamping) {
                 val centre = position.center
@@ -412,11 +436,16 @@ fun OfflineMapCanvas(
         extentOf(routes, liveRoute, emptyList()) ?: extentOf(emptyList(), null, basemaps)
     }
 
-    LaunchedEffect(mapView, initialCamera, initialExtent, tracksLoading, insets) {
+    // Read once, not per recomposition: the camera is republished as the map moves, so
+    // keying the framing effect on it would let the map's own position come back around as
+    // the place it is supposed to be restored to.
+    val rememberedCamera = remember { initialCamera }
+
+    LaunchedEffect(mapView, initialExtent, tracksLoading, insets, viewSize) {
         if (hasFramed) return@LaunchedEffect
         val position = mapView.model.mapViewPosition
 
-        val remembered = initialCamera
+        val remembered = rememberedCamera
         if (remembered != null) {
             position.setCenter(LatLong(remembered.latitude, remembered.longitude))
             position.zoom = remembered.zoom
@@ -425,7 +454,7 @@ fun OfflineMapCanvas(
         }
         if (tracksLoading) return@LaunchedEffect
         val target = initialExtent ?: return@LaunchedEffect
-        val dimension = mapView.dimensionOrNull(insets) ?: return@LaunchedEffect
+        val dimension = viewSize.usable(insets) ?: return@LaunchedEffect
 
         position.setCenter(target.centerPoint)
         position.zoomLevel =
@@ -454,9 +483,19 @@ private class MapLayers(
     val markers: GroupLayer,
 )
 
-private fun GroupLayer.replaceWith(next: List<Layer>) {
+/**
+ * Refills a group in place.
+ *
+ * Each child is handed the display model by hand. A layer normally receives it from
+ * `Layers.add`, and going straight into [GroupLayer.layers] bypasses that; the group
+ * propagates its own only to the children present at the moment it is itself added, and
+ * these groups are added empty and filled afterwards. Without this every overlay draws
+ * with a null display model and takes the render thread down with it.
+ */
+internal fun GroupLayer.replaceWith(next: List<Layer>, displayModel: DisplayModel) {
     synchronized(this) {
         layers.clear()
+        next.forEach { it.displayModel = displayModel }
         layers.addAll(next)
     }
     requestRedraw()
@@ -714,7 +753,8 @@ private fun BoundingBox.padded(fraction: Double): BoundingBox = runCatching {
 }.getOrDefault(this)
 
 /** The view's size minus whatever is floating over it, or null before it is laid out. */
-private fun MapView.dimensionOrNull(insets: Insets): Dimension? {
+private fun Dimension?.usable(insets: Insets): Dimension? {
+    if (this == null) return null
     val usableWidth = width - insets.left - insets.right - 2 * EDGE_PADDING_PX
     val usableHeight = height - insets.top - insets.bottom - 2 * EDGE_PADDING_PX
     return if (usableWidth > 0 && usableHeight > 0) Dimension(usableWidth, usableHeight) else null
