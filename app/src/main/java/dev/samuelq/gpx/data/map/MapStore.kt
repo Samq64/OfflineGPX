@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
+import java.util.concurrent.ConcurrentHashMap
 
 /** An offline basemap the user has imported, and what its header says about it. */
 class OfflineMap(
@@ -63,8 +64,7 @@ sealed interface MapImportResult {
  *
  * Copied into app-private storage rather than read where they sit: PMTiles is a byte-range
  * format the renderer seeks around in constantly, and a SAF document is a stream through
- * another process with no promise of still being there tomorrow. MapLibre's
- * `pmtiles://file://` needs a real path anyway.
+ * another process. MapLibre's `pmtiles://file://` needs a real path anyway.
  *
  * Nothing here fetches anything - maps arrive through the file picker or not at all.
  */
@@ -93,22 +93,28 @@ class MapStore(
             maps.filter { it.file.name in current.activeMapFiles }
         }
 
-    /** Re-reads the directory. Cheap - a handful of files, each parsed to 127 bytes. */
+    /**
+     * What has already been read off each archive. The header is 127 bytes, but
+     * [PmtilesCoverage] walks every tile directory in the file to find the true outline -
+     * and that only changes when the file does, where this runs at every launch.
+     */
+    private val readMaps = ConcurrentHashMap<Key, OfflineMap>()
+
+    /** A file is the same file as long as neither its path nor its mtime has moved. */
+    private data class Key(val path: String, val modifiedAt: Long)
+
+    /** Re-reads the directory, reusing what was already read off unchanged archives. */
     suspend fun refresh() = withContext(Dispatchers.IO) {
-        val found = directory.listFiles().orEmpty()
+        val files = directory.listFiles().orEmpty()
             .filter { it.isFile && it.extension.equals(EXTENSION, ignoreCase = true) }
-            .mapNotNull { file ->
-                PmtilesHeader.read(file)?.let { header ->
-                    OfflineMap(
-                        file = file,
-                        header = header,
-                        sizeBytes = file.length(),
-                        coverage = PmtilesCoverage.read(file, header),
-                        attribution = PmtilesMetadata.readAttribution(file, header),
-                    )
-                }
-            }
+
+        val keys = files.associateBy { Key(it.path, it.lastModified()) }
+        val found = keys
+            .mapNotNull { (key, file) -> readMaps[key] ?: read(file)?.also { readMaps[key] = it } }
             .sortedByDescending { it.file.lastModified() }
+
+        // A deleted archive shouldn't go on holding its coverage in memory.
+        readMaps.keys.retainAll(keys.keys)
 
         _maps.value = found
 
@@ -152,19 +158,13 @@ class MapStore(
                 return@withContext MapImportResult.Failed(MapImportError.UNREADABLE)
             }
 
-            val header = PmtilesHeader.read(destination)
-            if (header == null) {
+            // Handed to the cache below, so refresh() doesn't re-walk what this just read.
+            val map = read(destination)
+            if (map == null) {
                 destination.delete()
                 return@withContext MapImportResult.Failed(MapImportError.NOT_AN_ARCHIVE)
             }
-
-            val map = OfflineMap(
-                file = destination,
-                header = header,
-                sizeBytes = destination.length(),
-                coverage = PmtilesCoverage.read(destination, header),
-                attribution = PmtilesMetadata.readAttribution(destination, header),
-            )
+            readMaps[Key(destination.path, destination.lastModified())] = map
 
             // Superseded rather than refused: a newer map over the same ground replaces
             // whichever shown one it overlaps, since two renderings of the same place
@@ -178,6 +178,18 @@ class MapStore(
             settings.setActiveMapFiles(settings.settings.value.activeMapFiles + destination.name)
             MapImportResult.Imported(map)
         }
+
+    /** Everything read off one archive, or null if it is not a PMTiles v3 file at all. */
+    private fun read(file: File): OfflineMap? {
+        val header = PmtilesHeader.read(file) ?: return null
+        return OfflineMap(
+            file = file,
+            header = header,
+            sizeBytes = file.length(),
+            coverage = PmtilesCoverage.read(file, header),
+            attribution = PmtilesMetadata.readAttribution(file, header),
+        )
+    }
 
     suspend fun delete(map: OfflineMap) = withContext(Dispatchers.IO) {
         map.file.delete()

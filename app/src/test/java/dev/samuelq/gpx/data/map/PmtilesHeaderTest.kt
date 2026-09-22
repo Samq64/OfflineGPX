@@ -55,16 +55,6 @@ class PmtilesHeaderTest {
     }
 
     @Test
-    fun `knows what it covers`() {
-        val header = requireNotNull(PmtilesHeader.parse(realHeader))
-
-        // Parliament Hill, comfortably inside the extract.
-        assertTrue(header.contains(latitude = 45.4236, longitude = -75.7009))
-        // Kingston, two hours away and outside it.
-        assertTrue(!header.contains(latitude = 44.2312, longitude = -76.4860))
-    }
-
-    @Test
     fun `rejects a file that is not an archive`() {
         assertNull(PmtilesHeader.parse(ByteArray(127)))
         assertNull(PmtilesHeader.parse("not a map at all, just some bytes".toByteArray()))

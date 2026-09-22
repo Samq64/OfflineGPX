@@ -10,6 +10,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.os.SystemClock
 import androidx.annotation.StringRes
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
@@ -51,6 +52,20 @@ class RecordingService : Service() {
     private var collection: Job? = null
     private var wal: RecordingWal? = null
 
+    /**
+     * True from the first START until the service goes away, pause included. [collection]
+     * is null while paused and so can't answer this - and a START arriving then would
+     * reopen the WAL in append mode over the ride already in it.
+     */
+    private var recording = false
+
+    /**
+     * Set by the first STOP or DISCARD. Both the bar and the notification offer Stop; the
+     * second would otherwise find the WAL handed off, report "nothing was recorded" over a
+     * ride that saved fine, and stopSelf() out from under the save still running.
+     */
+    private var stopping = false
+
     private var startedAt: Instant = Instant.EPOCH
     private var paused = false
     private var pointCount = 0
@@ -60,6 +75,9 @@ class RecordingService : Service() {
     private var currentSpeedMps: Double? = null
     private var lastFixAt: Instant? = null
     private var lastAccuracyMeters: Double? = null
+
+    /** When the notification last went out, for the throttle in [updateNotification]. */
+    private var notifiedAt = 0L
 
     /**
      * Built from settings as they stood when the recording started - a threshold changed
@@ -97,7 +115,8 @@ class RecordingService : Service() {
     }
 
     private fun start() {
-        if (collection != null) return
+        if (recording) return
+        recording = true
 
         startedAt = Instant.now()
         paused = false
@@ -151,6 +170,7 @@ class RecordingService : Service() {
 
     /** Give up before a recording exists: say why, drop the notification, go away. */
     private fun abandon(@StringRes messageRes: Int) {
+        recording = false
         container.recordingController.emit(RecordingEvent.Failed(messageRes))
         container.recordingController.update(RecordingState.Idle)
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
@@ -202,7 +222,8 @@ class RecordingService : Service() {
         }
 
         publish()
-        updateNotification()
+        // Throttled, unlike `publish`: see updateNotification.
+        updateNotification(force = false)
     }
 
     /**
@@ -211,7 +232,7 @@ class RecordingService : Service() {
      * write a real `<trkseg>` boundary that travels with the file to whatever reads it next.
      */
     private fun pause() {
-        if (paused) return
+        if (paused || !recording || stopping) return
         paused = true
 
         collection?.cancel()
@@ -234,7 +255,7 @@ class RecordingService : Service() {
     }
 
     private fun resume() {
-        if (!paused) return
+        if (!paused || !recording || stopping) return
 
         val source = LocationSource(this)
         // Location can be switched off during a long pause - it is a quick-settings
@@ -252,6 +273,14 @@ class RecordingService : Service() {
     }
 
     private fun stop(save: Boolean) {
+        if (stopping) return
+        // A STOP with no recording behind it has nothing to save and nothing to say.
+        if (!recording) {
+            stopSelf()
+            return
+        }
+        stopping = true
+
         collection?.cancel()
         collection = null
 
@@ -299,6 +328,11 @@ class RecordingService : Service() {
                     }
                 }
             } finally {
+                // Cleared here, not in onDestroy: stopping is asynchronous, so a Record
+                // tapped straight after the save lands on this same instance, where a
+                // `recording` still true would swallow it and let the service die anyway.
+                recording = false
+                stopping = false
                 container.recordingController.update(RecordingState.Idle)
                 container.recordingController.updateTrace(LiveTrace.Empty)
                 ServiceCompat.stopForeground(this@RecordingService, ServiceCompat.STOP_FOREGROUND_REMOVE)
@@ -351,7 +385,15 @@ class RecordingService : Service() {
         )
     }
 
-    private fun updateNotification() {
+    /**
+     * @param force post regardless of how recently the last one did. True for pause and
+     *   resume; false for the per-fix tick, which otherwise rebuilds the whole
+     *   Notification once a second for a ride to move a readout by a few metres.
+     */
+    private fun updateNotification(force: Boolean = true) {
+        val now = SystemClock.elapsedRealtime()
+        if (!force && now - notifiedAt < NOTIFICATION_INTERVAL_MILLIS) return
+        notifiedAt = now
         getSystemService<NotificationManager>()?.notify(NOTIFICATION_ID, buildNotification())
     }
 
@@ -417,6 +459,8 @@ class RecordingService : Service() {
     }
 
     override fun onDestroy() {
+        recording = false
+        stopping = false
         collection?.cancel()
         wal?.close()
         scope.cancel()
@@ -436,6 +480,9 @@ class RecordingService : Service() {
         /** Fixes between live-trace snapshots. At 1 Hz, the map's line grows every 5s. */
         private const val TRACE_PUBLISH_EVERY = 5
 
+        /** The floor on how often the ongoing notification is rebuilt while sampling. */
+        private const val NOTIFICATION_INTERVAL_MILLIS = 5_000L
+
         /**
          * Below this a recording is not a track - not zero, since a handful of fixes that
          * happened to clear the displacement floor is the same nothing as none at all.
@@ -445,6 +492,13 @@ class RecordingService : Service() {
 
         /** The in-progress log. Fixed name: there is only ever one recording. */
         const val WAL_NAME = "recording.wal"
+
+        /**
+         * Where recovery moves an abandoned [WAL_NAME] before reading it, so a recording
+         * started meanwhile cannot end up sharing the file. See
+         * `GpxTrackRepository.recoverAbandonedRecording`.
+         */
+        const val WAL_RECOVERY_NAME = "recovering.wal"
 
         /** Where recordings and their logs live. App-private: no permission, and ours to delete. */
         fun recordingsDir(context: Context): File =

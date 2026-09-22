@@ -13,6 +13,7 @@ import dev.samuelq.gpx.data.db.TrackDao
 import dev.samuelq.gpx.data.db.TrackEntity
 import dev.samuelq.gpx.data.db.TrackSource
 import dev.samuelq.gpx.R
+import dev.samuelq.gpx.data.gpx.GpxNameRewriter
 import dev.samuelq.gpx.data.gpx.GpxParseException
 import dev.samuelq.gpx.data.gpx.GpxParser
 import dev.samuelq.gpx.data.gpx.GpxWriter
@@ -153,10 +154,14 @@ class GpxTrackRepository(
         }.recoverFailure()
     }
 
-    override suspend fun saveRecording(track: Track, startedAt: Instant): Result<Long> =
+    override suspend fun saveRecording(
+        track: Track,
+        startedAt: Instant,
+        analyzed: TrackProfile?,
+    ): Result<Long> =
         withContext(io) {
             runCatching {
-                val profile = TrackAnalyzer.analyze(track)
+                val profile = analyzed ?: TrackAnalyzer.analyze(track)
                 val displayName = recordingFileName(startedAt)
                 val file = File(recordingsDir, displayName)
 
@@ -191,28 +196,35 @@ class GpxTrackRepository(
         }
 
     override suspend fun recoverAbandonedRecording(): Long? = withContext(io) {
-        val log = File(recordingsDir, RecordingService.WAL_NAME)
-        if (!log.exists() || log.length() == 0L) return@withContext null
+        val claimed = File(recordingsDir, RecordingService.WAL_RECOVERY_NAME)
+        // Claimed by renaming before a byte is read: a recording started while this is
+        // still parsing opens WAL_NAME in append mode, and without the rename that live
+        // log is the one the deletes below would take. A claim left by a recovery that
+        // died mid-way is finished rather than overwritten.
+        if (!claimed.exists()) {
+            val log = File(recordingsDir, RecordingService.WAL_NAME)
+            if (!log.exists() || log.length() == 0L) return@withContext null
+            if (!log.renameTo(claimed)) return@withContext null
+        }
 
         // Timestamps come from the fixes themselves, so a recovered ride is dated when it
         // happened rather than when the app next opened.
-        val track = RecordingWal.recover(log, name = null)
+        val track = RecordingWal.recover(claimed, name = null)
         if (track == null) {
-            log.delete()
+            claimed.delete()
             return@withContext null
         }
 
         // The same bar a clean stop applies: a crash must not resurrect what pressing Stop
         // would have thrown away.
-        if (TrackAnalyzer.analyze(track).stats.distanceMeters <
-            RecordingService.MIN_SAVEABLE_DISTANCE_METERS
-        ) {
-            log.delete()
+        val profile = TrackAnalyzer.analyze(track)
+        if (profile.stats.distanceMeters < RecordingService.MIN_SAVEABLE_DISTANCE_METERS) {
+            claimed.delete()
             return@withContext null
         }
 
         val startedAt = track.segments.firstOrNull()?.points?.firstOrNull()?.time ?: Instant.now()
-        saveRecording(track, startedAt).getOrNull()?.also { log.delete() }
+        saveRecording(track, startedAt, profile).getOrNull()?.also { claimed.delete() }
     }
 
     override suspend fun exportAll(names: Map<Long, String>, treeUri: String): Result<Int> =
@@ -226,28 +238,45 @@ class GpxTrackRepository(
                     DocumentsContract.getTreeDocumentId(tree),
                 )
 
+                // One runCatching per track, not one around the batch: a folder filling up
+                // halfway is exactly what the count exists to report, and letting that
+                // escape would report zero for a folder holding twenty files.
                 names.count { (id, name) ->
-                    val entity = dao.byId(id)
-                    // The provider resolves a name that is already taken by adding a
-                    // number, so two rides called the same thing cost nothing here.
-                    val target = entity?.let {
-                        DocumentsContract.createDocument(
-                            appContext.contentResolver,
-                            folder,
-                            GPX_MIME,
-                            name,
-                        )
-                    }
-                    if (target == null) {
-                        false
-                    } else {
-                        appContext.contentResolver.openOutputStream(target)?.use { sink ->
-                            openStream(entity.location).use { it.copyTo(sink) }
-                        } != null
-                    }
+                    runCatching { writeExport(folder, id, name) }.getOrDefault(false)
                 }
             }.recoverFailure()
         }
+
+    /**
+     * Copies one track into [folder]. Deletes the document again if the copy fails: it is
+     * created before it can be written, and a zero-byte `.gpx` in the user's own folder is
+     * worse than the track simply not being there.
+     */
+    private suspend fun writeExport(folder: Uri, id: Long, name: String): Boolean {
+        val entity = dao.byId(id) ?: return false
+        // The provider resolves a name that is already taken by adding a number, so two
+        // rides called the same thing cost nothing here.
+        val target = DocumentsContract.createDocument(
+            appContext.contentResolver,
+            folder,
+            GPX_MIME,
+            name,
+        ) ?: return false
+
+        val written = try {
+            appContext.contentResolver.openOutputStream(target)?.use { sink ->
+                openStream(entity.location).use { it.copyTo(sink) }
+            } != null
+        } catch (e: Exception) {
+            Log.d(TAG, "Could not export ${entity.displayName}", e)
+            false
+        }
+
+        if (!written) {
+            runCatching { DocumentsContract.deleteDocument(appContext.contentResolver, target) }
+        }
+        return written
+    }
 
     override suspend fun openTransient(location: String): Result<LoadedTrack> = withContext(io) {
         runCatching {
@@ -278,25 +307,24 @@ class GpxTrackRepository(
                 ?: throw TrackLoadException.Unreadable("No track with id $id")
             val trimmed = name.trim().takeIf(String::isNotEmpty)
 
-            // Rewritten on disk too, for either source: export is a byte copy of this
-            // file, not a re-serialisation, so a rename that never touched it wouldn't survive one.
+            // Written into the file too: export is a byte copy, so a rename that never
+            // touched it wouldn't survive one. Spliced rather than reparsed and rewritten
+            // - see [GpxNameRewriter]. Via a temp file, so a crash never truncates it.
             val file = File(entity.location)
-            val parsed = file.inputStream().use(parser::parse)
-            rewriteFile(file, parsed.copy(name = trimmed))
+            val temp = File(file.parentFile, "${file.name}.tmp")
+            try {
+                if (GpxNameRewriter.rewrite(file, temp, trimmed) && !temp.renameTo(file)) {
+                    throw TrackLoadException.Unreadable("Could not rewrite ${file.name}")
+                }
+            } finally {
+                // A no-op once renamed; this is for the failure paths, which would
+                // otherwise leave a half-written .tmp behind for good.
+                temp.delete()
+            }
             if (cached?.first == entity.location) cached = null
 
             dao.setTrackName(id, trimmed)
         }.recoverFailure()
-    }
-
-    /** Writes [track] to [file] via a temp file, so a crash mid-write never truncates it. */
-    private fun rewriteFile(file: File, track: Track) {
-        val temp = File(file.parentFile, "${file.name}.tmp")
-        temp.outputStream().use { writer.write(track, it) }
-        if (!temp.renameTo(file)) {
-            temp.delete()
-            throw TrackLoadException.Unreadable("Could not rewrite ${file.name}")
-        }
     }
 
     override suspend fun setVisible(ids: List<Long>, visible: Boolean) = withContext(io) {
@@ -307,22 +335,12 @@ class GpxTrackRepository(
         dao.setAllVisible(visible)
     }
 
-    override suspend fun forget(id: Long) = forgetAll(listOf(id))
-
     override suspend fun forgetAll(ids: List<Long>) = withContext(io) {
         if (ids.isEmpty()) return@withContext
         val entities = dao.byIds(ids)
         if (entities.any { it.location == cached?.first }) cached = null
         ids.forEach { dao.delete(it) }
-        entities.forEach(::releaseOrDelete)
-    }
-
-    override suspend fun clearAll() = withContext(io) {
-        // Read the rows before dropping them: deleting their files needs their locations.
-        val all = dao.all()
-        cached = null
-        dao.deleteAll()
-        all.forEach(::releaseOrDelete)
+        entities.forEach(::deleteFile)
     }
 
     /**
@@ -381,7 +399,7 @@ class GpxTrackRepository(
         }
 
     /** Both sources are this app's own file now, so deleting the row deletes it. */
-    private fun releaseOrDelete(entity: TrackEntity) {
+    private fun deleteFile(entity: TrackEntity) {
         runCatching { File(entity.location).delete() }
     }
 
@@ -439,9 +457,13 @@ class GpxTrackRepository(
         const val MAX_IMPORT_NAME_LENGTH = 80
         val UNSAFE_FILENAME_CHARACTERS = Regex("""[\\/:*?"<>|]""")
 
-        /** Sortable, unambiguous, and legible as a filename once exported. */
+        /**
+         * Sortable, unambiguous, and legible as a filename once exported. `Locale.ROOT` so
+         * the digits are the ones that sort - `ofPattern` otherwise takes its
+         * `DecimalStyle` from the default locale, numerals and all.
+         */
         private val FILE_STAMP: DateTimeFormatter =
-            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HHmmss")
+            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HHmmss", java.util.Locale.ROOT)
 
         fun recordingFileName(startedAt: Instant): String =
             "${FILE_STAMP.format(startedAt.atZone(ZoneId.systemDefault()))}.gpx"

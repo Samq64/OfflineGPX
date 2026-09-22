@@ -276,11 +276,15 @@ fun MapScreen(
 
     // --- What the canvas draws, and how much room it has ---------------------------
 
-    // Positions, not shapes - the map has its own Web Mercator projection now. The
-    // recording is deliberately *not* in this list: it grows every few seconds and the
-    // saved tracks don't, so keeping them together meant rebuilding every track on the map
-    // to add a few metres to one of them. See OfflineMapCanvas's `liveRoute`.
-    val overlays = remember(state.entities, state.geometry, focusedTrack, palette) {
+    // Positions, not shapes - the map projects. The recording is deliberately not in this
+    // list: it grows every few seconds and the saved tracks don't, so keeping them
+    // together rebuilt every track to add a few metres to one. See `liveRoute`.
+    //
+    // Keyed on the focused track's *id*, not the track: focus changes neither geometry nor
+    // colour, and a rebuilt overlay is a new object that discards the extent it measured
+    // and re-walks every position on this thread. The width focus does decide is a feature
+    // property, resolved when the GeoJSON is built.
+    val overlays = remember(state.entities, state.geometry, focusedTrack?.id, palette) {
         val drawable = state.entities.mapNotNull { entity ->
             state.geometry[entity.id]?.let { entity to it }
         }

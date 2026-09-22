@@ -16,10 +16,10 @@ import java.time.format.DateTimeParseException
 class GpxParseException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
 /**
- * Streaming GPX reader. Pull-parses rather than building a DOM, because a long ride is
- * tens of thousands of points and nothing here needs random access to the XML.
+ * Streaming GPX reader. Pull-parses rather than building a DOM: a long ride is tens of
+ * thousands of points and nothing needs random access to the XML.
  *
- * Tolerant by design: GPX in the wild mixes 1.0 and 1.1 namespaces, omits `<ele>`, spells
+ * Tolerant by design - GPX in the wild mixes 1.0 and 1.1 namespaces, omits `<ele>`, spells
  * timestamps several ways and carries vendor `<extensions>`. Anything unrecognised is
  * skipped; only a document that is not GPX at all is an error.
  *
@@ -55,14 +55,12 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
         val segments = mutableListOf<TrackSegment>()
         var trackName: String? = null
         var metadataName: String? = null
-        var description: String? = null
 
         forEachChild(parser) {
             when (parser.name) {
                 TAG_METADATA -> forEachChild(parser) {
                     when (parser.name) {
                         TAG_NAME -> metadataName = readText(parser).takeIf(String::isNotBlank)
-                        TAG_DESC -> description = readText(parser).takeIf(String::isNotBlank)
                         else -> skip(parser)
                     }
                 }
@@ -74,9 +72,6 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
                             // First named track wins; later ones are usually laps.
                             if (trackName == null) trackName = value
                         }
-
-                        TAG_DESC ->
-                            if (description == null) description = readText(parser).takeIf(String::isNotBlank)
 
                         TAG_TRKSEG -> readSegment(parser)?.let(segments::add)
                         else -> skip(parser)
@@ -105,7 +100,6 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
 
         return Track(
             name = trackName ?: metadataName,
-            description = description,
             segments = segments.filter { it.points.isNotEmpty() },
         )
     }
@@ -221,7 +215,6 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
         private const val TAG_RTE = "rte"
         private const val TAG_RTEPT = "rtept"
         private const val TAG_NAME = "name"
-        private const val TAG_DESC = "desc"
         private const val TAG_ELE = "ele"
         private const val TAG_TIME = "time"
         private const val ATTR_LAT = "lat"
@@ -236,9 +229,8 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
          * offset, a few neither. A timestamp matching none is dropped, downgrading the
          * track to untimed rather than failing the file.
          *
-         * The spelling is looked at before a parser is chosen, rather than trying all three
-         * until one stops throwing - this runs once per point, and try/catch on every local-
-         * offset file (most exporters) meant a filled-in stack trace per point.
+         * The spelling is inspected before a parser is chosen rather than trying all three:
+         * this runs once per point, and try/catch meant a filled-in stack trace per point.
          */
         internal fun parseGpxTime(raw: String): Instant? {
             val text = raw.trim()

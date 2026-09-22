@@ -33,7 +33,6 @@ data class TrackSegment(val points: List<TrackPoint>)
  */
 data class Track(
     val name: String?,
-    val description: String?,
     val segments: List<TrackSegment>,
 ) {
     /** All points, in order, flattened across segments. */

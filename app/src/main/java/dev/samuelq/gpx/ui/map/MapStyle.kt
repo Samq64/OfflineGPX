@@ -10,28 +10,32 @@ import org.json.JSONObject
 
 /**
  * The style the renderer is handed, built at runtime rather than shipped as an asset,
- * since the one thing that varies is the imported archive's path - a style is where a
- * source's URL lives. No basemap is the same code with one branch taken: routes on a flat
- * background.
+ * since what varies is the imported archive's path - and a style is where a source's URL
+ * lives. No basemap is one branch taken: routes on a flat background.
  *
- * Labels come from glyph ranges bundled in assets: no network to fetch them, and MapLibre
- * Native silently renders no text at all without a `glyphs` URL. Only Latin is shipped
- * (~280 KB); see [LABEL_FONT].
+ * Labels come from glyph ranges in assets, since there is no network to fetch them and
+ * MapLibre Native silently renders no text without a `glyphs` URL. See [LABEL_FONT].
  */
 object MapStyle {
 
     /**
-     * A style for [map], or an empty one if there is no basemap.
+     * A style for [maps], or an empty one if there is no basemap.
      *
-     * @param background what to paint where there are no tiles, which is the whole screen
-     *   when nothing is imported. Comes from the theme so the empty state is not a white
-     *   rectangle in a dark app.
+     * @param background what to paint where there are no tiles. From the theme, so the
+     *   empty state is not a white rectangle in a dark app.
+     * @param coverageMask the world with each archive's coverage cut out, and
+     *   [coverageOutline] the boundary of that shape - both GeoJSON. In the style rather
+     *   than set afterwards, because "afterwards" is several frames: MapLibre draws a
+     *   missing tile from its parent, so until the mask lands, ground from outside the
+     *   extract is on screen.
      */
     fun json(
         maps: List<OfflineMap>,
         background: Color,
         land: Color,
         label: Color,
+        coverageMask: String,
+        coverageOutline: String,
     ): String {
         val layers = JSONArray().put(
             JSONObject()
@@ -66,7 +70,7 @@ object MapStyle {
         // their relative order can matter.
         maps.forEachIndexed { index, map ->
             if (map.header.isVector) {
-                groundLayers(index, map.header, land, background).forEach(layers::put)
+                groundLayers(index, land, background).forEach(layers::put)
             } else {
                 layers.put(
                     JSONObject()
@@ -76,6 +80,37 @@ object MapStyle {
                 )
             }
         }
+        // Between the ground and the labels: everything the archives don't contain is
+        // painted out here, and the outline marks where detail stops. Above the labels
+        // would bury the names; the routes go in below the lowest label layer later, and
+        // so land above both of these.
+        if (maps.isNotEmpty()) {
+            sources.put(SOURCE_MASK, geoJsonSource(coverageMask))
+            sources.put(SOURCE_COVERAGE, geoJsonSource(coverageOutline))
+
+            layers.put(
+                JSONObject()
+                    .put("id", LAYER_MASK)
+                    .put("type", "fill")
+                    .put("source", SOURCE_MASK)
+                    .put("paint", JSONObject().put("fill-color", background.css()))
+            )
+            layers.put(
+                JSONObject()
+                    .put("id", LAYER_COVERAGE)
+                    .put("type", "line")
+                    .put("source", SOURCE_COVERAGE)
+                    .put(
+                        "paint",
+                        JSONObject()
+                            .put("line-color", label.css())
+                            .put("line-width", COVERAGE_WIDTH)
+                            .put("line-opacity", COVERAGE_OPACITY)
+                            .put("line-dasharray", JSONArray().put(3).put(2))
+                    )
+            )
+        }
+
         maps.forEachIndexed { index, map ->
             if (map.header.isVector) {
                 labelLayers(index, map.header, label, background).forEach(layers::put)
@@ -94,19 +129,16 @@ object MapStyle {
     }
 
     /**
-     * A walking and cycling basemap, in the Protomaps schema: `earth`, `landuse`, `water`,
-     * `roads`, with `roads` carrying `kind` (footway/cycleway/bridleway/path all collapse
-     * to `path`) and, more finely, `kind_detail` - which is what tells a sidewalk apart
-     * from the trail it runs beside, both otherwise `kind: path`. An archive in another
-     * schema draws a blank basemap with routes still on top - the file is fine, this style
-     * just doesn't know it.
+     * A walking and cycling basemap in the Protomaps schema: `earth`, `landuse`, `water`,
+     * `roads`. `roads` carries `kind` (footway/cycleway/bridleway all collapse to `path`)
+     * and `kind_detail`, which is what tells a sidewalk from the trail beside it. An
+     * archive in another schema draws blank with routes still on top.
      *
-     * Deliberately plain otherwise: one green for anything vegetated, no urban landuse
-     * tint. Water, paths and buildings are worth reading at a glance; the rest is context.
+     * Plain otherwise: water, paths and buildings are worth reading at a glance; the rest
+     * is context.
      */
     private fun groundLayers(
         index: Int,
-        header: PmtilesHeader,
         land: Color,
         background: Color,
     ): List<JSONObject> {
@@ -274,6 +306,20 @@ object MapStyle {
 
     /** The lowest text layer of a map. Routes go below the first so they never cover a name. */
     fun lowestLabelLayer(index: Int): String = "water-label-$index"
+
+    /** Inline GeoJSON, so the geometry loads with the style rather than after it. */
+    private fun geoJsonSource(geoJson: String): JSONObject = JSONObject()
+        .put("type", "geojson")
+        .put("data", JSONObject(geoJson))
+
+    private const val SOURCE_MASK = "coverage-mask"
+    private const val SOURCE_COVERAGE = "coverage"
+    private const val LAYER_MASK = "coverage-mask-fill"
+    private const val LAYER_COVERAGE = "coverage-outline"
+
+    /** Visible as a boundary, not as a feature of the landscape. */
+    private const val COVERAGE_WIDTH = 1.5
+    private const val COVERAGE_OPACITY = 0.55
 
     /**
      * Below this luminance the theme is treated as dark, and every derived colour moves
@@ -480,8 +526,8 @@ object MapStyle {
     private const val LABEL_FONT = "Noto Sans Regular"
 }
 
-/** `#rrggbb`, which is the only colour spelling worth emitting into a style. */
-private fun Color.css(): String = String.format("#%06X", 0xFFFFFF and toArgb())
+/** `#rrggbb` - a token in a document, hence `Locale.ROOT`, not a number anybody reads. */
+internal fun Color.css(): String = String.format(java.util.Locale.ROOT, "#%06X", 0xFFFFFF and toArgb())
 
 /**
  * A step away from the background, for deriving a palette from one surface colour. The

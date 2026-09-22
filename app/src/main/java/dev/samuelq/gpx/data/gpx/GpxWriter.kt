@@ -7,13 +7,10 @@ import java.time.Instant
 import java.time.format.DateTimeFormatter
 
 /**
- * Writes a [Track] as GPX 1.1.
+ * Writes a [Track] as GPX 1.1 - storage, not an export feature. A recording *is* a GPX
+ * file on disk, so what this writes is what the app reads back and what the user shares.
  *
- * This is the other half of storage, not an export feature: a recording *is* a GPX file on
- * disk, so what this writes is what the app reads back and what the user shares. There is
- * no second format to disagree with.
- *
- * @param newSerializer injected for the same reason [GpxParser] injects its parser - the
+ * @param newSerializer injected for the same reason [GpxParser] injects its parser: the
  *   framework's xmlpull classes are unimplemented stubs in unit tests.
  */
 class GpxWriter(private val newSerializer: () -> XmlSerializer = DEFAULT_SERIALIZER) {
@@ -38,7 +35,6 @@ class GpxWriter(private val newSerializer: () -> XmlSerializer = DEFAULT_SERIALI
 
         xml.startTag(NAMESPACE, "trk")
         track.name?.takeIf(String::isNotBlank)?.let { xml.textTag("name", it) }
-        track.description?.takeIf(String::isNotBlank)?.let { xml.textTag("desc", it) }
 
         for (segment in track.segments) {
             if (segment.points.isEmpty()) continue

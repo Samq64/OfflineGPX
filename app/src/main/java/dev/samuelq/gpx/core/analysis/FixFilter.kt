@@ -19,16 +19,14 @@ data class Fix(
 /**
  * Decides which fixes are a position and which are noise.
  *
- * Without this a phone sitting on a table records a ride: a stationary GPS wanders inside
- * its own error circle, and 1 Hz of that wander is speed and distance that never happened.
- * Two rules: a fix less accurate than [maxAccuracyMeters] isn't a position at all, and a fix
- * that hasn't moved further than its own error circle (floored at [minDisplacementMeters])
- * hasn't been shown to have moved.
+ * Without this a phone on a table records a ride: a stationary GPS wanders inside its own
+ * error circle, and 1 Hz of that wander is distance that never happened. Two rules - a fix
+ * less accurate than [maxAccuracyMeters] isn't a position, and one that hasn't moved
+ * further than its own error circle (floored at [minDisplacementMeters]) hasn't moved.
  *
- * A reading that fails only the second rule still comes back, as the *last known position*
- * stamped with the new time, once per [stillIntervalSeconds] - so a stop reads downstream as
- * the speed line decaying to zero and sitting there, rather than as a silence [TrackAnalyzer]
- * has to infer and draw as a gap.
+ * A reading failing only the second still comes back, as the last known position stamped
+ * with the new time, once per [stillIntervalSeconds] - so a stop reads downstream as the
+ * speed decaying to zero rather than as a silence [TrackAnalyzer] must draw as a gap.
  */
 class FixFilter(
     private val maxAccuracyMeters: Double = MAX_ACCURACY_METERS,

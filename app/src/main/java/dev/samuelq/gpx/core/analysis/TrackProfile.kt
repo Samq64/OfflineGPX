@@ -33,9 +33,9 @@ data class TrackStats(
  * A track with everything the charts need, precomputed once.
  *
  * Parallel primitive arrays, not a list of objects: a long ride is 30-50k points and the
- * chart re-reads these every scrub frame. All arrays are length [size] and share indices
- * with [points]. Not a `data class` - array equality would be structural and O(n), where
- * `remember` keys want identity.
+ * chart re-reads these every scrub frame. All are length [size] and share indices with
+ * [points]. Not a `data class` - array equality would be O(n), where `remember` keys want
+ * identity.
  */
 class TrackProfile(
     val points: List<TrackPoint>,

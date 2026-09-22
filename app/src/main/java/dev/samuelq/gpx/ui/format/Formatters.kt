@@ -24,8 +24,6 @@ class Formatters(val units: UnitSystem) {
 
     private val metric: Boolean get() = units == UnitSystem.METRIC
 
-    /** What the distance axis ticks are in. The ticks themselves are bare numbers. */
-    val distanceUnit: String get() = if (metric) "km" else "mi"
     val speedUnit: String get() = if (metric) "km/h" else "mph"
     val elevationUnit: String get() = if (metric) "m" else "ft"
 
@@ -139,7 +137,6 @@ class Formatters(val units: UnitSystem) {
      * `remember` keys.
      */
     val SpeedAxis: (Float) -> String = { speedAxis(it) }
-    val ElevationAxis: (Float) -> String = { elevationAxis(it) }
     val DurationAxis: (Float) -> String = { durationAxis(it) }
 
     companion object {
@@ -200,13 +197,8 @@ class Formatters(val units: UnitSystem) {
         fun dateTime(instant: Instant?, zone: ZoneId = ZoneId.systemDefault()): String =
             instant?.let { DATE_TIME.withZone(zone).format(it) } ?: EMPTY
 
-        fun timeOfDay(instant: Instant?, zone: ZoneId = ZoneId.systemDefault()): String =
-            instant?.let { TIME_OF_DAY.withZone(zone).format(it) } ?: EMPTY
-
         private val DATE_TIME: DateTimeFormatter =
             DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
-        private val TIME_OF_DAY: DateTimeFormatter =
-            DateTimeFormatter.ofLocalizedTime(FormatStyle.MEDIUM)
     }
 }
 

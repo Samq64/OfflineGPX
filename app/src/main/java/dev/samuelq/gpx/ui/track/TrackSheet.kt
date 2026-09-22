@@ -128,9 +128,9 @@ fun TrackSheet(
 
     // Only on the time axis. On a distance axis a stop is zero wide - correctly, because
     // no distance passed during it - so there is no band to label and nothing missing.
-    val pausedFormat = stringResource(R.string.chart_paused)
-    val breakLabel: ((Float) -> String)? = remember(useTimeAxis, pausedFormat) {
-        if (!useTimeAxis) null else { seconds -> pausedFormat.format(Formatters.durationAxis(seconds)) }
+    val gapFormat = stringResource(R.string.chart_gap)
+    val breakLabel: ((Float) -> String)? = remember(useTimeAxis, gapFormat) {
+        if (!useTimeAxis) null else { seconds -> gapFormat.format(Formatters.durationAxis(seconds)) }
     }
 
     Column(
@@ -285,12 +285,11 @@ fun TrackSheet(
 }
 
 /**
- * The name, in the swatch the map and the list already know it by - not decoration, but
- * the only thing tying these numbers to one line among several overlaid routes.
+ * The name, beside the swatch the map and the list know it by - the only thing tying these
+ * numbers to one line among several overlaid routes.
  *
- * No close button and no expand/collapse control: dragged away, tapped away on the bare
- * map, backed out of - three ways out already - and with only two heights, the drag
- * handle already reaches both; a button next to it would just repeat the gesture.
+ * No close or expand control: dragged away, tapped away on the bare map and backed out of
+ * are three ways out already, and the drag handle reaches both heights.
  */
 @Composable
 private fun SheetTitle(

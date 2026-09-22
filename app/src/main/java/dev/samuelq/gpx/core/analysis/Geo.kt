@@ -15,9 +15,7 @@ private const val EARTH_RADIUS_METERS = 6_371_008.8
  *
  * Haversine, not Vincenty: over tens-of-metres hops the spherical-vs-ellipsoidal error is
  * far below the GPS noise in the same data, and haversine cannot fail to converge.
- *
- * Horizontal only. "Distance" in every mainstream tracker means ground distance, so
- * folding in elevation would disagree with the number on the user's watch.
+ * Horizontal only - "distance" in every mainstream tracker means ground distance.
  */
 fun haversineMeters(from: TrackPoint, to: TrackPoint): Double {
     val lat1 = Math.toRadians(from.latitude)

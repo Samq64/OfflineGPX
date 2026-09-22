@@ -67,11 +67,17 @@ object PmtilesCoverage {
     private fun collectTiles(handle: RandomAccessFile, header: PmtilesHeader): Set<Long> {
         val tiles = HashSet<Long>()
         val pending = ArrayDeque<Pair<Long, Long>>()
+        // A leaf pointing back at a directory already walked is a cycle, and a cycle is an
+        // unbounded queue rather than a slow import - MAX_TILES below can't catch it,
+        // since leaf pointers add no tiles for it to count.
+        val visited = HashSet<Long>()
         pending.add(header.rootDirectoryOffset to header.rootDirectoryLength)
 
         while (pending.isNotEmpty()) {
             val (offset, length) = pending.removeFirst()
             if (length <= 0 || length > MAX_DIRECTORY_BYTES) continue
+            if (!visited.add(offset)) continue
+            if (visited.size > MAX_DIRECTORIES) return emptySet()
 
             val entries = parseDirectory(readDirectory(handle, offset, length, header))
             for (entry in entries) {
@@ -277,4 +283,7 @@ object PmtilesCoverage {
     private const val MAX_ENTRIES = 500_000
     private const val MAX_TILES = 1_000_000
     private const val MAX_DIRECTORY_BYTES = 32L * 1024 * 1024
+
+    /** Root plus leaves. A real archive has one leaf per ~2700 root entries, so this is vast. */
+    private const val MAX_DIRECTORIES = 100_000
 }

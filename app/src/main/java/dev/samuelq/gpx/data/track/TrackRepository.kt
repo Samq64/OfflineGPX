@@ -63,8 +63,15 @@ interface TrackRepository {
     /**
      * Writes a finished recording to app-private storage as GPX and indexes it. Returns
      * the new row id.
+     *
+     * @param analyzed the profile of this exact [track], when the caller already has one -
+     *   recovery does, and re-deriving it walks every point again for the same answer.
      */
-    suspend fun saveRecording(track: Track, startedAt: Instant): Result<Long>
+    suspend fun saveRecording(
+        track: Track,
+        startedAt: Instant,
+        analyzed: TrackProfile? = null,
+    ): Result<Long>
 
     /**
      * Rescues a recording whose process died before it could be stopped. Runs once at
@@ -105,9 +112,5 @@ interface TrackRepository {
 
     suspend fun setAllVisible(visible: Boolean)
 
-    suspend fun forget(id: Long)
-
     suspend fun forgetAll(ids: List<Long>)
-
-    suspend fun clearAll()
 }

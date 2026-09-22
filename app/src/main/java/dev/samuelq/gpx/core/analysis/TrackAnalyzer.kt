@@ -50,10 +50,9 @@ object TrackAnalyzer {
     /**
      * How many typical intervals a gap must span to count as one.
      *
-     * Taken against the median interval rather than a fixed number of seconds, because
-     * "unusually long" means something different for a 1 Hz recording and for a route
-     * exported with one point per kilometre. The median is used rather than the mean
-     * precisely because the gaps this is looking for would drag a mean up with them.
+     * Against the median interval rather than a fixed number of seconds, since "unusually
+     * long" differs for a 1 Hz recording and a route with one point per kilometre. Median
+     * rather than mean precisely because the gaps sought would drag a mean up with them.
      */
     const val GAP_INTERVAL_MULTIPLE = 10.0
 
@@ -210,12 +209,10 @@ object TrackAnalyzer {
     /**
      * The file's own segment boundaries, plus one wherever the clock jumps.
      *
-     * A dismounted break usually isn't recorded as one - auto-pause and smart recording
-     * leave one long, ordinary-looking interval, which untouched reads as riding straight
-     * through the stop at speed. Splitting there says what's actually known (nothing was
-     * recorded) rather than interpolating a stop, which would invent decelerations nobody
-     * measured. Every consumer of [TrackProfile.segmentStartIndices] already handles a
-     * split this way, since signal loss has always meant the same thing.
+     * A dismounted break usually isn't recorded as one - auto-pause leaves one long,
+     * ordinary-looking interval, which untouched reads as riding straight through the stop
+     * at speed. Splitting there says what's known (nothing was recorded) rather than
+     * interpolating a stop, which would invent decelerations nobody measured.
      */
     private fun breaksAt(
         points: List<TrackPoint>,
@@ -260,9 +257,9 @@ object TrackAnalyzer {
      * Centred finite difference of distance over [SPEED_WINDOW_SECONDS], clamped to the
      * enclosing segment so the window never spans a signal-loss gap.
      *
-     * Both edges only move forward, carried from one sample to the next rather than
-     * re-found from scratch - `elapsed` is monotonic, so re-searching from `i` every time is
-     * quadratic whenever the clock doesn't advance (e.g. a run stamped with one timestamp).
+     * Both edges only move forward, carried from one sample to the next: `elapsed` is
+     * monotonic, and re-searching from `i` each time is quadratic whenever the clock
+     * doesn't advance.
      */
     private fun computeSpeed(
         starts: IntArray,

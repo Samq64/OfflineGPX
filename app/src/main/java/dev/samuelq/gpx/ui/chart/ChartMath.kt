@@ -148,11 +148,10 @@ fun nearestIndex(values: FloatArray, target: Float): Int {
 /**
  * Builds a polyline reduced to one column of pixels at a time.
  *
- * A 30k-point track on a 1000px chart has thirty samples per column; feeding all of them
- * to a [Path] costs thirty times the geometry for no more detail than the screen can show.
- * Each column collapses to the four values carrying its shape - first, both extremes,
- * last. Every-nth subsampling would instead delete the peaks, which on a speed chart are
- * the whole point of looking.
+ * A 30k-point track on a 1000px chart has thirty samples per column, which is thirty times
+ * the geometry for no more detail than the screen can show. Each column collapses to the
+ * four values carrying its shape - first, both extremes, last. Every-nth subsampling would
+ * instead delete the peaks, which on a speed chart are the point of looking.
  */
 class PolylineBuilder(
     private val line: Path,

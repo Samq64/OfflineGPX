@@ -31,12 +31,11 @@ class LocationSource(context: Context) {
     /**
      * Fixes until the collector stops.
      *
-     * @param onUnavailable called when the user switches location off mid-recording. The
-     *   flow stays open - the provider can come back, and the points already collected are
-     *   still a recording - but silence is not something the caller can distinguish from a
-     *   slow fix, so it has to be told.
-     * @throws SecurityException if the location permission is not held - the caller checks
-     *   first, and a throw here means a bug rather than a user decision.
+     * @param onUnavailable called when location is switched off mid-recording. The flow
+     *   stays open - the provider can come back - but the caller can't tell that silence
+     *   from a slow fix, so it has to be told.
+     * @throws SecurityException if the location permission is not held. The caller checks
+     *   first, so a throw here is a bug rather than a user decision.
      */
     @SuppressLint("MissingPermission")
     fun fixes(

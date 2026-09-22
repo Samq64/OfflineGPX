@@ -11,7 +11,6 @@ import androidx.compose.ui.graphics.Color
 private val Blue450 = Color(0xFF2A78D6)
 private val Blue400 = Color(0xFF3987E5)
 private val Blue100 = Color(0xFFCDE2FB)
-private val Blue550 = Color(0xFF1C5CAB)
 private val Blue600 = Color(0xFF184F95)
 private val Blue700 = Color(0xFF0D366B)
 
@@ -128,9 +127,6 @@ data class ChartColors(
     val label: Color,
     val surface: Color,
 ) {
-    /** The 10% wash used under a line. Never a saturated block. */
-    fun fill(series: Color): Color = series.copy(alpha = 0.10f)
-
     companion object {
         val Light = ChartColors(
             speed = Blue450,

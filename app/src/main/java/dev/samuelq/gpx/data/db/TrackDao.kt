@@ -9,10 +9,6 @@ import kotlinx.coroutines.flow.Flow
 interface TrackDao {
 
     /**
-     * Newest activity first, falling back to when it was last opened for files that carry
-     * no timestamps at all.
-     */
-    /**
      * Most recently interacted with first.
      *
      * The only ordering in the app. The list and the map agree by construction - the map
@@ -24,10 +20,6 @@ interface TrackDao {
 
     @Query("SELECT COUNT(*) FROM tracks")
     suspend fun count(): Int
-
-    /** A one-shot read of every row, to release SAF grants before clearing the table. */
-    @Query("SELECT * FROM tracks")
-    suspend fun all(): List<TrackEntity>
 
     @Query("SELECT * FROM tracks WHERE id = :id")
     suspend fun byId(id: Long): TrackEntity?
@@ -52,7 +44,4 @@ interface TrackDao {
 
     @Query("UPDATE tracks SET visible = :visible")
     suspend fun setAllVisible(visible: Boolean)
-
-    @Query("DELETE FROM tracks")
-    suspend fun deleteAll()
 }

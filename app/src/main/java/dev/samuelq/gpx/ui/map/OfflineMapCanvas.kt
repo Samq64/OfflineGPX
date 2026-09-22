@@ -14,7 +14,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -43,7 +42,6 @@ import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
 import org.maplibre.android.style.expressions.Expression
 import org.maplibre.android.style.layers.CircleLayer
-import org.maplibre.android.style.layers.FillLayer
 import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory
@@ -177,10 +175,6 @@ fun OfflineMapCanvas(
     // change (every few seconds during a recording) would yank the map out from under a pan.
     var hasFramed by remember { mutableStateOf(false) }
 
-    // Reported outwards for the scale bar. Held as state and deliberately never read `by`
-    // in this function: the camera writes it every frame of a pan.
-    val metersPerPixel = remember { mutableDoubleStateOf(0.0) }
-
     val currentRoutes by rememberUpdatedState(routes)
     val currentLiveRoute by rememberUpdatedState(liveRoute)
     val select by rememberUpdatedState(onSelect)
@@ -225,7 +219,6 @@ fun OfflineMapCanvas(
                 val target = camera.target
                 val latitude = target?.latitude ?: 0.0
                 val scale = ready.projection.getMetersPerPixelAtLatitude(latitude)
-                metersPerPixel.doubleValue = scale
                 reportScale(scale)
                 if (target != null) {
                     reportCamera(CameraSnapshot(target.latitude, target.longitude, camera.zoom))
@@ -253,17 +246,22 @@ fun OfflineMapCanvas(
     LaunchedEffect(map, basemaps, backgroundColor, landColor, labelColor) {
         val ready = map ?: return@LaunchedEffect
         style = null
-        ready.setStyle(
-            Style.Builder().fromJson(
-                MapStyle.json(
-                    maps = basemaps,
-                    background = backgroundColor,
-                    land = landColor,
-                    label = labelColor,
-                )
+        // Built off the main thread and handed over complete, coverage geometry included.
+        // The mask has to be in the style rather than set from a later effect: MapLibre
+        // draws a missing tile from its parent, so an archive's own low-zoom parents carry
+        // ground past the edge of the extract until the mask lands on top of it.
+        val json = withContext(Dispatchers.Default) {
+            MapStyle.json(
+                maps = basemaps,
+                background = backgroundColor,
+                land = landColor,
+                label = labelColor,
+                coverageMask = basemaps.toOutsideMask().toJson(),
+                coverageOutline = basemaps.toCoverageOutline().toJson(),
             )
-        ) { loaded ->
-            loaded.addRouteLayers(markerColor, markerRingColor, puckColor, labelColor, backgroundColor)
+        }
+        ready.setStyle(Style.Builder().fromJson(json)) { loaded ->
+            loaded.addRouteLayers(markerColor, markerRingColor, puckColor)
             style = loaded
         }
     }
@@ -273,15 +271,6 @@ fun OfflineMapCanvas(
     // Every one of these builds its GeoJSON off the main thread - a long ride is a few
     // hundred thousand `Point` allocations, which don't belong on the frame the user sees.
     // The handover back is on the main thread, since a source belongs to the renderer.
-    LaunchedEffect(style, basemaps) {
-        val loaded = style ?: return@LaunchedEffect
-        val (outline, mask) = withContext(Dispatchers.Default) {
-            basemaps.toCoverageOutline() to basemaps.toOutsideMask()
-        }
-        loaded.getSourceAs<GeoJsonSource>(SOURCE_COVERAGE)?.setGeoJson(outline)
-        loaded.getSourceAs<GeoJsonSource>(SOURCE_MASK)?.setGeoJson(mask)
-    }
-
     LaunchedEffect(style, routes, focusedTrackId) {
         val loaded = style ?: return@LaunchedEffect
         val collection = withContext(Dispatchers.Default) {
@@ -458,35 +447,11 @@ private fun Style.addRouteLayers(
     marker: Color,
     markerRing: Color,
     puck: Color,
-    coverage: Color,
-    background: Color,
 ) {
-    addSource(GeoJsonSource(SOURCE_MASK))
-    addSource(GeoJsonSource(SOURCE_COVERAGE))
     addSource(GeoJsonSource(SOURCE_ROUTES))
     addSource(GeoJsonSource(SOURCE_TRACE))
     addSource(GeoJsonSource(SOURCE_MARKER))
     addSource(GeoJsonSource(SOURCE_PUCK))
-
-    // Everything the archive doesn't contain, painted to match the flat background so it
-    // reads as "edge of the data" rather than "map that failed to load". A mask is
-    // unavoidable: MapLibre falls back to a *parent* tile wherever one is missing, and a
-    // low-zoom parent carries data past the real edge regardless of zoom floor. Cut to the
-    // true coverage, not the bounding box, since a polygon extract fills barely half its
-    // box. Below the labels, which are clipped by a `within` filter instead - one layer
-    // can't be both above the labels and below the routes.
-    val mask = FillLayer(LAYER_MASK, SOURCE_MASK)
-        .withProperties(PropertyFactory.fillColor(background.toArgb()))
-
-    // The edge of the archive, under the routes. A PMTiles extract carries the whole world
-    // at low zoom, so without a line marking where detail ends, zooming out looks like the
-    // map degrading rather than leaving the cut area.
-    val coverageOutline = LineLayer(LAYER_COVERAGE, SOURCE_COVERAGE).withProperties(
-            PropertyFactory.lineColor(coverage.toArgb()),
-            PropertyFactory.lineWidth(COVERAGE_WIDTH),
-            PropertyFactory.lineOpacity(COVERAGE_OPACITY),
-            PropertyFactory.lineDasharray(arrayOf(3f, 2f)),
-        )
 
     val routes = LineLayer(LAYER_ROUTES, SOURCE_ROUTES).withProperties(
         PropertyFactory.lineColor(Expression.get(PROPERTY_COLOR)),
@@ -502,17 +467,13 @@ private fun Style.addRouteLayers(
         PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
     )
     // Under the labels, not over them: a route is a thick opaque stroke, and text is the
-    // one thing it must never cover. Falls back to appending when there's no basemap and
-    // so no label layers. Each insert lands just below the labels, so this order stacks
-    // mask - outline - routes - trace, all still under the text.
+    // one thing it must never cover. The style put the mask and outline below the labels
+    // too, and these go in after, so the stack reads mask - outline - routes - trace, all
+    // still under the text. Falls back to appending when there is no basemap to label.
     if (getLayer(MapStyle.lowestLabelLayer(0)) != null) {
-        addLayerBelow(mask, MapStyle.lowestLabelLayer(0))
-        addLayerBelow(coverageOutline, MapStyle.lowestLabelLayer(0))
         addLayerBelow(routes, MapStyle.lowestLabelLayer(0))
         addLayerBelow(trace, MapStyle.lowestLabelLayer(0))
     } else {
-        // No basemap: there is nothing to mask and no labels to sit beneath.
-        addLayer(coverageOutline)
         addLayer(routes)
         addLayer(trace)
     }
@@ -555,13 +516,15 @@ private fun List<RouteOverlay>.toFeatureCollection(focusedTrackId: Long?): Featu
     val features = ArrayList<Feature>()
     forEach { route ->
         val width = if (route.trackId == focusedTrackId) FOCUSED_WIDTH else ROUTE_WIDTH
-        val starts = route.segmentStartIndices.toSortedSet().toList()
-        val boundaries = (if (starts.firstOrNull() == 0) starts else listOf(0) + starts) +
-            route.points.size
+        // One run per segment. Both producers hand these over ascending and starting at 0,
+        // so this neither sorts nor dedupes - the TreeSet it replaced was paying, per
+        // route per update, for a guarantee the data already carries.
+        val starts = route.segmentStartIndices
+        val runs = if (starts.isEmpty()) 1 else starts.size
 
-        for (i in 0 until boundaries.size - 1) {
-            val from = boundaries[i]
-            val to = boundaries[i + 1]
+        for (i in 0 until runs) {
+            val from = if (starts.isEmpty()) 0 else starts[i]
+            val to = if (i + 1 < starts.size) starts[i + 1] else route.points.size
             // A single position isn't a line (still drawn as the puck if live), and a
             // one-point LineString isn't valid GeoJSON.
             if (to - from < 2) continue
@@ -827,17 +790,11 @@ private fun MapLibreMap.nudgeIntoView(target: LatLng, insets: Insets, width: Int
     moveCamera(CameraUpdateFactory.newLatLng(moved))
 }
 
-private fun Color.css(): String = String.format("#%06X", 0xFFFFFF and toArgb())
-
-private const val SOURCE_MASK = "coverage-mask"
-private const val SOURCE_COVERAGE = "coverage"
 private const val SOURCE_ROUTES = "routes"
 private const val SOURCE_TRACE = "trace"
 private const val SOURCE_MARKER = "route-marker"
 private const val SOURCE_PUCK = "route-puck"
 
-private const val LAYER_MASK = "coverage-mask-fill"
-private const val LAYER_COVERAGE = "coverage-outline"
 private const val LAYER_ROUTES = "routes-line"
 private const val LAYER_TRACE = "trace-line"
 private const val LAYER_MARKER = "route-marker-circle"
@@ -851,10 +808,6 @@ private const val PROPERTY_WIDTH = "width"
 private const val ROUTE_WIDTH = 4f
 private const val FOCUSED_WIDTH = 6f
 private const val PUCK_HALO_ALPHA = 0.24f
-
-/** Visible as a boundary, not as a feature of the landscape. */
-private const val COVERAGE_WIDTH = 1.5f
-private const val COVERAGE_OPACITY = 0.55f
 
 /** The latitude Web Mercator stops at. Beyond it the projection has no answer. */
 private const val MERCATOR_LIMIT = 85.051129

@@ -3,7 +3,7 @@ package dev.samuelq.gpx.data.map
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.JsonPrimitive
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.IOException
@@ -13,10 +13,9 @@ import java.util.zip.GZIPInputStream
 /**
  * The one field this app reads out of an archive's own JSON metadata block.
  *
- * The app ships no maps and fetches nothing, so it has no idea where an imported archive's
- * data came from. `attribution` is the mbtiles/tippecanoe convention every mainstream
- * pmtiles builder already writes into this block, so reading it back is the only honest way
- * to credit whatever source it actually is.
+ * The app ships no maps and fetches nothing, so it has no idea where an archive's data
+ * came from. `attribution` is the mbtiles/tippecanoe convention every mainstream pmtiles
+ * builder writes here, so reading it back is the only honest way to credit the source.
  */
 object PmtilesMetadata {
 
@@ -53,14 +52,14 @@ object PmtilesMetadata {
     internal fun parseAttribution(json: String): String? = try {
         val attribution = (Json.parseToJsonElement(json) as? JsonObject)
             ?.get(FIELD_ATTRIBUTION)
-            ?.jsonPrimitive
+            // Cast rather than `jsonPrimitive`, which throws on an object or an array.
+            // `isString` then rules out a bare number, and `null` - whose `content` is the
+            // literal "null", which would otherwise be credited as the map's source.
+            ?.let { it as? JsonPrimitive }
+            ?.takeIf { it.isString }
             ?.content
         attribution?.let(::stripHtml)?.trim()?.takeIf(String::isNotEmpty)
     } catch (_: SerializationException) {
-        null
-    } catch (_: IllegalStateException) {
-        // Thrown by `jsonPrimitive` when the field is present but is an object or array
-        // rather than a string - not the shape the convention expects, so not usable.
         null
     }
 

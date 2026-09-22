@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /** Something the map should say, once. The words are the screen's business. */
@@ -99,15 +100,18 @@ class MapViewModel(
     }
 
     init {
+        // `update`, not `value = value.copy(...)`, at all four writers of this state: a
+        // read-modify-write that isn't atomic drops one of two concurrent edits. Renaming
+        // a track while its geometry loaded was enough to lose the new name.
         viewModelScope.launch {
             repository.visibleTracks.collect { entities ->
-                _state.value = _state.value.copy(entities = entities, loading = true)
+                _state.update { it.copy(entities = entities, loading = true) }
                 loadMissing(entities)
             }
         }
         viewModelScope.launch {
             repository.tracks.collect { all ->
-                _state.value = _state.value.copy(all = all)
+                _state.update { it.copy(all = all) }
                 // The sheet has no other way to learn its track was deleted elsewhere (the
                 // library, a batch delete) - without this it stays open over a gone row.
                 val focusedId = (requested as? TrackRef.Saved)?.id
@@ -166,10 +170,9 @@ class MapViewModel(
                 if (focused is FocusedTrack.Ready && focused.track.id == id) {
                     _focused.value = FocusedTrack.Ready(focused.track.renamed(trimmed))
                 }
-                _state.value.geometry[id]?.let { cached ->
-                    _state.value = _state.value.copy(
-                        geometry = _state.value.geometry + (id to cached.renamed(trimmed)),
-                    )
+                _state.update { current ->
+                    val cached = current.geometry[id] ?: return@update current
+                    current.copy(geometry = current.geometry + (id to cached.renamed(trimmed)))
                 }
             }
         }
@@ -207,17 +210,21 @@ class MapViewModel(
      */
     private suspend fun loadMissing(entities: List<TrackEntity>) {
         val wanted = entities.map { it.id }.toSet()
-        val kept = _state.value.geometry.filterKeys { it in wanted }
-        val missing = wanted - kept.keys
+        val missing = wanted - _state.value.geometry.keys
 
         val loaded = coroutineScope {
             missing.map { id -> async { repository.geometry(id).getOrNull() } }.awaitAll()
         }
+        val read = missing.zip(loaded).mapNotNull { (id, track) -> track?.let { id to it } }
 
-        val geometry = kept + missing.zip(loaded).mapNotNull { (id, track) ->
-            track?.let { id to it }
+        // Merged against what the state holds *now*, not the snapshot from before the
+        // reads above suspended - a rename landing in between is only in the former.
+        _state.update { current ->
+            current.copy(
+                geometry = current.geometry.filterKeys { it in wanted } + read,
+                loading = false,
+            )
         }
-        _state.value = _state.value.copy(geometry = geometry, loading = false)
     }
 
     /**

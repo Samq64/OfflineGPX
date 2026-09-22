@@ -313,10 +313,9 @@ fun LibraryScreen(
 /**
  * The bar that replaces the title while rows are ticked.
  *
- * Select-all is a tri-state checkbox rather than an icon - `material-icons-core` has no
- * `select_all`, and a checkbox also *shows* whether everything is selected and toggles,
- * which no icon can. Show/hide aren't here: every row already has a switch, and
- * show-all/hide-all live in the list's own menu.
+ * Select-all is a tri-state checkbox, not an icon: `material-icons-core` has no
+ * `select_all`, and a checkbox also *shows* whether everything is selected. Show/hide
+ * aren't here - every row has a switch, and show-all/hide-all are in the list's menu.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

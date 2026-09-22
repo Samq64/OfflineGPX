@@ -81,8 +81,6 @@ class RecordingController {
     private val _events = Channel<RecordingEvent>(Channel.BUFFERED)
     val events: Flow<RecordingEvent> = _events.receiveAsFlow()
 
-    val isActive: Boolean get() = _state.value is RecordingState.Active
-
     internal fun update(state: RecordingState) {
         _state.value = state
     }

@@ -7,13 +7,12 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 /**
- * What a PMTiles archive says about itself, read from its first 127 bytes at import: its
- * coverage and zoom range (neither is in the filename), whether the style needs a vector or
- * raster layer, and whether it's an archive at all before it becomes a blank map.
+ * What a PMTiles archive says about itself, from its first 127 bytes: coverage and zoom
+ * range, whether the style needs a vector or raster layer, and whether it is an archive at
+ * all before it becomes a blank map.
  *
  * Field offsets are from the PMTiles v3 spec, verified against archives cut with
- * go-pmtiles. This is a fixed-size record read, not a format reader - it stops at the
- * header rather than walking the tile directories.
+ * go-pmtiles. A fixed-size record read, not a format reader.
  */
 class PmtilesHeader(
     val tileType: TileType,
@@ -41,10 +40,6 @@ class PmtilesHeader(
     enum class TileType { MVT, PNG, JPEG, WEBP, AVIF, UNKNOWN }
 
     val isVector: Boolean get() = tileType == TileType.MVT
-
-    /** True if [latitude], [longitude] falls inside what this archive covers. */
-    fun contains(latitude: Double, longitude: Double): Boolean =
-        latitude in minLatitude..maxLatitude && longitude in minLongitude..maxLongitude
 
     companion object {
         /** The fixed-size v3 header. Everything this app needs is inside it. */

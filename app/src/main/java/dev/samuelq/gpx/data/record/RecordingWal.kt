@@ -12,15 +12,13 @@ import java.time.Instant
 /**
  * The append-only log a recording is written to as it happens.
  *
- * A half-finished GPX file is not a GPX file - it has no closing tags - so a crash or a
- * flat battery mid-ride would leave nothing recoverable. One flushed line per fix does,
- * and converting to GPX happens once, on stop. This is the only format the app invents,
- * and it exists so that losing a ride is not a possible outcome.
+ * A half-finished GPX file has no closing tags, so a crash mid-ride would leave nothing
+ * recoverable; one flushed line per fix does. The only format the app invents, and it
+ * exists so that losing a ride is not a possible outcome.
  *
- * Format, one record per line:
  * ```
  * <epochMillis>,<lat>,<lon>[,<ele>]   a fix
- * -                                   a segment break (a pause, or a gap in the signal)
+ * -                                   a segment break (a pause, or lost signal)
  * ```
  */
 class RecordingWal private constructor(
@@ -91,7 +89,7 @@ class RecordingWal private constructor(
 
             val usable = segments.filter { it.points.isNotEmpty() }
             if (usable.isEmpty()) return null
-            return Track(name = name, description = null, segments = usable)
+            return Track(name = name, segments = usable)
         }
 
         private fun parsePoint(line: String): TrackPoint? {

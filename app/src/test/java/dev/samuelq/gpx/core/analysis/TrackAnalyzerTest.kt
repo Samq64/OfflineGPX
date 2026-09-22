@@ -33,7 +33,7 @@ class TrackAnalyzerTest {
                 time = if (timed) start.plusSeconds(i * secondsBetween) else null,
             )
         }
-        return Track(name = "test", description = null, segments = listOf(TrackSegment(points)))
+        return Track(name = "test", segments = listOf(TrackSegment(points)))
     }
 
     @Test
@@ -69,7 +69,7 @@ class TrackAnalyzerTest {
             )
         }
         val profile = TrackAnalyzer.analyze(
-            Track("jitter", null, listOf(TrackSegment(points)))
+            Track("jitter", listOf(TrackSegment(points)))
         )
 
         // The unsmoothed derivative at the glitch would be ~35 m/s; the window keeps the
@@ -89,7 +89,7 @@ class TrackAnalyzerTest {
             TrackPoint(5.0 + it * step, 8.0, time = start.plusSeconds(600 + it.toLong()))
         }
         val profile = TrackAnalyzer.analyze(
-            Track("gap", null, listOf(TrackSegment(first), TrackSegment(second)))
+            Track("gap", listOf(TrackSegment(first), TrackSegment(second)))
         )
 
         // 100 m + 100 m, and emphatically not the ~550 km straight-line jump between them.
@@ -127,7 +127,7 @@ class TrackAnalyzerTest {
             TrackPoint(30 * step, 8.0, time = start.plusSeconds(30 + it.toLong()))
         }
         val profile = TrackAnalyzer.analyze(
-            Track("stop", null, listOf(TrackSegment(moving + parked)))
+            Track("stop", listOf(TrackSegment(moving + parked)))
         )
 
         assertEquals(150.0, profile.stats.totalDurationSeconds, 1e-6)
@@ -187,7 +187,7 @@ class TrackAnalyzerTest {
                 )
             }
         }
-        return Track(name = "gap", description = null, segments = listOf(TrackSegment(points)))
+        return Track(name = "gap", segments = listOf(TrackSegment(points)))
     }
 
     @Test
@@ -207,7 +207,7 @@ class TrackAnalyzerTest {
         // that all-or-nothing rule was applied to anything else.
         points[0] = points[0].copy(time = null)
         val profile = TrackAnalyzer.analyze(
-            Track(name = "gap", description = null, segments = listOf(TrackSegment(points)))
+            Track(name = "gap", segments = listOf(TrackSegment(points)))
         )
 
         assertFalse(profile.hasTime)
@@ -331,7 +331,7 @@ class TrackAnalyzerTest {
         val points = (0 until 30_000).map { i ->
             TrackPoint(latitude = i * step, longitude = 8.0, elevation = null, time = start)
         }
-        val track = Track(name = null, description = null, segments = listOf(TrackSegment(points)))
+        val track = Track(name = null, segments = listOf(TrackSegment(points)))
 
         val elapsed = kotlin.system.measureTimeMillis {
             val profile = TrackAnalyzer.analyze(track)
@@ -364,6 +364,6 @@ class TrackAnalyzerTest {
                 time = start.plusSeconds(seconds),
             )
         }
-        return Track(name = null, description = null, segments = listOf(TrackSegment(points)))
+        return Track(name = null, segments = listOf(TrackSegment(points)))
     }
 }

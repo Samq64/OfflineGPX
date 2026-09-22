@@ -27,7 +27,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextMeasurer
@@ -58,11 +57,10 @@ private const val BreakWashAlpha = 0.10f
 
 /**
  * A single-series line chart with an area wash and a shared scrubber. No legend: one
- * series, and the section title already names it.
+ * series, and the section title names it.
  *
- * [xScale] is passed in rather than derived, so every chart shares one domain. That is
- * what makes the scrubber meaningful - the same pixel column is the same moment in both
- * charts. The height covers the plot *and* the axis band, so ticks are never clipped.
+ * [xScale] is passed in rather than derived, so every chart shares one domain - which is
+ * what makes the scrubber meaningful, the same pixel column being the same moment in both.
  */
 @Composable
 fun ProfileChart(
@@ -247,6 +245,29 @@ private fun ScrubberLayer(
 ) {
     val series = render.series
 
+    // Measured here, not in the draw lambda: the scrubber redraws on every pointer move,
+    // and measurement was the one expensive thing it did per frame.
+    val tooltip = remember(render, selectedIndex, style, formatValue, formatPosition) {
+        val index = selectedIndex ?: return@remember null
+        if (index !in 0 until series.size) return@remember null
+        val value = series.y[index]
+        if (value.isNaN()) return@remember null
+        val format = formatValue ?: return@remember null
+
+        measurer.measure(
+            buildAnnotatedString {
+                formatPosition?.let { position ->
+                    withStyle(SpanStyle(color = chartColors.label)) {
+                        append(position(series.x[index]))
+                    }
+                    append('\n')
+                }
+                append(format(value))
+            },
+            style,
+        )
+    }
+
     Canvas(
         Modifier
             .fillMaxSize()
@@ -290,21 +311,11 @@ private fun ScrubberLayer(
         drawCircle(chartColors.surface, MarkerRadius.toPx() + SurfaceRing.toPx(), Offset(x, y))
         drawCircle(series.color, MarkerRadius.toPx(), Offset(x, y))
 
-        formatValue?.let { format ->
+        tooltip?.let {
             drawTooltip(
-                text = buildAnnotatedString {
-                    formatPosition?.let { position ->
-                        withStyle(SpanStyle(color = chartColors.label)) {
-                            append(position(series.x[index]))
-                        }
-                        append('\n')
-                    }
-                    append(format(value))
-                },
+                layout = it,
                 at = Offset(x, y),
                 plot = plot,
-                measurer = measurer,
-                style = style,
                 fill = chartColors.surface,
                 border = chartColors.axis,
             )
@@ -318,15 +329,12 @@ private fun ScrubberLayer(
  * since it sits over the line it describes.
  */
 private fun DrawScope.drawTooltip(
-    text: AnnotatedString,
+    layout: TextLayoutResult,
     at: Offset,
     plot: Rect,
-    measurer: TextMeasurer,
-    style: TextStyle,
     fill: Color,
     border: Color,
 ) {
-    val layout = measurer.measure(text, style)
     val padX = LabelPad.toPx() * 2
     val padY = LabelPad.toPx()
     val width = layout.size.width + 2 * padX
