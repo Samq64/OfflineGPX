@@ -62,11 +62,7 @@ class SettingsRepository(context: Context) {
     fun setMinDisplacementMeters(meters: Double) =
         update { putFloat(KEY_DISPLACEMENT, meters.toFloat()) }
 
-    fun setActiveMapFiles(names: Set<String>) = update {
-        putStringSet(KEY_ACTIVE_MAPS, names)
-        // The single-map key this replaced would otherwise win on the next read.
-        remove(KEY_ACTIVE_MAP)
-    }
+    fun setActiveMapFiles(names: Set<String>) = update { putStringSet(KEY_ACTIVE_MAPS, names) }
 
     /**
      * Back to shipped defaults - deliberately leaves imported maps alone. Dropping a large
@@ -93,11 +89,7 @@ class SettingsRepository(context: Context) {
                 .getFloat(KEY_ACCURACY, defaults.maxAccuracyMeters.toFloat()).toDouble(),
             minDisplacementMeters = prefs
                 .getFloat(KEY_DISPLACEMENT, defaults.minDisplacementMeters.toFloat()).toDouble(),
-            // Falls back to the single-map key this replaced, so an upgrade keeps the
-            // map the user had chosen rather than silently losing it.
-            activeMapFiles = prefs.getStringSet(KEY_ACTIVE_MAPS, null)
-                ?: prefs.getString(KEY_ACTIVE_MAP, null)?.let(::setOf)
-                ?: defaults.activeMapFiles,
+            activeMapFiles = prefs.getStringSet(KEY_ACTIVE_MAPS, null) ?: defaults.activeMapFiles,
         )
     }
 
@@ -108,8 +100,5 @@ class SettingsRepository(context: Context) {
         const val KEY_ACCURACY = "max_accuracy_meters"
         const val KEY_DISPLACEMENT = "min_displacement_meters"
         const val KEY_ACTIVE_MAPS = "active_map_files"
-
-        /** Superseded by [KEY_ACTIVE_MAPS]; still read once so upgrades keep their map. */
-        const val KEY_ACTIVE_MAP = "active_map_file"
     }
 }

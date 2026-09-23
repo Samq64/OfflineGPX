@@ -85,6 +85,13 @@ class MapRenderThemeTest {
         ).forEach { assertContains(lightXml, """k="$it"""") }
     }
 
+    /** Undrawn, the land overlay shows through and a coastal map's ocean reads as land. */
+    @Test
+    fun `the sea is drawn`() {
+        assertContains(lightXml, """k="natural" v="issea|sea"""")
+        assertContains(lightXml, """k="natural" v="nosea"""")
+    }
+
     /** Subway runs underground; drawing it draws a line over ground it never crosses. */
     @Test
     fun `surface rail is drawn and subway is not`() {

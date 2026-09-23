@@ -44,7 +44,7 @@ enum class MapImportError {
     UNREADABLE,
 
     /** It was read, and it is not a mapsforge map file. */
-    NOT_AN_ARCHIVE,
+    NOT_A_MAP_FILE,
 
     /** There is not enough free space to copy it. */
     NO_SPACE,
@@ -98,7 +98,7 @@ class MapStore(
     /** A file is the same file as long as neither its path nor its mtime has moved. */
     private data class Key(val path: String, val modifiedAt: Long)
 
-    /** Re-reads the directory, reusing what was already read off unchanged archives. */
+    /** Re-reads the directory, reusing what was already read off unchanged files. */
     suspend fun refresh() = withContext(Dispatchers.IO) {
         val files = directory.listFiles().orEmpty()
             .filter { it.isFile && it.extension.equals(EXTENSION, ignoreCase = true) }
@@ -108,7 +108,7 @@ class MapStore(
             .mapNotNull { (key, file) -> readMaps[key] ?: read(file)?.also { readMaps[key] = it } }
             .sortedByDescending { it.file.lastModified() }
 
-        // A deleted archive shouldn't go on holding its coverage in memory.
+        // A deleted file shouldn't go on holding its header in memory.
         readMaps.keys.retainAll(keys.keys)
 
         _maps.value = found
@@ -157,7 +157,7 @@ class MapStore(
             val map = read(destination)
             if (map == null) {
                 destination.delete()
-                return@withContext MapImportResult.Failed(MapImportError.NOT_AN_ARCHIVE)
+                return@withContext MapImportResult.Failed(MapImportError.NOT_A_MAP_FILE)
             }
             readMaps[Key(destination.path, destination.lastModified())] = map
 

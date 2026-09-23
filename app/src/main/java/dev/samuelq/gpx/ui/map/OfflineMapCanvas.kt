@@ -69,8 +69,8 @@ import java.io.ByteArrayInputStream
 import java.io.InputStream
 
 /**
- * One track as the map should draw it: the positions themselves, in degrees - not a
- * projected shape, since the map has its own coordinate space now.
+ * One track as the map should draw it: the positions themselves, in degrees. The map
+ * does its own projecting.
  */
 @Immutable
 class RouteOverlay(
@@ -283,14 +283,24 @@ fun OfflineMapCanvas(
         }
         basemap = null
 
+        // VTM fails the whole source if any one file won't open, so each is tried alone
+        // and a broken one is left out rather than blanking the rest.
+        val (shown, theme) = withContext(Dispatchers.IO) {
+            val shown = basemaps.filter { it.opens() }
+            val theme = if (shown.isEmpty()) null else ThemeLoader.load(
+                GeneratedRenderTheme(
+                    MapRenderTheme.xml(land = landColor, label = labelColor, background = backgroundColor)
+                )
+            )
+            shown to theme
+        }
+
         // Land under the tiles, not painted by them: the render theme's background is
         // transparent so ground no imported file covers reads as empty rather than as land.
         val land = OverlayLayer(map)
         val outline = OverlayLayer(map)
         layers.add(land, LayerGroup.Land.ordinal)
         layers.add(outline, LayerGroup.Outline.ordinal)
-        // Recorded before the theme load below suspends: a run cancelled there by the next
-        // change must still leave these for that next run to take down.
         basemap = Basemap(land, outline, null, null, null, null)
 
         val landStyle = Style.builder().fillColor(landColor.toArgb()).fillAlpha(1f)
@@ -303,33 +313,25 @@ fun OfflineMapCanvas(
                 .fixed(true)
                 .build()
         }
-        basemaps.forEach {
+        shown.forEach {
             land.add(boxDrawable(it, landStyle))
             outline.add(outlineDrawable(it, outlineStyle))
         }
         land.update()
         outline.update()
 
-        if (basemaps.isEmpty()) {
+        if (theme == null) {
             MapRenderer.setBackgroundColor(backgroundColor.toArgb())
             map.updateMap(true)
             return@LaunchedEffect
         }
 
-        val theme = withContext(Dispatchers.Default) {
-            ThemeLoader.load(
-                GeneratedRenderTheme(
-                    MapRenderTheme.xml(land = landColor, label = labelColor, background = backgroundColor)
-                )
-            )
-        }
         val source = MultiMapFileTileSource().apply {
-            // A file that will not open is skipped rather than fatal - the rest of the
-            // maps, and the routes above them, are still worth drawing.
-            basemaps.forEach { map -> add(MapFileTileSource().apply { setMapFile(map.file.path) }) }
+            shown.forEach { add(MapFileTileSource().apply { setMapFile(it.file.path) }) }
         }
         val tiles = OsmTileLayer(map, Viewport.MIN_ZOOM_LEVEL, Viewport.MAX_ZOOM_LEVEL)
         if (!tiles.setTileSource(source)) {
+            source.close()
             theme.dispose()
             return@LaunchedEffect
         }
@@ -344,7 +346,7 @@ fun OfflineMapCanvas(
         layers.add(labels, LayerGroup.Labels.ordinal)
         layers.add(mask, LayerGroup.Mask.ordinal)
         basemap = Basemap(land, outline, tiles, labels, mask, theme)
-        outsideDrawables(basemaps, backgroundColor).forEach { mask.add(it) }
+        outsideDrawables(shown, backgroundColor).forEach { mask.add(it) }
         mask.update()
         // Also clears to the theme's map-background-outside, which is the screen background.
         map.setTheme(theme)
@@ -403,32 +405,35 @@ fun OfflineMapCanvas(
         extentOf(routes, liveRoute, basemaps)
     }
 
-    LaunchedEffect(map, extent, insets, basemaps, viewSize) {
+    LaunchedEffect(map, extent, basemaps) {
         if (extent == null) return@LaunchedEffect
         val viewport = map.viewport()
 
         // A cap on the way in - magnifying a file's deepest zoom many times over draws
         // detail that does not exist, convincingly.
-        //
-        // Measured from the deepest zoom the file *stores*, not the one it advertises: a
-        // published file keeps tiles at z14 and claims z21, and everything above the base
-        // zoom is that tile's geometry drawn bigger.
-        val deepest = basemaps.maxOfOrNull { it.header.baseZoom } ?: DEFAULT_MAX_ZOOM
-        viewport.setMaxZoomLevel((deepest + OVERZOOM_ALLOWANCE).coerceAtMost(Viewport.MAX_ZOOM_LEVEL))
-
-        // Zooming out is limited to where everything is already on screen - beyond that is
-        // nothing but flat background, with no way back.
-        val usable = viewSize.usable(insets)
-        if (usable != null) {
-            val floor = MapPosition().apply { setByBoundingBox(extent, usable.width, usable.height) }.scale
-            viewport.setMinScale(minOf(floor, viewport.maxScale))
-        }
+        viewport.setMaxZoomLevel(basemaps.maxOfOrNull { it.maxViewZoom } ?: DEFAULT_MAX_ZOOM)
 
         // Panning can push the near edge of everything there is up to PAN_OVERSHOOT_FRACTION
         // off screen, not clamped dead against it - a hard wall exactly at the last point
         // reads as the map being broken, not as having reached the edge of the data.
         viewport.setMapLimit(extent.padded(PAN_OVERSHOOT_FRACTION))
         map.updateMap(true)
+    }
+
+    // Zooming out stops once everything is on screen with ZOOM_OUT_MARGIN_FRACTION to spare
+    // on each side of whichever axis is tighter - beyond that is nothing but flat
+    // background. Against the whole view, not the uncovered part: it is a limit on scale,
+    // and the sheet comes and goes.
+    LaunchedEffect(map, extent, basemaps, viewSize) {
+        if (extent == null) return@LaunchedEffect
+        val size = viewSize ?: return@LaunchedEffect
+        val fill = 1 - 2 * ZOOM_OUT_MARGIN_FRACTION
+        val width = (size.width * fill).toInt()
+        val height = (size.height * fill).toInt()
+        if (width <= 0 || height <= 0) return@LaunchedEffect
+        val viewport = map.viewport()
+        val floor = MapPosition().apply { setByBoundingBox(extent, width, height) }.scale
+        viewport.setMinScale(minOf(floor, viewport.maxScale))
     }
 
     // Only reached once per process at most: the moment a camera is ever remembered (see
@@ -734,6 +739,20 @@ private class MarkerSymbols(marker: Color, ring: Color, puck: Color, density: De
 private fun marker(at: TrackPoint, symbol: MarkerSymbol) =
     MarkerItem("", "", GeoPoint(at.latitude, at.longitude)).apply { marker = symbol }
 
+/** Whether VTM can read this file at all. Opened and closed again; the tile layer reopens it. */
+private fun OfflineMap.opens(): Boolean = MapFileTileSource().run {
+    setMapFile(file.path)
+    open().isSuccess.also { close() }
+}
+
+/**
+ * How far in the camera may go over this map. Measured from the deepest zoom the file
+ * *stores*, not the one it advertises: a published file keeps tiles at z14 and claims
+ * z21, and everything past the base zoom is that tile's geometry drawn bigger.
+ */
+internal val OfflineMap.maxViewZoom: Int
+    get() = (header.baseZoom + OVERZOOM_ALLOWANCE).coerceAtMost(Viewport.MAX_ZOOM_LEVEL)
+
 /** A map's own box, filled - the ground it actually covers. */
 private fun boxDrawable(map: OfflineMap, style: Style): RectangleDrawable {
     val h = map.header
@@ -1022,6 +1041,9 @@ private const val OVERLAY_CHECK_MS = 150L
 
 /** How far past the maps the outside mask reaches, in spans of their extent. */
 private const val MASK_MARGIN_SPANS = 3.0
+
+/** The gap left between everything there is and the screen edge at the widest zoom. */
+private const val ZOOM_OUT_MARGIN_FRACTION = 0.1
 
 /** How far past the edge of the data the pan clamp allows, as a fraction of its own span. */
 private const val PAN_OVERSHOOT_FRACTION = 0.05

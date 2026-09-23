@@ -60,6 +60,7 @@ import dev.samuelq.gpx.data.map.OfflineMap
 import dev.samuelq.gpx.data.settings.Settings
 import dev.samuelq.gpx.ui.format.LocalFormatters
 import dev.samuelq.gpx.ui.format.tabularFigures
+import dev.samuelq.gpx.ui.map.maxViewZoom
 import kotlin.math.roundToInt
 
 private val ScreenPadding = 20.dp
@@ -82,7 +83,7 @@ fun SettingsScreen(
     val formatters = LocalFormatters.current
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
-    // Held rather than deleted straight from the row: a mis-tap on a big archive costs a
+    // Held rather than deleted straight from the row: a mis-tap on a big map costs a
     // real trip back to wherever the file came from.
     var deletingMap by remember { mutableStateOf<OfflineMap?>(null) }
 
@@ -357,7 +358,7 @@ private fun MapRow(
     val detail = stringResource(
         R.string.settings_maps_detail,
         android.text.format.Formatter.formatShortFileSize(LocalContext.current, map.sizeBytes),
-        stringResource(R.string.settings_maps_zoom_to, map.header.maxZoom),
+        stringResource(R.string.settings_maps_zoom_to, map.maxViewZoom),
     )
 
     Row(
@@ -379,7 +380,7 @@ private fun MapRow(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            // Only when the archive says so itself - the app has no source of its own to
+            // Only when the file says so itself - the app has no source of its own to
             // credit.
             map.attribution?.let { attribution ->
                 Text(

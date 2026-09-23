@@ -4,7 +4,7 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <!--
-      Files - tracks and offline map archives alike - are picked through SAF, then copied
+      Files - tracks and offline map files alike - are picked through SAF, then copied
       into app-private storage. No persisted grant is kept and there is no storage
       permission.
 

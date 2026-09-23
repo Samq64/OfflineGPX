@@ -52,7 +52,7 @@
     <!-- Size, then how far it zooms. "2.4 MB · to zoom 15" -->
     <string name="settings_maps_detail">%1$s · %2$s</string>
     <string name="settings_maps_zoom_to">to zoom %1$d</string>
-    <!-- What the archive's own metadata says about where its data came from. -->
+    <!-- What the map file's own header says about where its data came from. -->
     <string name="settings_maps_attribution">Data: %1$s</string>
     <string name="settings_maps_importing">Copying map…</string>
     <string name="settings_maps_imported">Map added.</string>

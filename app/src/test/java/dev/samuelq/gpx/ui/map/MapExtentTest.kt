@@ -13,9 +13,9 @@ import kotlin.test.assertNull
 /**
  * What the camera is fitted to and penned inside of.
  *
- * The extent is now assembled from each route's own remembered box rather than from every
- * position on the map, so these check that the box is the same one - including at the two
- * edges where "there is nothing to frame" has to keep meaning that.
+ * The extent is assembled from each route's own remembered box, so these check it matches
+ * the positions - including at the two edges where "there is nothing to frame" has to
+ * keep meaning that.
  */
 class MapExtentTest {
 
@@ -34,14 +34,11 @@ class MapExtentTest {
     ) = OfflineMap(
         file = File("test.map"),
         header = MapFileHeader(
-            minZoom = 0,
-            maxZoom = 14,
             baseZoom = 14,
             minLongitude = west,
             minLatitude = south,
             maxLongitude = east,
             maxLatitude = north,
-            tileSize = 256,
             attribution = null,
         ),
         sizeBytes = 0,

@@ -5,11 +5,11 @@ import java.io.IOException
 import java.io.RandomAccessFile
 
 /**
- * What a mapsforge map file says about itself: the ground it covers, the zooms it can be
- * drawn at, and who the data came from - and whether it is a map file at all, before it
+ * What a mapsforge map file says about itself: the ground it covers, how deep its detail
+ * goes, and who the data came from - and whether it is a map file at all, before it
  * becomes a blank screen.
  *
- * Read here rather than through mapsforge's own `MapFile`, which opens the whole archive
+ * Read here rather than through mapsforge's own `MapFile`, which opens the whole file
  * and holds it: this runs over every file in the maps directory at every launch, and all
  * it needs is the header.
  *
@@ -18,11 +18,9 @@ import java.io.RandomAccessFile
  * parser silently instead of loudly.
  */
 class MapFileHeader(
-    val minZoom: Int,
-    val maxZoom: Int,
     /**
-     * The deepest zoom the file actually stores tiles at. Everything between this and
-     * [maxZoom] is the same data scaled up, so this - not [maxZoom] - is where the detail
+     * The deepest zoom the file actually stores tiles at. Everything past it is the same
+     * data scaled up, so this - not the maximum the file claims - is where the detail
      * really stops. Published files store 5/10/14 and claim 21.
      */
     val baseZoom: Int,
@@ -30,7 +28,6 @@ class MapFileHeader(
     val minLatitude: Double,
     val maxLongitude: Double,
     val maxLatitude: Double,
-    val tileSize: Int,
     /** Where the data came from, as the file states it. Null when it does not. */
     val attribution: String?,
 ) {
@@ -91,7 +88,7 @@ class MapFileHeader(
                 val maxLongitude = cursor.int() / COORDINATE_SCALE
                 if (minLongitude > maxLongitude || minLatitude > maxLatitude) return null
 
-                val tileSize = cursor.short()
+                cursor.skip(2) // tile size
                 cursor.string() // projection
 
                 val flags = cursor.byte()
@@ -108,28 +105,21 @@ class MapFileHeader(
                 repeat(cursor.short()) { cursor.string() } // way tag dictionary
 
                 // Zoom intervals, each serving a band of zooms from one stored base zoom.
-                // The file's range is the union, which is what a camera needs to be capped to.
                 val intervals = cursor.byte()
                 if (intervals <= 0) return null
-                var lowest = Int.MAX_VALUE
-                var highest = Int.MIN_VALUE
                 var deepestBase = Int.MIN_VALUE
                 repeat(intervals) {
                     deepestBase = maxOf(deepestBase, cursor.byte())
-                    lowest = minOf(lowest, cursor.byte())
-                    highest = maxOf(highest, cursor.byte())
+                    cursor.skip(2) // min and max zoom
                     cursor.skip(16) // sub-file start and size
                 }
 
                 MapFileHeader(
-                    minZoom = lowest,
-                    maxZoom = highest,
                     baseZoom = deepestBase,
                     minLongitude = minLongitude,
                     minLatitude = minLatitude,
                     maxLongitude = maxLongitude,
                     maxLatitude = maxLatitude,
-                    tileSize = tileSize,
                     // The comment is where an extract carries its data credit; created-by
                     // names the tool, which is the weaker answer but better than none.
                     attribution = comment?.takeIf { it.isNotBlank() } ?: createdBy?.takeIf { it.isNotBlank() },

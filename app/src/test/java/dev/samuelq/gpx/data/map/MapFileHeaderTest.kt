@@ -27,21 +27,15 @@ class MapFileHeaderTest {
         assertEquals(1.520, header.minLongitude)
         assertEquals(42.550, header.maxLatitude)
         assertEquals(1.545, header.maxLongitude)
-        assertEquals(256, header.tileSize)
     }
 
     /**
-     * The zoom range is the union across intervals, not any one of them: the file stores
-     * three base zooms and serves z0-21 between them.
-     *
-     * The base zoom is read separately because it is the one the camera is capped from -
-     * z15 to z21 are the z14 tile scaled up, and a cap on 21 is no cap at all.
+     * The deepest of the file's three stored base zooms, not the z21 it claims: the camera
+     * is capped from this, and z15 to z21 are the z14 tile scaled up.
      */
     @Test
-    fun `the zoom range spans every interval, and the base zoom is the deepest stored`() {
+    fun `the base zoom is the deepest stored`() {
         val header = assertNotNull(MapFileHeader.read(fixture()))
-        assertEquals(0, header.minZoom)
-        assertEquals(21, header.maxZoom)
         assertEquals(14, header.baseZoom)
     }
 
@@ -114,7 +108,7 @@ class MapFileHeaderTest {
             MapFileHeader.parse(header(wayTags = List(4) { "k".repeat(200) }))
         )
         assertEquals(42.0, header.minLatitude)
-        assertEquals(14, header.maxZoom)
+        assertEquals(14, header.baseZoom)
     }
 
     // --- A header, built to the spec so the reader can be pointed at edges -------------

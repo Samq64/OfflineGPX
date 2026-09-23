@@ -143,7 +143,7 @@ fun MapScreen(
         ActivityResultContracts.OpenDocument()
     ) { uri -> uri?.let(viewModel::importTrack) }
 
-    // The camera belongs to the map view now. This file only keeps the policy: frame once at a
+    // The camera belongs to the map view. This file only keeps the policy: frame once at a
     // cold start, never move on a selection - a map that rearranges on a tap is one you
     // have to re-read.
     //
@@ -280,10 +280,9 @@ fun MapScreen(
     // list: it grows every few seconds and the saved tracks don't, so keeping them
     // together rebuilt every track to add a few metres to one. See `liveRoute`.
     //
-    // Keyed on the focused track's *id*, not the track: focus changes neither geometry nor
-    // colour, and a rebuilt overlay is a new object that discards the extent it measured
-    // and re-walks every position on this thread. The width focus does decide is a feature
-    // property, resolved when the GeoJSON is built.
+    // Keyed on the focused track's *id*, not the track: a rebuilt overlay is a new object
+    // that discards the extent it measured. The id matters only for `unlisted` below; the
+    // focused width is the canvas's to draw.
     val overlays = remember(state.entities, state.geometry, focusedTrack?.id, palette) {
         val drawable = state.entities.mapNotNull { entity ->
             state.geometry[entity.id]?.let { entity to it }

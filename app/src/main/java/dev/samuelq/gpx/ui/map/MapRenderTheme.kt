@@ -14,9 +14,7 @@ import androidx.compose.ui.graphics.toArgb
  * a width that varies with zoom is written out as nested rules, one per band, rather than
  * as an interpolation.
  *
- * Zooms are counted on 256 px tiles, one more than MapLibre's 512 px count for the same
- * view. The widths and floors here were tuned under MapLibre, so each is written one zoom
- * later than it was there.
+ * Zooms are counted on 256 px tiles.
  *
  * The background is transparent and the land is drawn by the map screen as an overlay
  * under this, so that ground the imported file does not cover reads as empty rather than
@@ -39,6 +37,7 @@ object MapRenderTheme {
 
             // Ground, quietest first. Nothing here is ordered by an explicit z-index -
             // rules paint in document order, so this list is the stacking order.
+            sea(land, dark)
             vegetation(dark)
             water(dark)
             buildings(land, dark)
@@ -50,6 +49,16 @@ object MapRenderTheme {
     }
 
     // --- Ground ----------------------------------------------------------------------
+
+    /**
+     * The sea isn't a feature in the file: the writer fills coastal tiles with `sea` and
+     * `nosea` polygons, and VTM tags an all-water tile `issea`. Undrawn, the land overlay
+     * shows through and the ocean reads as land. `nosea` repaints land over the sea fill.
+     */
+    private fun StringBuilder.sea(land: Color, dark: Boolean) {
+        area("natural", "issea|sea", waterBlue(dark))
+        area("natural", "nosea", land.css())
+    }
 
     /**
      * One green for every vegetated or protected kind. The distinction between a park, a
@@ -131,15 +140,12 @@ object MapRenderTheme {
         )
 
         // Dashed, so a path reads as different from a road at a glance rather than by
-        // comparing two widths - and *narrower* than the smallest road at every band. It
-        // used to be wider, which put a footpath above the street it crosses in a hierarchy
-        // that is supposed to run the other way.
+        // comparing two widths - and narrower than the smallest road at every band, so a
+        // footpath never ranks above the street it crosses.
         //
-        // Sidewalks and crossings are drawn here along with everything else, which they
-        // were not before: the PMTiles schema carried a `kind_detail` that told a sidewalk
-        // from the trail beside it, and mapsforge's default tag config does not record
-        // `footway=sidewalk` at all. In a town this draws a second line beside every
-        // street, which is the other reason these are as quiet as they now are.
+        // Quiet for another reason too: mapsforge's tag config doesn't keep
+        // `footway=sidewalk`, so sidewalks can't be told from trails and in a town this
+        // draws a second line beside every street.
         zoomedLine(
             selector = """<rule e="way" k="highway" v="path|footway|cycleway|bridleway|track|steps">""",
             stroke = pathBrown(dark),

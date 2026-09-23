@@ -68,7 +68,7 @@ class SettingsViewModel(
                     is MapImportResult.Imported -> SettingsMessage.MapImported
                     is MapImportResult.Failed -> when (result.error) {
                         MapImportError.UNREADABLE -> SettingsMessage.MapUnreadable
-                        MapImportError.NOT_AN_ARCHIVE -> SettingsMessage.MapWrongFormat
+                        MapImportError.NOT_A_MAP_FILE -> SettingsMessage.MapWrongFormat
                         MapImportError.NO_SPACE -> SettingsMessage.MapNoSpace
                     }
                 }
