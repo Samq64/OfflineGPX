@@ -93,15 +93,30 @@ async function browse(next) {
   path = next;
   $('tree').innerHTML = '<li class="meta" style="padding:5px 8px">Loading…</li>';
   const parts = path.split('/').filter(Boolean);
-  $('crumbs').innerHTML = ['<a data-to="">maps</a>', ...parts.map((p, i) =>
-    `<a data-to="${parts.slice(0, i + 1).join('/')}">${p}</a>`)].join(' / ');
+  $('crumbs').replaceChildren(...[link('maps', { to: '' }), ...parts.map((p, i) =>
+    link(p, { to: parts.slice(0, i + 1).join('/') }))].flatMap((a, i) => (i ? [' / ', a] : [a])));
 
   const { directories, maps } = await api('/api/list', { path });
-  $('tree').innerHTML = [
-    ...directories.map((d) => `<li><a data-to="${path ? path + '/' : ''}${d}">${d}/</a></li>`),
-    ...maps.map((m) => `<li><a class="map" data-map="${path ? path + '/' : ''}${m}">${m.replace(/\.map$/, '')}</a></li>`),
-  ].join('') || '<li class="meta" style="padding:5px 8px">Empty.</li>';
+  const prefix = path ? path + '/' : '';
+  const items = [
+    ...directories.map((d) => link(`${d}/`, { to: prefix + d })),
+    ...maps.map((m) => Object.assign(link(m.replace(/\.map$/, ''), { map: prefix + m }), { className: 'map' })),
+  ].map((a) => el('li', a));
+  $('tree').innerHTML = items.length ? '' : '<li class="meta" style="padding:5px 8px">Empty.</li>';
+  $('tree').append(...items);
 }
+
+// Names and comments come from upstream, so they go in as text, never as markup.
+const el = (tag, ...children) => {
+  const node = document.createElement(tag);
+  node.append(...children);
+  return node;
+};
+const link = (text, data) => {
+  const a = el('a', text);
+  Object.assign(a.dataset, data);
+  return a;
+};
 
 document.addEventListener('click', async (event) => {
   const link = event.target.closest('a');
@@ -114,6 +129,12 @@ document.addEventListener('click', async (event) => {
 });
 
 async function choose(mapPath) {
+  // A selection drawn on the previous map means nothing on this one.
+  selection?.remove();
+  selection = null;
+  bbox = null;
+  $('selection').textContent = 'No area selected.';
+  $('go').disabled = true;
   $('source').textContent = 'Reading header…';
   source = await api('/api/source', { path: mapPath });
   const b = source.bbox;
@@ -123,9 +144,10 @@ async function choose(mapPath) {
   map.fitBounds(sourceBox.getBounds(), { padding: [30, 30] });
 
   const zooms = source.intervals.map((i) => `z${i.min}-${i.max}`).join(', ');
-  $('source').innerHTML = `<b>${mapPath}</b><br>${zooms}` +
-    (source.comment ? `<br><code>${source.comment}</code>` : '') +
-    `<br><span style="color:#6ea8fe">header read in ${source.requests} range requests</span>`;
+  const requests = Object.assign(el('span', `header read in ${source.requests} range requests`),
+    { style: 'color:#6ea8fe' });
+  $('source').replaceChildren(el('b', mapPath), el('br'), zooms,
+    ...(source.comment ? [el('br'), el('code', source.comment)] : []), el('br'), requests);
   $('draw').disabled = false;
   update();
 }
@@ -233,7 +255,8 @@ $('go').onclick = async () => {
       download: response.headers.get('content-disposition')?.match(/"(.+)"/)?.[1] ?? 'extract.map',
     });
     link.click();
-    URL.revokeObjectURL(link.href);
+    // Revoking straight away can cancel the download before the browser has started it.
+    setTimeout(() => URL.revokeObjectURL(link.href), 60_000);
 
     $('status').innerHTML = `<b>${(blob.size / 1e6).toFixed(2)} MB</b> in ` +
       `${((Date.now() - started) / 1000).toFixed(1)}s — ` +

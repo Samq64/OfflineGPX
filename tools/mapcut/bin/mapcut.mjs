@@ -7,7 +7,7 @@
 // the bytes inside the box are transferred.
 
 import { writeFile } from 'node:fs/promises';
-import { cut, readHeader } from '../lib/cut.mjs';
+import { cut, parseBbox, readHeader } from '../lib/cut.mjs';
 import { FileSource, HttpSource } from '../lib/source.mjs';
 
 export const openSource = (location) =>
@@ -19,7 +19,13 @@ if (!location || !destination || !box) {
   process.exit(2);
 }
 
-const [minLon, minLat, maxLon, maxLat] = box.split(',').map(Number);
+let bbox;
+try {
+  bbox = parseBbox(box);
+} catch (error) {
+  console.error(error.message);
+  process.exit(2);
+}
 const source = openSource(location);
 
 const header = await readHeader(source);
@@ -30,7 +36,7 @@ console.error(
 );
 
 const started = Date.now();
-const output = await cut(source, { minLon, minLat, maxLon, maxLat });
+const output = await cut(source, bbox);
 await writeFile(destination, output);
 await source.close?.();
 

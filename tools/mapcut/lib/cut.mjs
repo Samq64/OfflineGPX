@@ -21,12 +21,32 @@ export async function readHeader(source) {
   return parseHeader(body);
 }
 
+/** Parses `minLon,minLat,maxLon,maxLat`, rejecting anything that is not a real box. */
+export function parseBbox(text) {
+  const parts = String(text ?? '').split(',');
+  const [minLon, minLat, maxLon, maxLat] = parts.map((p) => (p.trim() === '' ? NaN : Number(p)));
+  const bbox = { minLon, minLat, maxLon, maxLat };
+  checkBbox(bbox, parts.length);
+  return bbox;
+}
+
+function checkBbox({ minLon, minLat, maxLon, maxLat }, count = 4) {
+  const ok = count === 4
+    && [minLon, minLat, maxLon, maxLat].every(Number.isFinite)
+    && minLat >= -90 && maxLat <= 90 && minLon >= -180 && maxLon <= 180
+    && minLat < maxLat && minLon < maxLon;
+  if (!ok) {
+    throw new Error('bbox must be minLon,minLat,maxLon,maxLat with west < east, south < north, in range');
+  }
+}
+
 /**
  * The requested box clipped to what the source actually holds, rounded to the
  * microdegrees the header stores. Rounding first matters: the reader will derive its tile
  * ranges from the rounded values, and this has to derive the same ones.
  */
 export function resolveBbox(requested, header) {
+  checkBbox(requested);
   const micro = (v) => Math.round(v * 1e6) / 1e6;
   const bbox = {
     minLat: micro(Math.max(requested.minLat, header.minLat)),
@@ -41,10 +61,10 @@ export function resolveBbox(requested, header) {
 }
 
 /**
- * Builds one output sub-file: a fresh dense index followed by the tile blocks it points
- * at, both in output row-major order.
+ * Reads the index rows one output sub-file needs and works out where its blocks lie,
+ * without fetching any of them. [bytes] is the sub-file's final size.
  */
-async function cutInterval(source, header, interval, bbox) {
+async function planInterval(source, header, interval, bbox) {
   const src = tileRange(header, interval.baseZoom);
   const out = tileRange(bbox, interval.baseZoom);
   const srcWidth = rangeWidth(src);
@@ -82,6 +102,15 @@ async function cutInterval(source, header, interval, bbox) {
     return { entries, startOffset, endOffset };
   });
 
+  const blockBytes = plans.reduce((sum, p) => sum + Math.max(0, p.endOffset - p.startOffset), 0);
+  return { interval, indexBytes, plans, bytes: indexBytes + blockBytes };
+}
+
+/**
+ * Builds one output sub-file: a fresh dense index followed by the tile blocks it points
+ * at, both in output row-major order.
+ */
+async function cutInterval(source, { interval, indexBytes, plans }) {
   const blobs = await source.all(plans.map((plan) => async () => (
     plan.endOffset > plan.startOffset
       ? source.read(interval.start + plan.startOffset, interval.start + plan.endOffset - 1)
@@ -119,14 +148,25 @@ async function cutInterval(source, header, interval, bbox) {
  * source's are almost certainly outside the new box. The comment and created-by strings
  * are kept verbatim, since that is where a file's attribution lives.
  */
-export async function cut(source, requested, { onProgress } = {}) {
+export async function cut(source, requested, { onProgress, maxBytes = Infinity } = {}) {
   const header = await readHeader(source);
   const bbox = resolveBbox(requested, header);
 
+  // Every index is read before any block, so an oversized cut fails having fetched little.
+  const plans = [];
+  for (const interval of header.intervals) plans.push(await planInterval(source, header, interval, bbox));
+  const total = plans.reduce((sum, p) => sum + p.bytes, 0);
+  if (total > maxBytes) {
+    throw Object.assign(
+      new Error(`extract would be ${(total / 1e6).toFixed(0)} MB, over the ${(maxBytes / 1e6).toFixed(0)} MB limit; select a smaller area`),
+      { status: 413 },
+    );
+  }
+
   const subFiles = [];
-  for (const [index, interval] of header.intervals.entries()) {
-    onProgress?.({ stage: 'interval', index, of: header.intervals.length, baseZoom: interval.baseZoom });
-    subFiles.push(await cutInterval(source, header, interval, bbox));
+  for (const [index, plan] of plans.entries()) {
+    onProgress?.({ stage: 'interval', index, of: plans.length, baseZoom: plan.interval.baseZoom });
+    subFiles.push(await cutInterval(source, plan));
   }
 
   const out = layout({
