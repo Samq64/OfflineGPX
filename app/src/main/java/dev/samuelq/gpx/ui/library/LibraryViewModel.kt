@@ -2,7 +2,9 @@ package dev.samuelq.gpx.ui.library
 
 import android.net.Uri
 import androidx.compose.runtime.Stable
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
@@ -33,7 +35,10 @@ sealed interface LibraryEvent {
 
 /** `@Stable` so a row's captured lambdas can be memoised. */
 @Stable
-class LibraryViewModel(private val repository: TrackRepository) : ViewModel() {
+class LibraryViewModel(
+    private val repository: TrackRepository,
+    private val savedState: SavedStateHandle,
+) : ViewModel() {
 
     /** What the user has typed into the search field. Blank means they have not. */
     private val _query = MutableStateFlow("")
@@ -85,16 +90,19 @@ class LibraryViewModel(private val repository: TrackRepository) : ViewModel() {
         }
     }
 
-    /** The filenames a pending batch will be written under, by row id. */
-    private var exportingAll: Map<Long, String> = emptyMap()
-
+    /**
+     * The filenames a pending batch will be written under, by row id. Saved state because
+     * the folder picker can outlive this process, and the result would otherwise land on
+     * an empty batch and silently write nothing.
+     */
     fun beginExportAll(names: Map<Long, String>) {
-        exportingAll = names
+        savedState[EXPORT_IDS] = names.keys.toLongArray()
+        savedState[EXPORT_NAMES] = ArrayList(names.values)
     }
 
     fun finishExportAll(folder: Uri?) {
-        val names = exportingAll
-        exportingAll = emptyMap()
+        val ids = savedState.remove<LongArray>(EXPORT_IDS) ?: LongArray(0)
+        val names = ids.zip(savedState.remove<ArrayList<String>>(EXPORT_NAMES).orEmpty()).toMap()
         if (folder == null || names.isEmpty()) return
         viewModelScope.launch {
             repository.exportAll(names, folder.toString()).fold(
@@ -131,8 +139,11 @@ class LibraryViewModel(private val repository: TrackRepository) : ViewModel() {
     }
 
     companion object {
+        private const val EXPORT_IDS = "export_ids"
+        private const val EXPORT_NAMES = "export_names"
+
         val Factory = viewModelFactory {
-            initializer { LibraryViewModel(appContainer.trackRepository) }
+            initializer { LibraryViewModel(appContainer.trackRepository, createSavedStateHandle()) }
         }
     }
 }

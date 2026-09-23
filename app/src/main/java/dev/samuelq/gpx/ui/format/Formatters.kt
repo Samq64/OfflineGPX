@@ -27,6 +27,14 @@ class Formatters(val units: UnitSystem) {
     val speedUnit: String get() = if (metric) "km/h" else "mph"
     val elevationUnit: String get() = if (metric) "m" else "ft"
 
+    /**
+     * Display units per SI unit, for the charts: axis ticks are chosen in what the reader
+     * sees, since 5 m/s is a round number and 18 km/h is not.
+     */
+    val speedPerMps: Float get() = speedIn(1.0).toFloat()
+    val elevationPerMeter: Float get() = elevationIn(1.0).toFloat()
+    val distancePerMeter: Float get() = (1.0 / if (metric) METERS_PER_KM else METERS_PER_MILE).toFloat()
+
     /** The small unit below the large one, so a 400m walk isn't "0.40 km". */
     fun distance(meters: Double, locale: Locale = Locale.getDefault()): String = when {
         meters.isNaN() -> EMPTY
@@ -81,13 +89,20 @@ class Formatters(val units: UnitSystem) {
             String.format(locale, "%.1f $speedUnit", speedIn(metersPerSecond))
         }
 
-    fun speedAxis(metersPerSecond: Float, locale: Locale = Locale.getDefault()): String {
-        val value = speedIn(metersPerSecond.toDouble())
-        return if (value < 10.0) {
-            String.format(locale, "%.1f", value)
-        } else {
-            String.format(locale, "%.0f", value)
-        }
+    fun speedAxis(
+        metersPerSecond: Float,
+        decimals: Int = 0,
+        locale: Locale = Locale.getDefault(),
+    ): String = String.format(
+        locale,
+        "%.${decimals.coerceIn(0, MAX_AXIS_DECIMALS)}f",
+        speedIn(metersPerSecond.toDouble()),
+    )
+
+    /** Tick labels for a speed axis whose ticks stand [stepMps] apart - see [distanceAxisFor]. */
+    fun speedAxisFor(stepMps: Float, locale: Locale = Locale.getDefault()): (Float) -> String {
+        val decimals = axisDecimals(speedIn(abs(stepMps).toDouble()))
+        return { mps -> speedAxis(mps, decimals, locale) }
     }
 
     /** Plain rounded metres or feet. Elevation is the usual caller; GPS accuracy the other. */
@@ -131,14 +146,6 @@ class Formatters(val units: UnitSystem) {
     private fun elevationIn(meters: Double): Double =
         if (metric) meters else meters * FEET_PER_METER
 
-    /**
-     * Stable singletons, not `this::speedAxis` at the call site - a bound reference to a
-     * default-arg function is a new lambda every recomposition, defeating the chart's
-     * `remember` keys.
-     */
-    val SpeedAxis: (Float) -> String = { speedAxis(it) }
-    val DurationAxis: (Float) -> String = { durationAxis(it) }
-
     companion object {
         /** The fallback, and what every preview and test gets unless it says otherwise. */
         val Metric = Formatters(UnitSystem.METRIC)
@@ -154,7 +161,8 @@ class Formatters(val units: UnitSystem) {
          */
         private fun axisDecimals(step: Double): Int =
             if (step > 0.0 && step.isFinite()) {
-                ceil(-log10(step)).toInt().coerceIn(0, MAX_AXIS_DECIMALS)
+                // The tolerance absorbs the SI round trip: 0.1 km comes back as 0.09999999.
+                ceil(-log10(step) - 1e-4).toInt().coerceIn(0, MAX_AXIS_DECIMALS)
             } else {
                 1
             }
@@ -178,17 +186,24 @@ class Formatters(val units: UnitSystem) {
             }
         }
 
-        /** Axis form: drops seconds once the track is long enough that they're noise. */
-        fun durationAxis(seconds: Float): String {
+        /** Compact form: `h:mm` when [hours], else `m:ss`. */
+        fun durationAxis(seconds: Float, hours: Boolean = seconds >= SECONDS_PER_HOUR): String {
             if (seconds.isNaN() || seconds < 0) return EMPTY
             val total = seconds.roundToLong()
-            val hours = total / 3600
-            val minutes = (total % 3600) / 60
-            val secs = total % 60
-            return when {
-                hours > 0 -> String.format(Locale.ROOT, "%d:%02d", hours, minutes)
-                else -> String.format(Locale.ROOT, "%d:%02d", minutes, secs)
+            return if (hours) {
+                String.format(Locale.ROOT, "%d:%02d", total / 3600, (total % 3600) / 60)
+            } else {
+                String.format(Locale.ROOT, "%d:%02d", total / 60, total % 60)
             }
+        }
+
+        /**
+         * Tick labels for a time axis running to [maxSeconds]. One format for every tick,
+         * or `33:20` and `1:06` sit side by side meaning minutes and hours.
+         */
+        fun durationAxisFor(maxSeconds: Float): (Float) -> String {
+            val hours = maxSeconds >= SECONDS_PER_HOUR
+            return { seconds -> durationAxis(seconds, hours) }
         }
 
         fun count(value: Int, locale: Locale = Locale.getDefault()): String =

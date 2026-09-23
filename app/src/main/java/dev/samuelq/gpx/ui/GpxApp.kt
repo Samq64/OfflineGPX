@@ -11,6 +11,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.dropUnlessResumed
 import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -40,7 +41,7 @@ fun GpxApp(
     val settings by container.settingsRepository.settings.collectAsStateWithLifecycle()
 
     // Remembered per unit system, not rebuilt per recomposition: the charts key their
-    // layout on the identity of the axis lambdas this carries.
+    // scales and tick labels on this instance.
     val formatters = remember(settings.units) { Formatters(settings.units) }
 
     LaunchedEffect(incomingTrack) {
@@ -80,12 +81,14 @@ fun GpxApp(
             composable<LibraryRoute> {
                 LibraryScreen(
                     onOpenTrack = { id -> navController.focusOnMap(FocusRequest.saved(id)) },
-                    onBack = navController::popBackStack,
+                    // Only while resumed: a second tap during the exit transition would
+                    // otherwise pop the map too, leaving an empty NavHost.
+                    onBack = dropUnlessResumed { navController.popBackStack() },
                 )
             }
 
             composable<SettingsRoute> {
-                SettingsScreen(onBack = navController::popBackStack)
+                SettingsScreen(onBack = dropUnlessResumed { navController.popBackStack() })
             }
         }
     }

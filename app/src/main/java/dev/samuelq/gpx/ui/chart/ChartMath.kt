@@ -8,6 +8,7 @@ import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.log10
 import kotlin.math.pow
+import kotlin.math.roundToInt
 
 /**
  * One line's worth of data.
@@ -49,12 +50,23 @@ class Scale(val min: Float, val max: Float, val ticks: FloatArray) {
 /**
  * Rounds a domain outward to values a reader can do arithmetic on - 0 / 20 / 40, never
  * 0 / 17.3 / 34.6.
+ *
+ * Values are SI; [perUnit] is display units per SI unit. The rounding happens in display
+ * units, since a round number of m/s is not a round number of km/h.
  */
-fun niceScale(rawMin: Float, rawMax: Float, zeroBased: Boolean, targetTicks: Int = 4): Scale {
+fun niceScale(
+    rawMin: Float,
+    rawMax: Float,
+    zeroBased: Boolean,
+    targetTicks: Int = 4,
+    perUnit: Float = 1f,
+): Scale {
     var lo = if (zeroBased) minOf(0f, rawMin) else rawMin
     var hi = rawMax
 
     if (!lo.isFinite() || !hi.isFinite()) return Scale(0f, 1f, floatArrayOf(0f, 1f))
+    lo *= perUnit
+    hi *= perUnit
     if (hi <= lo) {
         // A flat series still needs a readable axis around its single value.
         val pad = if (abs(hi) > 0f) abs(hi) * 0.1f else 1f
@@ -67,30 +79,39 @@ fun niceScale(rawMin: Float, rawMax: Float, zeroBased: Boolean, targetTicks: Int
     val niceMin = floor(lo / step) * step
     val niceMax = ceil(hi / step) * step
 
-    val count = ((niceMax - niceMin) / step).toInt() + 1
-    val ticks = FloatArray(count) { niceMin + it * step }
-    return Scale(niceMin, niceMax, ticks)
+    val count = ((niceMax - niceMin) / step).roundToInt() + 1
+    val ticks = FloatArray(count) { (niceMin + it * step) / perUnit }
+    return Scale(niceMin / perUnit, niceMax / perUnit, ticks)
 }
 
 /**
  * Keeps the domain exactly as measured but puts the ticks on round values inside it.
  *
  * Used for the x axis, where rounding the domain outward the way [niceScale] does would
- * leave the track ending in a stretch of empty plot.
+ * leave the track ending in a stretch of empty plot. [perUnit] as in [niceScale].
  */
-fun axisScale(min: Float, max: Float, targetTicks: Int = 4): Scale {
+fun axisScale(min: Float, max: Float, targetTicks: Int = 4, perUnit: Float = 1f): Scale =
+    axisScale(min, max, perUnit) { niceStep(it, targetTicks) }
+
+/** [axisScale] for elapsed seconds, ticked on steps a clock reads in. */
+fun timeAxisScale(min: Float, max: Float, targetTicks: Int = 4): Scale =
+    axisScale(min, max, 1f) { range -> timeStep(range, targetTicks) }
+
+private inline fun axisScale(min: Float, max: Float, perUnit: Float, step: (Float) -> Float): Scale {
     if (!min.isFinite() || !max.isFinite() || max <= min) {
         return Scale(min.takeIf { it.isFinite() } ?: 0f, (min + 1f).takeIf { it.isFinite() } ?: 1f, FloatArray(0))
     }
-    val step = niceStep(max - min, targetTicks)
-    val first = ceil(min / step) * step
+    val lo = min * perUnit
+    val hi = max * perUnit
+    val gap = step(hi - lo)
+    val first = ceil(lo / gap)
     val ticks = buildList {
-        var tick = first
+        var i = 0
         // The epsilon keeps a tick that lands exactly on the maximum from being dropped
         // by float error.
-        while (tick <= max + step * 1e-3f) {
-            add(tick)
-            tick += step
+        while ((first + i) * gap <= hi + gap * 1e-3f) {
+            add((first + i) * gap / perUnit)
+            i++
         }
     }
     return Scale(min, max, ticks.toFloatArray())
@@ -111,13 +132,30 @@ private fun niceStep(range: Float, targetTicks: Int): Float {
     return factor * magnitude
 }
 
+/** Seconds, minutes and hours divide by 60 and 24, not 10, so 1-2-5 lands on 0:33:20. */
+private val TimeSteps = floatArrayOf(
+    1f, 2f, 5f, 10f, 15f, 30f,
+    60f, 120f, 300f, 600f, 900f, 1800f,
+    3600f, 7200f, 10800f, 21600f, 43200f,
+)
+
+private const val SECONDS_PER_DAY = 86_400f
+
+private fun timeStep(range: Float, targetTicks: Int): Float {
+    if (range <= 0f || targetTicks <= 0) return 1f
+    val rough = range / targetTicks
+    // Below a second is not a track; past half a day, whole days on the 1-2-5 progression.
+    return TimeSteps.firstOrNull { it >= rough }
+        ?: (niceStep(rough / SECONDS_PER_DAY, 1) * SECONDS_PER_DAY)
+}
+
 /**
  * The vertical domain a series needs, ignoring the samples that were never recorded.
  *
  * Public, and computed by the caller rather than inside the chart, because the labels the
  * axis needs depend on its step - the same reason the x scale has always been passed in.
  */
-fun ChartSeries.yScale(): Scale {
+fun ChartSeries.yScale(perUnit: Float = 1f): Scale {
     var min = Float.POSITIVE_INFINITY
     var max = Float.NEGATIVE_INFINITY
     for (value in y) {
@@ -126,7 +164,7 @@ fun ChartSeries.yScale(): Scale {
         if (value > max) max = value
     }
     if (!min.isFinite() || !max.isFinite()) return Scale(0f, 1f, floatArrayOf(0f, 1f))
-    return niceScale(min, max, zeroBased)
+    return niceScale(min, max, zeroBased, perUnit = perUnit)
 }
 
 /**

@@ -93,11 +93,22 @@ class FormattersTest {
         assertEquals(Formatters.EMPTY, Formatters.duration(Double.NaN))
     }
 
-    /** The axis lambdas are what the charts key their layout on. */
     @Test
-    fun `axis lambdas are stable within an instance and differ across them`() {
-        assertEquals(metric.SpeedAxis, metric.SpeedAxis)
-        assert(metric.SpeedAxis !== imperial.SpeedAxis)
-        assertEquals("22", imperial.SpeedAxis(10f))
+    fun `speed ticks resolve the gap between them`() {
+        val kmh = metric.speedAxisFor(5f / 3.6f, en)
+        assertEquals(listOf("0", "5", "10", "15"), listOf(0f, 5f, 10f, 15f).map { kmh(it / 3.6f) })
+
+        val slow = metric.speedAxisFor(0.5f / 3.6f, en)
+        assertEquals("1.5", slow(1.5f / 3.6f))
+    }
+
+    /** One format per axis: `33:20` beside `1:06` reads as minutes, then hours. */
+    @Test
+    fun `duration ticks share one format`() {
+        val short = Formatters.durationAxisFor(1800f)
+        assertEquals(listOf("0:00", "10:00", "20:00"), listOf(0f, 600f, 1200f).map(short))
+
+        val long = Formatters.durationAxisFor(4000f)
+        assertEquals(listOf("0:00", "0:30", "1:00"), listOf(0f, 1800f, 3600f).map(long))
     }
 }

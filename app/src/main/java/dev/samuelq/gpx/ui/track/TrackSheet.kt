@@ -52,6 +52,7 @@ import dev.samuelq.gpx.data.track.LoadedTrack
 import dev.samuelq.gpx.ui.chart.ChartSeries
 import dev.samuelq.gpx.ui.chart.ProfileChart
 import dev.samuelq.gpx.ui.chart.axisScale
+import dev.samuelq.gpx.ui.chart.timeAxisScale
 import dev.samuelq.gpx.ui.chart.yScale
 import dev.samuelq.gpx.ui.format.Formatters
 import dev.samuelq.gpx.ui.format.LocalFormatters
@@ -103,13 +104,23 @@ fun TrackSheet(
     val xValues = if (useTimeAxis) profile.elapsedSeconds else profile.distanceMeters
     // One domain, shared by both charts, so the same pixel column is the same moment in
     // each and the scrubber means the same thing in both - and on the route behind.
-    val xScale = remember(profile, useTimeAxis) {
-        axisScale(xValues.firstOrNull() ?: 0f, xValues.lastOrNull() ?: 1f)
+    val xScale = remember(profile, useTimeAxis, formatters) {
+        val first = xValues.firstOrNull() ?: 0f
+        val last = xValues.lastOrNull() ?: 1f
+        if (useTimeAxis) {
+            timeAxisScale(first, last)
+        } else {
+            axisScale(first, last, perUnit = formatters.distancePerMeter)
+        }
     }
-    // Keyed on the scale as well as the units: the distance ticks are labelled to whatever
-    // precision tells one of them from the next, and that is a property of the step.
+    // Keyed on the scale as well as the units: the ticks are labelled to whatever precision
+    // tells one of them from the next, and that is a property of the scale.
     val formatX: (Float) -> String = remember(formatters, useTimeAxis, xScale) {
-        if (useTimeAxis) formatters.DurationAxis else formatters.distanceAxisFor(xScale.step)
+        if (useTimeAxis) {
+            Formatters.durationAxisFor(xScale.max)
+        } else {
+            formatters.distanceAxisFor(xScale.step)
+        }
     }
 
     // With units, unlike the axis formatters, since a tooltip is read on its own. Remembered
@@ -210,12 +221,17 @@ fun TrackSheet(
                             zeroBased = true,
                         )
                     }
+                    val yScale = remember(series, formatters) {
+                        series.yScale(formatters.speedPerMps)
+                    }
                     ProfileChart(
                         series = series,
                         xScale = xScale,
-                        yScale = remember(series) { series.yScale() },
+                        yScale = yScale,
                         formatX = formatX,
-                        formatY = formatters.SpeedAxis,
+                        formatY = remember(formatters, yScale) {
+                            formatters.speedAxisFor(yScale.step)
+                        },
                         selectedIndex = selectedIndex,
                         onSelectedIndexChange = onSelectedIndexChange,
                         contentDescription = stringResource(R.string.chart_speed),
@@ -256,7 +272,9 @@ fun TrackSheet(
                             zeroBased = false,
                         )
                     }
-                    val yScale = remember(series) { series.yScale() }
+                    val yScale = remember(series, formatters) {
+                        series.yScale(formatters.elevationPerMeter)
+                    }
                     ProfileChart(
                         series = series,
                         xScale = xScale,
