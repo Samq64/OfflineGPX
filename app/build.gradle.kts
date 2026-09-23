@@ -14,7 +14,7 @@ plugins {
  * by an absence - which is exactly the kind of thing that goes missing quietly. The
  * manifest merger folds in every dependency's permissions, so a library bump can add
  * INTERNET without a line changing in this repo. No current dependency declares one -
- * mapsforge ships as jars with no manifest at all - so this now guards against the next
+ * VTM ships as jars with no manifest at all - so this now guards against the next
  * dependency rather than the present ones, which is the point: it fires before a review does.
  *
  * Wired as a *transform* of the merged manifest rather than hung off `assemble`: a
@@ -155,8 +155,15 @@ dependencies {
 
     // Renders the basemap from a .map file the user supplied. Ships as plain jars, so it
     // declares no permissions of its own and has no manifest to merge.
-    implementation(libs.mapsforge.map.android)
-    implementation(libs.mapsforge.map.reader)
+    implementation(libs.vtm)
+    implementation(libs.vtm.android)
+    implementation(libs.vtm.jts)
+    implementation(libs.jts.core)
+    implementation(libs.androidsvg)
+    // The tessellator, one jar per ABI; AGP packages the .so inside each.
+    listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64").forEach { abi ->
+        runtimeOnly(variantOf(libs.vtm.android) { classifier("natives-$abi") })
+    }
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
@@ -168,6 +175,5 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
 
     testImplementation(libs.kotlin.test.junit)
-    testImplementation(libs.mapsforge.map.awt)
     testImplementation(libs.kxml2)
 }

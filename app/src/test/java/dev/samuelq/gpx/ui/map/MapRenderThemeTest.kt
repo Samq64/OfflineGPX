@@ -1,14 +1,17 @@
 package dev.samuelq.gpx.ui.map
 
 import androidx.compose.ui.graphics.Color
-import org.mapsforge.map.awt.graphics.AwtGraphicFactory
-import org.mapsforge.map.model.DisplayModel
-import org.mapsforge.map.rendertheme.XmlRenderTheme
-import org.mapsforge.map.rendertheme.XmlRenderThemeMenuCallback
-import org.mapsforge.map.rendertheme.XmlThemeResourceProvider
-import org.mapsforge.map.rendertheme.rule.RenderThemeHandler
+import org.oscim.backend.CanvasAdapter
+import org.oscim.backend.canvas.Bitmap
+import org.oscim.backend.canvas.Canvas
+import org.oscim.backend.canvas.Paint
+import org.oscim.theme.ThemeFile
+import org.oscim.theme.ThemeLoader
+import org.oscim.theme.XmlRenderThemeMenuCallback
+import org.oscim.theme.XmlThemeResourceProvider
 import java.io.ByteArrayInputStream
 import java.io.InputStream
+import java.lang.reflect.Proxy
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertNotNull
@@ -16,27 +19,31 @@ import kotlin.test.assertNotNull
 /**
  * The generated render theme, parsed by the same parser the renderer uses.
  *
- * This is the check worth having: mapsforge answers a malformed theme with a map that
- * draws nothing at all rather than with an error anyone would notice, and the theme is
- * built from strings at runtime, so nothing else would catch a typo in a rule.
+ * This is the check worth having: a malformed theme answers with a map that draws nothing
+ * at all rather than with an error anyone would notice, and the theme is built from
+ * strings at runtime, so nothing else would catch a typo in a rule.
  *
- * Parsed here through the desktop graphics factory. The parser is shared; only the paint
- * objects it builds differ from Android's.
+ * Parsed here with a do-nothing graphics backend. The parser only asks it for paints and
+ * the dash textures, whose contents don't matter to whether the theme parses.
  */
 class MapRenderThemeTest {
 
-    private fun parse(xml: String) = RenderThemeHandler.getRenderTheme(
-        AwtGraphicFactory.INSTANCE,
-        DisplayModel(),
-        object : XmlRenderTheme {
-            override fun getMenuCallback(): XmlRenderThemeMenuCallback? = null
-            override fun setMenuCallback(callback: XmlRenderThemeMenuCallback?) = Unit
-            override fun getRelativePathPrefix(): String = ""
-            override fun getRenderThemeAsStream(): InputStream = ByteArrayInputStream(xml.toByteArray())
-            override fun getResourceProvider(): XmlThemeResourceProvider? = null
-            override fun setResourceProvider(provider: XmlThemeResourceProvider?) = Unit
-        },
-    )
+    private fun parse(xml: String) = run {
+        NullGraphics.install()
+        var mapsforge = false
+        ThemeLoader.load(
+            object : ThemeFile {
+                override fun getMenuCallback(): XmlRenderThemeMenuCallback? = null
+                override fun setMenuCallback(callback: XmlRenderThemeMenuCallback?) = Unit
+                override fun getRelativePathPrefix(): String = ""
+                override fun getRenderThemeAsStream(): InputStream = ByteArrayInputStream(xml.toByteArray())
+                override fun getResourceProvider(): XmlThemeResourceProvider? = null
+                override fun setResourceProvider(provider: XmlThemeResourceProvider?) = Unit
+                override fun isMapsforgeTheme() = mapsforge
+                override fun setMapsforgeTheme(value: Boolean) { mapsforge = value }
+            },
+        )
+    }
 
     private val lightXml = MapRenderTheme.xml(
         land = Color(0xFFF4F1EC),
@@ -51,7 +58,7 @@ class MapRenderThemeTest {
     )
 
     @Test
-    fun `the light theme is a theme mapsforge accepts`() {
+    fun `the light theme is a theme VTM accepts`() {
         assertNotNull(parse(lightXml))
     }
 
@@ -61,7 +68,7 @@ class MapRenderThemeTest {
      * generator and can break on its own.
      */
     @Test
-    fun `the dark theme is a theme mapsforge accepts`() {
+    fun `the dark theme is a theme VTM accepts`() {
         assertNotNull(parse(darkXml))
     }
 
@@ -93,4 +100,49 @@ class MapRenderThemeTest {
     fun `the background is transparent`() {
         assertContains(lightXml, """map-background="#00000000"""")
     }
+
+    /** What VTM clears the screen to, so ground beyond every file matches the app's own. */
+    @Test
+    fun `outside the maps is the background colour`() {
+        assertContains(darkXml, """map-background-outside="#111316"""")
+    }
+}
+
+/** A graphics backend whose every object is a proxy answering zero, false or null. */
+private object NullGraphics : CanvasAdapter() {
+    private var installed = false
+
+    fun install() {
+        if (!installed) init(this)
+        installed = true
+    }
+
+    private inline fun <reified T> stub(): T = Proxy.newProxyInstance(
+        T::class.java.classLoader, arrayOf(T::class.java),
+    ) { _, method, _ ->
+        when (method.returnType) {
+            java.lang.Boolean.TYPE -> false
+            java.lang.Integer.TYPE -> 0
+            java.lang.Float.TYPE -> 0f
+            java.lang.Double.TYPE -> 0.0
+            java.lang.Long.TYPE -> 0L
+            else -> null
+        }
+    } as T
+
+    override fun newCanvasImpl(): Canvas = stub()
+    override fun newPaintImpl(): Paint = stub()
+    override fun newBitmapImpl(width: Int, height: Int, format: Int): Bitmap = stub()
+    override fun decodeBitmapImpl(inputStream: InputStream?): Bitmap = stub()
+    override fun decodeBitmapImpl(inputStream: InputStream?, width: Int, height: Int, percent: Int): Bitmap = stub()
+    override fun decodeSvgBitmapImpl(inputStream: InputStream?, width: Int, height: Int, percent: Int): Bitmap = stub()
+    override fun loadBitmapAssetImpl(
+        relativePathPrefix: String?,
+        src: String?,
+        resourceProvider: XmlThemeResourceProvider?,
+        width: Int,
+        height: Int,
+        percent: Int,
+        themeCallback: org.oscim.theme.ThemeCallback?,
+    ): Bitmap = stub()
 }

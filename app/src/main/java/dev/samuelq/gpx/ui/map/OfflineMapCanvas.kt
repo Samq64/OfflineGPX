@@ -1,5 +1,6 @@
 package dev.samuelq.gpx.ui.map
 
+import android.graphics.Paint
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
@@ -15,11 +16,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
@@ -29,33 +33,37 @@ import dev.samuelq.gpx.core.model.TrackPoint
 import dev.samuelq.gpx.data.map.OfflineMap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.mapsforge.core.graphics.Cap
-import org.mapsforge.core.graphics.Join
-import org.mapsforge.core.graphics.Style
-import org.mapsforge.core.model.BoundingBox
-import org.mapsforge.core.model.Dimension
-import org.mapsforge.core.model.LatLong
-import org.mapsforge.core.model.Point
-import org.mapsforge.core.util.LatLongUtils
-import org.mapsforge.core.util.MercatorProjection
-import org.mapsforge.map.android.graphics.AndroidGraphicFactory
-import org.mapsforge.map.android.util.AndroidUtil
-import org.mapsforge.map.android.view.MapView
-import org.mapsforge.map.datastore.MultiMapDataStore
-import org.mapsforge.map.layer.GroupLayer
-import org.mapsforge.map.layer.Layer
-import org.mapsforge.map.layer.cache.TileCache
-import org.mapsforge.map.layer.labels.LabelLayer
-import org.mapsforge.map.layer.overlay.Circle
-import org.mapsforge.map.layer.overlay.Polygon
-import org.mapsforge.map.layer.overlay.Polyline
-import org.mapsforge.map.layer.renderer.TileRendererLayer
-import org.mapsforge.map.model.DisplayModel
-import org.mapsforge.map.model.common.Observer
-import org.mapsforge.map.reader.MapFile
-import org.mapsforge.map.rendertheme.XmlRenderTheme
-import org.mapsforge.map.rendertheme.XmlRenderThemeMenuCallback
-import org.mapsforge.map.rendertheme.XmlThemeResourceProvider
+import org.oscim.android.MapView
+import org.oscim.android.canvas.AndroidBitmap
+import org.oscim.core.BoundingBox
+import org.oscim.core.GeoPoint
+import org.oscim.core.MapPosition
+import org.oscim.core.MercatorProjection
+import org.oscim.core.Tile
+import org.oscim.event.Gesture
+import org.oscim.event.GestureListener
+import org.oscim.event.MotionEvent
+import org.oscim.layers.Layer
+import org.oscim.layers.marker.ItemizedLayer
+import org.oscim.layers.marker.MarkerInterface
+import org.oscim.layers.marker.MarkerItem
+import org.oscim.layers.marker.MarkerSymbol
+import org.oscim.layers.tile.vector.OsmTileLayer
+import org.oscim.layers.tile.vector.labeling.LabelLayer
+import org.oscim.layers.vector.VectorLayer
+import org.oscim.layers.vector.geometries.LineDrawable
+import org.oscim.layers.vector.geometries.RectangleDrawable
+import org.oscim.layers.vector.geometries.Style
+import org.oscim.map.Map
+import org.oscim.map.Viewport
+import org.oscim.renderer.MapRenderer
+import org.oscim.theme.IRenderTheme
+import org.oscim.theme.ThemeFile
+import org.oscim.theme.ThemeLoader
+import org.oscim.theme.XmlRenderThemeMenuCallback
+import org.oscim.theme.XmlThemeResourceProvider
+import org.oscim.tiling.source.mapfile.MapFileTileSource
+import org.oscim.tiling.source.mapfile.MultiMapFileTileSource
 import java.io.ByteArrayInputStream
 import java.io.InputStream
 
@@ -121,12 +129,12 @@ data class CameraSnapshot(val latitude: Double, val longitude: Double, val zoom:
 /**
  * Routes over an offline basemap, or over nothing if none is imported.
  *
- * Mapsforge renders from the map files directly and has no tile server behind it, so
- * there is nothing here that could reach the network even if the permission existed.
+ * VTM renders from the map files directly and has no tile server behind it, so there is
+ * nothing here that could reach the network even if the permission existed.
  *
- * Layers are held in stable [GroupLayer]s rather than rebuilt as one stack: the tile layer
- * is expensive to recreate, and the routes above it change every few seconds during a
- * recording. Each group is refilled on its own without disturbing the others' order.
+ * Every layer lives in a fixed group (see [LayerGroup]), so each can be swapped on its own
+ * without disturbing the stacking order: the tile layer is expensive to recreate, and the
+ * routes above it change every few seconds during a recording.
  */
 @Composable
 fun OfflineMapCanvas(
@@ -174,28 +182,19 @@ fun OfflineMapCanvas(
     /** Reports the camera's own position on every move, for [initialCamera] next time. */
     onCameraChange: (CameraSnapshot) -> Unit = {},
 ) {
-    val context = LocalContext.current
     val density = LocalDensity.current
     val layoutDirection = LocalLayoutDirection.current
 
-    val mapView = rememberMapViewWithLifecycle(backgroundColor)
-
-    // Every group is added once, in drawing order, and refilled in place afterwards. The
-    // tap layer goes last: taps are offered to layers in reverse order, so last is first.
-    val groups = remember {
-        MapLayers(
-            land = GroupLayer(),
-            outline = GroupLayer(),
-            routes = GroupLayer(),
-            trace = GroupLayer(),
-            markers = GroupLayer(),
-        )
-    }
+    val mapView = rememberMapViewWithLifecycle()
+    val map = mapView.map()
 
     var basemap by remember { mutableStateOf<Basemap?>(null) }
     // Framed once, when there's first something to frame - re-fitting on every route-set
     // change (every few seconds during a recording) would yank the map out from under a pan.
     var hasFramed by remember { mutableStateOf(false) }
+    // Observed from layout rather than read off the view: the first composition runs before
+    // any layout, and a camera fitted to 0 x 0 is a map stuck at whole-world zoom.
+    var viewSize by remember { mutableStateOf<IntSize?>(null) }
 
     val currentRoutes by rememberUpdatedState(routes)
     val currentLiveRoute by rememberUpdatedState(liveRoute)
@@ -221,168 +220,150 @@ fun OfflineMapCanvas(
 
     AndroidView(
         factory = { mapView },
-        modifier = modifier.semantics { this.contentDescription = contentDescription },
-        update = { /* Every change below is applied through an effect, not on recomposition. */ },
+        modifier = modifier
+            .onSizeChanged { viewSize = it }
+            .semantics { this.contentDescription = contentDescription },
     )
 
     // --- The stack, assembled once --------------------------------------------------
 
-    DisposableEffect(mapView, groups) {
-        val layers = mapView.layerManager.layers
-        layers.add(groups.land)
-        layers.add(groups.outline)
-        layers.add(groups.routes)
-        layers.add(groups.trace)
-        layers.add(groups.markers)
+    val routeLayer = remember(map) { LineLayer(map) }
+    val traceLayer = remember(map) { LineLayer(map) }
+    val markerLayer = remember(map) {
+        ItemizedLayer(map, MarkerSymbol(AndroidBitmap(1, 1, 0), MarkerSymbol.HotspotPlace.CENTER))
+    }
+
+    DisposableEffect(map) {
+        val layers = map.layers()
+        LayerGroup.entries.forEach { layers.addGroup(it.ordinal) }
+        // Taps are offered top layer first, so the tap layer gets its look before anything
+        // drawn under it.
+        layers.add(routeLayer.layer, LayerGroup.Routes.ordinal)
+        layers.add(traceLayer.layer, LayerGroup.Trace.ordinal)
+        layers.add(markerLayer, LayerGroup.Markers.ordinal)
         layers.add(
-            TapLayer { tapped ->
-                val hit = pick(tapped, mapView, currentRoutes, currentLiveRoute, tapReach)
+            TapLayer(map) { x, y ->
+                val hit = pick(x, y, map, currentRoutes, currentLiveRoute, tapReach)
                 if (hit == null) selectNothing() else select(hit.first, hit.second)
-            }
+            },
+            LayerGroup.Tap.ordinal,
         )
-        onDispose {
-            layers.clear()
-            // The layers themselves are destroyed with the view; the cache is not owned by
-            // any of them, so nothing else would ever free it.
-            basemap?.cache?.destroy()
-        }
+        // North-up, flat: a route drawn north-up is a shape people recognise.
+        map.eventLayer.enableRotation(false)
+        map.eventLayer.enableTilt(false)
+        onDispose { }
     }
 
     // --- Position reporting ---------------------------------------------------------
 
-    DisposableEffect(mapView) {
-        val position = mapView.model.mapViewPosition
-        // Explicitly an Observer, not a Kotlin lambda: removeObserver has to be handed the
-        // same instance addObserver got, and a function value converted at each call site
-        // would be two different objects and a leak per recomposition.
-        val observer = Observer {
-            val centre = position.center
-            val zoom = position.zoom
-            val mapSize = MercatorProjection.getMapSizeWithScaleFactor(
-                position.scaleFactor, mapView.model.displayModel.tileSize,
-            )
-            reportScale(MercatorProjection.calculateGroundResolution(centre.latitude, mapSize))
-            // Not before the first frame is placed. Until then the position is mapsforge's
-            // own default - the whole world - and remembering that as "where the user was"
-            // is both wrong and, since it feeds back in as initialCamera, self-fulfilling.
-            if (hasFramed) reportCamera(CameraSnapshot(centre.latitude, centre.longitude, zoom))
+    DisposableEffect(map) {
+        val listener = Map.UpdateListener { _, position ->
+            reportScale(MercatorProjection.groundResolution(position))
+            // Not before the first frame is placed. Until then the position is VTM's own
+            // default - the whole world - and remembering that as "where the user was" is
+            // both wrong and, since it feeds back in as initialCamera, self-fulfilling.
+            if (hasFramed) {
+                reportCamera(CameraSnapshot(position.latitude, position.longitude, position.zoom))
+            }
         }
-        position.addObserver(observer)
-        observer.onChange()
-        onDispose { position.removeObserver(observer) }
-    }
-
-    // The size the map is actually laid out at. Observed rather than read off the view:
-    // the first composition runs before any layout, so the camera effects below would see
-    // 0 x 0, bail, and never be asked again - which is a map stuck at whole-world zoom.
-    var viewSize by remember { mutableStateOf<Dimension?>(null) }
-
-    DisposableEffect(mapView) {
-        val dimension = mapView.model.mapViewDimension
-        val observer = Observer { viewSize = dimension.dimension }
-        dimension.addObserver(observer)
-        viewSize = dimension.dimension
-        onDispose { dimension.removeObserver(observer) }
+        map.events.bind(listener)
+        onDispose { map.events.unbind(listener) }
     }
 
     // --- The basemap ----------------------------------------------------------------
 
     // Keyed on the shown files and the theme colours - either means a new render theme and
-    // a new data store, which is the one thing worth rebuilding the tile layer for.
-    LaunchedEffect(mapView, basemaps, backgroundColor, landColor, labelColor) {
-        val layers = mapView.layerManager.layers
+    // a new data source, which is the one thing worth rebuilding the tile layer for.
+    LaunchedEffect(map, basemaps, backgroundColor, landColor, labelColor) {
+        val layers = map.layers()
         basemap?.let { current ->
-            layers.remove(current.labels)
-            layers.remove(current.tiles)
-            current.labels.onDestroy()
-            current.tiles.onDestroy()
-            // Not destroyed by either layer - a TileLayer holds its cache but never frees
-            // it, so a rebuild without this leaks a screenful of tiles every time.
-            current.cache.destroy()
+            current.all.forEach { layers.remove(it); it.onDetach() }
+            current.theme?.dispose()
         }
         basemap = null
 
         // Land under the tiles, not painted by them: the render theme's background is
         // transparent so ground no imported file covers reads as empty rather than as land.
-        groups.land.replaceWith(
-            basemaps.map { map -> boxPolygon(map, landColor) },
-            mapView.model.displayModel,
-        )
-        groups.outline.replaceWith(
-            basemaps.map { map -> outlinePolyline(map, labelColor) },
-            mapView.model.displayModel,
-        )
-        // The frame buffer's colour, not the view's: mapsforge clears every frame with the
-        // display model's own background (a fixed light grey) straight over whatever the
-        // view is painted. Ground beyond every imported file is most of the screen on a
-        // dark theme, and it was staying light.
-        mapView.model.displayModel.setBackgroundColor(backgroundColor.toArgb())
-
-        if (basemaps.isEmpty()) return@LaunchedEffect
-
-        val store = withContext(Dispatchers.IO) {
-            MultiMapDataStore(MultiMapDataStore.DataPolicy.RETURN_ALL).apply {
-                // A file that will not open is skipped rather than fatal - the rest of the
-                // maps, and the routes above them, are still worth drawing.
-                basemaps.forEach { map ->
-                    runCatching { addMapDataStore(MapFile(map.file), false, false) }
-                }
-            }
+        val land = VectorLayer(map).apply {
+            val style = Style.builder().fillColor(landColor.toArgb()).fillAlpha(1f)
+                .strokeColor(TRANSPARENT).build()
+            basemaps.forEach { add(boxDrawable(it, style)) }
+            update()
         }
-        val theme = GeneratedRenderTheme(
-            MapRenderTheme.xml(land = landColor, label = labelColor, background = backgroundColor)
-        )
+        val outline = VectorLayer(map).apply {
+            val style = with(density) {
+                Style.builder()
+                    .strokeColor(labelColor.copy(alpha = COVERAGE_OPACITY).toArgb())
+                    .strokeWidth(COVERAGE_WIDTH_DP.dp.toPx())
+                    .stipple(COVERAGE_DASH_DP.dp.roundToPx()).stippleColor(TRANSPARENT).stippleWidth(1f)
+                    .fixed(true)
+                    .build()
+            }
+            basemaps.forEach { add(outlineDrawable(it, style)) }
+            update()
+        }
+        layers.add(land, LayerGroup.Land.ordinal)
+        layers.add(outline, LayerGroup.Outline.ordinal)
 
-        // context.cacheDir, not the default: the no-argument overload puts rendered tiles in
-        // app-specific *external* storage, where any app holding all-files access can read
-        // where this one has been looking. Everything else this app writes is internal.
-        val cache = AndroidUtil.createTileCache(
-            context,
-            context.cacheDir,
-            TILE_CACHE_ID,
-            mapView.model.displayModel.tileSize,
-            SCREEN_RATIO,
-            mapView.model.frameBufferModel.overdrawFactor,
-            /* persistent = */ false,
-        )
-        val tiles = TileRendererLayer(
-            cache,
-            store,
-            mapView.model.mapViewPosition,
-            /* isTransparent = */ true,
-            // Names collected for the layer above rather than baked into each tile: a name
-            // that straddles a tile boundary is otherwise drawn once per tile it touches,
-            // which is why every pond in a bay came out captioned twice.
-            /* renderLabels = */ false,
-            /* cacheLabels = */ true,
-            AndroidGraphicFactory.INSTANCE,
-        ).apply { setXmlRenderTheme(theme) }
-        val labels = LabelLayer(AndroidGraphicFactory.INSTANCE, tiles.labelStore)
+        if (basemaps.isEmpty()) {
+            MapRenderer.setBackgroundColor(backgroundColor.toArgb())
+            basemap = Basemap(land, outline, null, null, null)
+            map.updateMap(true)
+            return@LaunchedEffect
+        }
 
-        // Directly above the land, below everything the app draws itself.
-        layers.add(1, tiles)
-        layers.add(2, labels)
-        basemap = Basemap(tiles, labels, cache)
+        val theme = withContext(Dispatchers.Default) {
+            ThemeLoader.load(
+                GeneratedRenderTheme(
+                    MapRenderTheme.xml(land = landColor, label = labelColor, background = backgroundColor)
+                )
+            )
+        }
+        val source = MultiMapFileTileSource().apply {
+            // A file that will not open is skipped rather than fatal - the rest of the
+            // maps, and the routes above them, are still worth drawing.
+            basemaps.forEach { map -> add(MapFileTileSource().apply { setMapFile(map.file.path) }) }
+        }
+        val tiles = OsmTileLayer(map)
+        if (!tiles.setTileSource(source)) {
+            theme.dispose()
+            basemap = Basemap(land, outline, null, null, null)
+            return@LaunchedEffect
+        }
+        val labels = LabelLayer(map, tiles)
+        layers.add(tiles, LayerGroup.Tiles.ordinal)
+        layers.add(labels, LayerGroup.Labels.ordinal)
+        // Also clears to the theme's map-background-outside, which is the screen background.
+        map.setTheme(theme)
+        basemap = Basemap(land, outline, tiles, labels, theme)
     }
 
     // --- What is drawn --------------------------------------------------------------
 
-    // Each of these builds its polylines off the main thread - a long ride is a few hundred
-    // thousand LatLong allocations, which don't belong on the frame the user sees.
-    LaunchedEffect(groups, routes, focusedTrackId) {
-        val built = withContext(Dispatchers.Default) { routes.toPolylines(focusedTrackId) }
-        groups.routes.replaceWith(built, mapView.model.displayModel)
+    val routeStyles = remember(density) { RouteStyles(density) }
+
+    // Each of these builds its lines off the main thread - a long ride is a few hundred
+    // thousand coordinates, which don't belong on the frame the user sees.
+    LaunchedEffect(routeLayer, routes, focusedTrackId) {
+        val built = withContext(Dispatchers.Default) { routes.toLines(focusedTrackId, routeStyles) }
+        routeLayer.replaceWith(built)
     }
 
     // Its own effect: runs every few seconds for the length of a ride, touching nothing else.
-    LaunchedEffect(groups, liveRoute) {
+    LaunchedEffect(traceLayer, liveRoute) {
         val built = withContext(Dispatchers.Default) {
-            listOfNotNull(liveRoute).toPolylines(focusedTrackId = null)
+            listOfNotNull(liveRoute).toLines(focusedTrackId = null, routeStyles)
         }
-        groups.trace.replaceWith(built, mapView.model.displayModel)
+        traceLayer.replaceWith(built)
     }
 
-    LaunchedEffect(groups, routes, liveRoute, puckTrackId, focusedTrackId, selectedIndex) {
+    // Built once per colour, not per selection: scrubbing a chart moves the marker on every
+    // frame, and a new bitmap each time is a new texture upload each time.
+    val symbols = remember(markerColor, markerRingColor, puckColor, density) {
+        MarkerSymbols(markerColor, markerRingColor, puckColor, density)
+    }
+
+    LaunchedEffect(markerLayer, symbols, routes, liveRoute, puckTrackId, focusedTrackId, selectedIndex) {
         // The recording is the usual answer for the puck and isn't in `routes`, so it is
         // asked first.
         val puckAt = (liveRoute?.takeIf { it.trackId == puckTrackId }
@@ -391,20 +372,15 @@ fun OfflineMapCanvas(
         val markerAt = routes.firstOrNull { it.trackId == focusedTrackId }
             ?.points?.getOrNull(selectedIndex ?: -1)
 
-        groups.markers.replaceWith(
-            buildList {
-                if (puckAt != null) {
-                    // Bigger than the scrub marker and wearing a halo: one points at a
-                    // moment in a ride that's over, this is the only thing on screen about
-                    // right now.
-                    add(circle(puckAt, PUCK_HALO_RADIUS, puckColor.copy(alpha = PUCK_HALO_ALPHA), null))
-                    add(circle(puckAt, PUCK_RADIUS, puckColor, markerRingColor))
-                }
-                // Last, so the point being read about is never underneath anything.
-                if (markerAt != null) add(circle(markerAt, MARKER_RADIUS, markerColor, markerRingColor))
-            },
-            mapView.model.displayModel,
-        )
+        val items = buildList<MarkerInterface> {
+            if (puckAt != null) add(marker(puckAt, symbols.puck))
+            // Last, so the point being read about is never underneath anything.
+            if (markerAt != null) add(marker(markerAt, symbols.marker))
+        }
+        markerLayer.removeAllItems(false)
+        markerLayer.addItems(items)
+        markerLayer.update()
+        map.render()
     }
 
     // --- Where it is looked at from -------------------------------------------------
@@ -415,55 +391,32 @@ fun OfflineMapCanvas(
         extentOf(routes, liveRoute, basemaps)
     }
 
-    LaunchedEffect(mapView, extent, insets, basemaps, viewSize) {
+    LaunchedEffect(map, extent, insets, basemaps, viewSize) {
         if (extent == null) return@LaunchedEffect
-        val position = mapView.model.mapViewPosition
+        val viewport = map.viewport()
 
         // A cap on the way in - magnifying a file's deepest zoom many times over draws
         // detail that does not exist, convincingly.
         //
         // Measured from the deepest zoom the file *stores*, not the one it advertises: a
-        // published file keeps tiles at z14 and claims z21, and mapsforge answers everything
-        // above the base zoom by scaling that tile up. Taking the claim at face value let a
-        // short track frame itself at z21, where the map is eight doublings of blur.
+        // published file keeps tiles at z14 and claims z21, and everything above the base
+        // zoom is that tile's geometry drawn bigger.
         val deepest = basemaps.maxOfOrNull { it.header.baseZoom } ?: DEFAULT_MAX_ZOOM
-        val ceiling = (deepest + OVERZOOM_ALLOWANCE).coerceAtMost(MAX_ZOOM_LEVEL)
-        position.zoomLevelMax = ceiling.toByte()
+        viewport.setMaxZoomLevel((deepest + OVERZOOM_ALLOWANCE).coerceAtMost(Viewport.MAX_ZOOM_LEVEL))
 
         // Zooming out is limited to where everything is already on screen - beyond that is
         // nothing but flat background, with no way back.
-        val dimension = viewSize.usable(insets)
-        if (dimension != null) {
-            val floor = LatLongUtils.zoomForBounds(dimension, extent, mapView.model.displayModel.tileSize)
-            position.zoomLevelMin = minOf(floor.toInt(), ceiling).toByte()
+        val usable = viewSize.usable(insets)
+        if (usable != null) {
+            val floor = MapPosition().apply { setByBoundingBox(extent, usable.width, usable.height) }.scale
+            viewport.setMinScale(minOf(floor, viewport.maxScale))
         }
-    }
 
-    // Panning can push the near edge of everything there is up to PAN_OVERSHOOT_FRACTION
-    // off screen, not clamped dead against it - a hard wall exactly at the last point reads
-    // as the map being broken, not as having reached the edge of the data.
-    DisposableEffect(mapView, extent) {
-        val bounds = extent?.padded(PAN_OVERSHOOT_FRACTION)
-        if (bounds == null) return@DisposableEffect onDispose { }
-        val position = mapView.model.mapViewPosition
-        var clamping = false
-        val observer = Observer {
-            // setCenter notifies observers again; without this the clamp re-enters itself.
-            if (!clamping) {
-                val centre = position.center
-                val clamped = LatLong(
-                    centre.latitude.coerceIn(bounds.minLatitude, bounds.maxLatitude),
-                    centre.longitude.coerceIn(bounds.minLongitude, bounds.maxLongitude),
-                )
-                if (clamped != centre) {
-                    clamping = true
-                    position.center = clamped
-                    clamping = false
-                }
-            }
-        }
-        position.addObserver(observer)
-        onDispose { position.removeObserver(observer) }
+        // Panning can push the near edge of everything there is up to PAN_OVERSHOOT_FRACTION
+        // off screen, not clamped dead against it - a hard wall exactly at the last point
+        // reads as the map being broken, not as having reached the edge of the data.
+        viewport.setMapLimit(extent.padded(PAN_OVERSHOOT_FRACTION))
+        map.updateMap(true)
     }
 
     // Only reached once per process at most: the moment a camera is ever remembered (see
@@ -480,114 +433,88 @@ fun OfflineMapCanvas(
     // the place it is supposed to be restored to.
     val rememberedCamera = remember { initialCamera }
 
-    LaunchedEffect(mapView, initialExtent, tracksLoading, insets, viewSize) {
+    LaunchedEffect(map, initialExtent, tracksLoading, insets, viewSize) {
         if (hasFramed) return@LaunchedEffect
-        val position = mapView.model.mapViewPosition
 
         val remembered = rememberedCamera
         if (remembered != null) {
-            position.setCenter(LatLong(remembered.latitude, remembered.longitude))
-            position.zoom = remembered.zoom
+            map.setMapPosition(
+                MapPosition().setPosition(remembered.latitude, remembered.longitude).setZoom(remembered.zoom)
+            )
             hasFramed = true
             return@LaunchedEffect
         }
         if (tracksLoading) return@LaunchedEffect
         val target = initialExtent ?: return@LaunchedEffect
-        val dimension = viewSize.usable(insets) ?: return@LaunchedEffect
+        val size = viewSize ?: return@LaunchedEffect
+        val usable = size.usable(insets) ?: return@LaunchedEffect
 
-        position.setCenter(target.centerPoint)
-        position.zoomLevel =
-            LatLongUtils.zoomForBounds(dimension, target, mapView.model.displayModel.tileSize)
+        map.setMapPosition(fit(target, size, usable, insets))
         hasFramed = true
     }
 
     // Scrubbing a chart moves the marker; moves the camera the least it can rather than
     // re-centring, which would turn reading a chart into a ride through a moving map.
-    LaunchedEffect(mapView, focusedTrackId, selectedIndex, insets) {
+    LaunchedEffect(map, focusedTrackId, selectedIndex, insets) {
         val at = currentRoutes.firstOrNull { it.trackId == focusedTrackId }
             ?.points?.getOrNull(selectedIndex ?: -1) ?: return@LaunchedEffect
-        mapView.nudgeIntoView(LatLong(at.latitude, at.longitude), insets)
+        map.nudgeIntoView(at.latitude, at.longitude, insets)
     }
 }
+
+/**
+ * The stacking order, bottom first. VTM keeps each group's layers together however late
+ * they are added, so a rebuilt basemap lands back under the routes rather than on top.
+ */
+private enum class LayerGroup { Land, Tiles, Labels, Outline, Routes, Trace, Markers, Tap }
 
 /** Pixels kept clear on each edge, for whatever is floating over the map. */
 private class Insets(val left: Int, val top: Int, val right: Int, val bottom: Int)
 
-/**
- * The basemap as one thing to put up and take down: the tiles, the names drawn over them,
- * and the cache they are rendered into.
- */
+/** The basemap as one thing to put up and take down. Tiles are null with no map shown. */
 private class Basemap(
-    val tiles: TileRendererLayer,
-    val labels: LabelLayer,
-    val cache: TileCache,
-)
-
-/** The stable layer groups, in the order they are drawn. */
-private class MapLayers(
-    val land: GroupLayer,
-    val outline: GroupLayer,
-    val routes: GroupLayer,
-    val trace: GroupLayer,
-    val markers: GroupLayer,
-)
-
-/**
- * Refills a group in place.
- *
- * Each child is handed the display model by hand. A layer normally receives it from
- * `Layers.add`, and going straight into [GroupLayer.layers] bypasses that; the group
- * propagates its own only to the children present at the moment it is itself added, and
- * these groups are added empty and filled afterwards. Without this every overlay draws
- * with a null display model and takes the render thread down with it.
- */
-internal fun GroupLayer.replaceWith(next: List<Layer>, displayModel: DisplayModel) {
-    synchronized(this) {
-        layers.clear()
-        next.forEach { it.displayModel = displayModel }
-        layers.addAll(next)
-    }
-    requestRedraw()
+    val land: VectorLayer,
+    val outline: VectorLayer,
+    val tiles: OsmTileLayer?,
+    val labels: LabelLayer?,
+    val theme: IRenderTheme?,
+) {
+    val all: List<Layer> get() = listOfNotNull(land, outline, tiles, labels)
 }
 
 /**
- * A [MapView] that follows the composition's lifecycle - it owns a render thread and a
- * frame buffer, and leaking one leaks both.
+ * A [MapView] that follows the composition's lifecycle - it owns a GL thread and its
+ * surface, and leaking one leaks both.
  */
 @Composable
-private fun rememberMapViewWithLifecycle(background: Color): MapView {
+private fun rememberMapViewWithLifecycle(): MapView {
     val context = LocalContext.current
-    val mapView = remember {
-        MapView(context).apply {
-            // No rotation and no built-in controls: a route drawn north-up is a shape
-            // people recognise, and the app draws its own chrome.
-            isClickable = true
-            setBuiltInZoomControls(false)
-            mapScaleBar.isVisible = false
-            setBackgroundColor(background.toArgb())
-        }
-    }
+    val mapView = remember { MapView(context) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
 
     DisposableEffect(lifecycle, mapView) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_DESTROY) mapView.destroyAll()
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> mapView.onResume()
+                Lifecycle.Event.ON_PAUSE -> mapView.onPause()
+                else -> Unit
+            }
         }
         lifecycle.addObserver(observer)
         onDispose {
             lifecycle.removeObserver(observer)
-            mapView.destroyAll()
-            AndroidGraphicFactory.clearResourceMemoryCache()
+            mapView.onDestroy()
         }
     }
     return mapView
 }
 
-/** The generated theme, handed to mapsforge as the stream it insists on. */
-private class GeneratedRenderTheme(xml: String) : XmlRenderTheme {
+/** The generated theme, handed to VTM as the stream it insists on. */
+private class GeneratedRenderTheme(xml: String) : ThemeFile {
     private val bytes = xml.toByteArray()
     private var menuCallback: XmlRenderThemeMenuCallback? = null
     private var resourceProvider: XmlThemeResourceProvider? = null
+    private var mapsforgeTheme = false
 
     override fun getMenuCallback(): XmlRenderThemeMenuCallback? = menuCallback
     override fun setMenuCallback(callback: XmlRenderThemeMenuCallback?) { menuCallback = callback }
@@ -595,52 +522,56 @@ private class GeneratedRenderTheme(xml: String) : XmlRenderTheme {
     override fun getRenderThemeAsStream(): InputStream = ByteArrayInputStream(bytes)
     override fun getResourceProvider(): XmlThemeResourceProvider? = resourceProvider
     override fun setResourceProvider(provider: XmlThemeResourceProvider?) { resourceProvider = provider }
+    // Set by the parser itself on seeing the mapsforge namespace.
+    override fun isMapsforgeTheme(): Boolean = mapsforgeTheme
+    override fun setMapsforgeTheme(value: Boolean) { mapsforgeTheme = value }
 }
 
-/** A tap anywhere on the map, offered before any drawn layer gets a look. */
-private class TapLayer(private val onTap: (LatLong) -> Unit) : Layer() {
-    override fun draw(
-        boundingBox: BoundingBox?,
-        zoomLevel: Byte,
-        canvas: org.mapsforge.core.graphics.Canvas?,
-        topLeftPoint: Point?,
-        rotation: org.mapsforge.core.model.Rotation?,
-    ) = Unit
-
-    // layerXY is null for a layer with no position of its own, which this is - declaring it
-    // non-null makes Kotlin's own check throw on the first tap anyone makes.
-    override fun onTap(tapLatLong: LatLong, layerXY: Point?, tapXY: Point?): Boolean {
-        onTap(tapLatLong)
+/** A single tap anywhere on the map, in screen pixels. Double taps still zoom. */
+private class TapLayer(map: Map, private val onTap: (x: Float, y: Float) -> Unit) :
+    Layer(map), GestureListener {
+    override fun onGesture(g: Gesture, e: MotionEvent): Boolean {
+        if (g !is Gesture.Tap) return false
+        onTap(e.x, e.y)
         return true
     }
 }
 
 // --- Drawing ----------------------------------------------------------------------
 
-private fun stroke(color: Color, width: Float, dashed: Boolean = false) =
-    AndroidGraphicFactory.INSTANCE.createPaint().apply {
-        setColor(color.toArgb())
-        setStrokeWidth(width)
-        setStyle(Style.STROKE)
-        setStrokeCap(Cap.ROUND)
-        setStrokeJoin(Join.ROUND)
-        if (dashed) setDashPathEffect(floatArrayOf(6f, 4f))
-    }
+/**
+ * One style per width and colour, shared by every line drawn with it. VectorLayer batches
+ * consecutive lines of the *same* style into one draw, so a style per line would cost a
+ * draw call each.
+ */
+private class RouteStyles(density: Density) {
+    private val normal = with(density) { ROUTE_WIDTH_DP.dp.toPx() }
+    private val focused = with(density) { FOCUSED_WIDTH_DP.dp.toPx() }
+    private val cache = HashMap<Pair<Int, Boolean>, Style>()
 
-private fun fill(color: Color) = AndroidGraphicFactory.INSTANCE.createPaint().apply {
-    setColor(color.toArgb())
-    setStyle(Style.FILL)
+    @Synchronized
+    fun of(color: Color, isFocused: Boolean): Style = cache.getOrPut(color.toArgb() to isFocused) {
+        Style.builder()
+            .strokeColor(color.toArgb())
+            .strokeWidth(if (isFocused) focused else normal)
+            .cap(org.oscim.backend.canvas.Paint.Cap.ROUND)
+            .fixed(true)
+            // Simplified to a pixel at the zoom it is drawn at: a long ride has far more
+            // positions than the screen has pixels to show them with.
+            .generalization(Style.GENERALIZATION_SMALL)
+            .build()
+    }
 }
 
 /**
- * Every route as polylines, one per segment - the gap between segments is signal loss and
- * nothing should be drawn across it.
+ * Every route as lines, one per segment - the gap between segments is signal loss and
+ * nothing should be drawn across it. The focused route is drawn last, over the rest.
  */
-private fun List<RouteOverlay>.toPolylines(focusedTrackId: Long?): List<Layer> {
-    val out = ArrayList<Layer>()
+private fun List<RouteOverlay>.toLines(focusedTrackId: Long?, styles: RouteStyles): List<LineDrawable> {
+    val out = ArrayList<LineDrawable>()
     forEach { route ->
-        val width = if (route.trackId == focusedTrackId) FOCUSED_WIDTH else ROUTE_WIDTH
-        val paint = stroke(route.color, width)
+        val isFocused = route.trackId == focusedTrackId
+        val style = styles.of(route.color, isFocused)
         // Both producers hand these over ascending and starting at 0, so this neither
         // sorts nor dedupes - the data already carries that guarantee.
         val starts = route.segmentStartIndices
@@ -652,81 +583,135 @@ private fun List<RouteOverlay>.toPolylines(focusedTrackId: Long?): List<Layer> {
             // A single position isn't a line; still drawn as the puck if it is live.
             if (to - from < 2) continue
 
-            val coordinates = ArrayList<LatLong>(to - from)
+            val lonLat = DoubleArray((to - from) * 2)
             for (index in from until to) {
                 val point = route.points[index]
-                coordinates.add(LatLong(point.latitude, point.longitude))
+                lonLat[(index - from) * 2] = point.longitude
+                lonLat[(index - from) * 2 + 1] = point.latitude
             }
-            out.add(Polyline(paint, AndroidGraphicFactory.INSTANCE).apply { setPoints(coordinates) })
+            out.add(LineDrawable(lonLat, style).apply { if (isFocused) priority = 1 })
         }
     }
     return out
 }
 
-private fun circle(at: TrackPoint, radius: Float, fill: Color, ring: Color?) = Circle(
-    LatLong(at.latitude, at.longitude),
-    radius,
-    fill(fill),
-    ring?.let { stroke(it, MARKER_RING_WIDTH) },
-)
+/** A [VectorLayer] that remembers what it holds, since VTM offers no way to ask or to clear. */
+private class LineLayer(map: Map) {
+    val layer = VectorLayer(map)
+    private val drawn = ArrayList<LineDrawable>()
 
-/** A map's own box, filled - the ground it actually covers. */
-private fun boxPolygon(map: OfflineMap, land: Color) =
-    Polygon(fill(land), null, AndroidGraphicFactory.INSTANCE).apply {
-        val h = map.header
-        setPoints(
-            listOf(
-                LatLong(h.minLatitude, h.minLongitude),
-                LatLong(h.minLatitude, h.maxLongitude),
-                LatLong(h.maxLatitude, h.maxLongitude),
-                LatLong(h.maxLatitude, h.minLongitude),
-                LatLong(h.minLatitude, h.minLongitude),
-            )
-        )
+    /** Swaps every line for [next] and asks for one redraw. */
+    fun replaceWith(next: List<LineDrawable>) {
+        synchronized(layer) {
+            drawn.forEach { layer.remove(it) }
+            drawn.clear()
+            next.forEach { layer.add(it) }
+            drawn.addAll(next)
+        }
+        layer.update()
     }
+}
 
-/** The dashed boundary marking where an imported file's detail stops. */
-private fun outlinePolyline(map: OfflineMap, label: Color) =
-    Polyline(stroke(label.copy(alpha = COVERAGE_OPACITY), COVERAGE_WIDTH, dashed = true), AndroidGraphicFactory.INSTANCE)
-        .apply {
-            val h = map.header
-            setPoints(
-                listOf(
-                    LatLong(h.minLatitude, h.minLongitude),
-                    LatLong(h.minLatitude, h.maxLongitude),
-                    LatLong(h.maxLatitude, h.maxLongitude),
-                    LatLong(h.maxLatitude, h.minLongitude),
-                    LatLong(h.minLatitude, h.minLongitude),
-                )
+/** The circles, drawn once per colour - see where [MarkerSymbols] is remembered. */
+private class MarkerSymbols(marker: Color, ring: Color, puck: Color, density: Density) {
+    val marker: MarkerSymbol
+    val puck: MarkerSymbol
+
+    init {
+        with(density) {
+            val ringWidth = MARKER_RING_WIDTH_DP.dp.toPx()
+            this@MarkerSymbols.marker = symbol(
+                MARKER_RADIUS_DP.dp.toPx(), ringWidth, fill = marker, ring = ring, halo = null, haloRadius = 0f,
+            )
+            // Bigger than the scrub marker and wearing a halo: one points at a moment in a
+            // ride that's over, this is the only thing on screen about right now.
+            this@MarkerSymbols.puck = symbol(
+                PUCK_RADIUS_DP.dp.toPx(), ringWidth, fill = puck, ring = ring,
+                halo = puck.copy(alpha = PUCK_HALO_ALPHA), haloRadius = PUCK_HALO_RADIUS_DP.dp.toPx(),
             )
         }
+    }
+
+    private fun symbol(
+        radius: Float,
+        ringWidth: Float,
+        fill: Color,
+        ring: Color,
+        halo: Color?,
+        haloRadius: Float,
+    ): MarkerSymbol {
+        val outer = maxOf(radius + ringWidth / 2, haloRadius)
+        val size = kotlin.math.ceil(outer * 2).toInt() + 2
+        val bitmap = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(bitmap)
+        val centre = size / 2f
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        if (halo != null) {
+            paint.color = halo.toArgb()
+            canvas.drawCircle(centre, centre, haloRadius, paint)
+        }
+        paint.color = fill.toArgb()
+        canvas.drawCircle(centre, centre, radius, paint)
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = ringWidth
+        paint.color = ring.toArgb()
+        canvas.drawCircle(centre, centre, radius, paint)
+        return MarkerSymbol(AndroidBitmap(bitmap), MarkerSymbol.HotspotPlace.CENTER, false)
+    }
+}
+
+private fun marker(at: TrackPoint, symbol: MarkerSymbol) =
+    MarkerItem("", "", GeoPoint(at.latitude, at.longitude)).apply { marker = symbol }
+
+/** A map's own box, filled - the ground it actually covers. */
+private fun boxDrawable(map: OfflineMap, style: Style): RectangleDrawable {
+    val h = map.header
+    return RectangleDrawable(h.minLatitude, h.minLongitude, h.maxLatitude, h.maxLongitude, style)
+}
+
+/** The dashed boundary marking where an imported file's detail stops. */
+private fun outlineDrawable(map: OfflineMap, style: Style): LineDrawable {
+    val h = map.header
+    return LineDrawable(
+        doubleArrayOf(
+            h.minLongitude, h.minLatitude,
+            h.maxLongitude, h.minLatitude,
+            h.maxLongitude, h.maxLatitude,
+            h.minLongitude, h.maxLatitude,
+            h.minLongitude, h.minLatitude,
+        ),
+        style,
+    )
+}
 
 // --- Hit testing ------------------------------------------------------------------
 
 /**
  * Which track was tapped, and where along it.
  *
- * Mapsforge draws overlays rather than indexing them, so there is nothing to ask what was
- * under those pixels - this projects the drawn positions itself and measures to the *line*
- * rather than to its vertices. An imported route can be a point per kilometre, and a tap
- * halfway along one of those must still land on the track someone can plainly see.
+ * VTM's vector layers can say whether a tap hit *something*, not what or where along it,
+ * so this projects the drawn positions itself and measures to the *line* rather than to
+ * its vertices. An imported route can be a point per kilometre, and a tap halfway along one
+ * of those must still land on the track someone can plainly see.
  *
  * The index reported back is the nearer end of whichever segment was hit, since that is
- * what the charts and the marker are addressed by. One scan per tap over the routes on
- * screen, allocating nothing.
+ * what the charts and the marker are addressed by. One scan per tap over every route,
+ * allocating nothing.
  */
 private fun pick(
-    tapped: LatLong,
-    mapView: MapView,
+    screenX: Float,
+    screenY: Float,
+    map: Map,
     routes: List<RouteOverlay>,
     liveRoute: RouteOverlay?,
     reachPx: Float,
 ): Pair<Long, Int>? {
-    val mapSize = MercatorProjection.getMapSizeWithScaleFactor(
-        mapView.model.mapViewPosition.scaleFactor, mapView.model.displayModel.tileSize,
-    )
-    val tapX = MercatorProjection.longitudeToPixelX(tapped.longitude, mapSize)
-    val tapY = MercatorProjection.latitudeToPixelY(tapped.latitude, mapSize)
+    // In map pixels at the current scale, where a screen pixel is a map pixel: the map is
+    // never rotated or tilted.
+    val position = map.mapPosition
+    val mapSize = Tile.SIZE * position.scale
+    val tapX = position.x * mapSize + (screenX - map.width / 2.0)
+    val tapY = position.y * mapSize + (screenY - map.height / 2.0)
 
     var bestTrack: Long? = null
     var bestIndex = 0
@@ -747,8 +732,8 @@ private fun pick(
             var previousY = 0.0
             for (index in from until to) {
                 val point = route.points[index]
-                val x = MercatorProjection.longitudeToPixelX(point.longitude, mapSize)
-                val y = MercatorProjection.latitudeToPixelY(point.latitude, mapSize)
+                val x = MercatorProjection.longitudeToX(point.longitude) * mapSize
+                val y = MercatorProjection.latitudeToY(point.latitude) * mapSize
 
                 if (index == from) {
                     // A lone position is a point, not a line: measured to itself.
@@ -832,48 +817,58 @@ internal fun extentOf(
     // A single position isn't a box - nothing to fit a camera to, same as no routes at all.
     if (north == south && east == west) return null
 
-    return runCatching { BoundingBox(south, west, north, east) }.getOrNull()
+    return BoundingBox(south, west, north, east)
 }
 
 /**
  * [this] expanded outward by [fraction] of its own span on every side, for a pan clamp
  * that stops just past the edge of the data rather than dead against it.
  */
-private fun BoundingBox.padded(fraction: Double): BoundingBox = runCatching {
-    val latitudePad = (maxLatitude - minLatitude) * fraction
-    val longitudePad = (maxLongitude - minLongitude) * fraction
-    BoundingBox(
-        (minLatitude - latitudePad).coerceAtLeast(LatLongUtils.LATITUDE_MIN),
-        (minLongitude - longitudePad).coerceAtLeast(LatLongUtils.LONGITUDE_MIN),
-        (maxLatitude + latitudePad).coerceAtMost(LatLongUtils.LATITUDE_MAX),
-        (maxLongitude + longitudePad).coerceAtMost(LatLongUtils.LONGITUDE_MAX),
+private fun BoundingBox.padded(fraction: Double): BoundingBox {
+    val latitudePad = latitudeSpan * fraction
+    val longitudePad = longitudeSpan * fraction
+    return BoundingBox(
+        (minLatitude - latitudePad).coerceAtLeast(MercatorProjection.LATITUDE_MIN),
+        (minLongitude - longitudePad).coerceAtLeast(MercatorProjection.LONGITUDE_MIN),
+        (maxLatitude + latitudePad).coerceAtMost(MercatorProjection.LATITUDE_MAX),
+        (maxLongitude + longitudePad).coerceAtMost(MercatorProjection.LONGITUDE_MAX),
     )
-}.getOrDefault(this)
+}
 
 /** The view's size minus whatever is floating over it, or null before it is laid out. */
-private fun Dimension?.usable(insets: Insets): Dimension? {
+private fun IntSize?.usable(insets: Insets): IntSize? {
     if (this == null) return null
     val usableWidth = width - insets.left - insets.right - 2 * EDGE_PADDING_PX
     val usableHeight = height - insets.top - insets.bottom - 2 * EDGE_PADDING_PX
-    return if (usableWidth > 0 && usableHeight > 0) Dimension(usableWidth, usableHeight) else null
+    return if (usableWidth > 0 && usableHeight > 0) IntSize(usableWidth, usableHeight) else null
 }
 
 /**
- * Pans the least it can to bring [target] inside the uncovered box, or not at all -
+ * [target] fitted into the uncovered part of the view, centred there rather than on the
+ * screen - otherwise the sheet covers the bottom of whatever was just framed.
+ */
+private fun fit(target: BoundingBox, size: IntSize, usable: IntSize, insets: Insets): MapPosition {
+    val position = MapPosition().apply { setByBoundingBox(target, usable.width, usable.height) }
+    val mapSize = Tile.SIZE * position.scale
+    // Where the uncovered box's centre sits relative to the screen's, in pixels.
+    val offsetX = (insets.left - insets.right) / 2.0
+    val offsetY = (insets.top - insets.bottom) / 2.0
+    position.x -= offsetX / mapSize
+    position.y -= offsetY / mapSize
+    return position
+}
+
+/**
+ * Pans the least it can to bring the target inside the uncovered box, or not at all -
  * expressed as a camera-centre move so the amount moved equals the amount out of bounds.
  */
-private fun MapView.nudgeIntoView(target: LatLong, insets: Insets) {
+private fun Map.nudgeIntoView(latitude: Double, longitude: Double, insets: Insets) {
     if (width <= 0 || height <= 0) return
-    val position = model.mapViewPosition
-    val mapSize = MercatorProjection.getMapSizeWithScaleFactor(
-        position.scaleFactor, model.displayModel.tileSize,
-    )
-    val centre = position.center
-    val centreX = MercatorProjection.longitudeToPixelX(centre.longitude, mapSize)
-    val centreY = MercatorProjection.latitudeToPixelY(centre.latitude, mapSize)
+    val position = mapPosition
+    val mapSize = Tile.SIZE * position.scale
 
-    val atX = MercatorProjection.longitudeToPixelX(target.longitude, mapSize) - centreX + width / 2.0
-    val atY = MercatorProjection.latitudeToPixelY(target.latitude, mapSize) - centreY + height / 2.0
+    val atX = (MercatorProjection.longitudeToX(longitude) - position.x) * mapSize + width / 2.0
+    val atY = (MercatorProjection.latitudeToY(latitude) - position.y) * mapSize + height / 2.0
 
     val left = insets.left + FOLLOW_MARGIN_PX
     val top = insets.top + FOLLOW_MARGIN_PX
@@ -896,19 +891,24 @@ private fun MapView.nudgeIntoView(target: LatLong, insets: Insets) {
     // Moving the picture right by dx means moving the camera left by dx. Not animated:
     // this answers a drag happening right now, and an easing curve would arrive after the
     // finger had moved on.
-    position.center = MercatorProjection.fromPixels(centreX - dx, centreY - dy, mapSize)
+    position.x -= dx / mapSize
+    position.y -= dy / mapSize
+    setMapPosition(position)
 }
 
-private const val ROUTE_WIDTH = 8f
-private const val FOCUSED_WIDTH = 12f
-private const val MARKER_RING_WIDTH = 4f
-private const val MARKER_RADIUS = 10f
-private const val PUCK_RADIUS = 12f
-private const val PUCK_HALO_RADIUS = 28f
+private const val TRANSPARENT = 0
+
+private const val ROUTE_WIDTH_DP = 3f
+private const val FOCUSED_WIDTH_DP = 4.5f
+private const val MARKER_RING_WIDTH_DP = 1.5f
+private const val MARKER_RADIUS_DP = 5f
+private const val PUCK_RADIUS_DP = 6f
+private const val PUCK_HALO_RADIUS_DP = 14f
 private const val PUCK_HALO_ALPHA = 0.24f
 
 /** Visible as a boundary, not as a feature of the landscape. */
-private const val COVERAGE_WIDTH = 3f
+private const val COVERAGE_WIDTH_DP = 1.2f
+private const val COVERAGE_DASH_DP = 4f
 private const val COVERAGE_OPACITY = 0.55f
 
 /** About a fingertip. In dp: a finger is a physical size, whatever the screen's density. */
@@ -924,11 +924,3 @@ private const val OVERZOOM_ALLOWANCE = 2
 
 /** The ceiling when no map is shown and there is nothing to derive one from. */
 private const val DEFAULT_MAX_ZOOM = 16
-
-/** Mapsforge addresses zoom as a byte; this is where its own tile maths stops. */
-private const val MAX_ZOOM_LEVEL = 22
-
-private const val TILE_CACHE_ID = "basemap"
-
-/** How much of the screen the in-memory tile cache is sized against. */
-private const val SCREEN_RATIO = 1.5f

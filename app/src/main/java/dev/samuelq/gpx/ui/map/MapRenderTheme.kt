@@ -8,7 +8,8 @@ import androidx.compose.ui.graphics.toArgb
  * The render theme the basemap is drawn with, built at runtime rather than shipped as an
  * asset so it can take its colours from the theme the user is actually in.
  *
- * Mapsforge reads raw OSM tags, not a normalised schema, so every rule here filters on
+ * Written in the mapsforge theme dialect, which VTM reads as well as its own. The files
+ * carry raw OSM tags, not a normalised schema, so every rule here filters on
  * `highway`, `natural`, `landuse` and friends directly. There is no expression language:
  * a width that varies with zoom is written out as nested rules, one per band, rather than
  * as an interpolation.
@@ -28,11 +29,12 @@ object MapRenderTheme {
             append("""<?xml version="1.0" encoding="UTF-8"?>""")
             append("""<rendertheme xmlns="http://mapsforge.org/renderTheme" version="6" """)
             // Transparent, not the land colour: the tile layer paints only features, and
-            // whatever is underneath shows through where the file has no data.
-            append("""map-background="#00000000" map-background-outside="#00000000">""")
+            // whatever is underneath shows through where the file has no data. Outside is
+            // what VTM clears the whole screen to.
+            append("""map-background="#00000000" map-background-outside="${background.css()}">""")
 
             // Ground, quietest first. Nothing here is ordered by an explicit z-index -
-            // mapsforge paints in document order, so this list is the stacking order.
+            // rules paint in document order, so this list is the stacking order.
             vegetation(dark)
             water(dark)
             buildings(land, dark)
@@ -143,18 +145,18 @@ object MapRenderTheme {
     // --- Names -----------------------------------------------------------------------
 
     /**
-     * Least to most important, since mapsforge resolves label collisions in document
-     * order: a trail name beats a lake name beats a hamlet.
+     * Least to most important. Collisions are settled by `priority`, higher winning, not
+     * by document order: a trail name beats a place name beats a lake.
      */
     private fun StringBuilder.labels(label: Color, background: Color) {
-        caption("natural", "water", label, background, minZoom = 9, size = 12)
-        caption("place", "city|town|village|hamlet|locality", label, background, minZoom = 5, size = 14)
+        caption("natural", "water", label, background, minZoom = 9, size = 12, priority = 10)
+        caption("place", "city|town|village|hamlet|locality", label, background, minZoom = 5, size = 14, priority = 20)
 
         // The names of the paths themselves, along them - "which trail is this" is the
-        // question the app exists to help with, so this is last and wins every collision.
+        // question the app exists to help with, so this wins every collision.
         append("""<rule e="way" k="highway" v="*" zoom-min="13">""")
         append(
-            """<pathText k="name" font-size="11" fill="${label.css()}" """ +
+            """<pathText k="name" font-size="11" priority="30" fill="${label.css()}" """ +
                 """stroke="${background.css()}" stroke-width="2.0"/></rule>""",
         )
     }
@@ -166,10 +168,11 @@ object MapRenderTheme {
         halo: Color,
         minZoom: Int,
         size: Int,
+        priority: Int,
     ) {
         append("""<rule e="any" k="$key" v="$values" zoom-min="$minZoom">""")
         append(
-            """<caption k="name" font-size="$size" fill="${label.css()}" """ +
+            """<caption k="name" font-size="$size" priority="$priority" fill="${label.css()}" """ +
                 """stroke="${halo.css()}" stroke-width="2.0" display="ifspace"/></rule>""",
         )
     }

@@ -42,13 +42,14 @@ A permission added here must map to a feature a user can name.
 | minSdk / targetSdk | 29 (Android 10) / 37 (Android 17) |
 
 Dependencies: AndroidX, Compose, Room, navigation-compose, kotlinx.serialization,
-mapsforge. The original no-dependency minimalism isn't the governing constraint any more —
+VTM (mapsforge's OpenGL renderer). The original no-dependency minimalism isn't the governing constraint any more —
 the permission budget is. A dependency earns its place by beating the hand-rolled code it
 replaces; what disqualifies one is pulling `INTERNET` into the merged manifest, or wanting a
-permission for a feature nobody asked for. Mapsforge ships as plain jars with no manifest
-and no native code, so it declares nothing: the whole release APK is **3.3 MB against
-MapLibre's 52.8 MB**, which was 48 MB of `libmaplibre.so` across four ABIs. Per device
-rather than per universal APK, that is roughly 16 MB down to 3.5 MB.
+permission for a feature nobody asked for. VTM ships as plain jars with no manifest, so it
+declares nothing, and its one native library is a ~45 KB tessellator: the whole release APK
+is **3.7 MB against MapLibre's 52.8 MB**, which was 48 MB of `libmaplibre.so` across four
+ABIs. VTM releases after 0.25.0 are published to JitPack only; `settings.gradle.kts` lets
+JitPack serve that one group and nothing else.
 
 Basemaps are mapsforge `.map` files. The format stores three base zooms (5/10/14) and
 renders the rest by scaling, where PMTiles stored a tile at every zoom — which is why the
@@ -77,7 +78,7 @@ data/
   track/         TrackRepository (interface) + GpxTrackRepository (Room + app-private files).
 ui/
   chart/         ChartMath, ProfileChart - the Canvas charts.
-  map/           MapScreen, OfflineMapCanvas (mapsforge), MapChrome (scale bar), MapRenderTheme.
+  map/           MapScreen, OfflineMapCanvas (VTM), MapChrome (scale bar), MapRenderTheme.
   track/         TrackSheet + TrackDialogs + TrackSummary - the sheet a tapped route opens in.
   library/       Manage: import, export, rename, show/hide, batch delete.
   record/        RecordViewModel + RecordingBar, shown by the map. No screen of its own.
@@ -155,12 +156,11 @@ is a wrong number presented as a real one.
 
 ### Offline maps
 
-Mapsforge renders a basemap from a `.map` file the user supplies through the file picker —
-the app fetches nothing and ships no maps of its own. A file is copied into app-private
-storage at import (its header read first; deleted again if it isn't a map file). Rendered
-tiles are cached in the app's internal cache directory, not the app-specific *external* one
-mapsforge reaches for by default — where this app has been looking is not for other apps to
-read.
+VTM renders a basemap on the GPU from a `.map` file the user supplies through the file
+picker — the app fetches nothing and ships no maps of its own. A file is copied into
+app-private storage at import (its header read first; deleted again if it isn't a map file).
+Tiles are vector geometry held in memory, never written to disk, so zooming stays sharp
+between zoom levels.
 
 A `.map` file's coverage is a rectangle and the header states it exactly, so it is taken at
 its word. Two files over the same ground are two renderings of one place stacked, and no
@@ -171,13 +171,13 @@ field carries one, is listed on the settings screen; the app has no source of it
 credit.
 
 The render theme is generated at runtime rather than shipped as an asset, so it can take its
-colours from the theme the user is in. Mapsforge reads raw OSM tags and has no expression
-language, so a width that varies with zoom is written out as one nested rule per band.
-Names are drawn by a `LabelLayer` over the tiles rather than baked into them, or a name
-straddling a tile boundary is drawn once per tile it touches.
+colours from the theme the user is in. It is written in the mapsforge theme dialect, which
+VTM reads as well as its own: rules filter on raw OSM tags, and a width that varies with
+zoom is written out as one nested rule per band. Label collisions are settled by explicit
+`priority`, trail names highest.
 
 The camera is the map view's: pinch, fling, and a pan clamp to the fit of every track and
-shown map. A scale bar reads the camera's live scale and is drawn over it. The map's own
+shown map, kept north-up with rotation and tilt turned off. A scale bar reads the camera's live scale and is drawn over it. The map's own
 composition doesn't survive navigating away to the library or settings and back -
 Compose Navigation only keeps the current destination composed - so the camera's last
 position is remembered in the ViewModel (which does survive) and restored directly on

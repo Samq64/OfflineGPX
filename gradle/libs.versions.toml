@@ -29,13 +29,14 @@ serialization = "1.11.0"
 
 kxml2 = "2.3.0"
 
-# Mapsforge. Renders the basemap from a .map file the user supplied.
+# VTM, mapsforge's OpenGL renderer. Draws the basemap from a .map file the user supplied.
 #
-# Published as plain jars rather than AARs, so it contributes no AndroidManifest and
-# therefore no permissions at all - CheckNoNetworkPermissions in app/build.gradle.kts now
-# guards against a future dependency rather than against this one. It is also pure Java
-# with no native libraries, which is where the APK size went.
-mapsforge = "0.25.0"
+# Plain jars rather than AARs, so it contributes no AndroidManifest and therefore no
+# permissions. Its one native library (a polygon tessellator) is ~45 KB per ABI.
+vtm = "0.30.0"
+# vtm-jts builds its filled overlays on JTS, and vtm-android decodes SVG symbols with this.
+jts = "1.20.0"
+androidsvg = "1.4"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -63,15 +64,12 @@ androidx-room-compiler = { group = "androidx.room", name = "room-compiler", vers
 androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigation" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "serialization" }
 
-mapsforge-map-android = { group = "org.mapsforge", name = "mapsforge-map-android", version.ref = "mapsforge" }
-# The .map reader itself. Pulled in transitively too, but this is the artifact the data
-# layer talks to directly, so it is named.
-mapsforge-map-reader = { group = "org.mapsforge", name = "mapsforge-map-reader", version.ref = "mapsforge" }
-
-# Test-only: mapsforge's renderer for the desktop, which brings the same render-theme
-# parser the Android one uses. Lets the generated theme be parsed for real on the JVM,
-# where a malformed theme is an exception rather than a map that silently draws nothing.
-mapsforge-map-awt = { group = "org.mapsforge", name = "mapsforge-map-awt", version.ref = "mapsforge" }
+vtm = { group = "com.github.mapsforge.vtm", name = "vtm", version.ref = "vtm" }
+vtm-android = { group = "com.github.mapsforge.vtm", name = "vtm-android", version.ref = "vtm" }
+# The filled overlays: each map's land box.
+vtm-jts = { group = "com.github.mapsforge.vtm", name = "vtm-jts", version.ref = "vtm" }
+jts-core = { group = "org.locationtech.jts", name = "jts-core", version.ref = "jts" }
+androidsvg = { group = "com.caverock", name = "androidsvg", version.ref = "androidsvg" }
 
 kotlin-test-junit = { group = "org.jetbrains.kotlin", name = "kotlin-test-junit", version.ref = "kotlin" }
 # Test-only: a real XmlPullParser so GpxParser is testable on the JVM without

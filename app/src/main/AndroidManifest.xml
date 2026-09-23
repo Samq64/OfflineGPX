@@ -30,7 +30,7 @@
       every dependency's permissions, so a library can add INTERNET without anyone writing
       it. tools:node="remove" strips it back out.
 
-      Nothing declares these today - mapsforge ships as plain jars with no manifest - so
+      Nothing declares these today - VTM ships as plain jars with no manifest - so
       these removals are standing guards rather than active repairs. They stay because the
       cost is three lines and the failure they prevent is silent and permanent.
 

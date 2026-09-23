@@ -60,7 +60,7 @@ sealed interface MapImportResult {
  *
  * Copied into app-private storage rather than read where they sit: a map file is seeked
  * around in constantly as tiles are drawn, and a SAF document is a stream through another
- * process. Mapsforge's `MapFile` needs a real path anyway.
+ * process. VTM's map reader needs a real path anyway.
  *
  * Nothing here fetches anything - maps arrive through the file picker or not at all.
  */
