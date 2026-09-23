@@ -2,35 +2,51 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Mapsforge Extract Tool</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
   :root { color-scheme: dark; --bg:#14161a; --panel:#1c1f26; --line:#2c313b; --ink:#e6e8ec; --dim:#9aa3b2; --accent:#6ea8fe; }
   * { box-sizing: border-box; }
-  body { margin:0; height:100vh; display:flex; font:14px/1.5 system-ui, sans-serif; background:var(--bg); color:var(--ink); }
-  #side { width:340px; flex:none; border-right:1px solid var(--line); display:flex; flex-direction:column; background:var(--panel); }
-  #map { flex:1; }
-  h1 { font-size:15px; margin:0; padding:14px 16px; border-bottom:1px solid var(--line); font-weight:600; }
+  /* dvh, not vh: a phone browser's address bar is part of the viewport by the vh
+     definition and not by the one anybody means. */
+  body { margin:0; height:100dvh; display:flex; flex-direction:column; font:14px/1.5 system-ui, sans-serif; background:var(--bg); color:var(--ink); }
+  h1 { font-size:15px; margin:0; padding:14px 16px; border-bottom:1px solid var(--line); font-weight:600; flex:none; }
+  /* Narrow: the map on top, the controls under it, each scrolling on its own. The map
+     has to stay big enough to draw a rectangle on, which is the whole point of it. */
+  main { flex:1; min-height:0; display:flex; flex-direction:column-reverse; }
+  #side { flex:1 1 auto; min-height:0; overflow:auto; background:var(--panel); border-top:1px solid var(--line); }
+  #map { flex:1 1 50%; min-height:220px; }
+  @media (min-width: 720px) {
+    main { flex-direction:row; }
+    #side { flex:none; width:340px; border-top:0; border-right:1px solid var(--line); }
+    #map { flex:1; }
+  }
   .pad { padding:12px 16px; border-bottom:1px solid var(--line); }
   .crumbs { font-size:12px; color:var(--dim); margin-bottom:8px; word-break:break-all; }
-  .crumbs a { color:var(--accent); text-decoration:none; cursor:pointer; }
+  .crumbs a { display:inline-block; padding:4px 2px; color:var(--accent); text-decoration:none; cursor:pointer; }
   ul { list-style:none; margin:0; padding:0; max-height:34vh; overflow:auto; }
-  li a { display:block; padding:5px 8px; border-radius:5px; color:var(--ink); text-decoration:none; cursor:pointer; }
-  li a:hover { background:#262b34; }
+  /* A finger, not a cursor: these are the only targets on the screen and they are a list
+     of near-identical words. */
+  li a { display:block; padding:10px 8px; border-radius:5px; color:var(--ink); text-decoration:none; cursor:pointer; }
+  li a:hover, li a:active { background:#262b34; }
   li a.map::after { content:' .map'; color:var(--dim); font-size:11px; }
-  button { width:100%; padding:9px; border:0; border-radius:6px; background:var(--accent); color:#0b0d10; font-weight:600; cursor:pointer; font-size:13px; }
+  button { width:100%; padding:12px; border:0; border-radius:6px; background:var(--accent); color:#0b0d10; font-weight:600; cursor:pointer; font-size:14px; }
   button:disabled { background:#3a4150; color:#6d7688; cursor:default; }
   button.ghost { background:transparent; border:1px solid var(--line); color:var(--ink); margin-bottom:8px; }
   button.ghost.on { border-color:var(--accent); color:var(--accent); }
+  /* While a rectangle is being dragged out, the gesture belongs to this page rather than
+     to the browser's own scroll and zoom. */
+  body.drawing #map { touch-action:none; }
   .meta { font-size:12px; color:var(--dim); }
   .meta b { color:var(--ink); font-weight:500; }
   code { font-size:11px; color:var(--dim); word-break:break-all; }
 </style>
 </head>
 <body>
+<h1>Mapsforge Extract Tool</h1>
+<main>
 <div id="side">
-  <h1>Mapsforge Extract Tool</h1>
   <div class="pad">
     <div class="crumbs" id="crumbs"></div>
     <ul id="tree"></ul>
@@ -48,6 +64,7 @@
   </div>
 </div>
 <div id="map"></div>
+</main>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
@@ -114,35 +131,77 @@ async function choose(mapPath) {
 }
 
 // --- Drawing -----------------------------------------------------------------
+//
+// Pointer events rather than Leaflet's mouse ones: a touch screen sends a browser no
+// mousemove while a finger is down, so a drag-to-draw built on mousedown/mousemove/mouseup
+// works with a mouse and does nothing at all on a phone.
 
+const canvas = map.getContainer();
 let drawing = false, anchor = null;
 
-$('draw').onclick = () => {
-  drawing = !drawing;
-  $('draw').classList.toggle('on', drawing);
-  $('draw').textContent = drawing ? 'Drag on the map…' : 'Draw a rectangle';
-  map.dragging[drawing ? 'disable' : 'enable']();
+function setDrawing(on) {
+  drawing = on;
+  document.body.classList.toggle('drawing', on);
+  $('draw').classList.toggle('on', on);
+  $('draw').textContent = on ? 'Drag on the map…' : 'Draw a rectangle';
+  // The map's own gestures would otherwise pan and pinch underneath the rectangle.
+  map.dragging[on ? 'disable' : 'enable']();
+  map.touchZoom[on ? 'disable' : 'enable']();
+  map.doubleClickZoom[on ? 'disable' : 'enable']();
+}
+
+$('draw').onclick = () => setDrawing(!drawing);
+
+/**
+ * Where a pointer is, in the map's own coordinates, held inside the source file's own box.
+ * Dragging past the edge pins the rectangle to it rather than selecting ground the file
+ * does not contain - the cut would come back empty there, and the box is drawn on screen,
+ * so a selection crossing it is a question already answered.
+ */
+const at = (event) => {
+  const rect = canvas.getBoundingClientRect();
+  const point = map.containerPointToLatLng(L.point(event.clientX - rect.left, event.clientY - rect.top));
+  const b = source.bbox;
+  return L.latLng(
+    Math.min(Math.max(point.lat, b.minLat), b.maxLat),
+    Math.min(Math.max(point.lng, b.minLon), b.maxLon),
+  );
 };
 
-map.on('mousedown', (event) => {
-  if (!drawing) return;
-  anchor = event.latlng;
+canvas.addEventListener('pointerdown', (event) => {
+  if (!drawing || !event.isPrimary) return;
+  event.preventDefault();
+  canvas.setPointerCapture(event.pointerId);
+  anchor = at(event);
   selection?.remove();
   selection = L.rectangle([anchor, anchor], { color: '#7ee787', weight: 2, fillOpacity: 0.12 }).addTo(map);
 });
 
-map.on('mousemove', (event) => {
-  if (drawing && anchor) selection.setBounds(L.latLngBounds(anchor, event.latlng));
+canvas.addEventListener('pointermove', (event) => {
+  if (!drawing || !anchor) return;
+  event.preventDefault();
+  selection.setBounds(L.latLngBounds(anchor, at(event)));
 });
 
-map.on('mouseup', () => {
-  if (!drawing || !anchor) return;
-  anchor = null;
-  $('draw').click();
-  const b = selection.getBounds();
-  bbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map((n) => n.toFixed(6));
-  update();
-});
+// Cancel counts as an end: a system gesture taking the pointer away mid-drag must not
+// leave the map stuck in drawing mode with no way back.
+for (const type of ['pointerup', 'pointercancel']) {
+  canvas.addEventListener(type, (event) => {
+    if (!drawing || !anchor) return;
+    anchor = null;
+    const b = selection.getBounds();
+    // A tap is not a rectangle. Easy to do by accident with a finger, and a zero-area cut
+    // is a request for an empty file.
+    if (b.getNorth() === b.getSouth() || b.getEast() === b.getWest()) {
+      selection.remove();
+      selection = null;
+      return;
+    }
+    setDrawing(false);
+    bbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map((n) => n.toFixed(6));
+    update();
+  });
+}
 
 function update() {
   if (!bbox) return;
@@ -157,6 +216,9 @@ function update() {
 $('go').onclick = async () => {
   $('go').disabled = true;
   $('status').textContent = 'Cutting…';
+  // A cut is tens of seconds. On a phone the status sits below the fold, where an
+  // unexplained wait looks like a button that did nothing.
+  $('status').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   const started = Date.now();
   try {
     const url = new URL('/api/extract', location.origin);
