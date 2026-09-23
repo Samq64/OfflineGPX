@@ -43,9 +43,9 @@ class RecordingWal private constructor(
 
     override fun close() = writer.close()
 
-    /** Deletes the log. Called once its contents are safely a GPX file. */
+    /** Deletes the log. A failed close is ignored: the contents are going either way. */
     fun discard() {
-        close()
+        runCatching(::close)
         file.delete()
     }
 

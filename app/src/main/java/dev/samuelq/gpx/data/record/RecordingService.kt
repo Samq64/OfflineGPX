@@ -8,9 +8,9 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
-import android.os.Build
 import android.os.IBinder
 import android.os.SystemClock
+import android.util.Log
 import androidx.annotation.StringRes
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
@@ -26,15 +26,20 @@ import dev.samuelq.gpx.core.model.TrackPoint
 import dev.samuelq.gpx.data.settings.Settings
 import dev.samuelq.gpx.GpxApplication
 import dev.samuelq.gpx.ui.format.Formatters
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.io.File
+import java.io.IOException
 import java.time.Instant
 
 /**
@@ -47,24 +52,33 @@ import java.time.Instant
 class RecordingService : Service() {
 
     private val container get() = (application as GpxApplication).container
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    /**
+     * Every field below, and the WAL, is touched only from here: one fix at a time, never
+     * racing a pause or a stop. IO rather than Main because each fix is a flushed write.
+     */
+    private val recorder = Dispatchers.IO.limitedParallelism(1)
+
+    /** A write that fails ends the recording rather than the process; see [fail]. */
+    private val scope: CoroutineScope = CoroutineScope(
+        SupervisorJob() + recorder + CoroutineExceptionHandler { _, e ->
+            Log.e(TAG, "Recording failed", e)
+            scope.launch { fail() }
+        }
+    )
+
+    /** Commands suspend (recovery, saving), and must not interleave with each other. */
+    private val commands = Mutex()
 
     private var collection: Job? = null
     private var wal: RecordingWal? = null
 
     /**
-     * True from the first START until the service goes away, pause included. [collection]
-     * is null while paused and so can't answer this - and a START arriving then would
-     * reopen the WAL in append mode over the ride already in it.
+     * True from START until the recording ends, pause included. [collection] is null while
+     * paused and so can't answer this - and a START arriving then would reopen the WAL in
+     * append mode over the ride already in it.
      */
     private var recording = false
-
-    /**
-     * Set by the first STOP or DISCARD. Both the bar and the notification offer Stop; the
-     * second would otherwise find the WAL handed off, report "nothing was recorded" over a
-     * ride that saved fine, and stopSelf() out from under the save still running.
-     */
-    private var stopping = false
 
     private var startedAt: Instant = Instant.EPOCH
     private var paused = false
@@ -101,20 +115,29 @@ class RecordingService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
-            ACTION_START -> start()
-            ACTION_PAUSE -> pause()
-            ACTION_RESUME -> resume()
-            ACTION_STOP -> stop(save = true)
-            ACTION_DISCARD -> stop(save = false)
-            else -> stopSelf()
+        val action = intent?.action
+        // Now, not once the command gets its turn: a START queued behind a long save would
+        // miss the deadline startForegroundService sets, and that is a crash.
+        if (action == ACTION_START) startForegroundNotification()
+        scope.launch {
+            commands.withLock {
+                when (action) {
+                    ACTION_START -> start()
+                    ACTION_PAUSE -> pause()
+                    ACTION_RESUME -> resume()
+                    ACTION_STOP -> stop(save = true)
+                    ACTION_DISCARD -> stop(save = false)
+                }
+                // By id, so a START queued behind a stop still gets its recording.
+                if (!recording) stopSelf(startId)
+            }
         }
         // Not sticky: a restart with no intent cannot know whether the user still wants to
         // be recorded, and resuming location sampling unasked is exactly the wrong default.
         return START_NOT_STICKY
     }
 
-    private fun start() {
+    private suspend fun start() {
         if (recording) return
         recording = true
 
@@ -140,9 +163,8 @@ class RecordingService : Service() {
         traceStartsSegment = true
         tracePublishedAt = 0
 
-        // Before anything else: the caller reached us through startForegroundService, so
-        // the notification has to go up within seconds whatever happens next - including
-        // the refusal below.
+        // Again, now the state it shows is this ride's. Also covers a START that waited
+        // behind a stop, whose finish() took the first one down.
         startForegroundNotification()
 
         val source = LocationSource(this)
@@ -154,8 +176,14 @@ class RecordingService : Service() {
             return
         }
 
-        val file = File(recordingsDir(this), WAL_NAME)
-        wal = RecordingWal.open(file)
+        // A ride whose save failed is still in the log. Saved first, so this one starts
+        // from an empty file instead of being appended to it.
+        if (!container.trackRepository.recoverAbandonedRecording()) {
+            abandon(R.string.record_save_failed)
+            return
+        }
+
+        wal = RecordingWal.open(File(recordingsDir(this), WAL_NAME))
 
         publish()
         collectFixes(source)
@@ -170,11 +198,27 @@ class RecordingService : Service() {
 
     /** Give up before a recording exists: say why, drop the notification, go away. */
     private fun abandon(@StringRes messageRes: Int) {
-        recording = false
         container.recordingController.emit(RecordingEvent.Failed(messageRes))
-        container.recordingController.update(RecordingState.Idle)
-        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+        finish()
+    }
+
+    /** The log stopped taking writes. Whatever reached it stays on disk for recovery. */
+    private fun fail() {
+        if (!recording) return
+        collection?.cancel()
+        collection = null
+        wal?.let { runCatching(it::close) }
+        wal = null
+        container.recordingController.emit(RecordingEvent.Failed(R.string.record_save_failed))
+        finish()
         stopSelf()
+    }
+
+    private fun finish() {
+        recording = false
+        container.recordingController.update(RecordingState.Idle)
+        container.recordingController.updateTrace(LiveTrace.Empty)
+        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
     }
 
     /**
@@ -231,11 +275,11 @@ class RecordingService : Service() {
      * already leaves a silence the analyser splits on) cannot do: save the battery, and
      * write a real `<trkseg>` boundary that travels with the file to whatever reads it next.
      */
-    private fun pause() {
-        if (paused || !recording || stopping) return
+    private suspend fun pause() {
+        if (paused || !recording) return
         paused = true
 
-        collection?.cancel()
+        collection?.cancelAndJoin()
         collection = null
 
         // A pause is a gap in the track, not a straight line across it. Mark it now so
@@ -255,7 +299,7 @@ class RecordingService : Service() {
     }
 
     private fun resume() {
-        if (!paused || !recording || stopping) return
+        if (!paused || !recording) return
 
         val source = LocationSource(this)
         // Location can be switched off during a long pause - it is a quick-settings
@@ -272,72 +316,59 @@ class RecordingService : Service() {
         updateNotification()
     }
 
-    private fun stop(save: Boolean) {
-        if (stopping) return
+    private suspend fun stop(save: Boolean) {
         // A STOP with no recording behind it has nothing to save and nothing to say.
-        if (!recording) {
-            stopSelf()
-            return
-        }
-        stopping = true
+        if (!recording) return
 
-        collection?.cancel()
+        // Joined, not just cancelled: a fix mid-append must land before the log closes.
+        collection?.cancelAndJoin()
         collection = null
 
-        val log = wal
+        val log = wal ?: return finish()
         wal = null
 
-        scope.launch {
-            try {
-                if (!save) {
-                    log?.discard()
-                    container.recordingController.emit(RecordingEvent.Discarded)
-                } else {
-                    log?.close()
-                    val file = log?.file
-                    val track = file?.let { RecordingWal.recover(it, name = null) }
-                    // Nothing in the log, or fixes that never went anywhere - either way a
-                    // library row of three empty charts, and neither the user's decision,
-                    // so neither is called "discarded".
-                    if (track == null || distanceMeters < MIN_SAVEABLE_DISTANCE_METERS) {
-                        file?.delete()
-                        container.recordingController.emit(
-                            RecordingEvent.Failed(
-                                if (track == null) {
-                                    R.string.record_nothing_recorded
-                                } else {
-                                    R.string.record_no_distance
-                                }
-                            )
-                        )
-                    } else {
-                        val id = container.trackRepository.saveRecording(track, startedAt)
-                        id.fold(
-                            onSuccess = {
-                                file.delete()
-                                container.recordingController.emit(RecordingEvent.Saved(it))
-                            },
-                            onFailure = {
-                                // Keep the log. A failed save that also deleted the ride
-                                // would be the worst outcome this class exists to prevent.
-                                container.recordingController.emit(
-                                    RecordingEvent.Failed(R.string.record_save_failed)
-                                )
-                            },
-                        )
-                    }
-                }
-            } finally {
-                // Cleared here, not in onDestroy: stopping is asynchronous, so a Record
-                // tapped straight after the save lands on this same instance, where a
-                // `recording` still true would swallow it and let the service die anyway.
-                recording = false
-                stopping = false
-                container.recordingController.update(RecordingState.Idle)
-                container.recordingController.updateTrace(LiveTrace.Empty)
-                ServiceCompat.stopForeground(this@RecordingService, ServiceCompat.STOP_FOREGROUND_REMOVE)
-                stopSelf()
+        try {
+            if (!save) {
+                log.discard()
+                container.recordingController.emit(RecordingEvent.Discarded)
+                return
             }
+            log.close()
+            val track = RecordingWal.recover(log.file, name = null)
+            // Nothing in the log, or fixes that never went anywhere - either way a library
+            // row of three empty charts, and neither the user's decision, so neither is
+            // called "discarded". The log only ever holds this ride; see [start].
+            if (track == null || distanceMeters < MIN_SAVEABLE_DISTANCE_METERS) {
+                log.file.delete()
+                container.recordingController.emit(
+                    RecordingEvent.Failed(
+                        if (track == null) {
+                            R.string.record_nothing_recorded
+                        } else {
+                            R.string.record_no_distance
+                        }
+                    )
+                )
+                return
+            }
+            container.trackRepository.saveRecording(track, startedAt).fold(
+                onSuccess = {
+                    log.file.delete()
+                    container.recordingController.emit(RecordingEvent.Saved(it))
+                },
+                onFailure = {
+                    // Keep the log. A failed save that also deleted the ride would be
+                    // the worst outcome this class exists to prevent.
+                    container.recordingController.emit(
+                        RecordingEvent.Failed(R.string.record_save_failed)
+                    )
+                },
+            )
+        } catch (e: IOException) {
+            Log.e(TAG, "Could not read back the recording", e)
+            container.recordingController.emit(RecordingEvent.Failed(R.string.record_save_failed))
+        } finally {
+            finish()
         }
     }
 
@@ -377,11 +408,7 @@ class RecordingService : Service() {
             this,
             NOTIFICATION_ID,
             buildNotification(),
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
-            } else {
-                0
-            },
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION,
         )
     }
 
@@ -459,11 +486,9 @@ class RecordingService : Service() {
     }
 
     override fun onDestroy() {
-        recording = false
-        stopping = false
-        collection?.cancel()
-        wal?.close()
         scope.cancel()
+        // Queued behind whatever the recorder is running, so it can't land mid-append.
+        CoroutineScope(recorder).launch { wal?.let { runCatching(it::close) } }
         super.onDestroy()
     }
 
@@ -474,6 +499,7 @@ class RecordingService : Service() {
         const val ACTION_STOP = "dev.samuelq.gpx.RECORD_STOP"
         const val ACTION_DISCARD = "dev.samuelq.gpx.RECORD_DISCARD"
 
+        private const val TAG = "RecordingService"
         private const val CHANNEL_ID = "recording"
         private const val NOTIFICATION_ID = 1
 
@@ -494,11 +520,11 @@ class RecordingService : Service() {
         const val WAL_NAME = "recording.wal"
 
         /**
-         * Where recovery moves an abandoned [WAL_NAME] before reading it, so a recording
-         * started meanwhile cannot end up sharing the file. See
+         * Prefix of the names recovery moves an abandoned [WAL_NAME] to before reading it.
+         * One per ride, so a claim a failed save left behind is never overwritten. See
          * `GpxTrackRepository.recoverAbandonedRecording`.
          */
-        const val WAL_RECOVERY_NAME = "recovering.wal"
+        const val WAL_RECOVERY_PREFIX = "recovering-"
 
         /** Where recordings and their logs live. App-private: no permission, and ours to delete. */
         fun recordingsDir(context: Context): File =

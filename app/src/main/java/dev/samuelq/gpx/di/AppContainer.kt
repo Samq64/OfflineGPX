@@ -11,6 +11,7 @@ import dev.samuelq.gpx.data.settings.SettingsRepository
 import dev.samuelq.gpx.data.track.GpxTrackRepository
 import dev.samuelq.gpx.data.track.TrackRepository
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
@@ -52,10 +53,13 @@ class AppContainer(context: Context) {
 
     /**
      * Rescues a ride whose process died before it was stopped. Runs once per launch, off
-     * the main thread.
+     * the main thread - but undispatched, so it holds the recovery lock before any
+     * recording can start.
      */
     fun recoverAbandonedRecording() {
-        applicationScope.launch { trackRepository.recoverAbandonedRecording() }
+        applicationScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            trackRepository.recoverAbandonedRecording()
+        }
     }
 
     /**

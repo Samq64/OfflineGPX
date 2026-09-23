@@ -27,6 +27,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.shareIn
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileNotFoundException
@@ -52,6 +54,9 @@ class GpxTrackRepository(
     private val scope = CoroutineScope(SupervisorJob() + io)
 
     private val recordingsDir: File get() = RecordingService.recordingsDir(appContext)
+
+    /** Two recoveries at once would both save the same claimed log. */
+    private val recovery = Mutex()
 
     /**
      * App-private copy of every imported GPX, same as [recordingsDir] - a recording and an
@@ -162,7 +167,7 @@ class GpxTrackRepository(
         withContext(io) {
             runCatching {
                 val profile = analyzed ?: TrackAnalyzer.analyze(track)
-                val displayName = recordingFileName(startedAt)
+                val displayName = uniqueRecordingName(startedAt)
                 val file = File(recordingsDir, displayName)
 
                 // Named before it's written, so the name is inside the GPX and survives an
@@ -195,24 +200,45 @@ class GpxTrackRepository(
             }.recoverFailure()
         }
 
-    override suspend fun recoverAbandonedRecording(): Long? = withContext(io) {
-        val claimed = File(recordingsDir, RecordingService.WAL_RECOVERY_NAME)
-        // Claimed by renaming before a byte is read: a recording started while this is
-        // still parsing opens WAL_NAME in append mode, and without the rename that live
-        // log is the one the deletes below would take. A claim left by a recovery that
-        // died mid-way is finished rather than overwritten.
-        if (!claimed.exists()) {
+    // Locked before switching threads, so the launch-time call takes the lock during
+    // Application.onCreate - ahead of any recording, which would otherwise have its live
+    // log claimed out from under it.
+    override suspend fun recoverAbandonedRecording(): Boolean = recovery.withLock {
+        withContext(io) {
+            // Claimed by renaming before a byte is read, under a name of its own so a claim
+            // a failed save left behind is retried rather than overwritten.
             val log = File(recordingsDir, RecordingService.WAL_NAME)
-            if (!log.exists() || log.length() == 0L) return@withContext null
-            if (!log.renameTo(claimed)) return@withContext null
-        }
+            if (log.length() > 0L) {
+                log.renameTo(
+                    File(recordingsDir, "${RecordingService.WAL_RECOVERY_PREFIX}${System.currentTimeMillis()}.wal")
+                )
+            } else {
+                log.delete()
+            }
 
+            recordingsDir
+                .listFiles { file -> file.name.startsWith(RecordingService.WAL_RECOVERY_PREFIX) }
+                .orEmpty()
+                .sortedBy(File::getName)
+                .forEach { claimed ->
+                    try {
+                        recoverClaimed(claimed)
+                    } catch (e: IOException) {
+                        Log.w(TAG, "Could not recover ${claimed.name}", e)
+                    }
+                }
+            !log.exists()
+        }
+    }
+
+    /** Saves one claimed log as a track, deleting it once it is one or never could be. */
+    private suspend fun recoverClaimed(claimed: File) {
         // Timestamps come from the fixes themselves, so a recovered ride is dated when it
         // happened rather than when the app next opened.
         val track = RecordingWal.recover(claimed, name = null)
         if (track == null) {
             claimed.delete()
-            return@withContext null
+            return
         }
 
         // The same bar a clean stop applies: a crash must not resurrect what pressing Stop
@@ -220,11 +246,11 @@ class GpxTrackRepository(
         val profile = TrackAnalyzer.analyze(track)
         if (profile.stats.distanceMeters < RecordingService.MIN_SAVEABLE_DISTANCE_METERS) {
             claimed.delete()
-            return@withContext null
+            return
         }
 
         val startedAt = track.segments.firstOrNull()?.points?.firstOrNull()?.time ?: Instant.now()
-        saveRecording(track, startedAt, profile).getOrNull()?.also { claimed.delete() }
+        if (saveRecording(track, startedAt, profile).isSuccess) claimed.delete()
     }
 
     override suspend fun exportAll(names: Map<Long, String>, treeUri: String): Result<Int> =
@@ -419,6 +445,21 @@ class GpxTrackRepository(
     }
 
     /**
+     * The start time as a filename, numbered if taken: local time repeats an hour when the
+     * clocks go back, and a save must never overwrite another ride.
+     */
+    private fun uniqueRecordingName(startedAt: Instant): String {
+        val base = FILE_STAMP.format(startedAt.atZone(ZoneId.systemDefault()))
+        var candidate = "$base.gpx"
+        var suffix = 2
+        while (File(recordingsDir, candidate).exists()) {
+            candidate = "$base-$suffix.gpx"
+            suffix++
+        }
+        return candidate
+    }
+
+    /**
      * A name in [importsDir] not already taken, keeping the picked file's own name where
      * possible - same reasoning as `MapStore`'s equivalent.
      */
@@ -464,9 +505,6 @@ class GpxTrackRepository(
          */
         private val FILE_STAMP: DateTimeFormatter =
             DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HHmmss", java.util.Locale.ROOT)
-
-        fun recordingFileName(startedAt: Instant): String =
-            "${FILE_STAMP.format(startedAt.atZone(ZoneId.systemDefault()))}.gpx"
 
         /** Maps the read failures onto the three the UI has messages for. */
         fun <T> Result<T>.recoverFailure(): Result<T> = recoverCatching { e ->

@@ -74,10 +74,11 @@ interface TrackRepository {
     ): Result<Long>
 
     /**
-     * Rescues a recording whose process died before it could be stopped. Runs once at
-     * startup; returns the new row id, or null when there was nothing to recover.
+     * Rescues recordings that were never saved: the process died, or the save failed.
+     * Runs at startup and before each recording. Returns whether the live log's name is
+     * free, so a new recording can't be appended to an old one.
      */
-    suspend fun recoverAbandonedRecording(): Long?
+    suspend fun recoverAbandonedRecording(): Boolean
 
     /**
      * Writes several tracks into [treeUri], a folder chosen through SAF, under the [names]
