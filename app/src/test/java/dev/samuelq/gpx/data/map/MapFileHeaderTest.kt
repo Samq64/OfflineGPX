@@ -32,13 +32,17 @@ class MapFileHeaderTest {
 
     /**
      * The zoom range is the union across intervals, not any one of them: the file stores
-     * three base zooms and serves z0-21 between them, and the camera is capped to that.
+     * three base zooms and serves z0-21 between them.
+     *
+     * The base zoom is read separately because it is the one the camera is capped from -
+     * z15 to z21 are the z14 tile scaled up, and a cap on 21 is no cap at all.
      */
     @Test
-    fun `the zoom range spans every interval`() {
+    fun `the zoom range spans every interval, and the base zoom is the deepest stored`() {
         val header = assertNotNull(MapFileHeader.read(fixture()))
         assertEquals(0, header.minZoom)
         assertEquals(21, header.maxZoom)
+        assertEquals(14, header.baseZoom)
     }
 
     /** Where an extract's ODbL credit actually lives, and what the settings screen shows. */

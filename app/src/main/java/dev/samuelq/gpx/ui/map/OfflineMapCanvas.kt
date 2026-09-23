@@ -20,6 +20,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -43,6 +44,8 @@ import org.mapsforge.map.android.view.MapView
 import org.mapsforge.map.datastore.MultiMapDataStore
 import org.mapsforge.map.layer.GroupLayer
 import org.mapsforge.map.layer.Layer
+import org.mapsforge.map.layer.cache.TileCache
+import org.mapsforge.map.layer.labels.LabelLayer
 import org.mapsforge.map.layer.overlay.Circle
 import org.mapsforge.map.layer.overlay.Polygon
 import org.mapsforge.map.layer.overlay.Polyline
@@ -189,7 +192,7 @@ fun OfflineMapCanvas(
         )
     }
 
-    var tileLayer by remember { mutableStateOf<TileRendererLayer?>(null) }
+    var basemap by remember { mutableStateOf<Basemap?>(null) }
     // Framed once, when there's first something to frame - re-fitting on every route-set
     // change (every few seconds during a recording) would yank the map out from under a pan.
     var hasFramed by remember { mutableStateOf(false) }
@@ -200,6 +203,10 @@ fun OfflineMapCanvas(
     val selectNothing by rememberUpdatedState(onSelectNothing)
     val reportScale by rememberUpdatedState(onScaleChange)
     val reportCamera by rememberUpdatedState(onCameraChange)
+
+    // Resolved here, where there is a density to resolve it against: a fingertip is a
+    // physical size, and 44 raw pixels is a third of one on a modern screen.
+    val tapReach = remember(density) { with(density) { TAP_REACH_DP.dp.toPx() } }
 
     val insets = remember(contentPadding, layoutDirection, density) {
         with(density) {
@@ -229,11 +236,16 @@ fun OfflineMapCanvas(
         layers.add(groups.markers)
         layers.add(
             TapLayer { tapped ->
-                val hit = pick(tapped, mapView, currentRoutes, currentLiveRoute)
+                val hit = pick(tapped, mapView, currentRoutes, currentLiveRoute, tapReach)
                 if (hit == null) selectNothing() else select(hit.first, hit.second)
             }
         )
-        onDispose { layers.clear() }
+        onDispose {
+            layers.clear()
+            // The layers themselves are destroyed with the view; the cache is not owned by
+            // any of them, so nothing else would ever free it.
+            basemap?.cache?.destroy()
+        }
     }
 
     // --- Position reporting ---------------------------------------------------------
@@ -279,8 +291,16 @@ fun OfflineMapCanvas(
     // a new data store, which is the one thing worth rebuilding the tile layer for.
     LaunchedEffect(mapView, basemaps, backgroundColor, landColor, labelColor) {
         val layers = mapView.layerManager.layers
-        tileLayer?.let { layers.remove(it); it.onDestroy() }
-        tileLayer = null
+        basemap?.let { current ->
+            layers.remove(current.labels)
+            layers.remove(current.tiles)
+            current.labels.onDestroy()
+            current.tiles.onDestroy()
+            // Not destroyed by either layer - a TileLayer holds its cache but never frees
+            // it, so a rebuild without this leaks a screenful of tiles every time.
+            current.cache.destroy()
+        }
+        basemap = null
 
         // Land under the tiles, not painted by them: the render theme's background is
         // transparent so ground no imported file covers reads as empty rather than as land.
@@ -292,7 +312,11 @@ fun OfflineMapCanvas(
             basemaps.map { map -> outlinePolyline(map, labelColor) },
             mapView.model.displayModel,
         )
-        mapView.setBackgroundColor(backgroundColor.toArgb())
+        // The frame buffer's colour, not the view's: mapsforge clears every frame with the
+        // display model's own background (a fixed light grey) straight over whatever the
+        // view is painted. Ground beyond every imported file is most of the screen on a
+        // dark theme, and it was staying light.
+        mapView.model.displayModel.setBackgroundColor(backgroundColor.toArgb())
 
         if (basemaps.isEmpty()) return@LaunchedEffect
 
@@ -309,26 +333,36 @@ fun OfflineMapCanvas(
             MapRenderTheme.xml(land = landColor, label = labelColor, background = backgroundColor)
         )
 
+        // context.cacheDir, not the default: the no-argument overload puts rendered tiles in
+        // app-specific *external* storage, where any app holding all-files access can read
+        // where this one has been looking. Everything else this app writes is internal.
         val cache = AndroidUtil.createTileCache(
             context,
+            context.cacheDir,
             TILE_CACHE_ID,
             mapView.model.displayModel.tileSize,
             SCREEN_RATIO,
             mapView.model.frameBufferModel.overdrawFactor,
+            /* persistent = */ false,
         )
-        val layer = TileRendererLayer(
+        val tiles = TileRendererLayer(
             cache,
             store,
             mapView.model.mapViewPosition,
             /* isTransparent = */ true,
-            /* renderLabels = */ true,
-            /* cacheLabels = */ false,
+            // Names collected for the layer above rather than baked into each tile: a name
+            // that straddles a tile boundary is otherwise drawn once per tile it touches,
+            // which is why every pond in a bay came out captioned twice.
+            /* renderLabels = */ false,
+            /* cacheLabels = */ true,
             AndroidGraphicFactory.INSTANCE,
         ).apply { setXmlRenderTheme(theme) }
+        val labels = LabelLayer(AndroidGraphicFactory.INSTANCE, tiles.labelStore)
 
         // Directly above the land, below everything the app draws itself.
-        layers.add(1, layer)
-        tileLayer = layer
+        layers.add(1, tiles)
+        layers.add(2, labels)
+        basemap = Basemap(tiles, labels, cache)
     }
 
     // --- What is drawn --------------------------------------------------------------
@@ -387,7 +421,12 @@ fun OfflineMapCanvas(
 
         // A cap on the way in - magnifying a file's deepest zoom many times over draws
         // detail that does not exist, convincingly.
-        val deepest = basemaps.maxOfOrNull { it.header.maxZoom } ?: DEFAULT_MAX_ZOOM
+        //
+        // Measured from the deepest zoom the file *stores*, not the one it advertises: a
+        // published file keeps tiles at z14 and claims z21, and mapsforge answers everything
+        // above the base zoom by scaling that tile up. Taking the claim at face value let a
+        // short track frame itself at z21, where the map is eight doublings of blur.
+        val deepest = basemaps.maxOfOrNull { it.header.baseZoom } ?: DEFAULT_MAX_ZOOM
         val ceiling = (deepest + OVERZOOM_ALLOWANCE).coerceAtMost(MAX_ZOOM_LEVEL)
         position.zoomLevelMax = ceiling.toByte()
 
@@ -474,6 +513,16 @@ fun OfflineMapCanvas(
 /** Pixels kept clear on each edge, for whatever is floating over the map. */
 private class Insets(val left: Int, val top: Int, val right: Int, val bottom: Int)
 
+/**
+ * The basemap as one thing to put up and take down: the tiles, the names drawn over them,
+ * and the cache they are rendered into.
+ */
+private class Basemap(
+    val tiles: TileRendererLayer,
+    val labels: LabelLayer,
+    val cache: TileCache,
+)
+
 /** The stable layer groups, in the order they are drawn. */
 private class MapLayers(
     val land: GroupLayer,
@@ -558,7 +607,9 @@ private class TapLayer(private val onTap: (LatLong) -> Unit) : Layer() {
         rotation: org.mapsforge.core.model.Rotation?,
     ) = Unit
 
-    override fun onTap(tapLatLong: LatLong, layerXY: Point, tapXY: Point): Boolean {
+    // layerXY is null for a layer with no position of its own, which this is - declaring it
+    // non-null makes Kotlin's own check throw on the first tap anyone makes.
+    override fun onTap(tapLatLong: LatLong, layerXY: Point?, tapXY: Point?): Boolean {
         onTap(tapLatLong)
         return true
     }
@@ -656,14 +707,20 @@ private fun outlinePolyline(map: OfflineMap, label: Color) =
  * Which track was tapped, and where along it.
  *
  * Mapsforge draws overlays rather than indexing them, so there is nothing to ask what was
- * under those pixels - this projects every drawn position and takes the nearest within a
- * fingertip. One scan per tap over the routes on screen.
+ * under those pixels - this projects the drawn positions itself and measures to the *line*
+ * rather than to its vertices. An imported route can be a point per kilometre, and a tap
+ * halfway along one of those must still land on the track someone can plainly see.
+ *
+ * The index reported back is the nearer end of whichever segment was hit, since that is
+ * what the charts and the marker are addressed by. One scan per tap over the routes on
+ * screen, allocating nothing.
  */
 private fun pick(
     tapped: LatLong,
     mapView: MapView,
     routes: List<RouteOverlay>,
     liveRoute: RouteOverlay?,
+    reachPx: Float,
 ): Pair<Long, Int>? {
     val mapSize = MercatorProjection.getMapSizeWithScaleFactor(
         mapView.model.mapViewPosition.scaleFactor, mapView.model.displayModel.tileSize,
@@ -673,18 +730,59 @@ private fun pick(
 
     var bestTrack: Long? = null
     var bestIndex = 0
-    var bestDistance = TAP_REACH_PX * TAP_REACH_PX
+    var bestDistance = (reachPx * reachPx).toDouble()
 
     // The recording is checked too - a tap on it must not read as a tap on the bare map.
     for (route in (routes + listOfNotNull(liveRoute))) {
-        route.points.forEachIndexed { index, point ->
-            val dx = MercatorProjection.longitudeToPixelX(point.longitude, mapSize) - tapX
-            val dy = MercatorProjection.latitudeToPixelY(point.latitude, mapSize) - tapY
-            val distance = dx * dx + dy * dy
-            if (distance < bestDistance) {
-                bestDistance = distance
-                bestTrack = route.trackId
-                bestIndex = index
+        val starts = route.segmentStartIndices
+        val runs = if (starts.isEmpty()) 1 else starts.size
+
+        for (run in 0 until runs) {
+            val from = if (starts.isEmpty()) 0 else starts[run]
+            val to = if (run + 1 < starts.size) starts[run + 1] else route.points.size
+            if (to <= from) continue
+
+            // Nothing is drawn across a segment break, so nothing is hit across one either.
+            var previousX = 0.0
+            var previousY = 0.0
+            for (index in from until to) {
+                val point = route.points[index]
+                val x = MercatorProjection.longitudeToPixelX(point.longitude, mapSize)
+                val y = MercatorProjection.latitudeToPixelY(point.latitude, mapSize)
+
+                if (index == from) {
+                    // A lone position is a point, not a line: measured to itself.
+                    if (to - from == 1) {
+                        val dx = x - tapX
+                        val dy = y - tapY
+                        val distance = dx * dx + dy * dy
+                        if (distance < bestDistance) {
+                            bestDistance = distance
+                            bestTrack = route.trackId
+                            bestIndex = index
+                        }
+                    }
+                } else {
+                    val spanX = x - previousX
+                    val spanY = y - previousY
+                    val lengthSquared = spanX * spanX + spanY * spanY
+                    val along = if (lengthSquared == 0.0) {
+                        0.0
+                    } else {
+                        (((tapX - previousX) * spanX + (tapY - previousY) * spanY) / lengthSquared)
+                            .coerceIn(0.0, 1.0)
+                    }
+                    val dx = previousX + along * spanX - tapX
+                    val dy = previousY + along * spanY - tapY
+                    val distance = dx * dx + dy * dy
+                    if (distance < bestDistance) {
+                        bestDistance = distance
+                        bestTrack = route.trackId
+                        bestIndex = if (along < 0.5) index - 1 else index
+                    }
+                }
+                previousX = x
+                previousY = y
             }
         }
     }
@@ -813,8 +911,8 @@ private const val PUCK_HALO_ALPHA = 0.24f
 private const val COVERAGE_WIDTH = 3f
 private const val COVERAGE_OPACITY = 0.55f
 
-/** About a fingertip, in pixels rather than dp because it is a hit test, not a drawing. */
-private const val TAP_REACH_PX = 44.0
+/** About a fingertip. In dp: a finger is a physical size, whatever the screen's density. */
+private const val TAP_REACH_DP = 40f
 private const val FOLLOW_MARGIN_PX = 96
 private const val EDGE_PADDING_PX = 64
 

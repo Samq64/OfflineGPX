@@ -10,6 +10,15 @@ node bin/mapcut.mjs https://download.mapsforge.org/maps/v5/europe/andorra.map ou
 
 No dependencies, no build step.
 
+The page is built for a phone as much as a desktop — the phone is where the `.map` file is
+wanted, and a map cut on a laptop has to be moved across to be any use. The panel sits under
+the map on a narrow screen, and the rectangle is dragged out with a finger: the drawing runs
+on pointer events, since a touch screen sends no `mousemove` while a finger is down.
+
+One wrinkle when serving over the LAN: Chrome calls a file from an `http://` page an
+insecure download and asks before keeping it. Answer **Keep**. Serving this over TLS is the
+only real fix and is beyond what a prototype is for.
+
 ## How it works
 
 Upstream is `download.mapsforge.org/maps/v5/`, which mirrors the Geofabrik tree

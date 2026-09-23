@@ -20,6 +20,12 @@ import java.io.RandomAccessFile
 class MapFileHeader(
     val minZoom: Int,
     val maxZoom: Int,
+    /**
+     * The deepest zoom the file actually stores tiles at. Everything between this and
+     * [maxZoom] is the same data scaled up, so this - not [maxZoom] - is where the detail
+     * really stops. Published files store 5/10/14 and claim 21.
+     */
+    val baseZoom: Int,
     val minLongitude: Double,
     val minLatitude: Double,
     val maxLongitude: Double,
@@ -107,8 +113,9 @@ class MapFileHeader(
                 if (intervals <= 0) return null
                 var lowest = Int.MAX_VALUE
                 var highest = Int.MIN_VALUE
+                var deepestBase = Int.MIN_VALUE
                 repeat(intervals) {
-                    cursor.byte() // base zoom
+                    deepestBase = maxOf(deepestBase, cursor.byte())
                     lowest = minOf(lowest, cursor.byte())
                     highest = maxOf(highest, cursor.byte())
                     cursor.skip(16) // sub-file start and size
@@ -117,6 +124,7 @@ class MapFileHeader(
                 MapFileHeader(
                     minZoom = lowest,
                     maxZoom = highest,
+                    baseZoom = deepestBase,
                     minLongitude = minLongitude,
                     minLatitude = minLatitude,
                     maxLongitude = maxLongitude,

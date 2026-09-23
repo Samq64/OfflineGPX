@@ -38,7 +38,11 @@ enum class MapMessage { RenameFailed, Hidden, ImportFailed }
 data class MapUiState(
     val entities: List<TrackEntity> = emptyList(),
     val geometry: Map<Long, LoadedTrack> = emptyMap(),
-    val loading: Boolean = false,
+    // True from the start, not false: a read is already in flight when this is constructed,
+    // and the map frames itself once, on the first state that says there is nothing more
+    // coming. Starting false let that happen before the tracks had arrived - the camera
+    // settled on the basemap and latched, which is the one thing `tracksLoading` is for.
+    val loading: Boolean = true,
     /**
      * Every row, visible or not - the sheet's rename/export/delete questions are about
      * the row, not the geometry.

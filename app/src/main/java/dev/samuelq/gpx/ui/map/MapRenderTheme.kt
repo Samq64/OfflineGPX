@@ -123,17 +123,19 @@ object MapRenderTheme {
         )
 
         // Dashed, so a path reads as different from a road at a glance rather than by
-        // comparing two widths.
+        // comparing two widths - and *narrower* than the smallest road at every band. It
+        // used to be wider, which put a footpath above the street it crosses in a hierarchy
+        // that is supposed to run the other way.
         //
         // Sidewalks and crossings are drawn here along with everything else, which they
         // were not before: the PMTiles schema carried a `kind_detail` that told a sidewalk
         // from the trail beside it, and mapsforge's default tag config does not record
         // `footway=sidewalk` at all. In a town this draws a second line beside every
-        // street. Fixing it means cutting from files written with a custom tag config.
+        // street, which is the other reason these are as quiet as they now are.
         zoomedLine(
             selector = """<rule e="way" k="highway" v="path|footway|cycleway|bridleway|track|steps">""",
             stroke = pathBrown(dark),
-            widths = listOf(12 to 1f, 14 to 2.5f, 17 to 7f),
+            widths = listOf(12 to 0.5f, 14 to 1.2f, 17 to 4.5f),
             dashes = "8,5",
         )
     }
@@ -214,8 +216,13 @@ object MapRenderTheme {
     /**
      * A desaturated red-brown, as paper maps have used for trails for a century. Muted,
      * since the dash already says "path".
+     *
+     * The dark one is much darker than the light one rather than the same brown twice.
+     * Against near-black ground, the light brown was brighter than every road on the map -
+     * roads are derived from the ground by stepping *towards* white, so they land in the
+     * greys, and a mid-tone brown outshone all of them.
      */
-    private fun pathBrown(dark: Boolean) = if (dark) "#a9795d" else "#a8785f"
+    private fun pathBrown(dark: Boolean) = if (dark) "#6b4f3e" else "#a8785f"
 
     /**
      * Below this luminance the theme is treated as dark, and every derived colour moves

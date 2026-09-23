@@ -486,7 +486,10 @@ fun MapScreen(
                 // first and the only one that does not involve aiming at anything.
                 onSelectNothing = { viewModel.focus(null) },
                 contentPadding = canvasPadding,
-                backgroundColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+                // A step apart, not the same colour twice: ground no imported file covers
+                // has to read as empty rather than as land, and the dashed outline alone is
+                // a thin thing to carry that.
+                backgroundColor = MaterialTheme.colorScheme.surfaceContainerLow,
                 landColor = MaterialTheme.colorScheme.surfaceContainerLowest,
                 labelColor = MaterialTheme.colorScheme.onSurface,
                 onScaleChange = { metersPerPixel.doubleValue = it },

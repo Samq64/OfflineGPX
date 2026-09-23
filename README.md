@@ -46,12 +46,14 @@ mapsforge. The original no-dependency minimalism isn't the governing constraint 
 the permission budget is. A dependency earns its place by beating the hand-rolled code it
 replaces; what disqualifies one is pulling `INTERNET` into the merged manifest, or wanting a
 permission for a feature nobody asked for. Mapsforge ships as plain jars with no manifest
-and no native code, so it declares nothing and costs 3.3 MB of release APK against
-MapLibre's 49 MB of `libmaplibre.so` across four ABIs.
+and no native code, so it declares nothing: the whole release APK is **3.3 MB against
+MapLibre's 52.8 MB**, which was 48 MB of `libmaplibre.so` across four ABIs. Per device
+rather than per universal APK, that is roughly 16 MB down to 3.5 MB.
 
 Basemaps are mapsforge `.map` files. The format stores three base zooms (5/10/14) and
-renders the rest by scaling, where PMTiles stored a tile at every zoom — which is most of
-why the same ground is 4–6× smaller here. `tools/mapcut` cuts an area out of
+renders the rest by scaling, where PMTiles stored a tile at every zoom — which is why the
+same ground is **about 2.5× smaller** here (12 × 12 km of eastern Ontario: 2.47 MB as
+`.pmtiles` to z15, 0.98 MB as `.map`). `tools/mapcut` cuts an area out of
 `download.mapsforge.org` by byte-copying tile blocks over HTTP range requests.
 
 Still hand-rolled: the charts (no library gives a shared-domain scrubber or an
@@ -153,25 +155,29 @@ is a wrong number presented as a real one.
 
 ### Offline maps
 
-MapLibre Native renders a basemap from a `.pmtiles` archive the user supplies through the
-file picker — the app fetches nothing and ships no maps of its own. An archive is copied
-into app-private storage at import (validated first; deleted again if it fails to parse).
+Mapsforge renders a basemap from a `.map` file the user supplies through the file picker —
+the app fetches nothing and ships no maps of its own. A file is copied into app-private
+storage at import (its header read first; deleted again if it isn't a map file). Rendered
+tiles are cached in the app's internal cache directory, not the app-specific *external* one
+mapsforge reaches for by default — where this app has been looking is not for other apps to
+read.
 
-Coverage is read from the tile directory, not trusted from the header's bounding box, which
-is a lie for anything cut from a drawn polygon rather than a bbox. Two archives over the
-same ground are two renderings of one place stacked, and no z-order makes that legible, so
-importing a map that overlaps one already shown deletes the older one — newer supersedes
-older automatically, rather than refusing the import and making the user delete the old one
-by hand. Attribution, if the archive's own metadata carries one, is listed on the settings
-screen; the app has no source of its own to credit.
+A `.map` file's coverage is a rectangle and the header states it exactly, so it is taken at
+its word. Two files over the same ground are two renderings of one place stacked, and no
+z-order makes that legible, so importing a map that overlaps one already shown deletes the
+older one — newer supersedes older automatically, rather than refusing the import and making
+the user delete the old one by hand. Attribution, if the file's own comment or created-by
+field carries one, is listed on the settings screen; the app has no source of its own to
+credit.
 
-`GpxApplication` tells MapLibre it's offline before any map exists — its
-`ConnectivityReceiver` calls `getActiveNetworkInfo()` unguarded, which throws without
-`ACCESS_NETWORK_STATE`, and that permission is one of the three stripped from the merged
-manifest.
+The render theme is generated at runtime rather than shipped as an asset, so it can take its
+colours from the theme the user is in. Mapsforge reads raw OSM tags and has no expression
+language, so a width that varies with zoom is written out as one nested rule per band.
+Names are drawn by a `LabelLayer` over the tiles rather than baked into them, or a name
+straddling a tile boundary is drawn once per tile it touches.
 
-The camera is MapLibre's: pinch, fling, and a pan clamp to the fit of every track and shown
-map. A scale bar reads the camera's live scale and is drawn over it. The map's own
+The camera is the map view's: pinch, fling, and a pan clamp to the fit of every track and
+shown map. A scale bar reads the camera's live scale and is drawn over it. The map's own
 composition doesn't survive navigating away to the library or settings and back -
 Compose Navigation only keeps the current destination composed - so the camera's last
 position is remembered in the ViewModel (which does survive) and restored directly on
@@ -179,10 +185,16 @@ return, rather than re-fitting to the tracks or the map from nothing every time.
 
 The basemap style is deliberately plain: earth, one green for anything vegetated, water
 (always blue, regardless of theme), buildings (a landmark on a country road), and roads
-and surface rail with their names. Sidewalks and crossings are filtered out - pavement
-this app already draws as the road beside it, not a trail of their own. Urban tint and
-finer landuse distinctions are left out — this is a place to read a route against, not a
-general-purpose map.
+and surface rail with their names. Urban tint and finer landuse distinctions are left out —
+this is a place to read a route against, not a general-purpose map.
+
+Sidewalks and crossings used to be filtered out — pavement this app already draws as the
+road beside it, not a trail of their own. They can't be now: the PMTiles schema carried a
+`kind_detail` that told them apart, and the tag configuration the published `.map` files are
+written with does not record `footway=sidewalk` at all, so a sidewalk reaches the renderer
+as an ordinary `highway=footway`. In a town this draws a second dashed line beside every
+street, which is the one thing about the basemap that is plainly worse than it was. Fixing
+it needs source files written with a custom tag configuration.
 
 ## Design decisions worth knowing
 

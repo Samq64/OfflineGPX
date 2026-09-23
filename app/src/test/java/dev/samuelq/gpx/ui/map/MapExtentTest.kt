@@ -36,6 +36,7 @@ class MapExtentTest {
         header = MapFileHeader(
             minZoom = 0,
             maxZoom = 14,
+            baseZoom = 14,
             minLongitude = west,
             minLatitude = south,
             maxLongitude = east,
