@@ -8,7 +8,7 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, normalize } from 'node:path';
-import { cut, readHeader } from './lib/cut.mjs';
+import { cut, parseBbox, readHeader } from './lib/cut.mjs';
 import { HttpSource } from './lib/source.mjs';
 
 const ROOT = 'https://download.mapsforge.org/maps/v5/';
@@ -19,12 +19,17 @@ const port = Number(process.env.PORT ?? 8787);
 const listings = new Map();
 const CACHE_MS = 60 * 60 * 1000;
 
+// A cut is held in memory whole, so both its size and how many run at once are bounded.
+const MAX_EXTRACT_BYTES = 256 * 1024 * 1024;
+const MAX_EXTRACTS = 2;
+let extracts = 0;
+
 /** One level of the upstream tree: the sub-directories and the .map files in it. */
 async function list(path) {
   const cached = listings.get(path);
   if (cached && Date.now() - cached.at < CACHE_MS) return cached.value;
 
-  const response = await fetch(ROOT + path);
+  const response = await fetch(ROOT + path, { signal: AbortSignal.timeout(30_000) });
   if (!response.ok) throw new Error(`upstream ${response.status} for ${path}`);
   const html = await response.text();
 
@@ -76,15 +81,21 @@ const routes = {
 
   async '/api/extract'(url, response) {
     const path = safePath(url.searchParams.get('path'));
-    const [minLon, minLat, maxLon, maxLat] = (url.searchParams.get('bbox') ?? '')
-      .split(',').map(Number);
-    if ([minLon, minLat, maxLon, maxLat].some((n) => !Number.isFinite(n))) {
-      throw new Error('bbox must be minLon,minLat,maxLon,maxLat');
+    const bbox = parseBbox(url.searchParams.get('bbox'));
+    const { minLon, minLat, maxLon, maxLat } = bbox;
+    if (extracts >= MAX_EXTRACTS) {
+      return json(response, { error: 'busy with other extracts; try again shortly' }, 503);
     }
 
     const source = new HttpSource(ROOT + path);
     const started = Date.now();
-    const output = await cut(source, { minLon, minLat, maxLon, maxLat });
+    extracts += 1;
+    let output;
+    try {
+      output = await cut(source, bbox, { maxBytes: MAX_EXTRACT_BYTES });
+    } finally {
+      extracts -= 1;
+    }
     const name = `${path.split('/').pop().replace(/\.map$/, '')}-extract.map`;
 
     console.log(
@@ -116,6 +127,6 @@ createServer(async (request, response) => {
     response.writeHead(200, { 'content-type': `${type}; charset=utf-8` });
     response.end(body);
   } catch (error) {
-    json(response, { error: String(error.message ?? error) }, 400);
+    json(response, { error: String(error.message ?? error) }, error.status ?? 400);
   }
 }).listen(port, () => console.log(`mapcut prototype on http://localhost:${port}`));
