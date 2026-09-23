@@ -14,6 +14,10 @@ import androidx.compose.ui.graphics.toArgb
  * a width that varies with zoom is written out as nested rules, one per band, rather than
  * as an interpolation.
  *
+ * Zooms are counted on 256 px tiles, one more than MapLibre's 512 px count for the same
+ * view. The widths and floors here were tuned under MapLibre, so each is written one zoom
+ * later than it was there.
+ *
  * The background is transparent and the land is drawn by the map screen as an overlay
  * under this, so that ground the imported file does not cover reads as empty rather than
  * as land. See [OfflineMapCanvas].
@@ -77,12 +81,12 @@ object MapRenderTheme {
         zoomedLine(
             selector = """<rule e="way" k="waterway" v="river|canal" closed="no">""",
             stroke = blue,
-            widths = listOf(10 to 0.6f, 13 to 1.6f, 16 to 5f),
+            stops = listOf(11 to 0.6f, 14 to 1.6f, 17 to 5f),
         )
         zoomedLine(
             selector = """<rule e="way" k="waterway" v="stream|drain" closed="no">""",
             stroke = blue,
-            widths = listOf(13 to 0.5f, 16 to 2f),
+            stops = listOf(14 to 0.5f, 17 to 2f),
         )
     }
 
@@ -90,6 +94,8 @@ object MapRenderTheme {
      * A lone building is a landmark on a country road - "the farmhouse" or "the barn" is
      * how a route gets described - so this wants to read as a shape rather than vanish as
      * texture the way dense urban infill would if it were this dark.
+     *
+     * From z15 because that is where the published files start carrying them at all.
      */
     private fun StringBuilder.buildings(land: Color, dark: Boolean) {
         append("""<rule e="way" k="building" v="*" closed="yes" zoom-min="15">""")
@@ -105,12 +111,12 @@ object MapRenderTheme {
         zoomedLine(
             selector = """<rule e="way" k="highway" v="residential|unclassified|living_street|service|pedestrian">""",
             stroke = land.shifted(0.30f, dark).css(),
-            widths = listOf(12 to 0.5f, 14 to 1.5f, 17 to 6f),
+            stops = listOf(13 to 0.5f, 15 to 1.5f, 18 to 6f),
         )
         zoomedLine(
             selector = """<rule e="way" k="highway" v="motorway|trunk|primary|secondary|tertiary|motorway_link|trunk_link|primary_link|secondary_link|tertiary_link">""",
             stroke = land.shifted(0.45f, dark).css(),
-            widths = listOf(8 to 0.5f, 12 to 2f, 17 to 10f),
+            stops = listOf(9 to 0.5f, 13 to 2f, 18 to 10f),
         )
 
         // A tighter, evener dash than a path's - closer to the tick marks a rail line is
@@ -120,7 +126,7 @@ object MapRenderTheme {
         zoomedLine(
             selector = """<rule e="way" k="railway" v="rail|light_rail|narrow_gauge">""",
             stroke = land.shifted(0.55f, dark).css(),
-            widths = listOf(11 to 0.5f, 14 to 1f, 17 to 3f),
+            stops = listOf(12 to 0.5f, 15 to 1f, 18 to 3f),
             dashes = "4,4",
         )
 
@@ -137,7 +143,7 @@ object MapRenderTheme {
         zoomedLine(
             selector = """<rule e="way" k="highway" v="path|footway|cycleway|bridleway|track|steps">""",
             stroke = pathBrown(dark),
-            widths = listOf(12 to 0.5f, 14 to 1.2f, 17 to 4.5f),
+            stops = listOf(13 to 0.5f, 15 to 1.2f, 18 to 4.5f),
             dashes = "8,5",
         )
     }
@@ -149,12 +155,12 @@ object MapRenderTheme {
      * by document order: a trail name beats a place name beats a lake.
      */
     private fun StringBuilder.labels(label: Color, background: Color) {
-        caption("natural", "water", label, background, minZoom = 9, size = 12, priority = 10)
-        caption("place", "city|town|village|hamlet|locality", label, background, minZoom = 5, size = 14, priority = 20)
+        caption("natural", "water", label, background, minZoom = 10, size = 12, priority = 10)
+        caption("place", "city|town|village|hamlet|locality", label, background, minZoom = 6, size = 14, priority = 20)
 
         // The names of the paths themselves, along them - "which trail is this" is the
         // question the app exists to help with, so this wins every collision.
-        append("""<rule e="way" k="highway" v="*" zoom-min="13">""")
+        append("""<rule e="way" k="highway" v="*" zoom-min="14">""")
         append(
             """<pathText k="name" font-size="11" priority="30" fill="${label.css()}" """ +
                 """stroke="${background.css()}" stroke-width="2.0"/></rule>""",
@@ -184,28 +190,48 @@ object MapRenderTheme {
     }
 
     /**
-     * A line whose width steps with zoom. Mapsforge has no interpolation, so each band in
-     * [widths] becomes a nested rule that inherits the selector's filter and narrows the
-     * zoom range. `e="any" k="*" v="*"` is the pass-through child selector.
+     * A line whose width follows [stops] with zoom. The theme has no interpolation, so the
+     * stops are filled in to one band per zoom level, each a nested rule that inherits the
+     * selector's filter and narrows the zoom range - stepping only between the stops made a
+     * road hold its narrowest width for three levels and then jump. `e="any" k="*" v="*"`
+     * is the pass-through child selector.
      */
     private fun StringBuilder.zoomedLine(
         selector: String,
         stroke: String,
-        widths: List<Pair<Int, Float>>,
+        stops: List<Pair<Int, Float>>,
         dashes: String? = null,
     ) {
+        val widths = perZoom(stops)
         append(selector)
         widths.forEachIndexed { index, (zoom, width) ->
             val next = widths.getOrNull(index + 1)?.first
             val range = if (next == null) """zoom-min="$zoom"""" else """zoom-min="$zoom" zoom-max="${next - 1}""""
             append("""<rule e="any" k="*" v="*" $range>""")
-            append("""<line stroke="$stroke" stroke-width="$width" """)
+            append("""<line stroke="$stroke" stroke-width="${unscaled(zoom, width)}" """)
             append("""stroke-linecap="round" stroke-linejoin="round"""")
             if (dashes != null) append(""" stroke-dasharray="$dashes"""")
             append("/></rule>")
         }
         append("</rule>")
     }
+
+    /**
+     * [width] with VTM's own growth divided back out. Its tile loader widens every line by
+     * 1.4 per zoom above 12 on top of what the theme says, which on widths already written
+     * per zoom drew a street at z18 six times as wide as intended - and its dashes with it.
+     */
+    internal fun unscaled(zoom: Int, width: Float): Float =
+        Math.round(width / Math.pow(VTM_STROKE_INCREASE, (zoom - VTM_STROKE_MIN_ZOOM).coerceAtLeast(0).toDouble()).toFloat() * 1000) / 1000f
+
+    /** [stops] linearly interpolated to every whole zoom between the first and the last. */
+    internal fun perZoom(stops: List<Pair<Int, Float>>): List<Pair<Int, Float>> =
+        stops.zipWithNext().flatMap { (from, to) ->
+            (from.first until to.first).map { zoom ->
+                val t = (zoom - from.first).toFloat() / (to.first - from.first)
+                zoom to Math.round((from.second + (to.second - from.second) * t) * 100) / 100f
+            }
+        } + stops.last()
 
     // --- The colours that are not the theme's to choose --------------------------------
     //
@@ -232,6 +258,10 @@ object MapRenderTheme {
      * towards white instead of towards black.
      */
     private const val DARK_THRESHOLD = 0.35f
+
+    /** VectorTileLoader's STROKE_INCREASE and STROKE_MIN_ZOOM; see [unscaled]. */
+    private const val VTM_STROKE_INCREASE = 1.4
+    private const val VTM_STROKE_MIN_ZOOM = 12
 }
 
 /** `#rrggbb` - a token in a document, hence `Locale.ROOT`, not a number anybody reads. */

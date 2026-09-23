@@ -36,6 +36,7 @@ import kotlinx.coroutines.withContext
 import org.oscim.android.MapView
 import org.oscim.android.canvas.AndroidBitmap
 import org.oscim.core.BoundingBox
+import org.oscim.core.Box
 import org.oscim.core.GeoPoint
 import org.oscim.core.MapPosition
 import org.oscim.core.MercatorProjection
@@ -284,30 +285,33 @@ fun OfflineMapCanvas(
 
         // Land under the tiles, not painted by them: the render theme's background is
         // transparent so ground no imported file covers reads as empty rather than as land.
-        val land = VectorLayer(map).apply {
-            val style = Style.builder().fillColor(landColor.toArgb()).fillAlpha(1f)
-                .strokeColor(TRANSPARENT).build()
-            basemaps.forEach { add(boxDrawable(it, style)) }
-            update()
-        }
-        val outline = VectorLayer(map).apply {
-            val style = with(density) {
-                Style.builder()
-                    .strokeColor(labelColor.copy(alpha = COVERAGE_OPACITY).toArgb())
-                    .strokeWidth(COVERAGE_WIDTH_DP.dp.toPx())
-                    .stipple(COVERAGE_DASH_DP.dp.roundToPx()).stippleColor(TRANSPARENT).stippleWidth(1f)
-                    .fixed(true)
-                    .build()
-            }
-            basemaps.forEach { add(outlineDrawable(it, style)) }
-            update()
-        }
+        val land = OverlayLayer(map)
+        val outline = OverlayLayer(map)
         layers.add(land, LayerGroup.Land.ordinal)
         layers.add(outline, LayerGroup.Outline.ordinal)
+        // Recorded before the theme load below suspends: a run cancelled there by the next
+        // change must still leave these for that next run to take down.
+        basemap = Basemap(land, outline, null, null, null, null)
+
+        val landStyle = Style.builder().fillColor(landColor.toArgb()).fillAlpha(1f)
+            .strokeColor(TRANSPARENT).build()
+        val outlineStyle = with(density) {
+            Style.builder()
+                .strokeColor(labelColor.copy(alpha = COVERAGE_OPACITY).toArgb())
+                .strokeWidth(COVERAGE_WIDTH_DP.dp.toPx())
+                .stipple(COVERAGE_DASH_DP.dp.roundToPx()).stippleColor(TRANSPARENT).stippleWidth(1f)
+                .fixed(true)
+                .build()
+        }
+        basemaps.forEach {
+            land.add(boxDrawable(it, landStyle))
+            outline.add(outlineDrawable(it, outlineStyle))
+        }
+        land.update()
+        outline.update()
 
         if (basemaps.isEmpty()) {
             MapRenderer.setBackgroundColor(backgroundColor.toArgb())
-            basemap = Basemap(land, outline, null, null, null)
             map.updateMap(true)
             return@LaunchedEffect
         }
@@ -324,18 +328,26 @@ fun OfflineMapCanvas(
             // maps, and the routes above them, are still worth drawing.
             basemaps.forEach { map -> add(MapFileTileSource().apply { setMapFile(map.file.path) }) }
         }
-        val tiles = OsmTileLayer(map)
+        val tiles = OsmTileLayer(map, Viewport.MIN_ZOOM_LEVEL, Viewport.MAX_ZOOM_LEVEL)
         if (!tiles.setTileSource(source)) {
             theme.dispose()
-            basemap = Basemap(land, outline, null, null, null)
             return@LaunchedEffect
         }
-        val labels = LabelLayer(map, tiles)
+        // Against the full zoom range, not the camera's: the label layer copies the
+        // viewport's limits at construction, throws if they are narrower than its own, and
+        // places no labels outside them - and the camera's limits change with the extent.
+        val labels = map.viewport().withFullZoomRange { LabelLayer(map, tiles) }
+        // Over the labels too: a file's low zooms are whole tiles tens of kilometres wide,
+        // so it holds lakes and towns well past its own box, and VTM draws all of them.
+        val mask = OverlayLayer(map)
         layers.add(tiles, LayerGroup.Tiles.ordinal)
         layers.add(labels, LayerGroup.Labels.ordinal)
+        layers.add(mask, LayerGroup.Mask.ordinal)
+        basemap = Basemap(land, outline, tiles, labels, mask, theme)
+        outsideDrawables(basemaps, backgroundColor).forEach { mask.add(it) }
+        mask.update()
         // Also clears to the theme's map-background-outside, which is the screen background.
         map.setTheme(theme)
-        basemap = Basemap(land, outline, tiles, labels, theme)
     }
 
     // --- What is drawn --------------------------------------------------------------
@@ -466,20 +478,35 @@ fun OfflineMapCanvas(
  * The stacking order, bottom first. VTM keeps each group's layers together however late
  * they are added, so a rebuilt basemap lands back under the routes rather than on top.
  */
-private enum class LayerGroup { Land, Tiles, Labels, Outline, Routes, Trace, Markers, Tap }
+private enum class LayerGroup { Land, Tiles, Labels, Mask, Outline, Routes, Trace, Markers, Tap }
+
+/** Runs [block] with VTM's own zoom limits in place, then puts the camera's back. */
+private inline fun <T> Viewport.withFullZoomRange(block: () -> T): T {
+    val min = minScale
+    val max = maxScale
+    setMinZoomLevel(Viewport.MIN_ZOOM_LEVEL)
+    setMaxZoomLevel(Viewport.MAX_ZOOM_LEVEL)
+    try {
+        return block()
+    } finally {
+        minScale = min
+        maxScale = max
+    }
+}
 
 /** Pixels kept clear on each edge, for whatever is floating over the map. */
 private class Insets(val left: Int, val top: Int, val right: Int, val bottom: Int)
 
 /** The basemap as one thing to put up and take down. Tiles are null with no map shown. */
 private class Basemap(
-    val land: VectorLayer,
-    val outline: VectorLayer,
+    val land: OverlayLayer,
+    val outline: OverlayLayer,
     val tiles: OsmTileLayer?,
     val labels: LabelLayer?,
+    val mask: OverlayLayer?,
     val theme: IRenderTheme?,
 ) {
-    val all: List<Layer> get() = listOfNotNull(land, outline, tiles, labels)
+    val all: List<Layer> get() = listOfNotNull(land, outline, tiles, labels, mask)
 }
 
 /**
@@ -595,9 +622,53 @@ private fun List<RouteOverlay>.toLines(focusedTrackId: Long?, styles: RouteStyle
     return out
 }
 
+/**
+ * A [VectorLayer] that keeps up with the camera. VTM recomputes one on camera events, but a
+ * layer attached around the start-up framing move regularly missed it and went on showing
+ * the whole-world view it was first computed for - the outside mask most visibly, which
+ * left every map's surroundings unmasked until the camera next moved. So after any map
+ * event, each layer checks whether its last pass was for the current camera, and goes
+ * again until it was.
+ */
+private class OverlayLayer(private val owner: Map) : VectorLayer(owner) {
+    private val drawnFor = MapPosition()
+    private val current = MapPosition()
+    @Volatile private var drawnValid = false
+    @Volatile private var checking = false
+
+    override fun processFeatures(t: Task, b: Box) {
+        // Skipped by VTM while the view has no size; not a pass for any camera.
+        if (b.xmin.isNaN()) return
+        super.processFeatures(t, b)
+        synchronized(drawnFor) { drawnFor.copy(t.position) }
+        drawnValid = true
+    }
+
+    override fun onMapEvent(e: org.oscim.event.Event, pos: MapPosition) {
+        super.onMapEvent(e, pos)
+        if (!checking) {
+            checking = true
+            owner.postDelayed(::check, OVERLAY_CHECK_MS)
+        }
+    }
+
+    private fun check() {
+        owner.viewport().getMapPosition(current)
+        val behind = synchronized(drawnFor) {
+            !drawnValid || current.x != drawnFor.x || current.y != drawnFor.y || current.scale != drawnFor.scale
+        }
+        if (behind) {
+            update()
+            owner.postDelayed(::check, OVERLAY_CHECK_MS)
+        } else {
+            checking = false
+        }
+    }
+}
+
 /** A [VectorLayer] that remembers what it holds, since VTM offers no way to ask or to clear. */
 private class LineLayer(map: Map) {
-    val layer = VectorLayer(map)
+    val layer = OverlayLayer(map)
     private val drawn = ArrayList<LineDrawable>()
 
     /** Swaps every line for [next] and asks for one redraw. */
@@ -667,6 +738,36 @@ private fun marker(at: TrackPoint, symbol: MarkerSymbol) =
 private fun boxDrawable(map: OfflineMap, style: Style): RectangleDrawable {
     val h = map.header
     return RectangleDrawable(h.minLatitude, h.minLongitude, h.maxLatitude, h.maxLongitude, style)
+}
+
+/**
+ * Everywhere but the maps' own boxes, in the background colour, as plain rectangles: the
+ * world cut along every box edge, keeping the cells no box covers. Not one polygon with
+ * holes - VTM fills the holes in.
+ */
+private fun outsideDrawables(maps: List<OfflineMap>, background: Color): List<RectangleDrawable> {
+    val style = Style.builder().fillColor(background.toArgb()).fillAlpha(1f).strokeColor(TRANSPARENT).build()
+    // Not the whole world: the camera is penned to the extent and can't zoom out past it,
+    // so a few spans' margin always covers the screen, and world-sized rectangles were
+    // sometimes not drawn at all.
+    val extent = extentOf(emptyList(), null, maps) ?: return emptyList()
+    val outer = extent.padded(MASK_MARGIN_SPANS)
+    val latitudes = (maps.flatMap { listOf(it.header.minLatitude, it.header.maxLatitude) } +
+        listOf(outer.minLatitude, outer.maxLatitude)).distinct().sorted()
+    val longitudes = (maps.flatMap { listOf(it.header.minLongitude, it.header.maxLongitude) } +
+        listOf(outer.minLongitude, outer.maxLongitude)).distinct().sorted()
+
+    val out = ArrayList<RectangleDrawable>()
+    for (i in 0 until latitudes.size - 1) for (j in 0 until longitudes.size - 1) {
+        val midLatitude = (latitudes[i] + latitudes[i + 1]) / 2
+        val midLongitude = (longitudes[j] + longitudes[j + 1]) / 2
+        val covered = maps.any {
+            val h = it.header
+            midLatitude in h.minLatitude..h.maxLatitude && midLongitude in h.minLongitude..h.maxLongitude
+        }
+        if (!covered) out.add(RectangleDrawable(latitudes[i], longitudes[j], latitudes[i + 1], longitudes[j + 1], style))
+    }
+    return out
 }
 
 /** The dashed boundary marking where an imported file's detail stops. */
@@ -915,6 +1016,12 @@ private const val COVERAGE_OPACITY = 0.55f
 private const val TAP_REACH_DP = 40f
 private const val FOLLOW_MARGIN_PX = 96
 private const val EDGE_PADDING_PX = 64
+
+/** How long an overlay lets the camera settle before checking it drew for it. */
+private const val OVERLAY_CHECK_MS = 150L
+
+/** How far past the maps the outside mask reaches, in spans of their extent. */
+private const val MASK_MARGIN_SPANS = 3.0
 
 /** How far past the edge of the data the pan clamp allows, as a fraction of its own span. */
 private const val PAN_OVERSHOOT_FRACTION = 0.05

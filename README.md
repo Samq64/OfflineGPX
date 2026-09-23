@@ -173,8 +173,14 @@ credit.
 The render theme is generated at runtime rather than shipped as an asset, so it can take its
 colours from the theme the user is in. It is written in the mapsforge theme dialect, which
 VTM reads as well as its own: rules filter on raw OSM tags, and a width that varies with
-zoom is written out as one nested rule per band. Label collisions are settled by explicit
-`priority`, trail names highest.
+zoom is written out as one nested rule per zoom level, interpolated between stops. Zooms
+count 256 px tiles, one more than MapLibre's for the same view, and VTM widens lines by 1.4
+per zoom above z12 on its own; the theme divides that back out. Label collisions are
+settled by explicit `priority`, trail names highest.
+
+A file's low zooms are whole tiles tens of kilometres wide, so it carries lakes, roads and
+towns well past its own box, and VTM draws all of it. The ground outside every file is
+masked in the background colour, labels included.
 
 The camera is the map view's: pinch, fling, and a pan clamp to the fit of every track and
 shown map, kept north-up with rotation and tilt turned off. A scale bar reads the camera's live scale and is drawn over it. The map's own

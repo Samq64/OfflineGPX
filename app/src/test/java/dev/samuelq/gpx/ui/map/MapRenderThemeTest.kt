@@ -101,6 +101,23 @@ class MapRenderThemeTest {
         assertContains(lightXml, """map-background="#00000000"""")
     }
 
+    /** Every whole zoom gets its own width, and the stops themselves are kept exactly. */
+    @Test
+    fun `widths are filled in between stops`() {
+        kotlin.test.assertEquals(
+            listOf(12 to 0.5f, 13 to 1.0f, 14 to 1.5f, 15 to 3.0f, 16 to 4.5f, 17 to 6f),
+            MapRenderTheme.perZoom(listOf(12 to 0.5f, 14 to 1.5f, 17 to 6f)),
+        )
+    }
+
+    /** VTM's own 1.4-per-zoom growth above z12 is divided back out, and nothing below. */
+    @Test
+    fun `widths undo VTM's zoom growth`() {
+        kotlin.test.assertEquals(2f, MapRenderTheme.unscaled(12, 2f))
+        kotlin.test.assertEquals(2f, MapRenderTheme.unscaled(9, 2f))
+        kotlin.test.assertEquals(1.02f, MapRenderTheme.unscaled(14, 2f))
+    }
+
     /** What VTM clears the screen to, so ground beyond every file matches the app's own. */
     @Test
     fun `outside the maps is the background colour`() {
