@@ -9,6 +9,7 @@ import android.util.Log
 import dev.samuelq.gpx.core.analysis.TrackAnalyzer
 import dev.samuelq.gpx.core.analysis.TrackProfile
 import dev.samuelq.gpx.core.model.Track
+import dev.samuelq.gpx.data.db.ColorUse
 import dev.samuelq.gpx.data.db.TrackDao
 import dev.samuelq.gpx.data.db.TrackEntity
 import dev.samuelq.gpx.data.db.TrackSource
@@ -390,8 +391,7 @@ class GpxTrackRepository(
         return appContext.getString(partOfDay, appContext.getString(activity))
     }
 
-    /** Round-robin over the palette, so a handful of tracks rarely collide on a hue. */
-    private suspend fun nextColorIndex(): Int = dao.count() % ROUTE_PALETTE_SIZE
+    private suspend fun nextColorIndex(): Int = leastUsedSlot(dao.colorUsage(), ROUTE_PALETTE_SIZE)
 
     /**
      * Reads and analyses whatever [location] points at: an app-private path, or a
@@ -525,4 +525,19 @@ class GpxTrackRepository(
             }
         }
     }
+}
+
+/**
+ * The palette slot fewest tracks on the map use, then fewest overall, then the lowest.
+ * A round-robin over the row count repeated a colour still in use after any delete.
+ */
+internal fun leastUsedSlot(usage: List<ColorUse>, size: Int): Int {
+    val shown = IntArray(size)
+    val all = IntArray(size)
+    usage.forEach { use ->
+        val slot = use.colorIndex.mod(size)
+        all[slot]++
+        if (use.visible) shown[slot]++
+    }
+    return (0 until size).minWith(compareBy({ shown[it] }, { all[it] }))
 }

@@ -96,7 +96,10 @@ private val RoutePaletteLight = listOf(
     Color(0xFF2E8B6F),
     Color(0xFF8E5BC4),
     Color(0xFFB8912B),
-    Color(0xFFC2456E),
+    // Cyan, not the pinkish red this slot once was: the recording draws in the error red,
+    // and a saved track in nearly the same hue read as one. Checked against every other
+    // slot and that red, including under simulated protan, deutan and tritan vision.
+    Color(0xFF0F9FB0),
 )
 
 private val RoutePaletteDark = listOf(
@@ -105,7 +108,7 @@ private val RoutePaletteDark = listOf(
     Color(0xFF45A587),
     Color(0xFFA87ADA),
     Color(0xFFD3AC46),
-    Color(0xFFDB6489),
+    Color(0xFF30BCC8),
 )
 
 /** The route palette for the current theme. Follows dark mode, not the wallpaper. */

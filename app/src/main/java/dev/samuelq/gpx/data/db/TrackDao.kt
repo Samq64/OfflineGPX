@@ -18,8 +18,8 @@ interface TrackDao {
     @Query("SELECT * FROM tracks ORDER BY lastOpenedAtEpochMillis DESC")
     fun observeByRecent(): Flow<List<TrackEntity>>
 
-    @Query("SELECT COUNT(*) FROM tracks")
-    suspend fun count(): Int
+    @Query("SELECT colorIndex, visible FROM tracks")
+    suspend fun colorUsage(): List<ColorUse>
 
     @Query("SELECT * FROM tracks WHERE id = :id")
     suspend fun byId(id: Long): TrackEntity?
@@ -45,3 +45,6 @@ interface TrackDao {
     @Query("UPDATE tracks SET visible = :visible")
     suspend fun setAllVisible(visible: Boolean)
 }
+
+/** One track's palette slot and whether it is on the map, for picking the next slot. */
+data class ColorUse(val colorIndex: Int, val visible: Boolean)
