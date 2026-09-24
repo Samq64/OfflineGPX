@@ -64,14 +64,10 @@ class SettingsRepository(context: Context) {
 
     fun setActiveMapFiles(names: Set<String>) = update { putStringSet(KEY_ACTIVE_MAPS, names) }
 
-    /**
-     * Back to shipped defaults - deliberately leaves imported maps alone. Dropping a large
-     * file the user went and obtained would be a deletion wearing a reset's clothes.
-     */
-    fun resetToDefaults() = update {
-        val activeMaps = read().activeMapFiles
-        clear()
-        if (activeMaps.isNotEmpty()) putStringSet(KEY_ACTIVE_MAPS, activeMaps)
+    /** The recording filters back to shipped defaults; units and maps are left alone. */
+    fun resetRecording() = update {
+        remove(KEY_ACCURACY)
+        remove(KEY_DISPLACEMENT)
     }
 
     private inline fun update(crossinline edits: SharedPreferences.Editor.() -> Unit) {

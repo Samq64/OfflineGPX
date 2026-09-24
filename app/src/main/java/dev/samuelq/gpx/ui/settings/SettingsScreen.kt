@@ -50,6 +50,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -60,7 +62,6 @@ import dev.samuelq.gpx.data.map.OfflineMap
 import dev.samuelq.gpx.data.settings.Settings
 import dev.samuelq.gpx.ui.format.LocalFormatters
 import dev.samuelq.gpx.ui.format.tabularFigures
-import dev.samuelq.gpx.ui.map.maxViewZoom
 import kotlin.math.roundToInt
 
 private val ScreenPadding = 20.dp
@@ -245,7 +246,7 @@ fun SettingsScreen(
             Spacer(Modifier.height(16.dp))
 
             TextButton(
-                onClick = viewModel::resetToDefaults,
+                onClick = viewModel::resetRecording,
                 modifier = Modifier.padding(horizontal = ScreenPadding - 12.dp),
             ) {
                 Text(stringResource(R.string.settings_reset))
@@ -346,20 +347,13 @@ private fun MapsSection(
     }
 }
 
-/**
- * One imported map: its name, plus the two facts that decide if it's the one you want -
- * size and zoom depth, both from the file's own header rather than the filename.
- */
+/** One imported map: its name, who the data is from, and its size. */
 @Composable
 private fun MapRow(
     map: OfflineMap,
     onDelete: () -> Unit,
 ) {
-    val detail = stringResource(
-        R.string.settings_maps_detail,
-        android.text.format.Formatter.formatShortFileSize(LocalContext.current, map.sizeBytes),
-        stringResource(R.string.settings_maps_zoom_to, map.maxViewZoom),
-    )
+    val size = android.text.format.Formatter.formatShortFileSize(LocalContext.current, map.sizeBytes)
 
     Row(
         modifier = Modifier
@@ -375,20 +369,20 @@ private fun MapRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text(
-                text = detail,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
             // Only when the file says so itself - the app has no source of its own to
             // credit.
             map.attribution?.let { attribution ->
                 Text(
-                    text = stringResource(R.string.settings_maps_attribution, attribution),
+                    text = attribution,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            Text(
+                text = size,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
 
         IconButton(onClick = onDelete) {
@@ -435,11 +429,16 @@ private fun ClosedFloatingPointRange<Double>.toFloatRange(): ClosedFloatingPoint
 
 @Composable
 private fun SectionHeading(text: String) {
+    // Material 3's list subheader: title small in primary. A title role, not a label -
+    // labels are for text inside components - and a heading to TalkBack, so it can skip
+    // between sections.
     Text(
         text = text,
-        style = MaterialTheme.typography.labelLarge,
+        style = MaterialTheme.typography.titleSmall,
         color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(horizontal = ScreenPadding, vertical = 12.dp),
+        modifier = Modifier
+            .padding(horizontal = ScreenPadding, vertical = 12.dp)
+            .semantics { heading() },
     )
 }
 

@@ -55,7 +55,7 @@ class SettingsViewModel(
     fun setUnits(units: UnitSystem) = repository.setUnits(units)
     fun setMaxAccuracy(meters: Double) = repository.setMaxAccuracyMeters(meters)
     fun setMinDisplacement(meters: Double) = repository.setMinDisplacementMeters(meters)
-    fun resetToDefaults() = repository.resetToDefaults()
+    fun resetRecording() = repository.resetRecording()
 
     fun importMap(uri: Uri?, suggestedName: String?) {
         if (uri == null) return

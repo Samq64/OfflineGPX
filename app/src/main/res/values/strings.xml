@@ -38,7 +38,7 @@
     <string name="settings_displacement_off">Off</string>
 
     <string name="settings_recording_applies_next">Both are read when a recording starts, so they won\'t affect one already running.</string>
-    <string name="settings_reset">Reset to defaults</string>
+    <string name="settings_reset">Reset recording settings</string>
 
     <string name="settings_section_maps">Offline maps</string>
     <string name="settings_maps_explanation">No internet access here, so maps come from a .map file you open. Without one, routes are drawn on a plain background.</string>
@@ -49,11 +49,6 @@
     <string name="settings_maps_delete">Delete map</string>
     <string name="settings_maps_delete_title">Delete this map?</string>
     <string name="settings_maps_delete_body">"%1$s" will be removed. You\'ll need to open the file again to use it.</string>
-    <!-- Size, then how far it zooms. "2.4 MB · to zoom 15" -->
-    <string name="settings_maps_detail">%1$s · %2$s</string>
-    <string name="settings_maps_zoom_to">to zoom %1$d</string>
-    <!-- What the map file's own header says about where its data came from. -->
-    <string name="settings_maps_attribution">Data: %1$s</string>
     <string name="settings_maps_importing">Copying map…</string>
     <string name="settings_maps_imported">Map added.</string>
     <string name="settings_maps_deleted">Map deleted.</string>
