@@ -38,7 +38,10 @@ data class TrackEntity(
     /** When the activity happened. Null for a file with no timestamps. */
     @ColumnInfo(index = true) val startedAtEpochMillis: Long?,
 
-    /** When the app last showed it - the list's sort order when there is no start time. */
+    /**
+     * The last interaction: imported, recorded or opened. The list is ordered by it, most
+     * recent first, and the map stacks by it, most recent on top.
+     */
     val lastOpenedAtEpochMillis: Long,
 
     /**

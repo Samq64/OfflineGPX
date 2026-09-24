@@ -23,6 +23,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -139,6 +140,7 @@ data class CameraSnapshot(val latitude: Double, val longitude: Double, val zoom:
  */
 @Composable
 fun OfflineMapCanvas(
+    /** Drawn in this order, the last on top. */
     routes: List<RouteOverlay>,
     basemaps: List<OfflineMap>,
     contentDescription: String,
@@ -155,7 +157,7 @@ fun OfflineMapCanvas(
      * seconds and they don't - growth this way costs only its own geometry.
      */
     liveRoute: RouteOverlay? = null,
-    /** Which route the sheet is showing, drawn heavier than the rest. */
+    /** Which route the sheet is showing. */
     focusedTrackId: Long? = null,
     /** Highlighted point within [focusedTrackId]'s route, as an index into its points. */
     selectedIndex: Int? = null,
@@ -168,6 +170,11 @@ fun OfflineMapCanvas(
     onSelectNothing: () -> Unit = {},
     /** Space kept clear of routes when framing, for the sheet and the controls. */
     contentPadding: PaddingValues = PaddingValues(),
+    /**
+     * How much of the bottom a sheet covers, zero with none open. Panning is measured from
+     * its top edge, so nothing can be stranded underneath it.
+     */
+    sheetHeight: Dp = 0.dp,
     backgroundColor: Color = Color.Unspecified,
     landColor: Color = Color.Unspecified,
     labelColor: Color = Color.Unspecified,
@@ -207,6 +214,7 @@ fun OfflineMapCanvas(
     // Resolved here, where there is a density to resolve it against: a fingertip is a
     // physical size, and 44 raw pixels is a third of one on a modern screen.
     val tapReach = remember(density) { with(density) { TAP_REACH_DP.dp.toPx() } }
+    val followMargin = remember(density) { with(density) { FOLLOW_MARGIN_DP.dp.roundToPx() } }
 
     val insets = remember(contentPadding, layoutDirection, density) {
         with(density) {
@@ -358,15 +366,15 @@ fun OfflineMapCanvas(
 
     // Each of these builds its lines off the main thread - a long ride is a few hundred
     // thousand coordinates, which don't belong on the frame the user sees.
-    LaunchedEffect(routeLayer, routes, focusedTrackId) {
-        val built = withContext(Dispatchers.Default) { routes.toLines(focusedTrackId, routeStyles) }
+    LaunchedEffect(routeLayer, routes) {
+        val built = withContext(Dispatchers.Default) { routes.toLines(routeStyles) }
         routeLayer.replaceWith(built)
     }
 
     // Its own effect: runs every few seconds for the length of a ride, touching nothing else.
     LaunchedEffect(traceLayer, liveRoute) {
         val built = withContext(Dispatchers.Default) {
-            listOfNotNull(liveRoute).toLines(focusedTrackId = null, routeStyles)
+            listOfNotNull(liveRoute).toLines(routeStyles)
         }
         traceLayer.replaceWith(built)
     }
@@ -412,28 +420,38 @@ fun OfflineMapCanvas(
         // A cap on the way in - magnifying a file's deepest zoom many times over draws
         // detail that does not exist, convincingly.
         viewport.setMaxZoomLevel(basemaps.maxOfOrNull { it.maxViewZoom } ?: DEFAULT_MAX_ZOOM)
-
-        // Panning can push the near edge of everything there is up to PAN_OVERSHOOT_FRACTION
-        // off screen, not clamped dead against it - a hard wall exactly at the last point
-        // reads as the map being broken, not as having reached the edge of the data.
-        viewport.setMapLimit(extent.padded(PAN_OVERSHOOT_FRACTION))
         map.updateMap(true)
     }
 
-    // Zooming out stops once everything is on screen with ZOOM_OUT_MARGIN_FRACTION to spare
-    // on each side of whichever axis is tighter - beyond that is nothing but flat
-    // background. Against the whole view, not the uncovered part: it is a limit on scale,
-    // and the sheet comes and goes.
+    // Zooming out stops once everything fits edge to edge on whichever axis is tighter -
+    // beyond that is nothing but flat background. Against the whole view, not the
+    // uncovered part: it is a limit on scale, and the sheet comes and goes.
     LaunchedEffect(map, extent, basemaps, viewSize) {
         if (extent == null) return@LaunchedEffect
         val size = viewSize ?: return@LaunchedEffect
-        val fill = 1 - 2 * ZOOM_OUT_MARGIN_FRACTION
-        val width = (size.width * fill).toInt()
-        val height = (size.height * fill).toInt()
-        if (width <= 0 || height <= 0) return@LaunchedEffect
+        if (size.width <= 0 || size.height <= 0) return@LaunchedEffect
         val viewport = map.viewport()
-        val floor = MapPosition().apply { setByBoundingBox(extent, width, height) }.scale
+        val floor = MapPosition().apply { setByBoundingBox(extent, size.width, size.height) }.scale
         viewport.setMinScale(minOf(floor, viewport.maxScale))
+    }
+
+    // Panning stops once an edge of everything there is reaches the screen's, and an axis
+    // it all fits on is held centred - so fully zoomed out, zooming
+    // is the only move left. The bottom edge is the sheet's top while one is open, so
+    // anything under it can be pulled out. Re-checked on every camera move, since the
+    // allowed range depends on the scale.
+    val sheetPx = with(density) { sheetHeight.roundToPx() }
+    val currentExtent by rememberUpdatedState(extent)
+    val currentSheetPx by rememberUpdatedState(sheetPx)
+    DisposableEffect(map) {
+        val listener = Map.UpdateListener { _, _ ->
+            currentExtent?.let { map.keepInView(it, currentSheetPx) }
+        }
+        map.events.bind(listener)
+        onDispose { map.events.unbind(listener) }
+    }
+    LaunchedEffect(map, extent, viewSize, sheetPx) {
+        extent?.let { map.keepInView(it, sheetPx) }
     }
 
     // Only reached once per process at most: the moment a camera is ever remembered (see
@@ -475,7 +493,7 @@ fun OfflineMapCanvas(
     LaunchedEffect(map, focusedTrackId, selectedIndex, insets) {
         val at = currentRoutes.firstOrNull { it.trackId == focusedTrackId }
             ?.points?.getOrNull(selectedIndex ?: -1) ?: return@LaunchedEffect
-        map.nudgeIntoView(at.latitude, at.longitude, insets)
+        map.nudgeIntoView(at.latitude, at.longitude, insets, followMargin)
     }
 }
 
@@ -572,20 +590,19 @@ private class TapLayer(map: Map, private val onTap: (x: Float, y: Float) -> Unit
 // --- Drawing ----------------------------------------------------------------------
 
 /**
- * One style per width and colour, shared by every line drawn with it. VectorLayer batches
+ * One style per colour, shared by every line drawn with it. VectorLayer batches
  * consecutive lines of the *same* style into one draw, so a style per line would cost a
  * draw call each.
  */
 private class RouteStyles(density: Density) {
-    private val normal = with(density) { ROUTE_WIDTH_DP.dp.toPx() }
-    private val focused = with(density) { FOCUSED_WIDTH_DP.dp.toPx() }
-    private val cache = HashMap<Pair<Int, Boolean>, Style>()
+    private val width = with(density) { ROUTE_WIDTH_DP.dp.toPx() }
+    private val cache = HashMap<Int, Style>()
 
     @Synchronized
-    fun of(color: Color, isFocused: Boolean): Style = cache.getOrPut(color.toArgb() to isFocused) {
+    fun of(color: Color): Style = cache.getOrPut(color.toArgb()) {
         Style.builder()
             .strokeColor(color.toArgb())
-            .strokeWidth(if (isFocused) focused else normal)
+            .strokeWidth(width)
             .cap(org.oscim.backend.canvas.Paint.Cap.ROUND)
             .fixed(true)
             // Simplified to a pixel at the zoom it is drawn at: a long ride has far more
@@ -597,13 +614,14 @@ private class RouteStyles(density: Density) {
 
 /**
  * Every route as lines, one per segment - the gap between segments is signal loss and
- * nothing should be drawn across it. The focused route is drawn last, over the rest.
+ * nothing should be drawn across it. Stacked in list order, the last on top.
  */
-private fun List<RouteOverlay>.toLines(focusedTrackId: Long?, styles: RouteStyles): List<LineDrawable> {
+private fun List<RouteOverlay>.toLines(styles: RouteStyles): List<LineDrawable> {
     val out = ArrayList<LineDrawable>()
-    forEach { route ->
-        val isFocused = route.trackId == focusedTrackId
-        val style = styles.of(route.color, isFocused)
+    forEachIndexed { priority, route ->
+        // VTM draws by priority, higher later. Within one priority the order is whatever its
+        // spatial index returns, not the order added, so each route gets its own.
+        val style = styles.of(route.color)
         // Both producers hand these over ascending and starting at 0, so this neither
         // sorts nor dedupes - the data already carries that guarantee.
         val starts = route.segmentStartIndices
@@ -621,7 +639,7 @@ private fun List<RouteOverlay>.toLines(focusedTrackId: Long?, styles: RouteStyle
                 lonLat[(index - from) * 2] = point.longitude
                 lonLat[(index - from) * 2 + 1] = point.latitude
             }
-            out.add(LineDrawable(lonLat, style).apply { if (isFocused) priority = 1 })
+            out.add(LineDrawable(lonLat, style).also { it.priority = priority })
         }
     }
     return out
@@ -750,7 +768,7 @@ private fun OfflineMap.opens(): Boolean = MapFileTileSource().run {
  * *stores*, not the one it advertises: a published file keeps tiles at z14 and claims
  * z21, and everything past the base zoom is that tile's geometry drawn bigger.
  */
-internal val OfflineMap.maxViewZoom: Int
+private val OfflineMap.maxViewZoom: Int
     get() = (header.baseZoom + OVERZOOM_ALLOWANCE).coerceAtMost(Viewport.MAX_ZOOM_LEVEL)
 
 /** A map's own box, filled - the ground it actually covers. */
@@ -958,8 +976,8 @@ private fun BoundingBox.padded(fraction: Double): BoundingBox {
 /** The view's size minus whatever is floating over it, or null before it is laid out. */
 private fun IntSize?.usable(insets: Insets): IntSize? {
     if (this == null) return null
-    val usableWidth = width - insets.left - insets.right - 2 * EDGE_PADDING_PX
-    val usableHeight = height - insets.top - insets.bottom - 2 * EDGE_PADDING_PX
+    val usableWidth = width - insets.left - insets.right
+    val usableHeight = height - insets.top - insets.bottom
     return if (usableWidth > 0 && usableHeight > 0) IntSize(usableWidth, usableHeight) else null
 }
 
@@ -979,10 +997,56 @@ private fun fit(target: BoundingBox, size: IntSize, usable: IntSize, insets: Ins
 }
 
 /**
+ * Moves the camera the least it can so no edge of [extent] comes inside the screen's - or
+ * above the top of a sheet [sheetPx] tall - holding it centred on any axis where it fits.
+ *
+ * The range is also handed to VTM as its map limit, so a drag stops cleanly against it; a
+ * pinch changes the scale that range was worked out for, which the correction here catches.
+ */
+private fun Map.keepInView(extent: BoundingBox, sheetPx: Int) {
+    if (width <= 0 || height <= 0) return
+    val position = mapPosition
+    val mapSize = Tile.SIZE * position.scale
+
+    val (minX, maxX) = centreRange(
+        MercatorProjection.longitudeToX(extent.minLongitude),
+        MercatorProjection.longitudeToX(extent.maxLongitude),
+        view = width, visibleEnd = width, mapSize,
+    )
+    val (minY, maxY) = centreRange(
+        MercatorProjection.latitudeToY(extent.maxLatitude),
+        MercatorProjection.latitudeToY(extent.minLatitude),
+        view = height, visibleEnd = height - sheetPx, mapSize,
+    )
+    viewport().setMapLimit(minX, minY, maxX, maxY)
+
+    val x = position.x.coerceIn(minX, maxX)
+    val y = position.y.coerceIn(minY, maxY)
+    if (x == position.x && y == position.y) return
+    position.x = x
+    position.y = y
+    setMapPosition(position)
+}
+
+/**
+ * Where the camera centre may sit on one axis, in projected units: [start] no further in
+ * than the screen edge, [end] no further in than [visibleEnd] - the far edge, or the top
+ * of whatever covers it. When both can't hold at once the extent is narrower than what is
+ * visible, and the only answer is centred in it.
+ */
+private fun centreRange(start: Double, end: Double, view: Int, visibleEnd: Int, mapSize: Double): Pair<Double, Double> {
+    val min = start + view / 2.0 / mapSize
+    val max = end + (view / 2.0 - visibleEnd) / mapSize
+    if (min <= max) return min to max
+    val centred = (start + end) / 2 + (view - visibleEnd) / 2.0 / mapSize
+    return centred to centred
+}
+
+/**
  * Pans the least it can to bring the target inside the uncovered box, or not at all -
  * expressed as a camera-centre move so the amount moved equals the amount out of bounds.
  */
-private fun Map.nudgeIntoView(latitude: Double, longitude: Double, insets: Insets) {
+private fun Map.nudgeIntoView(latitude: Double, longitude: Double, insets: Insets, margin: Int) {
     if (width <= 0 || height <= 0) return
     val position = mapPosition
     val mapSize = Tile.SIZE * position.scale
@@ -990,10 +1054,10 @@ private fun Map.nudgeIntoView(latitude: Double, longitude: Double, insets: Inset
     val atX = (MercatorProjection.longitudeToX(longitude) - position.x) * mapSize + width / 2.0
     val atY = (MercatorProjection.latitudeToY(latitude) - position.y) * mapSize + height / 2.0
 
-    val left = insets.left + FOLLOW_MARGIN_PX
-    val top = insets.top + FOLLOW_MARGIN_PX
-    val right = width - insets.right - FOLLOW_MARGIN_PX
-    val bottom = height - insets.bottom - FOLLOW_MARGIN_PX
+    val left = insets.left + margin
+    val top = insets.top + margin
+    val right = width - insets.right - margin
+    val bottom = height - insets.bottom - margin
     if (left >= right || top >= bottom) return
 
     val dx = when {
@@ -1019,7 +1083,6 @@ private fun Map.nudgeIntoView(latitude: Double, longitude: Double, insets: Inset
 private const val TRANSPARENT = 0
 
 private const val ROUTE_WIDTH_DP = 3f
-private const val FOCUSED_WIDTH_DP = 4.5f
 private const val MARKER_RING_WIDTH_DP = 1.5f
 private const val MARKER_RADIUS_DP = 5f
 private const val PUCK_RADIUS_DP = 6f
@@ -1033,8 +1096,8 @@ private const val COVERAGE_OPACITY = 0.55f
 
 /** About a fingertip. In dp: a finger is a physical size, whatever the screen's density. */
 private const val TAP_REACH_DP = 40f
-private const val FOLLOW_MARGIN_PX = 96
-private const val EDGE_PADDING_PX = 64
+/** How far inside the uncovered box a scrubbed point is kept. */
+private const val FOLLOW_MARGIN_DP = 36f
 
 /** How long an overlay lets the camera settle before checking it drew for it. */
 private const val OVERLAY_CHECK_MS = 150L
@@ -1042,14 +1105,9 @@ private const val OVERLAY_CHECK_MS = 150L
 /** How far past the maps the outside mask reaches, in spans of their extent. */
 private const val MASK_MARGIN_SPANS = 3.0
 
-/** The gap left between everything there is and the screen edge at the widest zoom. */
-private const val ZOOM_OUT_MARGIN_FRACTION = 0.1
-
-/** How far past the edge of the data the pan clamp allows, as a fraction of its own span. */
-private const val PAN_OVERSHOOT_FRACTION = 0.05
 
 /** How far past a file's deepest zoom the camera may still go. */
-private const val OVERZOOM_ALLOWANCE = 2
+private const val OVERZOOM_ALLOWANCE = 4
 
 /** The ceiling when no map is shown and there is nothing to derive one from. */
-private const val DEFAULT_MAX_ZOOM = 16
+private const val DEFAULT_MAX_ZOOM = 18

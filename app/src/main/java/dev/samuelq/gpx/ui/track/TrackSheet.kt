@@ -42,6 +42,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -61,8 +63,8 @@ import dev.samuelq.gpx.ui.theme.LocalChartColors
 private val SheetPadding = 20.dp
 
 /**
- * Everything the sheet shows above the fold: the handle, the name, one row of numbers.
- * Anything taller peeks at a chart heading with no chart under it.
+ * The collapsed height before a track has loaded, and the least it can be after. Once one
+ * has, the peek is measured from what it shows instead; see `onPeekHeightChange`.
  */
 val TrackSheetPeekHeight = 128.dp
 
@@ -95,7 +97,10 @@ fun TrackSheet(
     useTimeAxis: Boolean,
     onAxisChange: (Boolean) -> Unit,
     actions: TrackActions?,
+    /** The height of the part shown collapsed - name, numbers, date - so the peek fits it. */
+    onPeekHeightChange: (Dp) -> Unit,
 ) {
+    val density = LocalDensity.current
     val profile = loaded.profile
     val stats = profile.stats
     val chartColors = LocalChartColors.current
@@ -155,18 +160,31 @@ fun TrackSheet(
             }
     ) {
 
-        SheetTitle(
-            name = loaded.track.name?.takeIf(String::isNotBlank) ?: loaded.displayName,
-            routeColor = routeColor,
-            actions = actions,
-            modifier = Modifier.padding(start = SheetPadding, end = 4.dp),
-        )
+        // What the collapsed sheet shows, measured rather than assumed: a larger font
+        // would otherwise push the date under the gesture bar.
+        Column(Modifier.onSizeChanged { onPeekHeightChange(with(density) { it.height.toDp() }) }) {
+            SheetTitle(
+                name = loaded.track.name?.takeIf(String::isNotBlank) ?: loaded.displayName,
+                routeColor = routeColor,
+                actions = actions,
+                modifier = Modifier.padding(start = SheetPadding, end = 4.dp),
+            )
 
-        // Always the whole track - scrubbed values live on the charts themselves instead.
-        StatRow(
-            stats = trackHeadline(stats, profile.hasTime),
-            modifier = Modifier.padding(start = SheetPadding, end = 8.dp),
-        )
+            // Always the whole track - scrubbed values live on the charts themselves instead.
+            StatRow(
+                stats = trackHeadline(stats, profile.hasTime),
+                modifier = Modifier.padding(start = SheetPadding, end = 8.dp),
+            )
+
+            stats.startedAt?.let {
+                Text(
+                    text = Formatters.dateTime(it),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = SheetPadding, vertical = 8.dp),
+                )
+            }
+        }
 
         Column(
             modifier = Modifier
@@ -179,8 +197,8 @@ fun TrackSheet(
         ) {
             HorizontalDivider(Modifier.padding(horizontal = SheetPadding, vertical = 8.dp))
 
-            // Date, elapsed time, ascent, descent, point count: answers you go looking
-            // for rather than glance at, hence under the fold and not the row above it.
+            // Elapsed time, ascent, descent, point count: answers you go looking for
+            // rather than glance at, hence under the fold and not the row above it.
             Column(Modifier.padding(horizontal = SheetPadding, vertical = 4.dp)) {
                 TrackDetails(
                     stats = stats,
@@ -439,17 +457,20 @@ private fun AxisSelector(
     onChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    SingleChoiceSegmentedButtonRow(modifier) {
+    // Full width, halves shared equally: the same span as the charts it switches.
+    SingleChoiceSegmentedButtonRow(modifier.fillMaxWidth()) {
         SegmentedButton(
             selected = useTimeAxis,
             onClick = { onChange(true) },
             shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+            modifier = Modifier.weight(1f),
         ) { Text(stringResource(R.string.axis_time)) }
 
         SegmentedButton(
             selected = !useTimeAxis,
             onClick = { onChange(false) },
             shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+            modifier = Modifier.weight(1f),
         ) { Text(stringResource(R.string.axis_distance)) }
     }
 }

@@ -336,8 +336,15 @@ fun MapScreen(
     val sheetMaxHeight = windowHeight * SheetMaxHeightFraction
 
     val navigationBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    // Measured off the loaded sheet; the fixed height stands in until there is one.
+    var peekContentHeight by remember { mutableStateOf(0.dp) }
+    val peekHeight = if (focused is FocusedTrack.Ready && peekContentHeight > 0.dp) {
+        maxOf(TrackSheetPeekHeight, DragHandleHeight + peekContentHeight + navigationBarInset)
+    } else {
+        TrackSheetPeekHeight
+    }
     val sheetInset by animateDpAsState(
-        targetValue = if (hasFocus) TrackSheetPeekHeight else navigationBarInset,
+        targetValue = if (hasFocus) peekHeight else navigationBarInset,
         label = "sheetInset",
     )
     // The controls float over the map, so the fit has to be told about them or half a
@@ -351,9 +358,20 @@ fun MapScreen(
         targetValue = when {
             !hasFocus -> maxOf(navigationBarInset, controlsHeight + navigationBarInset)
             sheetState.currentValue == SheetValue.Expanded -> sheetMaxHeight
-            else -> maxOf(TrackSheetPeekHeight, sheetInset + controlsHeight)
+            else -> maxOf(peekHeight, sheetInset + controlsHeight)
         },
         label = "coveredHeight",
+    )
+
+    // Only the sheet, not the controls: what panning must be able to pull things out from
+    // under. Animated with the sheet, so the map follows it rather than jumping.
+    val sheetCover by animateDpAsState(
+        targetValue = when {
+            !hasFocus -> 0.dp
+            sheetState.currentValue == SheetValue.Expanded -> sheetMaxHeight
+            else -> peekHeight
+        },
+        label = "sheetCover",
     )
 
     val canvasPadding = PaddingValues(
@@ -364,7 +382,7 @@ fun MapScreen(
     )
     BottomSheetScaffold(
         scaffoldState = scaffoldState,
-        sheetPeekHeight = TrackSheetPeekHeight,
+        sheetPeekHeight = peekHeight,
         sheetDragHandle = { CompactDragHandle() },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
@@ -420,6 +438,7 @@ fun MapScreen(
                     onSelectedIndexChange = { selectedIndex = it },
                     useTimeAxis = preferTimeAxis && current.track.profile.hasTime,
                     onAxisChange = { preferTimeAxis = it },
+                    onPeekHeightChange = { peekContentHeight = it },
                     // Null for a file opened from an intent: it has no row to rename,
                     // hide or delete, and sharing it would just hand the file back to
                     // itself.
@@ -485,6 +504,7 @@ fun MapScreen(
                 // first and the only one that does not involve aiming at anything.
                 onSelectNothing = { viewModel.focus(null) },
                 contentPadding = canvasPadding,
+                sheetHeight = sheetCover,
                 // A step apart, not the same colour twice: ground no imported file covers
                 // has to read as empty rather than as land, and the dashed outline alone is
                 // a thin thing to carry that.
@@ -660,6 +680,9 @@ private val MapEdgePadding = 24.dp
  */
 private const val SheetMaxHeightFraction = 0.58f
 
+/** The handle's own height, counted into the measured peek. */
+private val DragHandleHeight = 20.dp
+
 /**
  * Half the height of the Material handle, which spends 44 of its 48dp on padding. Every
  * one of those is a dp of map, and the sheet is dragged by its whole surface anyway.
@@ -667,7 +690,7 @@ private const val SheetMaxHeightFraction = 0.58f
 @Composable
 private fun CompactDragHandle() {
     Box(
-        Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        Modifier.fillMaxWidth().height(DragHandleHeight),
         contentAlignment = Alignment.Center,
     ) {
         Box(
@@ -686,10 +709,10 @@ private fun EmptyState(
     modifier: Modifier = Modifier,
 ) {
     Column(
-        // Opaque: this sits over OfflineMapCanvas's own flat background, blank basemap
-        // or not.
+        // Opaque, over the canvas's own flat background, and the same colour as every
+        // other screen's: with nothing to show, this is a page, not a map.
         modifier = modifier
-            .background(MaterialTheme.colorScheme.surfaceContainerLowest)
+            .background(MaterialTheme.colorScheme.background)
             .padding(32.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
         horizontalAlignment = Alignment.CenterHorizontally,

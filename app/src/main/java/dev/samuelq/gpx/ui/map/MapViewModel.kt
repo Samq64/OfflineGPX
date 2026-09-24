@@ -115,13 +115,16 @@ class MapViewModel(
         }
         viewModelScope.launch {
             repository.tracks.collect { all ->
+                val before = _state.value.all
                 _state.update { it.copy(all = all) }
-                // The sheet has no other way to learn its track was deleted elsewhere (the
-                // library, a batch delete) - without this it stays open over a gone row.
-                val focusedId = (requested as? TrackRef.Saved)?.id
-                if (focusedId != null && all.none { it.id == focusedId }) {
-                    focus(null)
-                }
+                // The sheet has no other way to learn its track was deleted or hidden
+                // elsewhere (the library, a batch action) - without this it stays open, and
+                // a hidden one stays drawn as the focused track. Hidden means just now: a
+                // track opened while already hidden is meant to be shown.
+                val focusedId = (requested as? TrackRef.Saved)?.id ?: return@collect
+                val row = all.firstOrNull { it.id == focusedId }
+                val wasVisible = before.firstOrNull { it.id == focusedId }?.visible == true
+                if (row == null || (wasVisible && !row.visible)) focus(null)
             }
         }
     }
