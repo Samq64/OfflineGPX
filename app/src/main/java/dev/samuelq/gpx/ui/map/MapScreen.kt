@@ -273,8 +273,11 @@ fun MapScreen(
         if (hasFocus && !sidePanel) sheetState.partialExpand()
         else if (sheetState.currentValue != SheetValue.Hidden) sheetState.hide()
         // Letting go of the track lets go of the offer to name it, so a stale prompt can't
-        // ambush the next time that track is opened.
-        if (!hasFocus) namingId = null
+        // ambush the next time that track is opened - whichever one of the two opened it.
+        if (!hasFocus) {
+            namingId = null
+            renamingId = null
+        }
     }
 
     // Swiped away by hand: the selection follows the sheet rather than lingering as

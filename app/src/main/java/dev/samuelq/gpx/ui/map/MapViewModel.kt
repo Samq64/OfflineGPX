@@ -117,6 +117,10 @@ class MapViewModel(
             repository.tracks.collect { all ->
                 val before = _state.value.all
                 _state.update { it.copy(all = all) }
+                // The row is the name's only source of truth - a rename made from the
+                // library, where this screen has no hand in it, would otherwise leave the
+                // sheet showing what the track used to be called until it's reopened.
+                resyncNames(all)
                 // The sheet has no other way to learn its track was deleted or hidden
                 // elsewhere (the library, a batch action) - without this it stays open, and
                 // a hidden one stays drawn as the focused track. Hidden means just now: a
@@ -126,6 +130,26 @@ class MapViewModel(
                 val wasVisible = before.firstOrNull { it.id == focusedId }?.visible == true
                 if (row == null || (wasVisible && !row.visible)) focus(null)
             }
+        }
+    }
+
+    /** Brings the geometry cache and the open sheet, if any, in line with the rows' names. */
+    private fun resyncNames(entities: List<TrackEntity>) {
+        _state.update { current ->
+            var geometry = current.geometry
+            for (entity in entities) {
+                val cached = geometry[entity.id] ?: continue
+                if (cached.track.name != entity.trackName) {
+                    geometry = geometry + (entity.id to cached.renamed(entity.trackName))
+                }
+            }
+            current.copy(geometry = geometry)
+        }
+        _focused.update { focused ->
+            if (focused !is FocusedTrack.Ready) return@update focused
+            val entity = entities.firstOrNull { it.id == focused.track.id } ?: return@update focused
+            if (entity.trackName == focused.track.track.name) return@update focused
+            FocusedTrack.Ready(focused.track.renamed(entity.trackName))
         }
     }
 
