@@ -251,7 +251,11 @@ class RecordingService : Service() {
         val at = fix.point.time ?: return
         lastAccuracyMeters = fix.accuracyMeters
 
-        filter.pointFor(fix)?.let { point ->
+        filter.pointFor(fix)?.let { filtered ->
+            // The filter decides distance and displacement off bare position; the accuracy
+            // that earned this point its place is stamped on afterwards, purely to write
+            // down for whatever reopens the file later.
+            val point = filtered.copy(accuracyMeters = fix.accuracyMeters)
             lastPoint?.let { distanceMeters += haversineMeters(it, point) }
             lastPoint = point
             pointCount++

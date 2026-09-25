@@ -47,6 +47,9 @@ class GpxWriter(private val newSerializer: () -> XmlSerializer = DEFAULT_SERIALI
                 xml.attribute(null, "lon", format(point.longitude))
                 point.elevation?.let { xml.textTag("ele", String.format(java.util.Locale.ROOT, "%.1f", it)) }
                 point.time?.let { xml.textTag("time", TIMESTAMP.format(it)) }
+                // Not a true dilution-of-precision figure - see TrackPoint.accuracyMeters -
+                // but the closest slot GPX has, and after `<time>` is where the schema puts it.
+                point.accuracyMeters?.let { xml.textTag("hdop", String.format(java.util.Locale.ROOT, "%.1f", it)) }
                 xml.endTag(NAMESPACE, "trkpt")
             }
             xml.endTag(NAMESPACE, "trkseg")

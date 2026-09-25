@@ -17,8 +17,8 @@ import java.time.Instant
  * exists so that losing a ride is not a possible outcome.
  *
  * ```
- * <epochMillis>,<lat>,<lon>[,<ele>]   a fix
- * -                                   a segment break (a pause, or lost signal)
+ * <epochMillis>,<lat>,<lon>[,<ele>][,<accuracyMeters>]   a fix
+ * -                                                       a segment break (a pause, or lost signal)
  * ```
  */
 class RecordingWal private constructor(
@@ -28,7 +28,10 @@ class RecordingWal private constructor(
 
     fun append(point: TrackPoint) {
         val elevation = point.elevation?.toString() ?: ""
-        writer.write("${point.time?.toEpochMilli() ?: 0},${point.latitude},${point.longitude},$elevation")
+        val accuracy = point.accuracyMeters?.toString() ?: ""
+        writer.write(
+            "${point.time?.toEpochMilli() ?: 0},${point.latitude},${point.longitude},$elevation,$accuracy"
+        )
         writer.newLine()
         // Flushed per fix, at 1 Hz. The cost is negligible and it is the entire point:
         // an unflushed buffer is a lost ride.
@@ -104,6 +107,7 @@ class RecordingWal private constructor(
                 longitude = longitude,
                 elevation = parts.getOrNull(3)?.toDoubleOrNull(),
                 time = millis.takeIf { it > 0 }?.let(Instant::ofEpochMilli),
+                accuracyMeters = parts.getOrNull(4)?.toDoubleOrNull(),
             )
         }
     }

@@ -7,8 +7,9 @@ import kotlin.math.max
 /**
  * One raw reading from the positioning hardware, before anything decides to believe it.
  *
- * Distinct from [TrackPoint], which is what the recorder has decided to write down; GPX has
- * nowhere to put [accuracyMeters].
+ * Distinct from [TrackPoint], which is what the recorder has decided to write down: this is
+ * the reading that decision was made from, which for the "still" grace period in
+ * [FixFilter.pointFor] is not the same as the point it ends up stamped onto.
  */
 data class Fix(
     val point: TrackPoint,

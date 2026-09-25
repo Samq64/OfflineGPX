@@ -201,6 +201,16 @@ fun TrackSheet(
         ) {
             HorizontalDivider(Modifier.padding(horizontal = SheetPadding, vertical = 8.dp))
 
+            // Whatever the file itself said this ride was, verbatim - the app never writes
+            // one, so this only ever shows up on an import that carried its own <desc>.
+            loaded.track.description?.takeIf(String::isNotBlank)?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(horizontal = SheetPadding, vertical = 4.dp),
+                )
+            }
+
             // Elapsed time, ascent, descent, point count: answers you go looking for
             // rather than glance at, hence under the fold and not the row above it.
             Column(Modifier.padding(horizontal = SheetPadding, vertical = 4.dp)) {

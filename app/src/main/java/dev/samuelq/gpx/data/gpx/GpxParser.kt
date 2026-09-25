@@ -55,6 +55,7 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
         val segments = mutableListOf<TrackSegment>()
         var trackName: String? = null
         var metadataName: String? = null
+        var trackDescription: String? = null
 
         forEachChild(parser) {
             when (parser.name) {
@@ -71,6 +72,11 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
                             val value = readText(parser).takeIf(String::isNotBlank)
                             // First named track wins; later ones are usually laps.
                             if (trackName == null) trackName = value
+                        }
+
+                        TAG_DESC -> {
+                            val value = readText(parser).takeIf(String::isNotBlank)
+                            if (trackDescription == null) trackDescription = value
                         }
 
                         TAG_TRKSEG -> readSegment(parser)?.let(segments::add)
@@ -101,6 +107,7 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
         return Track(
             name = trackName ?: metadataName,
             segments = segments.filter { it.points.isNotEmpty() },
+            description = trackDescription,
         )
     }
 
@@ -134,18 +141,22 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
 
         var elevation: Double? = null
         var time: Instant? = null
+        var accuracy: Double? = null
 
         forEachChild(parser) {
             when (parser.name) {
                 TAG_ELE -> elevation = readText(parser).trim().toDoubleOrNull()
                 TAG_TIME -> time = parseGpxTime(readText(parser))
+                // Not a true dilution-of-precision figure - see TrackPoint.accuracyMeters -
+                // but the closest slot GPX has, and the one this app's own writer uses.
+                TAG_HDOP -> accuracy = readText(parser).trim().toDoubleOrNull()
                 else -> skip(parser)
             }
         }
 
         if (latitude == null || longitude == null) return null
         if (latitude !in -90.0..90.0 || longitude !in -180.0..180.0) return null
-        return TrackPoint(latitude, longitude, elevation, time)
+        return TrackPoint(latitude, longitude, elevation, time, accuracy)
     }
 
     /**
@@ -215,8 +226,10 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
         private const val TAG_RTE = "rte"
         private const val TAG_RTEPT = "rtept"
         private const val TAG_NAME = "name"
+        private const val TAG_DESC = "desc"
         private const val TAG_ELE = "ele"
         private const val TAG_TIME = "time"
+        private const val TAG_HDOP = "hdop"
         private const val ATTR_LAT = "lat"
         private const val ATTR_LON = "lon"
 

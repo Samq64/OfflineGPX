@@ -15,6 +15,12 @@ data class TrackPoint(
     /** Metres above the WGS84 ellipsoid, or `null` when the file carries no `<ele>`. */
     val elevation: Double? = null,
     val time: Instant? = null,
+    /**
+     * Horizontal accuracy in metres, written to and read from `<hdop>` - not a true
+     * dilution-of-precision figure (Android never hands us satellite geometry), but the
+     * closest slot GPX has for "how good was this fix".
+     */
+    val accuracyMeters: Double? = null,
 )
 
 /**
@@ -34,6 +40,8 @@ data class TrackSegment(val points: List<TrackPoint>)
 data class Track(
     val name: String?,
     val segments: List<TrackSegment>,
+    /** The `<trk><desc>`, or `null` when the file has none - most don't. */
+    val description: String? = null,
 ) {
     /** All points, in order, flattened across segments. */
     val points: List<TrackPoint> = segments.flatMap(TrackSegment::points)

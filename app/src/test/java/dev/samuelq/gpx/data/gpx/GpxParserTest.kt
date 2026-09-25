@@ -89,6 +89,36 @@ class GpxParserTest {
     }
 
     @Test
+    fun `reads a track's description`() {
+        val track = parse(
+            """
+            <gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1"><trk>
+              <name>Loop</name>
+              <desc>Started at the trailhead, rained the whole way back.</desc>
+              <trkseg><trkpt lat="47.0" lon="8.0"/></trkseg>
+            </trk></gpx>
+            """.trimIndent()
+        )
+
+        assertEquals("Started at the trailhead, rained the whole way back.", track.description)
+    }
+
+    @Test
+    fun `reads a point's hdop`() {
+        val track = parse(
+            """
+            <gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1"><trk><trkseg>
+              <trkpt lat="47.0" lon="8.0"><hdop>4.2</hdop></trkpt>
+              <trkpt lat="47.1" lon="8.1"/>
+            </trkseg></trk></gpx>
+            """.trimIndent()
+        )
+
+        assertEquals(4.2, track.points[0].accuracyMeters!!, 1e-9)
+        assertNull(track.points[1].accuracyMeters)
+    }
+
+    @Test
     fun `skips vendor extensions and unknown elements`() {
         val track = parse(
             """
