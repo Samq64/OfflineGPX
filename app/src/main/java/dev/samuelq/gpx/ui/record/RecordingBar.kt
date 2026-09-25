@@ -78,7 +78,7 @@ fun RecordingBar(
                 )
                 Spacer(Modifier.width(20.dp))
                 Text(
-                    text = Formatters.duration(state.movingSeconds),
+                    text = Formatters.duration(state.totalSeconds),
                     style = MaterialTheme.typography.titleMedium.tabularFigures(),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

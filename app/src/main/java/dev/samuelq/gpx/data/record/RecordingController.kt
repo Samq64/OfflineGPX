@@ -21,7 +21,12 @@ sealed interface RecordingState {
         val startedAt: Instant,
         val pointCount: Int,
         val distanceMeters: Double,
-        val movingSeconds: Double,
+        /**
+         * Wall-clock time since the recording started, pause included - ticks on its own
+         * every second rather than only when a fix lands, so it doesn't read as stuck when
+         * the GPS goes quiet or nothing new clears the distance filter.
+         */
+        val totalSeconds: Double,
         val lastPoint: TrackPoint?,
         /** Null until the first fix lands - GPS takes a few seconds to settle outdoors. */
         val currentSpeedMps: Double?,

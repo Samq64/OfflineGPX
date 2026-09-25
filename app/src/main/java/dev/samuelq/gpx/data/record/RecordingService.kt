@@ -20,7 +20,6 @@ import dev.samuelq.gpx.R
 import dev.samuelq.gpx.core.analysis.Fix
 import dev.samuelq.gpx.core.analysis.FixFilter
 import dev.samuelq.gpx.core.analysis.SpeedWindow
-import dev.samuelq.gpx.core.analysis.TrackAnalyzer
 import dev.samuelq.gpx.core.analysis.haversineMeters
 import dev.samuelq.gpx.core.model.TrackPoint
 import dev.samuelq.gpx.data.settings.Settings
@@ -33,6 +32,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
@@ -84,11 +84,20 @@ class RecordingService : Service() {
     private var paused = false
     private var pointCount = 0
     private var distanceMeters = 0.0
-    private var movingSeconds = 0.0
     private var lastPoint: TrackPoint? = null
     private var currentSpeedMps: Double? = null
-    private var lastFixAt: Instant? = null
     private var lastAccuracyMeters: Double? = null
+
+    /** When this recording started, on the clock [totalSeconds] reads - see [startedAt]. */
+    private var startedAtRealtime: Long = 0
+    /**
+     * Republishes on a plain clock rather than waiting on the next fix, so the duration
+     * shown keeps moving through a GPS outage, a stretch of points the filter rejects, or
+     * a pause - a fix is not the only thing that means time passed, and neither is motion.
+     * Runs for the whole recording, pause included, so it reads the same span [totalSeconds]
+     * does: the sheet's "elapsed" is start to finish with no time carved out of it either.
+     */
+    private var ticker: Job? = null
 
     /** When the notification last went out, for the throttle in [updateNotification]. */
     private var notifiedAt = 0L
@@ -145,11 +154,10 @@ class RecordingService : Service() {
         paused = false
         pointCount = 0
         distanceMeters = 0.0
-        movingSeconds = 0.0
         lastPoint = null
         currentSpeedMps = null
-        lastFixAt = null
         lastAccuracyMeters = null
+        startedAtRealtime = SystemClock.elapsedRealtime()
 
         val settings = container.settingsRepository.settings.value
         accuracyLimitMeters = settings.maxAccuracyMeters
@@ -186,6 +194,7 @@ class RecordingService : Service() {
         wal = RecordingWal.open(File(recordingsDir(this), WAL_NAME))
 
         publish()
+        startTicker()
         collectFixes(source)
     }
 
@@ -216,6 +225,8 @@ class RecordingService : Service() {
 
     private fun finish() {
         recording = false
+        ticker?.cancel()
+        ticker = null
         container.recordingController.update(RecordingState.Idle)
         container.recordingController.updateTrace(LiveTrace.Empty)
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
@@ -231,15 +242,13 @@ class RecordingService : Service() {
     }
 
     /**
-     * One reading. [FixFilter] alone decides what counts as travel; time, speed and the
-     * moving clock advance on every reading regardless, because a second passed either way.
+     * One reading. [FixFilter] alone decides what counts as travel - the duration shown
+     * doesn't wait on it, or on this being called at all; see [ticker].
      */
     private fun onFix(fix: Fix) {
         if (paused) return
 
         val at = fix.point.time ?: return
-        val seconds = lastFixAt?.let { (at.toEpochMilli() - it.toEpochMilli()) / 1000.0 } ?: 0.0
-        lastFixAt = at
         lastAccuracyMeters = fix.accuracyMeters
 
         filter.pointFor(fix)?.let { point ->
@@ -259,15 +268,29 @@ class RecordingService : Service() {
         speedWindow.add(at.toEpochMilli() / 1000.0, distanceMeters)
         currentSpeedMps = speedWindow.speedMps
 
-        // The analyzer's own threshold against the analyzer's own window, so the live
-        // moving time and the one on the sheet afterwards cannot disagree.
-        if (seconds > 0.0 && (currentSpeedMps ?: 0.0) >= TrackAnalyzer.MOVING_SPEED_THRESHOLD_MPS) {
-            movingSeconds += seconds
-        }
-
         publish()
         // Throttled, unlike `publish`: see updateNotification.
         updateNotification(force = false)
+    }
+
+    /**
+     * Wall-clock seconds since this recording started, pauses included - the same span
+     * [dev.samuelq.gpx.core.analysis.TrackAnalyzer]'s `totalDurationSeconds` measures from
+     * the saved file's first and last points, so the live number and the one on the sheet
+     * afterwards read the same thing.
+     */
+    private fun totalSeconds(): Double =
+        (SystemClock.elapsedRealtime() - startedAtRealtime) / 1000.0
+
+    /** Keeps the duration moving once a second without waiting on a fix to do it. */
+    private fun startTicker() {
+        ticker = scope.launch {
+            while (true) {
+                delay(TICK_INTERVAL_MILLIS)
+                publish()
+                updateNotification(force = false)
+            }
+        }
     }
 
     /**
@@ -288,7 +311,6 @@ class RecordingService : Service() {
         traceStartsSegment = true
         lastPoint = null
         currentSpeedMps = null
-        lastFixAt = null
         // Resuming somewhere else must not read as having travelled there: the next fix
         // starts a new run with nothing to measure against.
         filter.reset()
@@ -393,7 +415,7 @@ class RecordingService : Service() {
                 startedAt = startedAt,
                 pointCount = pointCount,
                 distanceMeters = distanceMeters,
-                movingSeconds = movingSeconds,
+                totalSeconds = totalSeconds(),
                 lastPoint = lastPoint,
                 currentSpeedMps = currentSpeedMps,
                 accuracyMeters = lastAccuracyMeters,
@@ -447,7 +469,7 @@ class RecordingService : Service() {
                     val formatters = Formatters(container.settingsRepository.settings.value.units)
                     append(formatters.distance(distanceMeters))
                     append("  ·  ")
-                    append(Formatters.duration(movingSeconds))
+                    append(Formatters.duration(totalSeconds()))
                 }
             )
             .setContentIntent(open)
@@ -508,6 +530,9 @@ class RecordingService : Service() {
 
         /** The floor on how often the ongoing notification is rebuilt while sampling. */
         private const val NOTIFICATION_INTERVAL_MILLIS = 5_000L
+
+        /** How often the clock ticks on its own, between whatever fixes arrive. */
+        private const val TICK_INTERVAL_MILLIS = 1_000L
 
         /**
          * Below this a recording is not a track - not zero, since a handful of fixes that
