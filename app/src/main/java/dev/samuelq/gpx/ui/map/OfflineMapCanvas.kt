@@ -25,6 +25,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
@@ -39,6 +40,7 @@ import org.oscim.android.canvas.AndroidBitmap
 import org.oscim.core.BoundingBox
 import org.oscim.core.Box
 import org.oscim.core.GeoPoint
+import org.oscim.core.MapElement
 import org.oscim.core.MapPosition
 import org.oscim.core.MercatorProjection
 import org.oscim.core.Tile
@@ -50,6 +52,7 @@ import org.oscim.layers.marker.ItemizedLayer
 import org.oscim.layers.marker.MarkerInterface
 import org.oscim.layers.marker.MarkerItem
 import org.oscim.layers.marker.MarkerSymbol
+import org.oscim.layers.tile.MapTile
 import org.oscim.layers.tile.vector.OsmTileLayer
 import org.oscim.layers.tile.vector.labeling.LabelLayer
 import org.oscim.layers.vector.VectorLayer
@@ -64,9 +67,17 @@ import org.oscim.theme.ThemeFile
 import org.oscim.theme.ThemeLoader
 import org.oscim.theme.XmlRenderThemeMenuCallback
 import org.oscim.theme.XmlThemeResourceProvider
+import org.oscim.tiling.ITileDataSink
+import org.oscim.tiling.ITileDataSource
+import org.oscim.tiling.OverzoomTileDataSource
+import org.oscim.tiling.QueryResult
+import org.oscim.tiling.TileDataSink
+import org.oscim.tiling.source.mapfile.MapFile
 import org.oscim.tiling.source.mapfile.MapFileTileSource
 import org.oscim.tiling.source.mapfile.MultiMapFileTileSource
+import org.oscim.utils.geom.TileClipper
 import java.io.ByteArrayInputStream
+import java.io.IOException
 import java.io.InputStream
 
 /**
@@ -162,7 +173,6 @@ fun OfflineMapCanvas(
     /** Highlighted point within [focusedTrackId]'s route, as an index into its points. */
     selectedIndex: Int? = null,
     markerColor: Color = Color.Unspecified,
-    markerRingColor: Color = Color.Unspecified,
     /** The track whose last point is where the recorder is standing, or null. */
     puckTrackId: Long? = null,
     puckColor: Color = Color.Unspecified,
@@ -175,6 +185,8 @@ fun OfflineMapCanvas(
      * its top edge, so nothing can be stranded underneath it.
      */
     sheetHeight: Dp = 0.dp,
+    /** The same for a panel down the start edge, as landscape shows the track in. */
+    panelWidth: Dp = 0.dp,
     backgroundColor: Color = Color.Unspecified,
     landColor: Color = Color.Unspecified,
     labelColor: Color = Color.Unspecified,
@@ -334,9 +346,7 @@ fun OfflineMapCanvas(
             return@LaunchedEffect
         }
 
-        val source = MultiMapFileTileSource().apply {
-            shown.forEach { add(MapFileTileSource().apply { setMapFile(it.file.path) }) }
-        }
+        val source = ClippedMapSource(shown)
         val tiles = OsmTileLayer(map, Viewport.MIN_ZOOM_LEVEL, Viewport.MAX_ZOOM_LEVEL)
         if (!tiles.setTileSource(source)) {
             source.close()
@@ -347,8 +357,8 @@ fun OfflineMapCanvas(
         // viewport's limits at construction, throws if they are narrower than its own, and
         // places no labels outside them - and the camera's limits change with the extent.
         val labels = map.viewport().withFullZoomRange { LabelLayer(map, tiles) }
-        // Over the labels too: a file's low zooms are whole tiles tens of kilometres wide,
-        // so it holds lakes and towns well past its own box, and VTM draws all of them.
+        // The source already cuts each file to its box; this covers what still overhangs
+        // it, like half a road's width at the edge.
         val mask = OverlayLayer(map)
         layers.add(tiles, LayerGroup.Tiles.ordinal)
         layers.add(labels, LayerGroup.Labels.ordinal)
@@ -381,8 +391,8 @@ fun OfflineMapCanvas(
 
     // Built once per colour, not per selection: scrubbing a chart moves the marker on every
     // frame, and a new bitmap each time is a new texture upload each time.
-    val symbols = remember(markerColor, markerRingColor, puckColor, density) {
-        MarkerSymbols(markerColor, markerRingColor, puckColor, density)
+    val symbols = remember(markerColor, puckColor, density) {
+        MarkerSymbols(markerColor, puckColor, density)
     }
 
     LaunchedEffect(markerLayer, symbols, routes, liveRoute, puckTrackId, focusedTrackId, selectedIndex) {
@@ -436,22 +446,29 @@ fun OfflineMapCanvas(
     }
 
     // Panning stops once an edge of everything there is reaches the screen's, and an axis
-    // it all fits on is held centred - so fully zoomed out, zooming
-    // is the only move left. The bottom edge is the sheet's top while one is open, so
-    // anything under it can be pulled out. Re-checked on every camera move, since the
-    // allowed range depends on the scale.
-    val sheetPx = with(density) { sheetHeight.roundToPx() }
+    // it all fits on is held centred - so fully zoomed out, zooming is the only move left.
+    // Edges a sheet or panel covers are measured from that instead, so anything under one
+    // can be pulled out. Re-checked on every camera move, since the allowed range depends
+    // on the scale.
+    val cover = with(density) {
+        val panel = panelWidth.roundToPx()
+        Cover(
+            left = if (layoutDirection == LayoutDirection.Ltr) panel else 0,
+            right = if (layoutDirection == LayoutDirection.Rtl) panel else 0,
+            bottom = sheetHeight.roundToPx(),
+        )
+    }
     val currentExtent by rememberUpdatedState(extent)
-    val currentSheetPx by rememberUpdatedState(sheetPx)
+    val currentCover by rememberUpdatedState(cover)
     DisposableEffect(map) {
         val listener = Map.UpdateListener { _, _ ->
-            currentExtent?.let { map.keepInView(it, currentSheetPx) }
+            currentExtent?.let { map.keepInView(it, currentCover) }
         }
         map.events.bind(listener)
         onDispose { map.events.unbind(listener) }
     }
-    LaunchedEffect(map, extent, viewSize, sheetPx) {
-        extent?.let { map.keepInView(it, sheetPx) }
+    LaunchedEffect(map, extent, viewSize, cover) {
+        extent?.let { map.keepInView(it, cover) }
     }
 
     // Only reached once per process at most: the moment a camera is ever remembered (see
@@ -500,8 +517,12 @@ fun OfflineMapCanvas(
 /**
  * The stacking order, bottom first. VTM keeps each group's layers together however late
  * they are added, so a rebuilt basemap lands back under the routes rather than on top.
+ *
+ * Names over the routes, haloed, so a road stays readable where a track runs along it.
+ * That puts them over the mask too, which is why [ClippedMapSource] drops what is past a
+ * file's edge before a name can be placed on it.
  */
-private enum class LayerGroup { Land, Tiles, Labels, Mask, Outline, Routes, Trace, Markers, Tap }
+private enum class LayerGroup { Land, Tiles, Mask, Outline, Routes, Trace, Labels, Markers, Tap }
 
 /** Runs [block] with VTM's own zoom limits in place, then puts the camera's back. */
 private inline fun <T> Viewport.withFullZoomRange(block: () -> T): T {
@@ -707,7 +728,7 @@ private class LineLayer(map: Map) {
 }
 
 /** The circles, drawn once per colour - see where [MarkerSymbols] is remembered. */
-private class MarkerSymbols(marker: Color, ring: Color, puck: Color, density: Density) {
+private class MarkerSymbols(marker: Color, puck: Color, density: Density) {
     val marker: MarkerSymbol
     val puck: MarkerSymbol
 
@@ -715,12 +736,12 @@ private class MarkerSymbols(marker: Color, ring: Color, puck: Color, density: De
         with(density) {
             val ringWidth = MARKER_RING_WIDTH_DP.dp.toPx()
             this@MarkerSymbols.marker = symbol(
-                MARKER_RADIUS_DP.dp.toPx(), ringWidth, fill = marker, ring = ring, halo = null, haloRadius = 0f,
+                MARKER_RADIUS_DP.dp.toPx(), ringWidth, fill = marker, ring = MARKER_RING, halo = null, haloRadius = 0f,
             )
             // Bigger than the scrub marker and wearing a halo: one points at a moment in a
             // ride that's over, this is the only thing on screen about right now.
             this@MarkerSymbols.puck = symbol(
-                PUCK_RADIUS_DP.dp.toPx(), ringWidth, fill = puck, ring = ring,
+                PUCK_RADIUS_DP.dp.toPx(), ringWidth, fill = puck, ring = MARKER_RING,
                 halo = puck.copy(alpha = PUCK_HALO_ALPHA), haloRadius = PUCK_HALO_RADIUS_DP.dp.toPx(),
             )
         }
@@ -775,6 +796,99 @@ private val OfflineMap.maxViewZoom: Int
 private fun boxDrawable(map: OfflineMap, style: Style): RectangleDrawable {
     val h = map.header
     return RectangleDrawable(h.minLatitude, h.minLongitude, h.maxLatitude, h.maxLongitude, style)
+}
+
+/**
+ * The maps as one source, each file's data cut to its own box. A file's low zooms are
+ * whole tiles tens of kilometres wide, so it carries lakes, roads and towns well past its
+ * box - painted over by the mask, but names are drawn above that, and a town floating on
+ * empty ground reads as broken.
+ *
+ * Queries the files itself rather than through [MultiMapFileTileSource]'s own data source,
+ * which hands every file the same sink and so can't say which box an element belongs to.
+ * No de-duplication across files: they don't overlap, and what two share past their
+ * edges is cut away here.
+ */
+private class ClippedMapSource(maps: List<OfflineMap>) : MultiMapFileTileSource() {
+    private val files = maps.map { map ->
+        val h = map.header
+        val source = MapFileTileSource().apply { setMapFile(map.file.path) }
+        add(source)
+        source to BoundingBox(h.minLatitude, h.minLongitude, h.maxLatitude, h.maxLongitude)
+    }
+
+    override fun getDataSource(): ITileDataSource {
+        val opened = files.mapNotNull { (source, box) ->
+            try {
+                MapFile(source) to box
+            } catch (_: IOException) {
+                null
+            }
+        }
+        return OverzoomTileDataSource(ClippedMapData(opened), overZoom)
+    }
+}
+
+private class ClippedMapData(private val files: List<Pair<MapFile, BoundingBox>>) : ITileDataSource {
+    override fun query(tile: MapTile, sink: ITileDataSink) {
+        val clipping = ClippingSink(sink)
+        try {
+            files.forEachIndexed { i, (file, box) ->
+                if (!file.supportsTile(tile)) return@forEachIndexed
+                clipping.level = i + 1
+                clipping.levels = files.size
+                clipping.clipTo(tile, box)
+                file.query(tile, clipping)
+            }
+            sink.completed(QueryResult.SUCCESS)
+        } catch (_: Exception) {
+            sink.completed(QueryResult.FAILED)
+        }
+    }
+
+    override fun dispose() = files.forEach { it.first.dispose() }
+
+    override fun cancel() = files.forEach { it.first.cancel() }
+}
+
+/**
+ * Passes on what lies inside one box, in the tile's own pixels. A [TileDataSink] because
+ * that is what a [MapFile] expects to be handed, and it keeps the file's own completion
+ * from reaching the real sink once per file.
+ */
+private class ClippingSink(sink: ITileDataSink) : TileDataSink(sink) {
+    private val clipper = TileClipper(0f, 0f, 0f, 0f)
+    private var left = 0f
+    private var top = 0f
+    private var right = 0f
+    private var bottom = 0f
+    private var whole = false
+
+    fun clipTo(tile: Tile, box: BoundingBox) {
+        val scale = Tile.SIZE.toDouble() * (1 shl tile.zoomLevel.toInt())
+        left = (MercatorProjection.longitudeToX(box.minLongitude) * scale - tile.tileX * Tile.SIZE).toFloat()
+        right = (MercatorProjection.longitudeToX(box.maxLongitude) * scale - tile.tileX * Tile.SIZE).toFloat()
+        top = (MercatorProjection.latitudeToY(box.maxLatitude) * scale - tile.tileY * Tile.SIZE).toFloat()
+        bottom = (MercatorProjection.latitudeToY(box.minLatitude) * scale - tile.tileY * Tile.SIZE).toFloat()
+        // Most tiles are wholly inside, and those need no clipping at all.
+        whole = left <= 0f && top <= 0f && right >= Tile.SIZE && bottom >= Tile.SIZE
+        clipper.setRect(left, top, right, bottom)
+    }
+
+    override fun process(element: MapElement) {
+        if (!whole) {
+            if (element.isPoint) {
+                if (!inside(element.getPointX(0), element.getPointY(0))) return
+            } else if (!clipper.clip(element)) {
+                return
+            }
+            element.labelPosition?.let { if (!inside(it.x, it.y)) element.labelPosition = null }
+            element.centroidPosition?.let { if (!inside(it.x, it.y)) element.centroidPosition = null }
+        }
+        super.process(element)
+    }
+
+    private fun inside(x: Float, y: Float) = x in left..right && y in top..bottom
 }
 
 /**
@@ -996,14 +1110,17 @@ private fun fit(target: BoundingBox, size: IntSize, usable: IntSize, insets: Ins
     return position
 }
 
+/** Pixels a sheet or panel hides along each edge. */
+private data class Cover(val left: Int, val right: Int, val bottom: Int)
+
 /**
  * Moves the camera the least it can so no edge of [extent] comes inside the screen's - or
- * above the top of a sheet [sheetPx] tall - holding it centred on any axis where it fits.
+ * inside whatever [cover] hides - holding it centred on any axis where it fits.
  *
  * The range is also handed to VTM as its map limit, so a drag stops cleanly against it; a
  * pinch changes the scale that range was worked out for, which the correction here catches.
  */
-private fun Map.keepInView(extent: BoundingBox, sheetPx: Int) {
+private fun Map.keepInView(extent: BoundingBox, cover: Cover) {
     if (width <= 0 || height <= 0) return
     val position = mapPosition
     val mapSize = Tile.SIZE * position.scale
@@ -1011,12 +1128,12 @@ private fun Map.keepInView(extent: BoundingBox, sheetPx: Int) {
     val (minX, maxX) = centreRange(
         MercatorProjection.longitudeToX(extent.minLongitude),
         MercatorProjection.longitudeToX(extent.maxLongitude),
-        view = width, visibleEnd = width, mapSize,
+        view = width, visibleStart = cover.left, visibleEnd = width - cover.right, mapSize,
     )
     val (minY, maxY) = centreRange(
         MercatorProjection.latitudeToY(extent.maxLatitude),
         MercatorProjection.latitudeToY(extent.minLatitude),
-        view = height, visibleEnd = height - sheetPx, mapSize,
+        view = height, visibleStart = 0, visibleEnd = height - cover.bottom, mapSize,
     )
     viewport().setMapLimit(minX, minY, maxX, maxY)
 
@@ -1030,15 +1147,22 @@ private fun Map.keepInView(extent: BoundingBox, sheetPx: Int) {
 
 /**
  * Where the camera centre may sit on one axis, in projected units: [start] no further in
- * than the screen edge, [end] no further in than [visibleEnd] - the far edge, or the top
- * of whatever covers it. When both can't hold at once the extent is narrower than what is
- * visible, and the only answer is centred in it.
+ * than [visibleStart] and [end] no further in than [visibleEnd] - the screen's edges, or
+ * those of whatever covers them. When both can't hold at once the extent is narrower than
+ * what is visible, and the only answer is centred in it.
  */
-private fun centreRange(start: Double, end: Double, view: Int, visibleEnd: Int, mapSize: Double): Pair<Double, Double> {
-    val min = start + view / 2.0 / mapSize
+private fun centreRange(
+    start: Double,
+    end: Double,
+    view: Int,
+    visibleStart: Int,
+    visibleEnd: Int,
+    mapSize: Double,
+): Pair<Double, Double> {
+    val min = start + (view / 2.0 - visibleStart) / mapSize
     val max = end + (view / 2.0 - visibleEnd) / mapSize
     if (min <= max) return min to max
-    val centred = (start + end) / 2 + (view - visibleEnd) / 2.0 / mapSize
+    val centred = (start + end) / 2 + (view - visibleStart - visibleEnd) / 2.0 / mapSize
     return centred to centred
 }
 
@@ -1084,8 +1208,11 @@ private const val TRANSPARENT = 0
 
 private const val ROUTE_WIDTH_DP = 3f
 private const val MARKER_RING_WIDTH_DP = 1.5f
-private const val MARKER_RADIUS_DP = 5f
-private const val PUCK_RADIUS_DP = 6f
+private const val MARKER_RADIUS_DP = 7f
+private const val PUCK_RADIUS_DP = 8f
+
+/** White in both themes: a surface-coloured ring vanished against dark-mode land. */
+private val MARKER_RING = Color.White
 private const val PUCK_HALO_RADIUS_DP = 14f
 private const val PUCK_HALO_ALPHA = 0.24f
 

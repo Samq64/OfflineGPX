@@ -18,6 +18,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -99,6 +100,8 @@ fun TrackSheet(
     actions: TrackActions?,
     /** The height of the part shown collapsed - name, numbers, date - so the peek fits it. */
     onPeekHeightChange: (Dp) -> Unit,
+    /** Shown as a close button, for the landscape panel. */
+    onClose: (() -> Unit)? = null,
 ) {
     val density = LocalDensity.current
     val profile = loaded.profile
@@ -167,6 +170,7 @@ fun TrackSheet(
                 name = loaded.track.name?.takeIf(String::isNotBlank) ?: loaded.displayName,
                 routeColor = routeColor,
                 actions = actions,
+                onClose = onClose,
                 modifier = Modifier.padding(start = SheetPadding, end = 4.dp),
             )
 
@@ -324,14 +328,15 @@ fun TrackSheet(
  * The name, beside the swatch the map and the list know it by - the only thing tying these
  * numbers to one line among several overlaid routes.
  *
- * No close or expand control: dragged away, tapped away on the bare map and backed out of
- * are three ways out already, and the drag handle reaches both heights.
+ * No close control on the sheet: dragged away, tapped away on the bare map and backed out
+ * of are three ways out already. The landscape panel has no handle, so it gets one.
  */
 @Composable
 private fun SheetTitle(
     name: String,
     routeColor: Color,
     actions: TrackActions?,
+    onClose: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -349,6 +354,11 @@ private fun SheetTitle(
             modifier = Modifier.weight(1f),
         )
         actions?.let { TrackMenu(it) }
+        onClose?.let {
+            IconButton(onClick = it) {
+                Icon(Icons.Default.Close, stringResource(R.string.track_close))
+            }
+        }
     }
 }
 
@@ -460,18 +470,18 @@ private fun AxisSelector(
     // Full width, halves shared equally: the same span as the charts it switches.
     SingleChoiceSegmentedButtonRow(modifier.fillMaxWidth()) {
         SegmentedButton(
-            selected = useTimeAxis,
-            onClick = { onChange(true) },
-            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-            modifier = Modifier.weight(1f),
-        ) { Text(stringResource(R.string.axis_time)) }
-
-        SegmentedButton(
             selected = !useTimeAxis,
             onClick = { onChange(false) },
-            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
             modifier = Modifier.weight(1f),
         ) { Text(stringResource(R.string.axis_distance)) }
+
+        SegmentedButton(
+            selected = useTimeAxis,
+            onClick = { onChange(true) },
+            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+            modifier = Modifier.weight(1f),
+        ) { Text(stringResource(R.string.axis_time)) }
     }
 }
 

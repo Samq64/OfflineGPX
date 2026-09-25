@@ -7,23 +7,34 @@ import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.PlayArrow
@@ -41,6 +52,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -48,11 +60,14 @@ import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.material3.rememberStandardBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -61,11 +76,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -79,8 +97,8 @@ import dev.samuelq.gpx.ui.theme.routePalette
 import dev.samuelq.gpx.ui.track.DeleteTrackDialog
 import dev.samuelq.gpx.ui.track.FocusedTrack
 import dev.samuelq.gpx.ui.track.TrackActions
-import dev.samuelq.gpx.ui.track.TrackRef
 import dev.samuelq.gpx.ui.track.TrackNameDialog
+import dev.samuelq.gpx.ui.track.TrackRef
 import dev.samuelq.gpx.ui.track.TrackSheet
 import dev.samuelq.gpx.ui.track.TrackSheetError
 import dev.samuelq.gpx.ui.track.TrackSheetLoading
@@ -242,10 +260,17 @@ fun MapScreen(
     val scaffoldState = rememberBottomSheetScaffoldState(bottomSheetState = sheetState)
     val hasFocus = focused != FocusedTrack.None
 
-    LaunchedEffect(hasFocus) {
+    // Wider than tall, the track goes in a panel down the side instead: a bottom sheet
+    // there covers most of a map that is already short. The sheet stays composed but
+    // hidden, so turning the phone moves the track between the two without losing it.
+    val windowSize = LocalWindowInfo.current.containerSize
+    val sidePanel = windowSize.width > windowSize.height
+    val currentSidePanel by rememberUpdatedState(sidePanel)
+
+    LaunchedEffect(hasFocus, sidePanel) {
         // Guarded, not unconditional: the sheet starts hidden, and hiding it before layout
         // asks for an anchor that doesn't exist.
-        if (hasFocus) sheetState.partialExpand()
+        if (hasFocus && !sidePanel) sheetState.partialExpand()
         else if (sheetState.currentValue != SheetValue.Hidden) sheetState.hide()
         // Letting go of the track lets go of the offer to name it, so a stale prompt can't
         // ambush the next time that track is opened.
@@ -260,14 +285,15 @@ fun MapScreen(
     // effect above had just set from the list.
     LaunchedEffect(sheetState) {
         snapshotFlow { sheetState.currentValue }.drop(1).collect { value ->
-            if (value == SheetValue.Hidden) viewModel.focus(null)
+            // Not when it was hidden to make way for the panel.
+            if (value == SheetValue.Hidden && !currentSidePanel) viewModel.focus(null)
         }
     }
 
     // Back steps down before it closes: dropping an expanded sheet straight to nothing
     // throws away a gesture's worth of intent in one press.
     BackHandler(enabled = hasFocus) {
-        if (sheetState.currentValue == SheetValue.Expanded) {
+        if (!sidePanel && sheetState.currentValue == SheetValue.Expanded) {
             scope.launch { sheetState.partialExpand() }
         } else {
             viewModel.focus(null)
@@ -330,7 +356,20 @@ fun MapScreen(
         }
     }
 
-    val windowHeight = with(density) { LocalWindowInfo.current.containerSize.height.toDp() }
+    val windowHeight = with(density) { windowSize.height.toDp() }
+    // The cutout comes out of the panel's own padding, so it's added on rather than eating
+    // into the 400. Wider still on a big screen: a longer chart is a finer one.
+    val panelInset = WindowInsets.safeDrawing.only(WindowInsetsSides.Start).asPaddingValues()
+        .calculateStartPadding(LocalLayoutDirection.current)
+    val panelWidth = maxOf(
+        SidePanelMinWidth + panelInset,
+        with(density) { windowSize.width.toDp() } * SidePanelWindowFraction,
+    )
+    // Animated, unlike the sheet's cover: the panel only moves on a tap, never a drag.
+    val panelCover by animateDpAsState(
+        targetValue = if (sidePanel && hasFocus) panelWidth else 0.dp,
+        label = "panelCover",
+    )
     // The sheet's one expanded height. The content column scrolls inside it, so the charts
     // are always reachable without needing a taller anchor to grow into.
     val sheetMaxHeight = windowHeight * SheetMaxHeightFraction
@@ -343,47 +382,91 @@ fun MapScreen(
     } else {
         TrackSheetPeekHeight
     }
-    val sheetInset by animateDpAsState(
-        targetValue = if (hasFocus) peekHeight else navigationBarInset,
-        label = "sheetInset",
-    )
+    // How much of the screen the sheet covers right now, read off its live position. Not
+    // animated from its settled state: that only changes once a drag has finished, so
+    // everything riding on the sheet lagged a dismissing swipe and then caught up.
+    var scaffoldHeight by remember { mutableIntStateOf(0) }
+    val sheetCover by remember {
+        derivedStateOf {
+            val offset = runCatching { sheetState.requireOffset() }.getOrNull() ?: return@derivedStateOf 0.dp
+            with(density) { (scaffoldHeight - offset).coerceAtLeast(0f).toDp() }
+        }
+    }
+    // The controls sit on the sheet, up to its peek - an expanded sheet covers them rather
+    // than lifting them halfway up the map.
+    val sheetInset = sheetCover.coerceIn(navigationBarInset, maxOf(navigationBarInset, peekHeight))
     // The controls float over the map, so the fit has to be told about them or half a
     // route ends up behind the recording bar.
     var controlsHeight by remember { mutableStateOf(0.dp) }
 
-    // How much of the map is actually covered right now, which is not the same as the
-    // peek: opening the sheet to read the charts hides well over half the canvas, and a
-    // route fitted to the peek would be sitting mostly behind it by then.
-    val coveredHeight by animateDpAsState(
-        targetValue = when {
-            !hasFocus -> maxOf(navigationBarInset, controlsHeight + navigationBarInset)
-            sheetState.currentValue == SheetValue.Expanded -> sheetMaxHeight
-            else -> maxOf(peekHeight, sheetInset + controlsHeight)
-        },
-        label = "coveredHeight",
-    )
-
-    // Only the sheet, not the controls: what panning must be able to pull things out from
-    // under. Animated with the sheet, so the map follows it rather than jumping.
-    val sheetCover by animateDpAsState(
-        targetValue = when {
-            !hasFocus -> 0.dp
-            sheetState.currentValue == SheetValue.Expanded -> sheetMaxHeight
-            else -> peekHeight
-        },
-        label = "sheetCover",
-    )
+    // How much of the map is actually covered right now: the sheet, or the controls
+    // standing on it, whichever reaches higher.
+    val coveredHeight = maxOf(sheetCover, sheetInset + controlsHeight)
 
     val canvasPadding = PaddingValues(
-        start = MapEdgePadding,
+        start = MapEdgePadding + panelCover,
         end = MapEdgePadding,
         top = MapEdgePadding,
         bottom = MapEdgePadding + coveredHeight,
     )
+
+    // The track's details, the same in the sheet and in the side panel. Nothing for no
+    // track: each caller decides what stands in for it.
+    val trackContent: @Composable (FocusedTrack, Dp, (() -> Unit)?, (Dp) -> Unit) -> Unit =
+        { current, maxHeight, onClose, onPeekHeightChange ->
+            when (current) {
+                FocusedTrack.None -> Unit
+                FocusedTrack.Loading -> TrackSheetLoading()
+                is FocusedTrack.Failed -> TrackSheetError(
+                    messageRes = current.messageRes,
+                    onRetry = viewModel::retryFocus,
+                    onClose = { viewModel.focus(null) },
+                )
+                is FocusedTrack.Ready -> TrackSheet(
+                    loaded = current.track,
+                    routeColor = palette[current.track.colorIndex % palette.size],
+                    maxHeight = maxHeight,
+                    selectedIndex = selectedIndex,
+                    onSelectedIndexChange = { selectedIndex = it },
+                    useTimeAxis = preferTimeAxis && current.track.profile.hasTime,
+                    onAxisChange = { preferTimeAxis = it },
+                    onPeekHeightChange = onPeekHeightChange,
+                    onClose = onClose,
+                    // Null for a file opened from an intent: it has no row to rename,
+                    // hide or delete, and sharing it would just hand the file back to
+                    // itself.
+                    actions = state.entity(current.track.id)?.let { entity ->
+                        remember(entity.id, entity.displayName, entity.location) {
+                            TrackActions(
+                                onRename = { renamingId = entity.id },
+                                onShare = {
+                                    context.startActivity(
+                                        shareTrackIntent(
+                                            context, entity.location, entity.trackName, entity.displayName,
+                                        )
+                                    )
+                                },
+                                onHide = {
+                                    viewModel.hide(entity.id)
+                                    viewModel.focus(null)
+                                },
+                                onDelete = { deletingId = entity.id },
+                            )
+                        }
+                    },
+                )
+            }
+        }
+
+
     BottomSheetScaffold(
+        modifier = Modifier.onSizeChanged { scaffoldHeight = it.height },
         scaffoldState = scaffoldState,
         sheetPeekHeight = peekHeight,
         sheetDragHandle = { CompactDragHandle() },
+        // A step off the map's own background, so the edge of the maps doesn't run
+        // straight into the sheet.
+        sheetContainerColor = MaterialTheme.colorScheme.surfaceContainer,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
@@ -416,52 +499,12 @@ fun MapScreen(
             )
         },
         sheetContent = {
-            when (val current = focused) {
-                // Hidden, but still the peek's height: a sheet whose content is shorter
-                // than its own peek leaves the scaffold with nonsense to anchor to.
-                FocusedTrack.None -> Spacer(
-                    Modifier.fillMaxWidth().height(TrackSheetPeekHeight)
-                )
-
-                FocusedTrack.Loading -> TrackSheetLoading()
-                is FocusedTrack.Failed -> TrackSheetError(
-                    messageRes = current.messageRes,
-                    onRetry = viewModel::retryFocus,
-                    onClose = { viewModel.focus(null) },
-                )
-
-                is FocusedTrack.Ready -> TrackSheet(
-                    loaded = current.track,
-                    routeColor = palette[current.track.colorIndex % palette.size],
-                    maxHeight = sheetMaxHeight,
-                    selectedIndex = selectedIndex,
-                    onSelectedIndexChange = { selectedIndex = it },
-                    useTimeAxis = preferTimeAxis && current.track.profile.hasTime,
-                    onAxisChange = { preferTimeAxis = it },
-                    onPeekHeightChange = { peekContentHeight = it },
-                    // Null for a file opened from an intent: it has no row to rename,
-                    // hide or delete, and sharing it would just hand the file back to
-                    // itself.
-                    actions = state.entity(current.track.id)?.let { entity ->
-                        remember(entity.id, entity.displayName, entity.location) {
-                            TrackActions(
-                                onRename = { renamingId = entity.id },
-                                onShare = {
-                                    context.startActivity(
-                                        shareTrackIntent(
-                                            context, entity.location, entity.trackName, entity.displayName,
-                                        )
-                                    )
-                                },
-                                onHide = {
-                                    viewModel.hide(entity.id)
-                                    viewModel.focus(null)
-                                },
-                                onDelete = { deletingId = entity.id },
-                            )
-                        }
-                    },
-                )
+            // Hidden, but still the peek's height: a sheet whose content is shorter than its
+            // own peek leaves the scaffold with nonsense to anchor to.
+            if (sidePanel || focused == FocusedTrack.None) {
+                Spacer(Modifier.fillMaxWidth().height(TrackSheetPeekHeight))
+            } else {
+                trackContent(focused, sheetMaxHeight, null) { peekContentHeight = it }
             }
         },
     ) { padding ->
@@ -487,7 +530,6 @@ fun MapScreen(
                 markerColor = focusedTrack
                     ?.let { palette[it.colorIndex % palette.size] }
                     ?: MaterialTheme.colorScheme.primary,
-                markerRingColor = MaterialTheme.colorScheme.surface,
                 puckTrackId = LIVE_TRACK_ID.takeIf { recording is RecordingState.Active },
                 puckColor = liveColor,
                 onSelect = { trackId, index ->
@@ -505,6 +547,7 @@ fun MapScreen(
                 onSelectNothing = { viewModel.focus(null) },
                 contentPadding = canvasPadding,
                 sheetHeight = sheetCover,
+                panelWidth = panelCover,
                 // A step apart, not the same colour twice: ground no imported file covers
                 // has to read as empty rather than as land, and the dashed outline alone is
                 // a thin thing to carry that.
@@ -566,7 +609,7 @@ fun MapScreen(
                     metersPerPixel = metersPerPixel,
                     modifier = Modifier
                         .align(Alignment.BottomStart)
-                        .padding(bottom = sheetInset + 4.dp),
+                        .padding(start = panelCover, bottom = sheetInset + 4.dp),
                 )
             }
 
@@ -574,7 +617,7 @@ fun MapScreen(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .padding(bottom = sheetInset)
+                    .padding(start = panelCover, bottom = sheetInset)
                     .onSizeChanged { controlsHeight = with(density) { it.height.toDp() } },
             ) {
                 // Still no reset button. A real map has a whole world to be lost in rather
@@ -605,6 +648,37 @@ fun MapScreen(
                         // again here left an empty strip with the map showing through it.
                         applyNavigationBarPadding = false,
                     )
+                }
+            }
+
+            // Over the map and the controls, down the start edge. Keeps showing the last
+            // track while it slides away, rather than emptying before it has gone.
+            var panelTrack by remember { mutableStateOf<FocusedTrack>(FocusedTrack.None) }
+            LaunchedEffect(focused) { if (focused != FocusedTrack.None) panelTrack = focused }
+            val fromStart = if (LocalLayoutDirection.current == LayoutDirection.Ltr) -1 else 1
+            AnimatedVisibility(
+                visible = sidePanel && hasFocus,
+                enter = slideInHorizontally { fromStart * it },
+                exit = slideOutHorizontally { fromStart * it },
+                modifier = Modifier.align(Alignment.TopStart).fillMaxHeight().width(panelWidth),
+            ) {
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceContainer,
+                    shape = RoundedCornerShape(topEnd = SidePanelCornerRadius),
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    Box(
+                        Modifier
+                            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Start))
+                            .padding(top = 16.dp),
+                    ) {
+                        trackContent(
+                            if (focused != FocusedTrack.None) focused else panelTrack,
+                            Dp.Unspecified,
+                            // No drag handle to swipe it away by, unlike the sheet.
+                            { viewModel.focus(null) },
+                        ) {}
+                    }
                 }
             }
         }
@@ -679,6 +753,11 @@ private val MapEdgePadding = 24.dp
  * wearing a slide animation, not a sheet - the route stays visible above it.
  */
 private const val SheetMaxHeightFraction = 0.58f
+
+/** The landscape panel: at least this past any cutout, or this share of the window if wider. */
+private val SidePanelMinWidth = 400.dp
+private const val SidePanelWindowFraction = 1f / 3
+private val SidePanelCornerRadius = 28.dp
 
 /** The handle's own height, counted into the measured peek. */
 private val DragHandleHeight = 20.dp

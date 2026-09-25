@@ -4,6 +4,24 @@ An Android app for cycling and hiking stats. Record a ride or a walk, or import 
 file, and get a **route** over an offline map, a **speed timeline** and an **elevation
 profile**, all on one shared, synchronised scrubber.
 
+## Build and sign
+
+Needs JDK 17 and the Android SDK (`sdk.dir` in `local.properties`, or `ANDROID_HOME`).
+
+```sh
+./gradlew :app:assembleDebug     # app/build/outputs/apk/debug/app-debug.apk, debug-signed
+./gradlew :app:assembleRelease   # app/build/outputs/apk/release/app-release-unsigned.apk
+```
+
+The release build has no signing config. For now, sign it with Android Studio's debug key
+(password `android`):
+
+```sh
+"$ANDROID_HOME"/build-tools/<version>/apksigner sign --ks ~/.android/debug.keystore \
+    --ks-pass pass:android --out app-release.apk \
+    app/build/outputs/apk/release/app-release-unsigned.apk
+```
+
 ## The permission budget
 
 The goal is **no `INTERNET`, permanently, and as few other permissions as possible** while
@@ -179,8 +197,9 @@ per zoom above z12 on its own; the theme divides that back out. Label collisions
 settled by explicit `priority`, trail names highest.
 
 A file's low zooms are whole tiles tens of kilometres wide, so it carries lakes, roads and
-towns well past its own box, and VTM draws all of it. The ground outside every file is
-masked in the background colour, labels included.
+towns well past its own box, and VTM draws all of it. Each file's data is clipped to its
+box as it's decoded, so no name is placed out there, and a mask in the background colour
+covers what still overhangs the edge.
 
 The camera is the map view's: pinch, fling, and a pan clamp to the fit of every track and
 shown map, kept north-up with rotation and tilt turned off. A scale bar reads the camera's live scale and is drawn over it. The map's own

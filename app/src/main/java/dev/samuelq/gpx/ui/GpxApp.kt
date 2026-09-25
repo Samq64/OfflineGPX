@@ -2,11 +2,7 @@ package dev.samuelq.gpx.ui
 
 import android.net.Uri
 import androidx.compose.animation.AnimatedContentTransitionScope.SlideDirection
-import androidx.activity.BackEventCompat
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.scaleOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -66,17 +62,6 @@ fun GpxApp(
             exitTransition = { slideOutOfContainer(SlideDirection.Start, NavigationSpec) },
             popEnterTransition = { slideIntoContainer(SlideDirection.End, NavigationSpec) },
             popExitTransition = { slideOutOfContainer(SlideDirection.End, NavigationSpec) },
-            // Dragged by the gesture itself: the screen follows the finger away from the edge
-            // it came from, shrinking a little, with the one underneath peeking in behind.
-            // Navigation's default only shrinks it in place, which shows nothing of where
-            // back leads.
-            predictivePopEnterTransition = { edge ->
-                slideInHorizontally { width -> -edge.awayFromEdge() * width / PEEK_PARALLAX }
-            },
-            predictivePopExitTransition = { edge ->
-                slideOutHorizontally { width -> edge.awayFromEdge() * width } +
-                    scaleOut(targetScale = PREDICTIVE_BACK_SCALE)
-            },
         ) {
 
             composable<MapRoute> { entry ->
@@ -107,15 +92,6 @@ fun GpxApp(
         }
     }
 }
-
-/** +1 for a swipe from the left edge, so the screen moves right; -1 from the right. */
-private fun Int.awayFromEdge(): Int = if (this == BackEventCompat.EDGE_RIGHT) -1 else 1
-
-/** How small the leaving screen gets by the end of the gesture, as Material's back preview. */
-private const val PREDICTIVE_BACK_SCALE = 0.9f
-
-/** The screen underneath starts 1/this of a width off, so it drifts in slower than the finger. */
-private const val PEEK_PARALLAX = 4
 
 /** Long enough to read as movement, short enough not to be a wait. */
 private val NavigationSpec = tween<IntOffset>(durationMillis = 300)
