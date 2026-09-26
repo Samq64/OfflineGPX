@@ -130,8 +130,8 @@ fun TrackDetails(
                 add(elapsedLabel to Formatters.duration(stats.totalDurationSeconds))
             }
             if (hasElevation) {
-                add(ascentLabel to formatters.climb(stats.ascentMeters))
-                add(descentLabel to formatters.climb(stats.descentMeters))
+                add(ascentLabel to formatters.elevation(stats.ascentMeters))
+                add(descentLabel to formatters.elevation(stats.descentMeters))
             }
             if (hasTime) {
                 add(pointsLabel to Formatters.count(stats.pointCount))

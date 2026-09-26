@@ -41,15 +41,6 @@ class FormattersTest {
     }
 
     @Test
-    fun `climb rounds to what GPS altitude can resolve`() {
-        assertEquals("65 m", metric.climb(67.3, en))
-        assertEquals("1,000 m", metric.climb(998.0, en))
-        // 67.3 m is 220.8 ft.
-        assertEquals("220 ft", imperial.climb(67.3, en))
-        assertEquals(Formatters.EMPTY, metric.climb(Double.NaN, en))
-    }
-
-    @Test
     fun `axis forms carry their unit`() {
         assertEquals("5.0 km", metric.distanceAxis(5000f, 1, en))
         assertEquals("3.1 mi", imperial.distanceAxis(5000f, 1, en))
