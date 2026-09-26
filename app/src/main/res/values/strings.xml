@@ -167,7 +167,7 @@
 
     <string name="stat_moving">Moving</string>
     <string name="stat_elapsed">Elapsed</string>
-    <string name="stat_avg_speed">Avg speed</string>
+    <string name="stat_avg_speed">Average speed</string>
     <string name="stat_ascent">Ascent</string>
     <string name="stat_descent">Descent</string>
     <string name="stat_points">Points</string>
