@@ -121,14 +121,36 @@ fun ChartSeries.yScale(perUnit: Float = 1f): Scale {
         if (value < min) min = value
         if (value > max) max = value
     }
-    if (!min.isFinite() || !max.isFinite()) return Scale(0f, 1f, floatArrayOf(0f, 1f))
+    if (!min.isFinite() || !max.isFinite()) return fixedTickScale(0f, 1f / perUnit, perUnit)
     if (max <= min) {
         // A flat series still needs a readable axis around its single value.
         val pad = if (abs(max) > 0f) abs(max) * 0.1f else 1f / perUnit
         min -= pad
         max += pad
     }
-    return axisScale(min, max, perUnit = perUnit)
+    return fixedTickScale(min, max, perUnit)
+}
+
+private const val Y_TICKS = 4
+
+/**
+ * Exactly [Y_TICKS] round ticks, the domain widened to run from the first to the last:
+ * the smallest 1-2-5 step whose ticks still cover the data.
+ */
+private fun fixedTickScale(min: Float, max: Float, perUnit: Float): Scale {
+    val lo = min * perUnit
+    val hi = max * perUnit
+    var step = niceStep(hi - lo, Y_TICKS - 1)
+    // A misaligned range can need one step up the progression, occasionally two.
+    while (true) {
+        val first = floor(lo / step)
+        // The epsilon keeps float error from rejecting a step whose last tick is the maximum.
+        if ((first + Y_TICKS - 1) * step >= hi - step * 1e-3f) {
+            val ticks = FloatArray(Y_TICKS) { (first + it) * step / perUnit }
+            return Scale(ticks.first(), ticks.last(), ticks)
+        }
+        step = niceStep(step * 1.01f, 1)
+    }
 }
 
 /**
