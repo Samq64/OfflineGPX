@@ -1,6 +1,7 @@
 package dev.samuelq.gpx.ui.map
 
 import android.graphics.Paint
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
@@ -8,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -184,11 +186,16 @@ fun OfflineMapCanvas(
      * ride, not a landmark on the map itself.
      */
     waypoints: List<Waypoint> = emptyList(),
-    waypointColor: Color = Color.Unspecified,
     onSelect: (trackId: Long, index: Int) -> Unit = { _, _ -> },
     onSelectNothing: () -> Unit = {},
-    /** Screen position is the pin's own, not the tap - reach forgives a miss by a few dp. */
-    onSelectWaypoint: (Waypoint, Offset) -> Unit = { _, _ -> },
+    onSelectWaypoint: (Waypoint) -> Unit = {},
+    /** A waypoint whose pin's screen position goes to [onFollowedWaypointMove] on every camera move. */
+    followedWaypoint: Waypoint? = null,
+    /**
+     * The centre of the pin's head, [WaypointPinHeadRadius] across - not the tip, and not the
+     * tap. Also called as soon as [followedWaypoint] changes, before it is next laid out.
+     */
+    onFollowedWaypointMove: (Offset) -> Unit = {},
     /** Space kept clear of routes when framing, for the sheet and the controls. */
     contentPadding: PaddingValues = PaddingValues(),
     /**
@@ -233,12 +240,15 @@ fun OfflineMapCanvas(
     val select by rememberUpdatedState(onSelect)
     val selectNothing by rememberUpdatedState(onSelectNothing)
     val selectWaypoint by rememberUpdatedState(onSelectWaypoint)
+    val currentFollowedWaypoint by rememberUpdatedState(followedWaypoint)
+    val reportWaypointAt by rememberUpdatedState(onFollowedWaypointMove)
     val reportScale by rememberUpdatedState(onScaleChange)
     val reportCamera by rememberUpdatedState(onCameraChange)
 
     // Resolved here, where there is a density to resolve it against: a fingertip is a
     // physical size, and 44 raw pixels is a third of one on a modern screen.
     val tapReach = remember(density) { with(density) { TAP_REACH_DP.dp.toPx() } }
+    val pinHeadLift = remember(density) { with(density) { Offset(0f, PIN_TIP_LENGTH_DP.dp.toPx()) } }
     val followMargin = remember(density) { with(density) { FOLLOW_MARGIN_DP.dp.roundToPx() } }
 
     val insets = remember(contentPadding, layoutDirection, density) {
@@ -281,7 +291,7 @@ fun OfflineMapCanvas(
                 // reading its note is a more specific answer than scrubbing to that point.
                 val waypointHit = pickWaypoint(x, y, map, currentWaypoints, tapReach)
                 if (waypointHit != null) {
-                    selectWaypoint(waypointHit.waypoint, waypointHit.screenPosition)
+                    selectWaypoint(waypointHit)
                 } else {
                     val hit = pick(x, y, map, currentRoutes, currentLiveRoute, tapReach)
                     if (hit == null) selectNothing() else select(hit.first, hit.second)
@@ -297,9 +307,16 @@ fun OfflineMapCanvas(
 
     // --- Position reporting ---------------------------------------------------------
 
+    // Before layout, so a newly followed pin's first frame is already placed - it may have
+    // come from a scrub, with no camera move to report it.
+    SideEffect {
+        followedWaypoint?.let { reportWaypointAt(map.screenPosition(it.point) - pinHeadLift) }
+    }
+
     DisposableEffect(map) {
         val listener = Map.UpdateListener { _, position ->
             reportScale(MercatorProjection.groundResolution(position))
+            currentFollowedWaypoint?.let { reportWaypointAt(map.screenPosition(it.point, position) - pinHeadLift) }
             // Not before the first frame is placed. Until then the position is VTM's own
             // default - the whole world - and remembering that as "where the user was" is
             // both wrong and, since it feeds back in as initialCamera, self-fulfilling.
@@ -411,8 +428,9 @@ fun OfflineMapCanvas(
 
     // Built once per colour, not per selection: scrubbing a chart moves the marker on every
     // frame, and a new bitmap each time is a new texture upload each time.
-    val symbols = remember(markerColor, puckColor, waypointColor, density) {
-        MarkerSymbols(markerColor, puckColor, waypointColor, density)
+    val darkTheme = isSystemInDarkTheme()
+    val symbols = remember(markerColor, puckColor, darkTheme, density) {
+        MarkerSymbols(markerColor, puckColor, darkTheme, density)
     }
 
     LaunchedEffect(
@@ -753,7 +771,7 @@ private class LineLayer(map: Map) {
 }
 
 /** The circles, drawn once per colour - see where [MarkerSymbols] is remembered. */
-private class MarkerSymbols(marker: Color, puck: Color, waypoint: Color, density: Density) {
+private class MarkerSymbols(marker: Color, puck: Color, darkTheme: Boolean, density: Density) {
     val marker: MarkerSymbol
     val puck: MarkerSymbol
     val waypoint: MarkerSymbol
@@ -774,7 +792,9 @@ private class MarkerSymbols(marker: Color, puck: Color, waypoint: Color, density
             // on its own - the tip is the hotspot, so it points at the position exactly the
             // way the puck and the scrub marker sit centred on theirs.
             this@MarkerSymbols.waypoint = pin(
-                PIN_RADIUS_DP.dp.toPx(), PIN_TIP_LENGTH_DP.dp.toPx(), ringWidth, fill = waypoint,
+                PIN_RADIUS_DP.dp.toPx(), PIN_TIP_LENGTH_DP.dp.toPx(), ringWidth,
+                fill = if (darkTheme) WAYPOINT_LIGHT_GREY else WAYPOINT_DARK_GREY,
+                ring = if (darkTheme) WAYPOINT_DARK_GREY else MARKER_RING,
             )
         }
     }
@@ -813,7 +833,7 @@ private class MarkerSymbols(marker: Color, puck: Color, waypoint: Color, density
      * so the point the pin actually marks is where the geometry says it is, not the middle
      * of the bitmap holding it.
      */
-    private fun pin(radius: Float, tipLength: Float, ringWidth: Float, fill: Color): MarkerSymbol {
+    private fun pin(radius: Float, tipLength: Float, ringWidth: Float, fill: Color, ring: Color): MarkerSymbol {
         // Full margin above and to the sides, for the stroke's overflow past the circle;
         // only half below, and a round join there rather than the default miter - a sharp
         // point mitred would spike well past the ring's own width.
@@ -834,8 +854,12 @@ private class MarkerSymbols(marker: Color, puck: Color, waypoint: Color, density
         paint.style = Paint.Style.STROKE
         paint.strokeJoin = Paint.Join.ROUND
         paint.strokeWidth = ringWidth
-        paint.color = MARKER_RING.toArgb()
+        paint.color = ring.toArgb()
         canvas.drawPath(path, paint)
+        // Punched through rather than painted, so the map shows in it in either theme.
+        paint.style = Paint.Style.FILL
+        paint.xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.CLEAR)
+        canvas.drawCircle(cx, cy, radius * PIN_HOLE_RATIO, paint)
         return MarkerSymbol(AndroidBitmap(bitmap), MarkerSymbol.HotspotPlace.BOTTOM_CENTER, false)
     }
 }
@@ -1030,8 +1054,13 @@ private fun outlineDrawable(map: OfflineMap, style: Style): LineDrawable {
 
 // --- Hit testing ------------------------------------------------------------------
 
-/** A waypoint a tap landed near, and exactly where its pin sits on screen right now. */
-private class WaypointHit(val waypoint: Waypoint, val screenPosition: Offset)
+/** Where [point] sits on screen with the camera at [position]; north-up and flat, see above. */
+private fun Map.screenPosition(point: TrackPoint, position: MapPosition = mapPosition): Offset {
+    val mapSize = Tile.SIZE * position.scale
+    val x = (MercatorProjection.longitudeToX(point.longitude) - position.x) * mapSize + width / 2.0
+    val y = (MercatorProjection.latitudeToY(point.latitude) - position.y) * mapSize + height / 2.0
+    return Offset(x.toFloat(), y.toFloat())
+}
 
 /**
  * The nearest waypoint within reach of a tap, or null - checked ahead of [pick] so a
@@ -1043,35 +1072,18 @@ private fun pickWaypoint(
     map: Map,
     waypoints: List<Waypoint>,
     reachPx: Float,
-): WaypointHit? {
-    val position = map.mapPosition
-    val mapSize = Tile.SIZE * position.scale
-    val tapX = position.x * mapSize + (screenX - map.width / 2.0)
-    val tapY = position.y * mapSize + (screenY - map.height / 2.0)
-
+): Waypoint? {
+    val tap = Offset(screenX, screenY)
     var best: Waypoint? = null
-    var bestX = 0.0
-    var bestY = 0.0
-    var bestDistance = (reachPx * reachPx).toDouble()
+    var bestDistance = reachPx * reachPx
     for (waypoint in waypoints) {
-        val x = MercatorProjection.longitudeToX(waypoint.point.longitude) * mapSize
-        val y = MercatorProjection.latitudeToY(waypoint.point.latitude) * mapSize
-        val dx = x - tapX
-        val dy = y - tapY
-        val distance = dx * dx + dy * dy
+        val distance = (map.screenPosition(waypoint.point) - tap).getDistanceSquared()
         if (distance < bestDistance) {
             bestDistance = distance
             best = waypoint
-            bestX = x
-            bestY = y
         }
     }
-    val found = best ?: return null
-    // Reversing the tap's own projection above, rather than re-deriving it, so a pin
-    // reports exactly the screen point that projection would put it at.
-    val screenX = bestX - position.x * mapSize + map.width / 2.0
-    val screenY = bestY - position.y * mapSize + map.height / 2.0
-    return WaypointHit(found, Offset(screenX.toFloat(), screenY.toFloat()))
+    return best
 }
 
 /**
@@ -1348,9 +1360,18 @@ private const val MARKER_RADIUS_DP = 7f
 private const val PUCK_RADIUS_DP = 8f
 private const val PIN_RADIUS_DP = 6f
 private const val PIN_TIP_LENGTH_DP = 11f
+private const val PIN_HOLE_RATIO = 0.4f
+
+/** The pin's head, ring included - for keeping a tooltip clear of it. */
+val WaypointPinHeadRadius = (PIN_RADIUS_DP + MARKER_RING_WIDTH_DP).dp
 
 /** White in both themes: a surface-coloured ring vanished against dark-mode land. */
 private val MARKER_RING = Color.White
+
+// Greys rather than a theme colour, so a pin never reads as belonging to any one track.
+// Inverted in dark mode, where a dark pin sank into the land.
+private val WAYPOINT_DARK_GREY = Color(0xFF424242)
+private val WAYPOINT_LIGHT_GREY = Color(0xFFE0E0E0)
 private const val PUCK_HALO_RADIUS_DP = 14f
 private const val PUCK_HALO_ALPHA = 0.24f
 

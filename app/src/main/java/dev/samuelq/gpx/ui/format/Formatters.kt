@@ -212,8 +212,13 @@ class Formatters(val units: UnitSystem) {
         fun dateTime(instant: Instant?, zone: ZoneId = ZoneId.systemDefault()): String =
             instant?.let { DATE_TIME.withZone(zone).format(it) } ?: EMPTY
 
+        fun time(instant: Instant?, zone: ZoneId = ZoneId.systemDefault()): String =
+            instant?.let { TIME.withZone(zone).format(it) } ?: EMPTY
+
         private val DATE_TIME: DateTimeFormatter =
             DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
+
+        private val TIME: DateTimeFormatter = DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)
     }
 }
 

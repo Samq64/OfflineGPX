@@ -340,7 +340,11 @@ private fun ChartTooltip(
         val x = plot.xFor(series.x[index], render.xScale) - plot.left
         val y = plot.yFor(value, render.yScale) - plot.top
 
-        ArrowTooltip(anchor = Offset(x, y), modifier = Modifier.matchParentSize()) {
+        ArrowTooltip(
+            anchor = { Offset(x, y) },
+            gap = MarkerRadius + SurfaceRing + 2.dp,
+            modifier = Modifier.matchParentSize(),
+        ) {
             Text(
                 text = buildAnnotatedString {
                     formatPosition?.let { position ->

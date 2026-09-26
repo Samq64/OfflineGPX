@@ -37,7 +37,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
@@ -178,8 +177,27 @@ fun MapScreen(
     // An index into a different track is meaningless, so it goes when the track does.
     var selectedIndex by remember(focusedTrack?.id) { mutableStateOf<Int?>(null) }
     // A waypoint's note belongs to whichever track is focused - switching tracks clears
-    // it, the same reason [selectedIndex] does, and any other tap on the map does too.
-    var tappedWaypoint by remember(focusedTrack?.id) { mutableStateOf<TappedWaypoint?>(null) }
+    // it, the same reason [selectedIndex] does. Opened by a tap on its pin or a scrub onto it.
+    var tappedWaypoint by remember(focusedTrack?.id) { mutableStateOf<Waypoint?>(null) }
+    // Each waypoint's one index, worked out once rather than on every scrub frame.
+    val waypointIndices = remember(focusedTrack) {
+        focusedTrack?.let { loaded -> loaded.track.waypoints.map { it to loaded.profile.indexOf(it.point) } }
+            .orEmpty()
+    }
+
+    /** The waypoint a scrub at [index] is on, by distance along the track, if any. */
+    fun scrubbedWaypoint(index: Int): Waypoint? {
+        val distance = focusedTrack?.profile?.distanceMeters ?: return null
+        if (index !in distance.indices) return null
+        val reach = distance.last() * SCRUB_WAYPOINT_REACH
+        return waypointIndices
+            .filter { (_, i) -> i >= 0 && kotlin.math.abs(distance[i] - distance[index]) <= reach }
+            .minByOrNull { (_, i) -> kotlin.math.abs(i - index) }
+            ?.first
+    }
+    // Written on every camera move and read only by the tooltip's layout, so panning
+    // re-places the tooltip without recomposing this screen.
+    val tappedWaypointAt = remember { mutableStateOf(Offset.Zero) }
 
     val locationOff = stringResource(R.string.record_location_off)
     val locationDenied = stringResource(R.string.record_location_denied)
@@ -443,7 +461,11 @@ fun MapScreen(
                     routeColor = palette[current.track.colorIndex % palette.size],
                     maxHeight = maxHeight,
                     selectedIndex = selectedIndex,
-                    onSelectedIndexChange = { selectedIndex = it },
+                    onSelectedIndexChange = { index ->
+                        selectedIndex = index
+                        // A scrub onto a waypoint shows its note, and off it hides it.
+                        tappedWaypoint = index?.let(::scrubbedWaypoint)
+                    },
                     useTimeAxis = preferTimeAxis && current.track.profile.hasTime,
                     onAxisChange = { preferTimeAxis = it },
                     onPeekHeightChange = onPeekHeightChange,
@@ -551,10 +573,11 @@ fun MapScreen(
                 // Only the live recording's own and the track whose sheet is open - a
                 // waypoint is a note on one ride, not a landmark the map always shows.
                 waypoints = mapWaypoints,
-                waypointColor = MaterialTheme.colorScheme.tertiary,
                 onSelect = { trackId, index ->
-                    tappedWaypoint = null
-                    when (trackId) {
+                    // An open note takes the first tap for itself, so closing it never also
+                    // moves the marker or swaps the track.
+                    if (tappedWaypoint != null) tappedWaypoint = null
+                    else when (trackId) {
                         // The recording has no row to open and no numbers to scrub.
                         LIVE_TRACK_ID -> Unit
                         // A tap on the route already showing moves its marker; a tap
@@ -566,10 +589,11 @@ fun MapScreen(
                 // Tapping the bare map puts it away, which is the gesture people try
                 // first and the only one that does not involve aiming at anything.
                 onSelectNothing = {
-                    tappedWaypoint = null
-                    viewModel.focus(null)
+                    if (tappedWaypoint != null) tappedWaypoint = null else viewModel.focus(null)
                 },
-                onSelectWaypoint = { waypoint, at -> tappedWaypoint = TappedWaypoint(waypoint, at) },
+                onSelectWaypoint = { tappedWaypoint = it },
+                followedWaypoint = tappedWaypoint,
+                onFollowedWaypointMove = { tappedWaypointAt.value = it },
                 contentPadding = canvasPadding,
                 sheetHeight = sheetCover,
                 panelWidth = panelCover,
@@ -589,20 +613,19 @@ fun MapScreen(
             )
 
             tappedWaypoint?.let { tapped ->
-                ArrowTooltip(anchor = tapped.at, modifier = Modifier.fillMaxSize()) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f, fill = false)) {
-                            Text(
-                                text = Formatters.dateTime(tapped.waypoint.point.time),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            tapped.waypoint.description?.takeIf(String::isNotBlank)?.let {
-                                Text(text = it, style = MaterialTheme.typography.bodyMedium)
-                            }
-                        }
-                        IconButton(onClick = { tappedWaypoint = null }) {
-                            Icon(Icons.Default.Close, contentDescription = stringResource(R.string.track_close))
+                ArrowTooltip(
+                    anchor = { tappedWaypointAt.value },
+                    gap = WaypointPinHeadRadius + 2.dp,
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    Column {
+                        Text(
+                            text = Formatters.time(tapped.point.time),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        tapped.description?.takeIf(String::isNotBlank)?.let {
+                            Text(text = it, style = MaterialTheme.typography.bodyMedium)
                         }
                     }
                 }
@@ -791,6 +814,9 @@ fun MapScreen(
  */
 private const val LIVE_TRACK_ID = Long.MIN_VALUE
 
+/** How near a scrub must come to a waypoint to show it, as a share of the track's length. */
+private const val SCRUB_WAYPOINT_REACH = 0.02f
+
 /** Breathing room between the routes and whatever is at the edge of the canvas. */
 private val MapEdgePadding = 24.dp
 
@@ -873,9 +899,6 @@ private fun ShowTracksHint(onClick: () -> Unit, modifier: Modifier = Modifier) {
         Text(stringResource(R.string.map_hidden_hint))
     }
 }
-
-/** A waypoint the user tapped, and exactly where its pin sat on screen at that moment. */
-private class TappedWaypoint(val waypoint: Waypoint, val at: Offset)
 
 /**
  * Asks for what is missing on the tap that starts a recording, nothing before it - no

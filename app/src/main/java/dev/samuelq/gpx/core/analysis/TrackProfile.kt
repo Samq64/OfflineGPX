@@ -54,4 +54,20 @@ class TrackProfile(
     val stats: TrackStats,
 ) {
     val size: Int get() = points.size
+
+    /**
+     * The one index [point] belongs to, or -1 on an empty track. Nearest in time when both
+     * have it, so a round trip past the same spot still picks the right leg; nearest in
+     * space otherwise.
+     */
+    fun indexOf(point: TrackPoint): Int {
+        val at = point.time
+        return if (at != null && hasTime) {
+            points.indices.minByOrNull { i ->
+                points[i].time?.let { kotlin.math.abs(it.toEpochMilli() - at.toEpochMilli()) } ?: Long.MAX_VALUE
+            }
+        } else {
+            points.indices.minByOrNull { haversineMeters(points[it], point) }
+        } ?: -1
+    }
 }
