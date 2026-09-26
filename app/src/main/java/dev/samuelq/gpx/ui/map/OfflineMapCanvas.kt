@@ -192,8 +192,8 @@ fun OfflineMapCanvas(
     /** A waypoint whose pin's screen position goes to [onFollowedWaypointMove] on every camera move. */
     followedWaypoint: Waypoint? = null,
     /**
-     * The centre of the pin's head, [WaypointPinHeadRadius] across - not the tip, and not the
-     * tap. Also called as soon as [followedWaypoint] changes, before it is next laid out.
+     * The pin's tip, where the waypoint actually is - not the tap. Also called as soon as
+     * [followedWaypoint] changes, before it is next laid out.
      */
     onFollowedWaypointMove: (Offset) -> Unit = {},
     /** Space kept clear of routes when framing, for the sheet and the controls. */
@@ -249,7 +249,7 @@ fun OfflineMapCanvas(
     // physical size, and 44 raw pixels is a third of one on a modern screen.
     val tapReach = remember(density) { with(density) { TAP_REACH_DP.dp.toPx() } }
     val pinHeadRadius = remember(density) { with(density) { WaypointPinHeadRadius.toPx() } }
-    val pinHeadLift = remember(density) { with(density) { Offset(0f, PIN_TIP_LENGTH_DP.dp.toPx()) } }
+    val pinTipLength = remember(density) { with(density) { PIN_TIP_LENGTH_DP.dp.toPx() } }
     val followMargin = remember(density) { with(density) { FOLLOW_MARGIN_DP.dp.roundToPx() } }
 
     val insets = remember(contentPadding, layoutDirection, density) {
@@ -290,7 +290,9 @@ fun OfflineMapCanvas(
             TapLayer(map) { x, y ->
                 // Checked first: a waypoint sits on top of its own track's line, and
                 // reading its note is a more specific answer than scrubbing to that point.
-                val waypointHit = pickWaypoint(x, y, map, currentWaypoints, pinHeadRadius, pinHeadLift.y)
+                val waypointHit = pickWaypoint(
+                    x, y, map, currentWaypoints, pinHeadRadius, pinTipLength, onTop = currentFollowedWaypoint,
+                )
                 if (waypointHit != null) {
                     selectWaypoint(waypointHit)
                 } else {
@@ -311,13 +313,13 @@ fun OfflineMapCanvas(
     // Before layout, so a newly followed pin's first frame is already placed - it may have
     // come from a scrub, with no camera move to report it.
     SideEffect {
-        followedWaypoint?.let { reportWaypointAt(map.screenPosition(it.point) - pinHeadLift) }
+        followedWaypoint?.let { reportWaypointAt(map.screenPosition(it.point)) }
     }
 
     DisposableEffect(map) {
         val listener = Map.UpdateListener { _, position ->
             reportScale(MercatorProjection.groundResolution(position))
-            currentFollowedWaypoint?.let { reportWaypointAt(map.screenPosition(it.point, position) - pinHeadLift) }
+            currentFollowedWaypoint?.let { reportWaypointAt(map.screenPosition(it.point, position)) }
             // Not before the first frame is placed. Until then the position is VTM's own
             // default - the whole world - and remembering that as "where the user was" is
             // both wrong and, since it feeds back in as initialCamera, self-fulfilling.
@@ -436,6 +438,7 @@ fun OfflineMapCanvas(
 
     LaunchedEffect(
         markerLayer, symbols, routes, liveRoute, puckTrackId, focusedTrackId, selectedIndex, waypoints,
+        followedWaypoint,
     ) {
         // The recording is the usual answer for the puck and isn't in `routes`, so it is
         // asked first.
@@ -448,7 +451,8 @@ fun OfflineMapCanvas(
         val items = buildList<MarkerInterface> {
             // First, so the puck and the scrub marker - both about right now, one way or
             // another - are never underneath a waypoint dropped earlier in the same ride.
-            waypoints.forEach { add(marker(it.point, symbols.waypoint)) }
+            // The selected one last among them, so it's never under a neighbour.
+            waypoints.sortedBy { it == followedWaypoint }.forEach { add(marker(it.point, symbols.waypoint)) }
             if (puckAt != null) add(marker(puckAt, symbols.puck))
             // Last, so the point being read about is never underneath anything.
             if (markerAt != null) add(marker(markerAt, symbols.marker))
@@ -1064,8 +1068,9 @@ private fun Map.screenPosition(point: TrackPoint, position: MapPosition = mapPos
 }
 
 /**
- * The waypoint whose drawn pin a tap landed on, nearest head first, or null - checked ahead
- * of [pick] so a waypoint sitting on a track's line is read as itself rather than as a scrub.
+ * The waypoint whose drawn pin a tap landed on, [onTop] first since it's drawn over the
+ * rest, then nearest head, or null - checked ahead of [pick] so a waypoint sitting on a
+ * track's line is read as itself rather than as a scrub.
  */
 private fun pickWaypoint(
     screenX: Float,
@@ -1074,6 +1079,7 @@ private fun pickWaypoint(
     waypoints: List<Waypoint>,
     headRadiusPx: Float,
     tipLengthPx: Float,
+    onTop: Waypoint?,
 ): Waypoint? {
     val tap = Offset(screenX, screenY)
     var best: Waypoint? = null
@@ -1084,6 +1090,7 @@ private fun pickWaypoint(
         val onIcon = kotlin.math.abs(tap.x - tip.x) <= headRadiusPx &&
             tap.y <= tip.y && tap.y >= tip.y - tipLengthPx - headRadiusPx
         if (!onIcon) continue
+        if (waypoint == onTop) return waypoint
         val distance = (tip - Offset(0f, tipLengthPx) - tap).getDistanceSquared()
         if (distance < bestDistance) {
             bestDistance = distance
@@ -1370,8 +1377,11 @@ private const val PIN_RADIUS_DP = 14f
 private const val PIN_TIP_LENGTH_DP = 25.25f
 private const val PIN_HOLE_RATIO = 0.4f
 
-/** The pin's head, ring included - for keeping a tooltip clear of it. */
-val WaypointPinHeadRadius = (PIN_RADIUS_DP + MARKER_RING_WIDTH_DP).dp
+/** The pin's head, ring included. */
+private val WaypointPinHeadRadius = (PIN_RADIUS_DP + MARKER_RING_WIDTH_DP).dp
+
+/** How far above the tip the head begins - a tooltip at the tip stays below this. */
+val WaypointPinHeadClearance = (PIN_TIP_LENGTH_DP - PIN_RADIUS_DP).dp
 
 /** White in both themes: a surface-coloured ring vanished against dark-mode land. */
 private val MARKER_RING = Color.White

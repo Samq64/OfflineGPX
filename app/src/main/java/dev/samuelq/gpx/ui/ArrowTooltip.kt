@@ -31,9 +31,9 @@ enum class TooltipArrow { Left, Right }
  *
  * Beside [anchor] rather than above it, so it never covers the thing it points at or a
  * chart's vertical scrub line: to the right when there's room, the left otherwise. Centred
- * on it vertically until that would run off an edge, then the bubble slides and the arrow
- * moves within it to keep pointing at the same spot. The arrow's tip stops [gap] short of
- * [anchor], clear of whatever marker is drawn there.
+ * on it vertically until that would run off an edge or rise more than [maxRise] above it,
+ * then the bubble slides and the arrow moves within it to keep pointing at the same spot.
+ * The arrow's tip stops [gap] short of [anchor], clear of whatever marker is drawn there.
  *
  * Needs bounded constraints from [modifier] (typically `Modifier.fillMaxSize()` or a fixed
  * `size()`), since that's what "off the edge" is measured against.
@@ -44,6 +44,8 @@ fun ArrowTooltip(
     anchor: () -> Offset,
     modifier: Modifier = Modifier,
     gap: Dp = 0.dp,
+    /** How far the bubble may extend above [anchor], for a marker that stands above it. */
+    maxRise: Dp = Dp.Infinity,
     fill: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
     border: Color = MaterialTheme.colorScheme.outlineVariant,
     content: @Composable () -> Unit,
@@ -95,11 +97,13 @@ fun ArrowTooltip(
         }
         val x = if (side == TooltipArrow.Left) rightX else leftX
 
-        val y = (anchor.y - placeable.height / 2f)
-            .coerceIn(0f, (constraints.maxHeight - placeable.height).coerceAtLeast(0).toFloat())
-
         val cornerPx = CornerRadius.toPx()
         val halfArrowPx = ArrowHalfWidth.toPx()
+        // Never less than the arrow needs above it to still point at the anchor.
+        val risePx = if (maxRise == Dp.Infinity) Float.MAX_VALUE else maxOf(maxRise.toPx(), cornerPx + halfArrowPx)
+        val y = maxOf(anchor.y - placeable.height / 2f, anchor.y - risePx)
+            .coerceIn(0f, (constraints.maxHeight - placeable.height).coerceAtLeast(0).toFloat())
+
         arrowSide.value = side
         arrowTipY.floatValue = if (placeable.height > 2 * (cornerPx + halfArrowPx)) {
             (anchor.y - y).coerceIn(cornerPx + halfArrowPx, placeable.height - cornerPx - halfArrowPx)

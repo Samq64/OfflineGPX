@@ -607,7 +607,9 @@ fun MapScreen(
             tappedWaypoint?.let { tapped ->
                 ArrowTooltip(
                     anchor = { tappedWaypointAt.value },
-                    gap = WaypointPinHeadRadius + 2.dp,
+                    // Beside the tip and hanging below it, clear of the head above.
+                    gap = 4.dp,
+                    maxRise = WaypointPinHeadClearance,
                     modifier = Modifier.fillMaxSize(),
                 ) {
                     Column {
