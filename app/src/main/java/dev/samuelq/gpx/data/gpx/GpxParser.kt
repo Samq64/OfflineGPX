@@ -3,6 +3,7 @@ package dev.samuelq.gpx.data.gpx
 import dev.samuelq.gpx.core.model.Track
 import dev.samuelq.gpx.core.model.TrackPoint
 import dev.samuelq.gpx.core.model.TrackSegment
+import dev.samuelq.gpx.core.model.Waypoint
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserException
 import org.xmlpull.v1.XmlPullParserFactory
@@ -53,12 +54,15 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
 
     private fun readGpx(parser: XmlPullParser): Track {
         val segments = mutableListOf<TrackSegment>()
+        val waypoints = mutableListOf<Waypoint>()
         var trackName: String? = null
         var metadataName: String? = null
         var trackDescription: String? = null
 
         forEachChild(parser) {
             when (parser.name) {
+                TAG_WPT -> readWaypoint(parser)?.let(waypoints::add)
+
                 TAG_METADATA -> forEachChild(parser) {
                     when (parser.name) {
                         TAG_NAME -> metadataName = readText(parser).takeIf(String::isNotBlank)
@@ -108,7 +112,31 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
             name = trackName ?: metadataName,
             segments = segments.filter { it.points.isNotEmpty() },
             description = trackDescription,
+            waypoints = waypoints,
         )
+    }
+
+    /** Reads a `<wpt>`. Returns null - rather than throwing - if lat/lon are unusable. */
+    private fun readWaypoint(parser: XmlPullParser): Waypoint? {
+        val latitude = parser.getAttributeValue(null, ATTR_LAT)?.toDoubleOrNull()
+        val longitude = parser.getAttributeValue(null, ATTR_LON)?.toDoubleOrNull()
+
+        var elevation: Double? = null
+        var time: Instant? = null
+        var description: String? = null
+
+        forEachChild(parser) {
+            when (parser.name) {
+                TAG_ELE -> elevation = readText(parser).trim().toDoubleOrNull()
+                TAG_TIME -> time = parseGpxTime(readText(parser))
+                TAG_DESC -> description = readText(parser).takeIf(String::isNotBlank)
+                else -> skip(parser)
+            }
+        }
+
+        if (latitude == null || longitude == null) return null
+        if (latitude !in -90.0..90.0 || longitude !in -180.0..180.0) return null
+        return Waypoint(TrackPoint(latitude, longitude, elevation, time), description)
     }
 
     private fun readSegment(parser: XmlPullParser): TrackSegment? {
@@ -225,6 +253,7 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
         private const val TAG_TRKPT = "trkpt"
         private const val TAG_RTE = "rte"
         private const val TAG_RTEPT = "rtept"
+        private const val TAG_WPT = "wpt"
         private const val TAG_NAME = "name"
         private const val TAG_DESC = "desc"
         private const val TAG_ELE = "ele"

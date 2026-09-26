@@ -38,6 +38,7 @@ class RecordViewModel(
     fun resume() = send(RecordingService.ACTION_RESUME)
     fun stop() = send(RecordingService.ACTION_STOP)
     fun discard() = send(RecordingService.ACTION_DISCARD)
+    fun addWaypoint(description: String) = RecordingService.sendWaypoint(getApplication(), description)
 
     private fun send(action: String) =
         RecordingService.send(getApplication(), action)

@@ -22,6 +22,7 @@ import dev.samuelq.gpx.core.analysis.FixFilter
 import dev.samuelq.gpx.core.analysis.SpeedWindow
 import dev.samuelq.gpx.core.analysis.haversineMeters
 import dev.samuelq.gpx.core.model.TrackPoint
+import dev.samuelq.gpx.core.model.Waypoint
 import dev.samuelq.gpx.data.settings.Settings
 import dev.samuelq.gpx.GpxApplication
 import dev.samuelq.gpx.ui.format.Formatters
@@ -88,6 +89,10 @@ class RecordingService : Service() {
     private var currentSpeedMps: Double? = null
     private var lastAccuracyMeters: Double? = null
 
+    /** Dropped by hand so far this ride. The WAL is the record of truth; recovery rebuilds
+     *  this same list from it, so this copy exists only to publish without waiting on that. */
+    private val waypoints = mutableListOf<Waypoint>()
+
     /** When this recording started, on the clock [totalSeconds] reads - see [startedAt]. */
     private var startedAtRealtime: Long = 0
     /**
@@ -136,6 +141,7 @@ class RecordingService : Service() {
                     ACTION_RESUME -> resume()
                     ACTION_STOP -> stop(save = true)
                     ACTION_DISCARD -> stop(save = false)
+                    ACTION_WAYPOINT -> addWaypoint(intent?.getStringExtra(EXTRA_DESCRIPTION) ?: "")
                 }
                 // By id, so a START queued behind a stop still gets its recording.
                 if (!recording) stopSelf(startId)
@@ -157,6 +163,7 @@ class RecordingService : Service() {
         lastPoint = null
         currentSpeedMps = null
         lastAccuracyMeters = null
+        waypoints.clear()
         startedAtRealtime = SystemClock.elapsedRealtime()
 
         val settings = container.settingsRepository.settings.value
@@ -275,6 +282,24 @@ class RecordingService : Service() {
         publish()
         // Throttled, unlike `publish`: see updateNotification.
         updateNotification(force = false)
+    }
+
+    /**
+     * Drops a waypoint at the last known position, stamped with the time this was called
+     * rather than the fix's own - a description can take a while to type, and the moment
+     * worth marking is when the button was pressed, not whenever the last fix happened to
+     * land. Silently does nothing before the first fix: there is nowhere to put it yet.
+     */
+    private fun addWaypoint(description: String) {
+        if (!recording) return
+        val point = lastPoint ?: return
+        val waypoint = Waypoint(
+            point.copy(time = Instant.now()),
+            description.trim().takeIf(String::isNotEmpty),
+        )
+        waypoints += waypoint
+        wal?.appendWaypoint(waypoint)
+        publish()
     }
 
     /**
@@ -424,6 +449,7 @@ class RecordingService : Service() {
                 currentSpeedMps = currentSpeedMps,
                 accuracyMeters = lastAccuracyMeters,
                 accuracyLimitMeters = accuracyLimitMeters,
+                waypoints = waypoints.toList(),
             )
         )
     }
@@ -524,6 +550,9 @@ class RecordingService : Service() {
         const val ACTION_RESUME = "dev.samuelq.gpx.RECORD_RESUME"
         const val ACTION_STOP = "dev.samuelq.gpx.RECORD_STOP"
         const val ACTION_DISCARD = "dev.samuelq.gpx.RECORD_DISCARD"
+        const val ACTION_WAYPOINT = "dev.samuelq.gpx.RECORD_WAYPOINT"
+
+        private const val EXTRA_DESCRIPTION = "description"
 
         private const val TAG = "RecordingService"
         private const val CHANNEL_ID = "recording"
@@ -566,6 +595,14 @@ class RecordingService : Service() {
             } else {
                 context.startService(intent)
             }
+        }
+
+        /** [description] may be blank - a waypoint with nothing typed is still one. */
+        fun sendWaypoint(context: Context, description: String) {
+            val intent = Intent(context, RecordingService::class.java)
+                .setAction(ACTION_WAYPOINT)
+                .putExtra(EXTRA_DESCRIPTION, description)
+            context.startService(intent)
         }
     }
 }

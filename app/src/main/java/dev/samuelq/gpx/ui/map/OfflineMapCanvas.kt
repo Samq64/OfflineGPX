@@ -14,6 +14,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.onSizeChanged
@@ -32,6 +33,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import dev.samuelq.gpx.core.model.TrackPoint
+import dev.samuelq.gpx.core.model.Waypoint
 import dev.samuelq.gpx.data.map.OfflineMap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -176,8 +178,17 @@ fun OfflineMapCanvas(
     /** The track whose last point is where the recorder is standing, or null. */
     puckTrackId: Long? = null,
     puckColor: Color = Color.Unspecified,
+    /**
+     * Drawn on whichever track they belong to - the caller has already narrowed this to
+     * the focused track's own and the live recording's, since a waypoint is a note on one
+     * ride, not a landmark on the map itself.
+     */
+    waypoints: List<Waypoint> = emptyList(),
+    waypointColor: Color = Color.Unspecified,
     onSelect: (trackId: Long, index: Int) -> Unit = { _, _ -> },
     onSelectNothing: () -> Unit = {},
+    /** Screen position is the pin's own, not the tap - reach forgives a miss by a few dp. */
+    onSelectWaypoint: (Waypoint, Offset) -> Unit = { _, _ -> },
     /** Space kept clear of routes when framing, for the sheet and the controls. */
     contentPadding: PaddingValues = PaddingValues(),
     /**
@@ -218,8 +229,10 @@ fun OfflineMapCanvas(
 
     val currentRoutes by rememberUpdatedState(routes)
     val currentLiveRoute by rememberUpdatedState(liveRoute)
+    val currentWaypoints by rememberUpdatedState(waypoints)
     val select by rememberUpdatedState(onSelect)
     val selectNothing by rememberUpdatedState(onSelectNothing)
+    val selectWaypoint by rememberUpdatedState(onSelectWaypoint)
     val reportScale by rememberUpdatedState(onScaleChange)
     val reportCamera by rememberUpdatedState(onCameraChange)
 
@@ -264,8 +277,15 @@ fun OfflineMapCanvas(
         layers.add(markerLayer, LayerGroup.Markers.ordinal)
         layers.add(
             TapLayer(map) { x, y ->
-                val hit = pick(x, y, map, currentRoutes, currentLiveRoute, tapReach)
-                if (hit == null) selectNothing() else select(hit.first, hit.second)
+                // Checked first: a waypoint sits on top of its own track's line, and
+                // reading its note is a more specific answer than scrubbing to that point.
+                val waypointHit = pickWaypoint(x, y, map, currentWaypoints, tapReach)
+                if (waypointHit != null) {
+                    selectWaypoint(waypointHit.waypoint, waypointHit.screenPosition)
+                } else {
+                    val hit = pick(x, y, map, currentRoutes, currentLiveRoute, tapReach)
+                    if (hit == null) selectNothing() else select(hit.first, hit.second)
+                }
             },
             LayerGroup.Tap.ordinal,
         )
@@ -391,11 +411,13 @@ fun OfflineMapCanvas(
 
     // Built once per colour, not per selection: scrubbing a chart moves the marker on every
     // frame, and a new bitmap each time is a new texture upload each time.
-    val symbols = remember(markerColor, puckColor, density) {
-        MarkerSymbols(markerColor, puckColor, density)
+    val symbols = remember(markerColor, puckColor, waypointColor, density) {
+        MarkerSymbols(markerColor, puckColor, waypointColor, density)
     }
 
-    LaunchedEffect(markerLayer, symbols, routes, liveRoute, puckTrackId, focusedTrackId, selectedIndex) {
+    LaunchedEffect(
+        markerLayer, symbols, routes, liveRoute, puckTrackId, focusedTrackId, selectedIndex, waypoints,
+    ) {
         // The recording is the usual answer for the puck and isn't in `routes`, so it is
         // asked first.
         val puckAt = (liveRoute?.takeIf { it.trackId == puckTrackId }
@@ -405,6 +427,9 @@ fun OfflineMapCanvas(
             ?.points?.getOrNull(selectedIndex ?: -1)
 
         val items = buildList<MarkerInterface> {
+            // First, so the puck and the scrub marker - both about right now, one way or
+            // another - are never underneath a waypoint dropped earlier in the same ride.
+            waypoints.forEach { add(marker(it.point, symbols.waypoint)) }
             if (puckAt != null) add(marker(puckAt, symbols.puck))
             // Last, so the point being read about is never underneath anything.
             if (markerAt != null) add(marker(markerAt, symbols.marker))
@@ -728,9 +753,10 @@ private class LineLayer(map: Map) {
 }
 
 /** The circles, drawn once per colour - see where [MarkerSymbols] is remembered. */
-private class MarkerSymbols(marker: Color, puck: Color, density: Density) {
+private class MarkerSymbols(marker: Color, puck: Color, waypoint: Color, density: Density) {
     val marker: MarkerSymbol
     val puck: MarkerSymbol
+    val waypoint: MarkerSymbol
 
     init {
         with(density) {
@@ -743,6 +769,12 @@ private class MarkerSymbols(marker: Color, puck: Color, density: Density) {
             this@MarkerSymbols.puck = symbol(
                 PUCK_RADIUS_DP.dp.toPx(), ringWidth, fill = puck, ring = MARKER_RING,
                 halo = puck.copy(alpha = PUCK_HALO_ALPHA), haloRadius = PUCK_HALO_RADIUS_DP.dp.toPx(),
+            )
+            // A pin, not a dot: a waypoint is a place someone marked, and the shape says so
+            // on its own - the tip is the hotspot, so it points at the position exactly the
+            // way the puck and the scrub marker sit centred on theirs.
+            this@MarkerSymbols.waypoint = pin(
+                PIN_RADIUS_DP.dp.toPx(), PIN_TIP_LENGTH_DP.dp.toPx(), ringWidth, fill = waypoint,
             )
         }
     }
@@ -772,6 +804,66 @@ private class MarkerSymbols(marker: Color, puck: Color, density: Density) {
         paint.color = ring.toArgb()
         canvas.drawCircle(centre, centre, radius, paint)
         return MarkerSymbol(AndroidBitmap(bitmap), MarkerSymbol.HotspotPlace.CENTER, false)
+    }
+
+    /**
+     * A teardrop: a circle of [radius] tangent to two lines converging [tipLength] below its
+     * centre, at the exact angle that meets the circle smoothly rather than a triangle
+     * glued onto it. The tip is the hotspot - see [MarkerSymbol.HotspotPlace.BOTTOM_CENTER] -
+     * so the point the pin actually marks is where the geometry says it is, not the middle
+     * of the bitmap holding it.
+     */
+    private fun pin(radius: Float, tipLength: Float, ringWidth: Float, fill: Color): MarkerSymbol {
+        // Full margin above and to the sides, for the stroke's overflow past the circle;
+        // only half below, and a round join there rather than the default miter - a sharp
+        // point mitred would spike well past the ring's own width.
+        val topPad = ringWidth
+        val bottomPad = ringWidth / 2
+        val width = kotlin.math.ceil(2 * radius + 2 * topPad).toInt() + 1
+        val height = kotlin.math.ceil(radius + tipLength + topPad + bottomPad).toInt() + 1
+        val cx = width / 2f
+        val cy = topPad + radius
+        val tipY = cy + tipLength
+
+        val bitmap = android.graphics.Bitmap.createBitmap(width, height, android.graphics.Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(bitmap)
+        val path = teardropPath(cx, cy, radius, tipY)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        paint.color = fill.toArgb()
+        canvas.drawPath(path, paint)
+        paint.style = Paint.Style.STROKE
+        paint.strokeJoin = Paint.Join.ROUND
+        paint.strokeWidth = ringWidth
+        paint.color = MARKER_RING.toArgb()
+        canvas.drawPath(path, paint)
+        return MarkerSymbol(AndroidBitmap(bitmap), MarkerSymbol.HotspotPlace.BOTTOM_CENTER, false)
+    }
+}
+
+/**
+ * A circle centred at ([cx],[cy]) with radius [radius], its outline replaced between the
+ * two points tangent to a line down to ([cx],[tipY]) with the two tangent lines themselves -
+ * the classic map pin, computed exactly rather than approximated with a fixed-width wedge.
+ */
+private fun teardropPath(cx: Float, cy: Float, radius: Float, tipY: Float): android.graphics.Path {
+    val d = tipY - cy
+    val angle = kotlin.math.acos((radius / d).coerceIn(-1f, 1f))
+    val a1 = (Math.PI / 2).toFloat() - angle
+    val a2 = (Math.PI / 2).toFloat() + angle
+    val a1Degrees = Math.toDegrees(a1.toDouble()).toFloat()
+    // The long way round, over the top of the circle - the short way is the wedge the
+    // tangent lines replace.
+    val sweepDegrees = -(360f - Math.toDegrees((2 * angle).toDouble()).toFloat())
+
+    return android.graphics.Path().apply {
+        moveTo(cx + radius * kotlin.math.cos(a1), cy + radius * kotlin.math.sin(a1))
+        arcTo(
+            android.graphics.RectF(cx - radius, cy - radius, cx + radius, cy + radius),
+            a1Degrees,
+            sweepDegrees,
+        )
+        lineTo(cx, tipY)
+        close()
     }
 }
 
@@ -937,6 +1029,50 @@ private fun outlineDrawable(map: OfflineMap, style: Style): LineDrawable {
 }
 
 // --- Hit testing ------------------------------------------------------------------
+
+/** A waypoint a tap landed near, and exactly where its pin sits on screen right now. */
+private class WaypointHit(val waypoint: Waypoint, val screenPosition: Offset)
+
+/**
+ * The nearest waypoint within reach of a tap, or null - checked ahead of [pick] so a
+ * waypoint sitting on a track's line is read as itself rather than as a scrub on that line.
+ */
+private fun pickWaypoint(
+    screenX: Float,
+    screenY: Float,
+    map: Map,
+    waypoints: List<Waypoint>,
+    reachPx: Float,
+): WaypointHit? {
+    val position = map.mapPosition
+    val mapSize = Tile.SIZE * position.scale
+    val tapX = position.x * mapSize + (screenX - map.width / 2.0)
+    val tapY = position.y * mapSize + (screenY - map.height / 2.0)
+
+    var best: Waypoint? = null
+    var bestX = 0.0
+    var bestY = 0.0
+    var bestDistance = (reachPx * reachPx).toDouble()
+    for (waypoint in waypoints) {
+        val x = MercatorProjection.longitudeToX(waypoint.point.longitude) * mapSize
+        val y = MercatorProjection.latitudeToY(waypoint.point.latitude) * mapSize
+        val dx = x - tapX
+        val dy = y - tapY
+        val distance = dx * dx + dy * dy
+        if (distance < bestDistance) {
+            bestDistance = distance
+            best = waypoint
+            bestX = x
+            bestY = y
+        }
+    }
+    val found = best ?: return null
+    // Reversing the tap's own projection above, rather than re-deriving it, so a pin
+    // reports exactly the screen point that projection would put it at.
+    val screenX = bestX - position.x * mapSize + map.width / 2.0
+    val screenY = bestY - position.y * mapSize + map.height / 2.0
+    return WaypointHit(found, Offset(screenX.toFloat(), screenY.toFloat()))
+}
 
 /**
  * Which track was tapped, and where along it.
@@ -1210,6 +1346,8 @@ private const val ROUTE_WIDTH_DP = 3f
 private const val MARKER_RING_WIDTH_DP = 1.5f
 private const val MARKER_RADIUS_DP = 7f
 private const val PUCK_RADIUS_DP = 8f
+private const val PIN_RADIUS_DP = 6f
+private const val PIN_TIP_LENGTH_DP = 11f
 
 /** White in both themes: a surface-coloured ring vanished against dark-mode land. */
 private val MARKER_RING = Color.White

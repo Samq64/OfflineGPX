@@ -31,6 +31,17 @@ data class TrackPoint(
 data class TrackSegment(val points: List<TrackPoint>)
 
 /**
+ * A note at a position, independent of the track's own points - a GPX `<wpt>`, dropped by
+ * hand rather than sampled on a timer. [point] is wherever the recorder last knew it was,
+ * not a new fix of its own; a waypoint marks a moment, not a measurement.
+ */
+data class Waypoint(
+    val point: TrackPoint,
+    /** What the user typed, or `null` for a bare marker - blank is a valid waypoint. */
+    val description: String? = null,
+)
+
+/**
  * A parsed GPX track: raw geometry, no derived values.
  *
  * Distance, speed and ascent live in [dev.samuelq.gpx.core.analysis.TrackProfile], so this
@@ -42,6 +53,8 @@ data class Track(
     val segments: List<TrackSegment>,
     /** The `<trk><desc>`, or `null` when the file has none - most don't. */
     val description: String? = null,
+    /** The file's own `<wpt>` elements, in no particular order - GPX doesn't promise one. */
+    val waypoints: List<Waypoint> = emptyList(),
 ) {
     /** All points, in order, flattened across segments. */
     val points: List<TrackPoint> = segments.flatMap(TrackSegment::points)

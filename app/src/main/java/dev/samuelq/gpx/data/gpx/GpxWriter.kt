@@ -33,6 +33,18 @@ class GpxWriter(private val newSerializer: () -> XmlSerializer = DEFAULT_SERIALI
             xml.endTag(NAMESPACE, "metadata")
         }
 
+        // Ahead of <trk>: the schema orders wpt*, rte*, trk*, and a reader that enforces it
+        // would otherwise reject a file this app wrote itself.
+        for (waypoint in track.waypoints) {
+            xml.startTag(NAMESPACE, "wpt")
+            xml.attribute(null, "lat", format(waypoint.point.latitude))
+            xml.attribute(null, "lon", format(waypoint.point.longitude))
+            waypoint.point.elevation?.let { xml.textTag("ele", String.format(java.util.Locale.ROOT, "%.1f", it)) }
+            waypoint.point.time?.let { xml.textTag("time", TIMESTAMP.format(it)) }
+            waypoint.description?.takeIf(String::isNotBlank)?.let { xml.textTag("desc", it) }
+            xml.endTag(NAMESPACE, "wpt")
+        }
+
         xml.startTag(NAMESPACE, "trk")
         track.name?.takeIf(String::isNotBlank)?.let { xml.textTag("name", it) }
 

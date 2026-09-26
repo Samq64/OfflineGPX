@@ -37,6 +37,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
@@ -74,6 +75,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -89,8 +91,11 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.samuelq.gpx.R
+import dev.samuelq.gpx.core.model.Waypoint
 import dev.samuelq.gpx.data.record.RecordingEvent
 import dev.samuelq.gpx.data.record.RecordingState
+import dev.samuelq.gpx.ui.ArrowTooltip
+import dev.samuelq.gpx.ui.format.Formatters
 import dev.samuelq.gpx.ui.record.RecordViewModel
 import dev.samuelq.gpx.ui.record.RecordingBar
 import dev.samuelq.gpx.ui.theme.routePalette
@@ -172,6 +177,9 @@ fun MapScreen(
     val focusedTrack = (focused as? FocusedTrack.Ready)?.track
     // An index into a different track is meaningless, so it goes when the track does.
     var selectedIndex by remember(focusedTrack?.id) { mutableStateOf<Int?>(null) }
+    // A waypoint's note belongs to whichever track is focused - switching tracks clears
+    // it, the same reason [selectedIndex] does, and any other tap on the map does too.
+    var tappedWaypoint by remember(focusedTrack?.id) { mutableStateOf<TappedWaypoint?>(null) }
 
     val locationOff = stringResource(R.string.record_location_off)
     val locationDenied = stringResource(R.string.record_location_denied)
@@ -345,6 +353,11 @@ fun MapScreen(
             }
         }
     }
+
+    // The live recording's own, plus whichever track's sheet is open - never every track's,
+    // which would read as the map's own layer rather than one ride's notes.
+    val mapWaypoints = ((recording as? RecordingState.Active)?.waypoints ?: emptyList()) +
+        (focusedTrack?.track?.waypoints ?: emptyList())
 
     val liveOverlay = remember(trace, liveColor) {
         if (trace.points.isEmpty()) {
@@ -535,7 +548,12 @@ fun MapScreen(
                     ?: MaterialTheme.colorScheme.primary,
                 puckTrackId = LIVE_TRACK_ID.takeIf { recording is RecordingState.Active },
                 puckColor = liveColor,
+                // Only the live recording's own and the track whose sheet is open - a
+                // waypoint is a note on one ride, not a landmark the map always shows.
+                waypoints = mapWaypoints,
+                waypointColor = MaterialTheme.colorScheme.tertiary,
                 onSelect = { trackId, index ->
+                    tappedWaypoint = null
                     when (trackId) {
                         // The recording has no row to open and no numbers to scrub.
                         LIVE_TRACK_ID -> Unit
@@ -547,7 +565,11 @@ fun MapScreen(
                 },
                 // Tapping the bare map puts it away, which is the gesture people try
                 // first and the only one that does not involve aiming at anything.
-                onSelectNothing = { viewModel.focus(null) },
+                onSelectNothing = {
+                    tappedWaypoint = null
+                    viewModel.focus(null)
+                },
+                onSelectWaypoint = { waypoint, at -> tappedWaypoint = TappedWaypoint(waypoint, at) },
                 contentPadding = canvasPadding,
                 sheetHeight = sheetCover,
                 panelWidth = panelCover,
@@ -565,6 +587,26 @@ fun MapScreen(
                 onCameraChange = viewModel::rememberCamera,
                 modifier = Modifier.fillMaxSize(),
             )
+
+            tappedWaypoint?.let { tapped ->
+                ArrowTooltip(anchor = tapped.at, modifier = Modifier.fillMaxSize()) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f, fill = false)) {
+                            Text(
+                                text = Formatters.dateTime(tapped.waypoint.point.time),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            tapped.waypoint.description?.takeIf(String::isNotBlank)?.let {
+                                Text(text = it, style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
+                        IconButton(onClick = { tappedWaypoint = null }) {
+                            Icon(Icons.Default.Close, contentDescription = stringResource(R.string.track_close))
+                        }
+                    }
+                }
+            }
 
             // Only the true first-run case, not "every track happens to be hidden" - that's
             // a state the user chose on purpose, and gets the bare map back, not a card.
@@ -646,6 +688,7 @@ fun MapScreen(
                         onResume = recorder::resume,
                         onStop = recorder::stop,
                         onDiscard = { confirmDiscard = true },
+                        onAddWaypoint = recorder::addWaypoint,
                         // The enclosing Column already pads its bottom edge by sheetInset,
                         // which covers the nav bar when the sheet isn't focused - padding
                         // again here left an empty strip with the map showing through it.
@@ -830,6 +873,9 @@ private fun ShowTracksHint(onClick: () -> Unit, modifier: Modifier = Modifier) {
         Text(stringResource(R.string.map_hidden_hint))
     }
 }
+
+/** A waypoint the user tapped, and exactly where its pin sat on screen at that moment. */
+private class TappedWaypoint(val waypoint: Waypoint, val at: Offset)
 
 /**
  * Asks for what is missing on the tap that starts a recording, nothing before it - no

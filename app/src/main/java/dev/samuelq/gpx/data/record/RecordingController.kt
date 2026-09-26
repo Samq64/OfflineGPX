@@ -3,6 +3,7 @@ package dev.samuelq.gpx.data.record
 import androidx.annotation.StringRes
 import dev.samuelq.gpx.core.analysis.FixFilter
 import dev.samuelq.gpx.core.model.TrackPoint
+import dev.samuelq.gpx.core.model.Waypoint
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -37,6 +38,8 @@ sealed interface RecordingState {
         val accuracyMeters: Double? = null,
         /** The limit [accuracyMeters] is being judged against, since the user can move it. */
         val accuracyLimitMeters: Double = FixFilter.MAX_ACCURACY_METERS,
+        /** Dropped by hand so far this ride, oldest first. */
+        val waypoints: List<Waypoint> = emptyList(),
     ) : RecordingState
 }
 

@@ -7,13 +7,18 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
@@ -24,6 +29,7 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -36,11 +42,15 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.toSize
+import dev.samuelq.gpx.ui.ArrowTooltip
 import dev.samuelq.gpx.ui.format.tabularFigures
 import dev.samuelq.gpx.ui.theme.ChartColors
 import dev.samuelq.gpx.ui.theme.LocalChartColors
+import kotlin.math.roundToInt
 
 // Mark specs. Thin marks, hairline chrome, generous air - the data is the only loud thing.
 private val LineWidth = 2.dp
@@ -50,7 +60,6 @@ private val SurfaceRing = 2.dp
 private val LabelGap = 6.dp
 private val RightPad = 10.dp
 private val AxisBand = 18.dp
-private val LabelPad = 3.dp
 private val HighlightBand = 16.dp
 private const val AreaFillAlpha = 0.10f
 private const val BreakWashAlpha = 0.10f
@@ -149,10 +158,13 @@ fun ProfileChart(
         }
     }
 
+    var boxSize by remember { mutableStateOf(IntSize.Zero) }
+
     Box(
         modifier
             .fillMaxWidth()
             .height(plotHeight + if (showXAxis) AxisBand else 0.dp)
+            .onSizeChanged { boxSize = it }
             .semantics { this.contentDescription = contentDescription },
     ) {
         StaticLayer(render, geometry, chartColors)
@@ -162,8 +174,14 @@ fun ProfileChart(
             chartColors = chartColors,
             selectedIndex = selectedIndex,
             onSelectedIndexChange = onSelectedIndexChange,
-            measurer = textMeasurer,
+        )
+        ChartTooltip(
+            render = render,
+            geometry = geometry,
+            boxSize = boxSize,
+            selectedIndex = selectedIndex,
             style = labelStyle.copy(color = MaterialTheme.colorScheme.onSurface),
+            labelColor = chartColors.label,
             formatValue = formatValue,
             formatPosition = formatPosition,
         )
@@ -228,8 +246,9 @@ private fun StaticLayer(
 }
 
 /**
- * A hairline, a dot, and what they are pointing at, drawn beside the mark rather than in a
- * row elsewhere - cheap enough to redraw on every pointer move.
+ * A hairline and a dot at the scrubbed position - what it's pointing at is [ChartTooltip]'s
+ * business, drawn as a separate composable overlay rather than here, so its text can be a
+ * real `Text` instead of a `TextLayoutResult` measured and drawn by hand.
  */
 @Composable
 private fun ScrubberLayer(
@@ -238,35 +257,8 @@ private fun ScrubberLayer(
     chartColors: ChartColors,
     selectedIndex: Int?,
     onSelectedIndexChange: (Int?) -> Unit,
-    measurer: TextMeasurer,
-    style: TextStyle,
-    formatValue: ((Float) -> String)?,
-    formatPosition: ((Float) -> String)?,
 ) {
     val series = render.series
-
-    // Measured here, not in the draw lambda: the scrubber redraws on every pointer move,
-    // and measurement was the one expensive thing it did per frame.
-    val tooltip = remember(render, selectedIndex, style, formatValue, formatPosition) {
-        val index = selectedIndex ?: return@remember null
-        if (index !in 0 until series.size) return@remember null
-        val value = series.y[index]
-        if (value.isNaN()) return@remember null
-        val format = formatValue ?: return@remember null
-
-        measurer.measure(
-            buildAnnotatedString {
-                formatPosition?.let { position ->
-                    withStyle(SpanStyle(color = chartColors.label)) {
-                        append(position(series.x[index]))
-                    }
-                    append('\n')
-                }
-                append(format(value))
-            },
-            style,
-        )
-    }
 
     Canvas(
         Modifier
@@ -310,52 +302,59 @@ private fun ScrubberLayer(
         // Surface ring first, so the dot stays legible where it sits on the line.
         drawCircle(chartColors.surface, MarkerRadius.toPx() + SurfaceRing.toPx(), Offset(x, y))
         drawCircle(series.color, MarkerRadius.toPx(), Offset(x, y))
-
-        tooltip?.let {
-            drawTooltip(
-                layout = it,
-                at = Offset(x, y),
-                plot = plot,
-                fill = chartColors.surface,
-                border = chartColors.axis,
-            )
-        }
     }
 }
 
 /**
- * Where you are and what is there, boxed above the mark and flipped below it rather than
- * allowed off the top. Stacked, not run together, so the two figures read apart. Opaque,
- * since it sits over the line it describes.
+ * Where you are and what is there, anchored to the scrubbed dot - the same [ArrowTooltip]
+ * a tapped waypoint on the map uses, clamped to the plot rect rather than the whole chart
+ * so it never covers the y-axis labels in the gutter beside it.
  */
-private fun DrawScope.drawTooltip(
-    layout: TextLayoutResult,
-    at: Offset,
-    plot: Rect,
-    fill: Color,
-    border: Color,
+@Composable
+private fun ChartTooltip(
+    render: ChartRender,
+    geometry: ChartGeometry,
+    boxSize: IntSize,
+    selectedIndex: Int?,
+    style: TextStyle,
+    labelColor: Color,
+    formatValue: ((Float) -> String)?,
+    formatPosition: ((Float) -> String)?,
 ) {
-    val padX = LabelPad.toPx() * 2
-    val padY = LabelPad.toPx()
-    val width = layout.size.width + 2 * padX
-    val height = layout.size.height + 2 * padY
-    val corner = CornerRadius(4.dp.toPx())
+    val series = render.series
+    val index = selectedIndex ?: return
+    if (index !in 0 until series.size) return
+    val value = series.y[index]
+    if (value.isNaN()) return
+    val format = formatValue ?: return
+    if (boxSize.width <= 0 || boxSize.height <= 0) return
 
-    val left = (at.x - width / 2f)
-        .coerceIn(plot.left, (plot.right - width).coerceAtLeast(plot.left))
-    val clear = MarkerRadius.toPx() + SurfaceRing.toPx() + LabelPad.toPx()
-    val above = at.y - clear - height
-    val top = if (above >= plot.top) above else at.y + clear
+    val density = LocalDensity.current
+    val plot = remember(geometry, boxSize) { geometry.plotRect(boxSize.toSize()) }
 
-    drawRoundRect(fill, Offset(left, top), Size(width, height), corner)
-    drawRoundRect(
-        color = border,
-        topLeft = Offset(left, top),
-        size = Size(width, height),
-        cornerRadius = corner,
-        style = Stroke(GridWidth.toPx()),
-    )
-    drawText(layout, topLeft = Offset(left + padX, top + padY))
+    Box(
+        Modifier
+            .offset { IntOffset(plot.left.roundToInt(), plot.top.roundToInt()) }
+            .size(with(density) { plot.width.toDp() }, with(density) { plot.height.toDp() }),
+    ) {
+        val x = plot.xFor(series.x[index], render.xScale) - plot.left
+        val y = plot.yFor(value, render.yScale) - plot.top
+
+        ArrowTooltip(anchor = Offset(x, y), modifier = Modifier.matchParentSize()) {
+            Text(
+                text = buildAnnotatedString {
+                    formatPosition?.let { position ->
+                        withStyle(SpanStyle(color = labelColor)) {
+                            append(position(series.x[index]))
+                        }
+                        append('\n')
+                    }
+                    append(format(value))
+                },
+                style = style,
+            )
+        }
+    }
 }
 
 /** Everything derived from the data, measured once. */

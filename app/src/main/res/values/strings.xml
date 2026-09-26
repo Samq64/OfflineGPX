@@ -6,6 +6,7 @@
     <string name="action_retry">Try again</string>
     <string name="action_cancel">Cancel</string>
     <string name="action_save">Save</string>
+    <string name="action_done">Done</string>
 
     <string name="map_open_list">Tracks</string>
     <string name="map_description">Map showing your routes. Tap a route to open it. Drag to move, pinch to zoom.</string>
@@ -103,6 +104,13 @@
     <plurals name="record_points_logged">
         <item quantity="one">%s point logged</item>
         <item quantity="other">%s points logged</item>
+    </plurals>
+    <string name="record_add_waypoint">Add waypoint</string>
+    <string name="record_waypoint_title">Waypoint %1$d</string>
+    <string name="record_waypoint_label">Note (optional)</string>
+    <plurals name="record_waypoints_logged">
+        <item quantity="one">%1$d waypoint</item>
+        <item quantity="other">%1$d waypoints</item>
     </plurals>
     <string name="record_save_failed">Couldn\'t save that recording. It\'s still on the device.</string>
     <string name="record_discarded">Recording discarded.</string>
