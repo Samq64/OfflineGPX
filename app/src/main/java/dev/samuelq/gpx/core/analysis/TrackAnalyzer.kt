@@ -36,8 +36,11 @@ object TrackAnalyzer {
      */
     const val ELEVATION_NOISE_THRESHOLD_METERS = 3.0
 
-    /** Half-width, in samples, of the moving average applied to elevation before ascent. */
-    private const val ELEVATION_SMOOTHING_RADIUS = 2
+    /**
+     * Half-width, in metres along the track, of the moving average applied to elevation
+     * before ascent. By distance rather than samples, so a sparse file isn't flattened.
+     */
+    private const val ELEVATION_SMOOTHING_METERS = 25.0
 
     /**
      * The shortest time gap that can be a break rather than a sample interval.
@@ -123,17 +126,12 @@ object TrackAnalyzer {
         }
 
         val smoothedElevation =
-            if (hasElevation) smoothElevation(elevation, starts, ends) else elevation
+            if (hasElevation) smoothElevation(elevation, distance, starts, ends) else elevation
 
-        var ascent = 0.0
-        var descent = 0.0
-        if (hasElevation) {
-            for (segment in starts.indices) {
-                val (up, down) = accumulateVertical(smoothedElevation, starts[segment], ends[segment])
-                ascent += up
-                descent += down
-            }
-        }
+        // One pass across breaks: height gained during a gap was still climbed, and a
+        // fresh reference per segment would drop up to the threshold at every pause.
+        val (ascent, descent) =
+            if (hasElevation) accumulateVertical(smoothedElevation) else 0.0 to 0.0
 
         var movingSeconds = 0.0
         if (hasTime) {
@@ -249,7 +247,9 @@ object TrackAnalyzer {
 
     /**
      * Centred finite difference of distance over [SPEED_WINDOW_SECONDS], clamped to the
-     * enclosing segment so the window never spans a signal-loss gap.
+     * enclosing segment so the window never spans a signal-loss gap. Always reaches at
+     * least the neighbouring sample either side: a sample alone in its window would read
+     * as stopped, which on a sparse file is every sample.
      *
      * Both edges only move forward, carried from one sample to the next: `elapsed` is
      * monotonic, and re-searching from `i` each time is quadratic whenever the clock
@@ -274,6 +274,8 @@ object TrackAnalyzer {
                 if (hi < i) hi = i
                 while (lo < i && elapsed[i] - elapsed[lo] > half) lo++
                 while (hi < end - 1 && elapsed[hi + 1] - elapsed[i] <= half) hi++
+                if (lo == i && i > start) lo = i - 1
+                if (hi == i && i < end - 1) hi = i + 1
 
                 val dt = elapsed[hi] - elapsed[lo]
                 out[i] = if (dt > 0f) max(0f, (distance[hi] - distance[lo]) / dt) else 0f
@@ -281,25 +283,36 @@ object TrackAnalyzer {
         }
     }
 
-    /** Moving average over +/-[ELEVATION_SMOOTHING_RADIUS] samples, NaN-tolerant, segment-local. */
-    private fun smoothElevation(elevation: FloatArray, starts: IntArray, ends: IntArray): FloatArray {
+    /**
+     * Moving average over +/-[ELEVATION_SMOOTHING_METERS] of [distance], NaN-tolerant,
+     * segment-local. Prefix sums, since a stop can put hundreds of samples in one window.
+     */
+    private fun smoothElevation(
+        elevation: FloatArray,
+        distance: FloatArray,
+        starts: IntArray,
+        ends: IntArray,
+    ): FloatArray {
         val out = FloatArray(elevation.size)
+        val sums = DoubleArray(elevation.size + 1)
+        val counts = IntArray(elevation.size + 1)
+        for (i in elevation.indices) {
+            val e = elevation[i]
+            sums[i + 1] = sums[i] + if (e.isNaN()) 0.0 else e.toDouble()
+            counts[i + 1] = counts[i] + if (e.isNaN()) 0 else 1
+        }
+        val half = ELEVATION_SMOOTHING_METERS.toFloat()
         for (segment in starts.indices) {
             val start = starts[segment]
             val end = ends[segment]
+            var lo = start
+            var hi = start
             for (i in start until end) {
-                var sum = 0.0
-                var count = 0
-                val from = max(start, i - ELEVATION_SMOOTHING_RADIUS)
-                val to = minOf(end - 1, i + ELEVATION_SMOOTHING_RADIUS)
-                for (j in from..to) {
-                    val e = elevation[j]
-                    if (!e.isNaN()) {
-                        sum += e
-                        count++
-                    }
-                }
-                out[i] = if (count > 0) (sum / count).toFloat() else Float.NaN
+                if (hi < i) hi = i
+                while (distance[i] - distance[lo] > half) lo++
+                while (hi < end - 1 && distance[hi + 1] - distance[i] <= half) hi++
+                val count = counts[hi + 1] - counts[lo]
+                out[i] = if (count > 0) ((sums[hi + 1] - sums[lo]) / count).toFloat() else Float.NaN
             }
         }
         return out
@@ -309,12 +322,12 @@ object TrackAnalyzer {
      * Hysteresis accumulator: only commit a climb or a drop once it exceeds
      * [ELEVATION_NOISE_THRESHOLD_METERS] from the last committed reference.
      */
-    private fun accumulateVertical(elevation: FloatArray, start: Int, end: Int): Pair<Double, Double> {
+    private fun accumulateVertical(elevation: FloatArray): Pair<Double, Double> {
         var ascent = 0.0
         var descent = 0.0
         var reference = Float.NaN
 
-        for (i in start until end) {
+        for (i in elevation.indices) {
             val e = elevation[i]
             if (e.isNaN()) continue
             if (reference.isNaN()) {

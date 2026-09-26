@@ -286,8 +286,9 @@ class TrackAnalyzerTest {
     /**
      * The speed window is carried from sample to sample rather than re-found. This checks
      * it against the definition it replaced - the widest centred window inside the segment
-     * that spans no more than half the window either side - at every sample of a file with
-     * breaks, varying intervals and a stalled clock in it.
+     * that spans no more than half the window either side, widened to the neighbouring
+     * sample when that leaves none - at every sample of a file with breaks, varying
+     * intervals and a stalled clock in it.
      */
     @Test
     fun `the carried speed window agrees with a search at every sample`() {
@@ -306,6 +307,8 @@ class TrackAnalyzerTest {
                 while (lo > start && profile.elapsedSeconds[i] - profile.elapsedSeconds[lo - 1] <= half) lo--
                 var hi = i
                 while (hi < end - 1 && profile.elapsedSeconds[hi + 1] - profile.elapsedSeconds[i] <= half) hi++
+                if (lo == i && i > start) lo = i - 1
+                if (hi == i && i < end - 1) hi = i + 1
 
                 val dt = profile.elapsedSeconds[hi] - profile.elapsedSeconds[lo]
                 val expected = if (dt > 0f) {
@@ -341,6 +344,82 @@ class TrackAnalyzerTest {
         assertTrue(elapsed < 5_000, "analysis took ${elapsed}ms")
     }
 
+    @Test
+    fun `a file sparser than the speed window still has a speed`() {
+        // A point every 20 s: no sample has a neighbour within the 10 s window.
+        val profile = TrackAnalyzer.analyze(
+            straightRun(count = 30, metersPerSecond = 8.0, secondsBetween = 20)
+        )
+
+        assertEquals(8.0f, profile.speedMps[15], 0.1f)
+        assertEquals(580.0, profile.stats.movingDurationSeconds, 1.0)
+        assertEquals(8.0, profile.stats.averageSpeedMps, 0.1)
+    }
+
+    /**
+     * Rolling hills 16 m high every 300 m along a northward run at 5 m/s, with +/-1.5 m of
+     * seeded jitter. [secondsBetween] thins it without changing the terrain.
+     */
+    private fun hillyRun(
+        meters: Double,
+        secondsBetween: Long = 1,
+        reverse: Boolean = false,
+        seed: Int = 1,
+    ): Track {
+        val random = kotlin.random.Random(seed)
+        val count = (meters / (5.0 * secondsBetween)).toInt() + 1
+        val step = 5.0 * secondsBetween
+        val points = (0 until count).map { i ->
+            val along = if (reverse) meters - i * step else i * step
+            TrackPoint(
+                latitude = along / metersPerDegreeLatitude,
+                longitude = 8.0,
+                elevation = 100.0 + 8.0 * kotlin.math.sin(2 * Math.PI * along / 300.0) +
+                    random.nextDouble(-1.5, 1.5),
+                time = start.plusSeconds(i * secondsBetween),
+            )
+        }
+        return Track(name = "hills", segments = listOf(TrackSegment(points)))
+    }
+
+    @Test
+    fun `ascent does not depend on how densely a track was sampled`() {
+        // Ten 16 m hills: 160 m, less what the 3 m threshold drops at each crest and trough.
+        val dense = TrackAnalyzer.analyze(hillyRun(3000.0)).stats.ascentMeters
+        val sparse = TrackAnalyzer.analyze(hillyRun(3000.0, secondsBetween = 10)).stats.ascentMeters
+
+        assertTrue(dense in 110.0..170.0, "dense ascent $dense")
+        assertTrue(sparse in 110.0..170.0, "sparse ascent $sparse")
+        // Not equal: 50 m apart, the sparse points have no neighbours to average their jitter
+        // with. Averaging by sample count instead flattened this one to about 6 m.
+        assertEquals(dense, sparse, dense * 0.2)
+    }
+
+    @Test
+    fun `an out-and-back climbs what it descends`() {
+        val out = TrackAnalyzer.analyze(hillyRun(3000.0, seed = 1)).stats
+        val back = TrackAnalyzer.analyze(hillyRun(3000.0, reverse = true, seed = 2)).stats
+
+        assertEquals(out.ascentMeters, back.descentMeters, out.ascentMeters * 0.1)
+        assertEquals(out.descentMeters, back.ascentMeters, out.descentMeters * 0.1)
+    }
+
+    @Test
+    fun `height gained across a break is still climbed`() {
+        val step = 5.0 / metersPerDegreeLatitude
+        val first = (0 until 20).map {
+            TrackPoint(it * step, 8.0, elevation = 100.0, time = start.plusSeconds(it.toLong()))
+        }
+        // Each side is flat; the 4 m came during the gap, and neither side alone clears 3 m.
+        val second = (20 until 40).map {
+            TrackPoint(it * step, 8.0, elevation = 104.0, time = start.plusSeconds(600 + it.toLong()))
+        }
+        val profile = TrackAnalyzer.analyze(Track("break", listOf(TrackSegment(first), TrackSegment(second))))
+
+        assertEquals(4.0, profile.stats.ascentMeters, 0.01)
+        assertEquals(0.0, profile.stats.descentMeters, 0.01)
+    }
+
     /** Uneven intervals, a stalled stretch and a real break, in one file. */
     private fun awkwardlyTimedRide(): Track {
         val step = 10.0 / metersPerDegreeLatitude
@@ -352,7 +431,7 @@ class TrackAnalyzerTest {
                 // A silence long enough for the analyser to cut the track here.
                 i == 80 -> 600L
                 // Longer than the window is wide, but not long enough to be a break: the
-                // sample either side of this has nothing to average with.
+                // sample either side of this has only its neighbour to average with.
                 i % 17 == 0 -> 20L
                 i % 7 == 0 -> 3L
                 else -> 1L

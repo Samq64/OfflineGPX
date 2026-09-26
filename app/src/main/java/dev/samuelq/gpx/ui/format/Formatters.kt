@@ -116,6 +116,17 @@ class Formatters(val units: UnitSystem) {
     fun elevation(meters: Double, locale: Locale = Locale.getDefault()): String =
         meters(meters, locale)
 
+    /**
+     * Ascent or descent, to the nearest [CLIMB_STEP_METERS] or [CLIMB_STEP_FEET]: GPS
+     * altitude drifts by more than that, so finer digits would claim a precision it lacks.
+     */
+    fun climb(meters: Double, locale: Locale = Locale.getDefault()): String {
+        if (meters.isNaN()) return EMPTY
+        val step = if (metric) CLIMB_STEP_METERS else CLIMB_STEP_FEET
+        val rounded = (elevationIn(meters) / step).roundToLong() * step
+        return String.format(locale, "%,d $elevationUnit", rounded)
+    }
+
     fun elevationAxis(
         meters: Float,
         decimals: Int = 0,
@@ -151,6 +162,9 @@ class Formatters(val units: UnitSystem) {
         val Metric = Formatters(UnitSystem.METRIC)
 
         const val EMPTY = "—"
+
+        private const val CLIMB_STEP_METERS = 5L
+        private const val CLIMB_STEP_FEET = 20L
 
         /** Past three, an axis tick is reading out float noise rather than a distance. */
         const val MAX_AXIS_DECIMALS = 3
