@@ -52,11 +52,13 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.samuelq.gpx.R
 import dev.samuelq.gpx.data.track.LoadedTrack
+import dev.samuelq.gpx.ui.chart.ChartAxisGroup
 import dev.samuelq.gpx.ui.chart.ChartSeries
 import dev.samuelq.gpx.ui.chart.ProfileChart
 import dev.samuelq.gpx.ui.chart.axisScale
 import dev.samuelq.gpx.ui.chart.timeAxisScale
 import dev.samuelq.gpx.ui.chart.yScale
+import dev.samuelq.gpx.ui.chart.zoomView
 import dev.samuelq.gpx.ui.format.Formatters
 import dev.samuelq.gpx.ui.format.LocalFormatters
 import dev.samuelq.gpx.ui.theme.LocalChartColors
@@ -110,15 +112,21 @@ fun TrackSheet(
     val formatters = LocalFormatters.current
 
     val xValues = if (useTimeAxis) profile.elapsedSeconds else profile.distanceMeters
-    // One domain, shared by both charts, so the same pixel column is the same moment in
+    val xDomain = (xValues.firstOrNull() ?: 0f)..(xValues.lastOrNull() ?: 1f)
+    // The stretch a pinch has zoomed to. A new track or axis starts zoomed out again.
+    var xView by remember(profile, useTimeAxis) { mutableStateOf(xDomain) }
+    // New per track and unit system, since the widest label only ever grows within one.
+    val axisGroup = remember(profile, formatters) { ChartAxisGroup() }
+    val onZoom: (Float, Float, Float) -> Unit = remember(profile, useTimeAxis) {
+        { anchor, zoom, pan -> xView = zoomView(xView, xDomain, anchor, zoom, pan) }
+    }
+    // One view, shared by both charts, so the same pixel column is the same moment in
     // each and the scrubber means the same thing in both - and on the route behind.
-    val xScale = remember(profile, useTimeAxis, formatters) {
-        val first = xValues.firstOrNull() ?: 0f
-        val last = xValues.lastOrNull() ?: 1f
+    val xScale = remember(xView, useTimeAxis, formatters) {
         if (useTimeAxis) {
-            timeAxisScale(first, last)
+            timeAxisScale(xView.start, xView.endInclusive)
         } else {
-            axisScale(first, last, perUnit = formatters.distancePerMeter)
+            axisScale(xView.start, xView.endInclusive, perUnit = formatters.distancePerMeter)
         }
     }
     // Keyed on the scale as well as the units: the ticks are labelled to whatever precision
@@ -236,7 +244,6 @@ fun TrackSheet(
 
             ChartSection(
                 title = stringResource(R.string.chart_speed),
-                unit = formatters.speedUnit,
                 modifier = Modifier.padding(horizontal = SheetPadding),
             ) {
                 if (!profile.hasTime) {
@@ -248,9 +255,6 @@ fun TrackSheet(
                             y = profile.speedMps,
                             segmentStartIndices = profile.segmentStartIndices,
                             color = chartColors.speed,
-                            // Speed is a magnitude: the distance from the baseline is the
-                            // value, so the axis has to include zero.
-                            zeroBased = true,
                         )
                     }
                     val yScale = remember(series, formatters) {
@@ -266,27 +270,20 @@ fun TrackSheet(
                         },
                         selectedIndex = selectedIndex,
                         onSelectedIndexChange = onSelectedIndexChange,
+                        onZoom = onZoom,
+                        axisGroup = axisGroup,
                         contentDescription = stringResource(R.string.chart_speed),
-                        highlightIndex = stats.maxSpeedIndex,
-                        highlightLabel = formatters.speed(stats.maxSpeedMps),
                         breakLabel = breakLabel,
                         formatValue = speedValue,
                         formatPosition = positionValue,
-                        // The elevation chart below carries the ticks for both, unless
-                        // this file has no elevation to draw and there is no chart there
-                        // to carry them.
-                        showXAxis = !profile.hasElevation,
                     )
                 }
             }
 
-            // Tighter than it was: the two plots share an axis now, which only reads as
-            // one axis under two charts if they are close enough to be one object.
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(12.dp))
 
             ChartSection(
                 title = stringResource(R.string.chart_elevation),
-                unit = formatters.elevationUnit,
                 modifier = Modifier.padding(horizontal = SheetPadding),
             ) {
                 if (!profile.hasElevation) {
@@ -298,10 +295,6 @@ fun TrackSheet(
                             y = profile.elevationMeters,
                             segmentStartIndices = profile.segmentStartIndices,
                             color = chartColors.elevation,
-                            // An elevation profile sits on a baseline near the low point,
-                            // as every mapping tool draws it. The y axis labels that
-                            // baseline explicitly so it can't be mistaken for sea level.
-                            zeroBased = false,
                         )
                     }
                     val yScale = remember(series, formatters) {
@@ -319,9 +312,9 @@ fun TrackSheet(
                         },
                         selectedIndex = selectedIndex,
                         onSelectedIndexChange = onSelectedIndexChange,
+                        onZoom = onZoom,
+                        axisGroup = axisGroup,
                         contentDescription = stringResource(R.string.chart_elevation),
-                        highlightIndex = stats.maxElevationIndex,
-                        highlightLabel = stats.maxElevationMeters?.let { formatters.elevation(it) },
                         breakLabel = breakLabel,
                         formatValue = elevationValue,
                         formatPosition = positionValue,
@@ -502,25 +495,12 @@ private fun AxisSelector(
 @Composable
 private fun ChartSection(
     title: String,
-    unit: String,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
     Column(modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Bottom,
-        ) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
-            // The axis ticks are bare numbers; the unit lives here once.
-            Text(
-                text = unit,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        Spacer(Modifier.height(8.dp))
+        Text(title, style = MaterialTheme.typography.titleSmall)
+        Spacer(Modifier.height(4.dp))
         content()
     }
 }

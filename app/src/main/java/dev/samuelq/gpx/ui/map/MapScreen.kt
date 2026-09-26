@@ -824,7 +824,7 @@ private val MapEdgePadding = 24.dp
  * The sheet's expanded height. A sheet that covers the map the moment it opens is a screen
  * wearing a slide animation, not a sheet - the route stays visible above it.
  */
-private const val SheetMaxHeightFraction = 0.58f
+private const val SheetMaxHeightFraction = 0.72f
 
 /** The landscape panel: at least this past any cutout, or this share of the window if wider. */
 private val SidePanelMinWidth = 400.dp

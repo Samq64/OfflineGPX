@@ -69,18 +69,17 @@ private val RowHeight = 48.dp
 
 /**
  * The three readings that answer "what was this ride", and no fourth - max speed isn't
- * here since the speed chart already marks and labels its own peak. The duration shown is
- * whichever one the average speed was measured over; see [movingIsBasis].
+ * here since the speed chart already marks and labels its own peak. Moving time, since that
+ * is what the average speed is measured over - the wall clock goes in [TrackDetails].
  */
 @Composable
 fun trackHeadline(stats: TrackStats, hasTime: Boolean): List<Stat> {
     val formatters = LocalFormatters.current
-    val moving = hasTime && stats.movingIsBasis
 
     // Labels resolved first, then the row built once - the sheet recomposes on every scrub
     // frame, and these numbers don't change with the scrub.
     val distanceLabel = stringResource(R.string.axis_distance)
-    val timeLabel = stringResource(if (moving) R.string.stat_moving else R.string.stat_duration)
+    val timeLabel = stringResource(R.string.stat_moving)
     val speedLabel = stringResource(R.string.stat_avg_speed)
     val pointsLabel = stringResource(R.string.stat_points)
 
@@ -91,9 +90,7 @@ fun trackHeadline(stats: TrackStats, hasTime: Boolean): List<Stat> {
                 add(
                     Stat(
                         label = timeLabel,
-                        value = Formatters.duration(
-                            if (moving) stats.movingDurationSeconds else stats.totalDurationSeconds
-                        ),
+                        value = Formatters.duration(stats.movingDurationSeconds),
                     )
                 )
                 add(Stat(speedLabel, formatters.speed(stats.averageSpeedMps)))
@@ -103,19 +100,6 @@ fun trackHeadline(stats: TrackStats, hasTime: Boolean): List<Stat> {
         }
     }
 }
-
-/**
- * Whether the headline should read moving time rather than the wall clock. Average speed
- * is distance over *moving* time; pairing it with the wall clock instead would make a ride
- * with a long lunch read as three numbers that don't reconcile. The other duration moves
- * into the fold - the same number as this one when there were no stops, hence the fold.
- */
-val TrackStats.movingIsBasis: Boolean
-    get() = movingDurationSeconds > 0.0 &&
-        totalDurationSeconds - movingDurationSeconds >= STOPPED_TIME_WORTH_SPLITTING
-
-/** Below a second the two durations format identically, so there is nothing to tell apart. */
-private const val STOPPED_TIME_WORTH_SPLITTING = 1.0
 
 /**
  * Everything worth keeping that didn't earn a place in the headline - numbers you go
@@ -141,8 +125,8 @@ fun TrackDetails(
         elapsedLabel, ascentLabel, descentLabel, pointsLabel,
     ) {
         buildList {
-            // The duration the headline didn't take; see [movingIsBasis] for which one that is.
-            if (hasTime && stats.movingIsBasis) {
+            // Shown even when it equals moving time, so the layout never depends on stops.
+            if (hasTime) {
                 add(elapsedLabel to Formatters.duration(stats.totalDurationSeconds))
             }
             if (hasElevation) {

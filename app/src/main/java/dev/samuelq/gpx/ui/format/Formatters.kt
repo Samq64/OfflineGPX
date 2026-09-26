@@ -57,8 +57,8 @@ class Formatters(val units: UnitSystem) {
     }
 
     /**
-     * Compact axis form: bare kilometres or miles, no unit. [decimals] is keyed to the gap
-     * between ticks, not the value's own magnitude - see [distanceAxisFor].
+     * Axis form: kilometres or miles at [decimals] keyed to the gap between ticks, not the
+     * value's own magnitude - see [distanceAxisFor].
      */
     fun distanceAxis(
         meters: Float,
@@ -66,7 +66,7 @@ class Formatters(val units: UnitSystem) {
         locale: Locale = Locale.getDefault(),
     ): String = String.format(
         locale,
-        "%.${decimals.coerceIn(0, MAX_AXIS_DECIMALS)}f",
+        "%.${decimals.coerceIn(0, MAX_AXIS_DECIMALS)}f ${if (metric) "km" else "mi"}",
         meters / if (metric) METERS_PER_KM else METERS_PER_MILE,
     )
 
@@ -95,7 +95,7 @@ class Formatters(val units: UnitSystem) {
         locale: Locale = Locale.getDefault(),
     ): String = String.format(
         locale,
-        "%.${decimals.coerceIn(0, MAX_AXIS_DECIMALS)}f",
+        "%.${decimals.coerceIn(0, MAX_AXIS_DECIMALS)}f $speedUnit",
         speedIn(metersPerSecond.toDouble()),
     )
 
@@ -125,7 +125,7 @@ class Formatters(val units: UnitSystem) {
     } else {
         String.format(
             locale,
-            "%,.${decimals.coerceIn(0, MAX_AXIS_DECIMALS)}f",
+            "%,.${decimals.coerceIn(0, MAX_AXIS_DECIMALS)}f $elevationUnit",
             elevationIn(meters.toDouble()),
         )
     }

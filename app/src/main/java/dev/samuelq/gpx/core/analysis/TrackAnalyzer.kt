@@ -148,26 +148,22 @@ object TrackAnalyzer {
         }
 
         var maxSpeed = 0f
-        var maxSpeedIndex = -1
+        var anySpeed = false
         for (i in 0 until size) {
             val v = speed[i]
             if (!v.isNaN() && v > maxSpeed) {
                 maxSpeed = v
-                maxSpeedIndex = i
+                anySpeed = true
             }
         }
 
         var minEle = Float.NaN
         var maxEle = Float.NaN
-        var maxEleIndex = -1
         for (i in 0 until size) {
             val e = elevation[i]
             if (e.isNaN()) continue
             if (minEle.isNaN() || e < minEle) minEle = e
-            if (maxEle.isNaN() || e > maxEle) {
-                maxEle = e
-                maxEleIndex = i
-            }
+            if (maxEle.isNaN() || e > maxEle) maxEle = e
         }
 
         val totalDistance = if (size > 0) distance[size - 1].toDouble() else 0.0
@@ -184,13 +180,11 @@ object TrackAnalyzer {
             totalDurationSeconds = totalDuration,
             movingDurationSeconds = movingSeconds,
             averageSpeedMps = if (averageBasis > 0.0) totalDistance / averageBasis else 0.0,
-            maxSpeedMps = if (maxSpeedIndex >= 0) maxSpeed.toDouble() else 0.0,
+            maxSpeedMps = if (anySpeed) maxSpeed.toDouble() else 0.0,
             ascentMeters = ascent,
             descentMeters = descent,
             minElevationMeters = minEle.takeUnless { it.isNaN() }?.toDouble(),
             maxElevationMeters = maxEle.takeUnless { it.isNaN() }?.toDouble(),
-            maxSpeedIndex = maxSpeedIndex,
-            maxElevationIndex = maxEleIndex,
         )
 
         return TrackProfile(

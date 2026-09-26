@@ -163,7 +163,6 @@
     <string name="axis_time">Time</string>
     <string name="axis_distance">Distance</string>
 
-    <string name="stat_duration">Duration</string>
     <string name="stat_moving">Moving</string>
     <string name="stat_elapsed">Elapsed</string>
     <string name="stat_avg_speed">Avg speed</string>

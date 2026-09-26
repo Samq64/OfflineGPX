@@ -1,8 +1,11 @@
 package dev.samuelq.gpx.ui.chart
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateCentroid
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -13,9 +16,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
@@ -27,8 +34,10 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
@@ -50,6 +59,7 @@ import dev.samuelq.gpx.ui.ArrowTooltip
 import dev.samuelq.gpx.ui.format.tabularFigures
 import dev.samuelq.gpx.ui.theme.ChartColors
 import dev.samuelq.gpx.ui.theme.LocalChartColors
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 // Mark specs. Thin marks, hairline chrome, generous air - the data is the only loud thing.
@@ -60,7 +70,6 @@ private val SurfaceRing = 2.dp
 private val LabelGap = 6.dp
 private val RightPad = 10.dp
 private val AxisBand = 18.dp
-private val HighlightBand = 16.dp
 private const val AreaFillAlpha = 0.10f
 private const val BreakWashAlpha = 0.10f
 
@@ -83,9 +92,6 @@ fun ProfileChart(
     onSelectedIndexChange: (Int?) -> Unit,
     contentDescription: String,
     modifier: Modifier = Modifier,
-    /** Index of the one extreme worth direct-labelling, or -1. */
-    highlightIndex: Int = -1,
-    highlightLabel: String? = null,
     /**
      * Names a gap in the data, given its width in x units, or null to leave it unnamed. An
      * unexplained hole otherwise reads as a rendering fault rather than a fact about the ride.
@@ -99,11 +105,13 @@ fun ProfileChart(
     /** The scrubbed position with its unit, shown in the same tooltip ahead of the value. */
     formatPosition: ((Float) -> String)? = null,
     /**
-     * Whether this chart draws the x axis, or leaves it to the one below - every chart in
-     * a stack shares one domain, so only the lowest needs to print it.
+     * A two-finger pinch or pan, as (anchor, zoom, pan) - anchor and pan as fractions of
+     * the plot's width, for [zoomView]. Null to leave the chart unzoomable.
      */
-    showXAxis: Boolean = true,
-    plotHeight: Dp = 164.dp,
+    onZoom: ((Float, Float, Float) -> Unit)? = null,
+    /** Shared by charts stacked on one x domain, so their plots line up column for column. */
+    axisGroup: ChartAxisGroup? = null,
+    plotHeight: Dp = 100.dp,
 ) {
     val chartColors = LocalChartColors.current
     val density = LocalDensity.current
@@ -117,23 +125,14 @@ fun ProfileChart(
     // gutter, the gutter decides the plot rect, and the pointer handler needs that same
     // rect to map a touch back to a sample.
     val render = remember(
-        series, xScale, yScale, formatX, formatY, labelStyle, highlightIndex, highlightLabel,
-        breakLabel, showXAxis,
+        series, xScale, yScale, formatX, formatY, labelStyle, breakLabel,
     ) {
         ChartRender(
             series = series,
             xScale = xScale,
             yScale = yScale,
             yTicks = yScale.ticks.map { textMeasurer.measure(formatY(it), labelStyle) },
-            // Nothing measured is nothing drawn, so a chart that has given its axis away
-            // needs no further say in the matter.
-            xTicks = if (!showXAxis) {
-                emptyList()
-            } else {
-                xScale.ticks.map { textMeasurer.measure(formatX(it), labelStyle) }
-            },
-            highlightIndex = highlightIndex,
-            highlightLayout = highlightLabel?.let { textMeasurer.measure(it, labelStyle) },
+            xTicks = xScale.ticks.map { textMeasurer.measure(formatX(it), labelStyle) },
             breaks = series.breaks().map { (from, to) ->
                 ChartBreak(
                     from = from,
@@ -144,14 +143,21 @@ fun ProfileChart(
         )
     }
 
-    val geometry = remember(render, density, showXAxis) {
-        val gutter = render.yTicks.maxOfOrNull { it.size.width }?.toFloat() ?: 0f
+    val ownGutter = render.yTicks.maxOfOrNull { it.size.width }?.toFloat() ?: 0f
+    if (axisGroup != null) {
+        SideEffect { if (ownGutter > axisGroup.gutterPx) axisGroup.gutterPx = ownGutter }
+    }
+    val gutter = maxOf(ownGutter, axisGroup?.gutterPx ?: 0f)
+    // Keyed on what it's measured from, not on [render]: a pinch makes a new render every
+    // frame, and a new geometry would restart the gesture reading it.
+    val geometry = remember(gutter, density) {
         with(density) {
             ChartGeometry(
                 gutterPx = gutter,
                 plotLeft = gutter + LabelGap.toPx(),
-                topPad = if (render.highlightLayout != null) HighlightBand.toPx() else 4.dp.toPx(),
-                bottomBand = if (showXAxis) AxisBand.toPx() else 0f,
+                // Room for half a tick label, should one land on the top edge.
+                topPad = 8.dp.toPx(),
+                bottomBand = AxisBand.toPx(),
                 rightPad = RightPad.toPx(),
                 labelGap = LabelGap.toPx(),
             )
@@ -163,7 +169,7 @@ fun ProfileChart(
     Box(
         modifier
             .fillMaxWidth()
-            .height(plotHeight + if (showXAxis) AxisBand else 0.dp)
+            .height(plotHeight + AxisBand)
             .onSizeChanged { boxSize = it }
             .semantics { this.contentDescription = contentDescription },
     ) {
@@ -174,6 +180,7 @@ fun ProfileChart(
             chartColors = chartColors,
             selectedIndex = selectedIndex,
             onSelectedIndexChange = onSelectedIndexChange,
+            onZoom = onZoom,
         )
         ChartTooltip(
             render = render,
@@ -209,18 +216,22 @@ private fun StaticLayer(
 
                 onDrawBehind {
                     drawGrid(render.yScale, plot, chartColors.grid, GridWidth.toPx())
-                    drawBreaks(render, plot, chartColors.label)
-
-                    drawPath(areaPath, render.series.color.copy(alpha = AreaFillAlpha))
-                    drawPath(
-                        path = linePath,
-                        color = render.series.color,
-                        style = Stroke(
-                            width = LineWidth.toPx(),
-                            cap = StrokeCap.Round,
-                            join = StrokeJoin.Round,
-                        ),
-                    )
+                    // Zoomed in, the data runs on past both edges. Widened by the line's
+                    // own width, so a peak at the top isn't shaved flat.
+                    val bleed = LineWidth.toPx()
+                    clipRect(plot.left, plot.top - bleed, plot.right, plot.bottom) {
+                        drawBreaks(render, plot, chartColors.label)
+                        drawPath(areaPath, render.series.color.copy(alpha = AreaFillAlpha))
+                        drawPath(
+                            path = linePath,
+                            color = render.series.color,
+                            style = Stroke(
+                                width = LineWidth.toPx(),
+                                cap = StrokeCap.Round,
+                                join = StrokeJoin.Round,
+                            ),
+                        )
+                    }
 
                     drawLine(
                         color = chartColors.axis,
@@ -230,16 +241,6 @@ private fun StaticLayer(
                     )
 
                     drawAxisLabels(render, plot, geometry)
-
-                    if (render.highlightIndex in 0 until render.series.size && render.highlightLayout != null) {
-                        drawHighlight(
-                            render = render,
-                            plot = plot,
-                            surface = chartColors.surface,
-                            markerRadius = MarkerRadius.toPx(),
-                            ring = SurfaceRing.toPx(),
-                        )
-                    }
                 }
             },
     )
@@ -257,28 +258,61 @@ private fun ScrubberLayer(
     chartColors: ChartColors,
     selectedIndex: Int?,
     onSelectedIndexChange: (Int?) -> Unit,
+    onZoom: ((Float, Float, Float) -> Unit)?,
 ) {
     val series = render.series
+    // Read through state, not keyed on: a pinch changes the scale every frame, and
+    // restarting the gesture each time would drop it after the first.
+    val currentRender by rememberUpdatedState(render)
+    val currentOnZoom by rememberUpdatedState(onZoom)
 
     Canvas(
         Modifier
             .fillMaxSize()
-            .pointerInput(render, geometry) {
-                // Horizontal-only, so dragging across the chart never steals the vertical
-                // scroll of the page it sits on.
-                detectHorizontalDragGestures(
-                    onDragStart = { offset ->
-                        onSelectedIndexChange(geometry.indexAt(offset.x, size.toSize(), render))
-                    },
-                    onHorizontalDrag = { change, _ ->
-                        change.consume()
-                        onSelectedIndexChange(geometry.indexAt(change.position.x, size.toSize(), render))
-                    },
-                )
-            }
-            .pointerInput(render, geometry) {
-                detectTapGestures { offset ->
-                    onSelectedIndexChange(geometry.indexAt(offset.x, size.toSize(), render))
+            .pointerInput(geometry) {
+                fun select(x: Float) =
+                    onSelectedIndexChange(geometry.indexAt(x, size.toSize(), currentRender))
+
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    var drift = Offset.Zero
+                    var scrubbing = false
+                    var zooming = false
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val pressed = event.changes.filter { it.pressed }
+                        if (pressed.isEmpty()) break
+                        val zoom = currentOnZoom
+                        if (pressed.size >= 2 && zoom != null) {
+                            zooming = true
+                            val plot = geometry.plotRect(size.toSize())
+                            val scale = event.calculateZoom()
+                            val pan = event.calculatePan().x
+                            if (scale != 1f || pan != 0f) {
+                                val anchor = (event.calculateCentroid().x - plot.left) / plot.width
+                                zoom(anchor, scale, pan / plot.width)
+                            }
+                            event.changes.forEach { it.consume() }
+                        } else if (!zooming) {
+                            // After a pinch the finger left behind neither scrubs nor taps.
+                            val change = pressed.firstOrNull { it.id == down.id } ?: break
+                            if (change.isConsumed) return@awaitEachGesture
+                            if (!scrubbing) {
+                                drift += change.positionChange()
+                                // Horizontal-only, so dragging across the chart never
+                                // steals the vertical scroll of the page it sits on.
+                                if (abs(drift.y) > viewConfiguration.touchSlop && abs(drift.y) > abs(drift.x)) {
+                                    return@awaitEachGesture
+                                }
+                                scrubbing = abs(drift.x) > viewConfiguration.touchSlop
+                            }
+                            if (scrubbing) {
+                                change.consume()
+                                select(change.position.x)
+                            }
+                        }
+                    }
+                    if (!scrubbing && !zooming) select(down.position.x)
                 }
             },
     ) {
@@ -287,6 +321,8 @@ private fun ScrubberLayer(
 
         val plot = geometry.plotRect(size)
         val x = plot.xFor(series.x[index], render.xScale)
+        // Zoomed away from it: nothing to point at in this view.
+        if (x < plot.left - 1f || x > plot.right + 1f) return@Canvas
 
         drawLine(
             color = chartColors.axis,
@@ -339,6 +375,7 @@ private fun ChartTooltip(
     ) {
         val x = plot.xFor(series.x[index], render.xScale) - plot.left
         val y = plot.yFor(value, render.yScale) - plot.top
+        if (x < -1f || x > plot.width + 1f) return@Box
 
         ArrowTooltip(
             anchor = { Offset(x, y) },
@@ -361,6 +398,12 @@ private fun ChartTooltip(
     }
 }
 
+/** The widest y-axis labels among a stack of charts, which all of them then make room for. */
+@Stable
+class ChartAxisGroup {
+    internal var gutterPx by mutableFloatStateOf(0f)
+}
+
 /** Everything derived from the data, measured once. */
 @Immutable
 private class ChartRender(
@@ -369,8 +412,6 @@ private class ChartRender(
     val yScale: Scale,
     val yTicks: List<TextLayoutResult>,
     val xTicks: List<TextLayoutResult>,
-    val highlightIndex: Int,
-    val highlightLayout: TextLayoutResult?,
     val breaks: List<ChartBreak>,
 )
 
@@ -441,10 +482,13 @@ private fun buildPaths(
 ) {
     val starts = series.segmentStartIndices
     val builder = PolylineBuilder(line, area, plot.bottom)
+    // Only what's in view, plus one either side so the line runs on off both edges.
+    val first = (nearestIndex(series.x, xScale.min) - 1).coerceAtLeast(0)
+    val last = (nearestIndex(series.x, xScale.max) + 2).coerceAtMost(series.size)
 
     for (segment in starts.indices) {
-        val from = starts[segment]
-        val to = if (segment + 1 < starts.size) starts[segment + 1] else series.size
+        val from = maxOf(starts[segment], first)
+        val to = minOf(if (segment + 1 < starts.size) starts[segment + 1] else series.size, last)
         for (i in from until to) {
             val value = series.y[i]
             if (value.isNaN()) {
@@ -512,39 +556,4 @@ private fun DrawScope.drawAxisLabels(render: ChartRender, plot: Rect, geometry: 
         val x = centered.coerceIn(0f, (plot.right - layout.size.width).coerceAtLeast(0f))
         drawText(layout, topLeft = Offset(x, plot.bottom + geometry.labelGap))
     }
-}
-
-/**
- * Direct-labels exactly one point, the extreme - a number beside every point would be
- * noise, and the scrubber reaches the rest. The label uses a text token, not the series
- * colour, since a light hue is illegible as type.
- */
-private fun DrawScope.drawHighlight(
-    render: ChartRender,
-    plot: Rect,
-    surface: Color,
-    markerRadius: Float,
-    ring: Float,
-) {
-    val series = render.series
-    val index = render.highlightIndex
-    val layout = render.highlightLayout ?: return
-    val value = series.y[index]
-    if (value.isNaN()) return
-
-    val x = plot.xFor(series.x[index], render.xScale)
-    val y = plot.yFor(value, render.yScale)
-
-    drawCircle(surface, markerRadius + ring, Offset(x, y))
-    drawCircle(series.color, markerRadius, Offset(x, y))
-
-    // Kept inside the plot rather than inside the canvas: clamped to zero, a peak in the
-    // first few samples put its label out over the y axis, on top of the tick numbers.
-    val labelX = (x - layout.size.width / 2f)
-        .coerceIn(plot.left, (plot.right - layout.size.width).coerceAtLeast(plot.left))
-    val above = y - markerRadius - ring - layout.size.height - 2f
-    // Flip below the marker rather than let the label run off the top of the plot.
-    val labelY = if (above >= 0f) above else y + markerRadius + ring + 2f
-
-    drawText(layout, topLeft = Offset(labelX, labelY))
 }

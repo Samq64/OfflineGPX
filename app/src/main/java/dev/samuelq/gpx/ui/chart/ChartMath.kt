@@ -25,12 +25,6 @@ class ChartSeries(
     /** Indices where a new polyline starts. The line is never drawn across these. */
     val segmentStartIndices: IntArray,
     val color: Color,
-    /**
-     * Whether the y axis must include zero. True for speed, where distance from the
-     * baseline *is* the magnitude and a truncated axis exaggerates every variation. False
-     * for elevation, whose silhouette sits on a baseline the axis labels explicitly.
-     */
-    val zeroBased: Boolean,
 ) {
     val size: Int get() = x.size
 }
@@ -48,47 +42,11 @@ class Scale(val min: Float, val max: Float, val ticks: FloatArray) {
 }
 
 /**
- * Rounds a domain outward to values a reader can do arithmetic on - 0 / 20 / 40, never
- * 0 / 17.3 / 34.6.
+ * Keeps the domain exactly as measured but puts the ticks on round values inside it, so
+ * the data's extremes are the plot's edges rather than a stretch of empty plot.
  *
- * Values are SI; [perUnit] is display units per SI unit. The rounding happens in display
+ * Values are SI; [perUnit] is display units per SI unit. Ticks are rounded in display
  * units, since a round number of m/s is not a round number of km/h.
- */
-fun niceScale(
-    rawMin: Float,
-    rawMax: Float,
-    zeroBased: Boolean,
-    targetTicks: Int = 4,
-    perUnit: Float = 1f,
-): Scale {
-    var lo = if (zeroBased) minOf(0f, rawMin) else rawMin
-    var hi = rawMax
-
-    if (!lo.isFinite() || !hi.isFinite()) return Scale(0f, 1f, floatArrayOf(0f, 1f))
-    lo *= perUnit
-    hi *= perUnit
-    if (hi <= lo) {
-        // A flat series still needs a readable axis around its single value.
-        val pad = if (abs(hi) > 0f) abs(hi) * 0.1f else 1f
-        lo -= pad
-        hi += pad
-        if (zeroBased) lo = minOf(0f, lo)
-    }
-
-    val step = niceStep(hi - lo, targetTicks)
-    val niceMin = floor(lo / step) * step
-    val niceMax = ceil(hi / step) * step
-
-    val count = ((niceMax - niceMin) / step).roundToInt() + 1
-    val ticks = FloatArray(count) { (niceMin + it * step) / perUnit }
-    return Scale(niceMin / perUnit, niceMax / perUnit, ticks)
-}
-
-/**
- * Keeps the domain exactly as measured but puts the ticks on round values inside it.
- *
- * Used for the x axis, where rounding the domain outward the way [niceScale] does would
- * leave the track ending in a stretch of empty plot. [perUnit] as in [niceScale].
  */
 fun axisScale(min: Float, max: Float, targetTicks: Int = 4, perUnit: Float = 1f): Scale =
     axisScale(min, max, perUnit) { niceStep(it, targetTicks) }
@@ -150,7 +108,7 @@ private fun timeStep(range: Float, targetTicks: Int): Float {
 }
 
 /**
- * The vertical domain a series needs, ignoring the samples that were never recorded.
+ * The series' own lowest to highest value, ignoring the samples that were never recorded.
  *
  * Public, and computed by the caller rather than inside the chart, because the labels the
  * axis needs depend on its step - the same reason the x scale has always been passed in.
@@ -164,7 +122,36 @@ fun ChartSeries.yScale(perUnit: Float = 1f): Scale {
         if (value > max) max = value
     }
     if (!min.isFinite() || !max.isFinite()) return Scale(0f, 1f, floatArrayOf(0f, 1f))
-    return niceScale(min, max, zeroBased, perUnit = perUnit)
+    if (max <= min) {
+        // A flat series still needs a readable axis around its single value.
+        val pad = if (abs(max) > 0f) abs(max) * 0.1f else 1f / perUnit
+        min -= pad
+        max += pad
+    }
+    return axisScale(min, max, perUnit = perUnit)
+}
+
+/**
+ * [view] after a pinch: scaled by [zoom] about [anchor], then shifted by [pan] - both as
+ * fractions of the plot's width, so the value under the fingers stays under them. Kept
+ * within [domain], and no narrower than [maxZoom] allows.
+ */
+fun zoomView(
+    view: ClosedFloatingPointRange<Float>,
+    domain: ClosedFloatingPointRange<Float>,
+    anchor: Float,
+    zoom: Float,
+    pan: Float,
+    maxZoom: Float = 50f,
+): ClosedFloatingPointRange<Float> {
+    val domainSpan = domain.endInclusive - domain.start
+    if (domainSpan <= 0f || zoom <= 0f) return view
+    val oldSpan = view.endInclusive - view.start
+    val span = (oldSpan / zoom).coerceIn(domainSpan / maxZoom, domainSpan)
+    val anchored = view.start + anchor * oldSpan
+    val start = (anchored - anchor * span - pan * span)
+        .coerceIn(domain.start, domain.endInclusive - span)
+    return start..(start + span)
 }
 
 /**

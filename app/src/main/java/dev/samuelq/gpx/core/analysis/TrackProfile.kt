@@ -23,10 +23,6 @@ data class TrackStats(
     val descentMeters: Double,
     val minElevationMeters: Double?,
     val maxElevationMeters: Double?,
-    /** Index into the profile arrays of the fastest sample, or -1. Used to direct-label the extreme. */
-    val maxSpeedIndex: Int,
-    /** Index into the profile arrays of the highest sample, or -1. */
-    val maxElevationIndex: Int,
 )
 
 /**

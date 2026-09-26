@@ -40,13 +40,12 @@ class FormattersTest {
         assertEquals("3,281 ft", imperial.elevation(1000.0, en))
     }
 
-    /** Axis ticks are bare numbers - the section heading carries the unit, once. */
     @Test
-    fun `axis forms carry no unit`() {
-        assertEquals("5.0", metric.distanceAxis(5000f, 1, en))
-        assertEquals("3.1", imperial.distanceAxis(5000f, 1, en))
-        assertEquals("1,000", metric.elevationAxis(1000f, 0, en))
-        assertEquals("3,281", imperial.elevationAxis(1000f, 0, en))
+    fun `axis forms carry their unit`() {
+        assertEquals("5.0 km", metric.distanceAxis(5000f, 1, en))
+        assertEquals("3.1 mi", imperial.distanceAxis(5000f, 1, en))
+        assertEquals("1,000 m", metric.elevationAxis(1000f, 0, en))
+        assertEquals("3,281 ft", imperial.elevationAxis(1000f, 0, en))
     }
 
     /**
@@ -56,10 +55,10 @@ class FormattersTest {
     @Test
     fun `elevation ticks resolve the gap between them`() {
         val flat = metric.elevationAxisFor(0.5f, en)
-        assertEquals(listOf("9.0", "9.5", "10.0"), listOf(9f, 9.5f, 10f).map(flat))
+        assertEquals(listOf("9.0 m", "9.5 m", "10.0 m"), listOf(9f, 9.5f, 10f).map(flat))
 
         val hilly = metric.elevationAxisFor(100f, en)
-        assertEquals(listOf("0", "100", "1,000"), listOf(0f, 100f, 1000f).map(hilly))
+        assertEquals(listOf("0 m", "100 m", "1,000 m"), listOf(0f, 100f, 1000f).map(hilly))
     }
 
     /**
@@ -69,14 +68,14 @@ class FormattersTest {
     @Test
     fun `distance ticks resolve the gap between them`() {
         val short = metric.distanceAxisFor(50f, en)
-        assertEquals(listOf("0.00", "0.05", "0.10", "0.15"), listOf(0f, 50f, 100f, 150f).map(short))
+        assertEquals(listOf("0.00 km", "0.05 km", "0.10 km", "0.15 km"), listOf(0f, 50f, 100f, 150f).map(short))
 
         val long = metric.distanceAxisFor(5000f, en)
-        assertEquals(listOf("0", "5", "10"), listOf(0f, 5000f, 10000f).map(long))
+        assertEquals(listOf("0 km", "5 km", "10 km"), listOf(0f, 5000f, 10000f).map(long))
 
         // Miles are the smaller unit, so the same ground needs one more decimal to split.
         val miles = imperial.distanceAxisFor(50f, en)
-        assertEquals(listOf("0.00", "0.03", "0.06"), listOf(0f, 50f, 100f).map(miles))
+        assertEquals(listOf("0.00 mi", "0.03 mi", "0.06 mi"), listOf(0f, 50f, 100f).map(miles))
     }
 
     @Test
@@ -96,10 +95,10 @@ class FormattersTest {
     @Test
     fun `speed ticks resolve the gap between them`() {
         val kmh = metric.speedAxisFor(5f / 3.6f, en)
-        assertEquals(listOf("0", "5", "10", "15"), listOf(0f, 5f, 10f, 15f).map { kmh(it / 3.6f) })
+        assertEquals(listOf("0 km/h", "5 km/h", "10 km/h", "15 km/h"), listOf(0f, 5f, 10f, 15f).map { kmh(it / 3.6f) })
 
         val slow = metric.speedAxisFor(0.5f / 3.6f, en)
-        assertEquals("1.5", slow(1.5f / 3.6f))
+        assertEquals("1.5 km/h", slow(1.5f / 3.6f))
     }
 
     /** One format per axis: `33:20` beside `1:06` reads as minutes, then hours. */
