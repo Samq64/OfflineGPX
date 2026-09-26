@@ -191,9 +191,9 @@ class RecordingService : Service() {
             return
         }
 
-        // A ride whose save failed is still in the log. Saved first, so this one starts
-        // from an empty file instead of being appended to it.
-        if (!container.trackRepository.recoverAbandonedRecording()) {
+        // A ride whose save failed is still in the log. Set aside first, for the next
+        // launch to ask about, so this one starts from an empty file.
+        if (!container.trackRepository.claimAbandonedRecording()) {
             abandon(R.string.record_save_failed)
             return
         }
@@ -580,7 +580,7 @@ class RecordingService : Service() {
         /**
          * Prefix of the names recovery moves an abandoned [WAL_NAME] to before reading it.
          * One per ride, so a claim a failed save left behind is never overwritten. See
-         * `GpxTrackRepository.recoverAbandonedRecording`.
+         * `GpxTrackRepository.claimAbandonedRecording`.
          */
         const val WAL_RECOVERY_PREFIX = "recovering-"
 

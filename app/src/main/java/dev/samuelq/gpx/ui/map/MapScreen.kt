@@ -97,6 +97,7 @@ import dev.samuelq.gpx.ui.ArrowTooltip
 import dev.samuelq.gpx.ui.format.Formatters
 import dev.samuelq.gpx.ui.record.RecordViewModel
 import dev.samuelq.gpx.ui.record.RecordingBar
+import dev.samuelq.gpx.ui.record.RecoveredRecordingDialog
 import dev.samuelq.gpx.ui.theme.routePalette
 import dev.samuelq.gpx.ui.track.DeleteTrackDialog
 import dev.samuelq.gpx.ui.track.FocusedTrack
@@ -177,24 +178,8 @@ fun MapScreen(
     // An index into a different track is meaningless, so it goes when the track does.
     var selectedIndex by remember(focusedTrack?.id) { mutableStateOf<Int?>(null) }
     // A waypoint's note belongs to whichever track is focused - switching tracks clears
-    // it, the same reason [selectedIndex] does. Opened by a tap on its pin or a scrub onto it.
+    // it, the same reason [selectedIndex] does.
     var tappedWaypoint by remember(focusedTrack?.id) { mutableStateOf<Waypoint?>(null) }
-    // Each waypoint's one index, worked out once rather than on every scrub frame.
-    val waypointIndices = remember(focusedTrack) {
-        focusedTrack?.let { loaded -> loaded.track.waypoints.map { it to loaded.profile.indexOf(it.point) } }
-            .orEmpty()
-    }
-
-    /** The waypoint a scrub at [index] is on, by distance along the track, if any. */
-    fun scrubbedWaypoint(index: Int): Waypoint? {
-        val distance = focusedTrack?.profile?.distanceMeters ?: return null
-        if (index !in distance.indices) return null
-        val reach = distance.last() * SCRUB_WAYPOINT_REACH
-        return waypointIndices
-            .filter { (_, i) -> i >= 0 && kotlin.math.abs(distance[i] - distance[index]) <= reach }
-            .minByOrNull { (_, i) -> kotlin.math.abs(i - index) }
-            ?.first
-    }
     // Written on every camera move and read only by the tooltip's layout, so panning
     // re-places the tooltip without recomposing this screen.
     val tappedWaypointAt = remember { mutableStateOf(Offset.Zero) }
@@ -206,6 +191,7 @@ fun MapScreen(
     val renameFailed = stringResource(R.string.library_rename_failed)
     val hidden = stringResource(R.string.track_hidden)
     val importFailed = stringResource(R.string.library_import_failed)
+    val saveFailed = stringResource(R.string.record_save_failed)
 
     // Replaces whatever is on screen rather than queueing behind it: these are answers to
     // a tap that just happened, and a stale one arriving four seconds later is a lie.
@@ -250,6 +236,7 @@ fun MapScreen(
                     MapMessage.RenameFailed -> renameFailed
                     MapMessage.Hidden -> hidden
                     MapMessage.ImportFailed -> importFailed
+                    MapMessage.RecoveryFailed -> saveFailed
                 }
             )
         }
@@ -461,11 +448,7 @@ fun MapScreen(
                     routeColor = palette[current.track.colorIndex % palette.size],
                     maxHeight = maxHeight,
                     selectedIndex = selectedIndex,
-                    onSelectedIndexChange = { index ->
-                        selectedIndex = index
-                        // A scrub onto a waypoint shows its note, and off it hides it.
-                        tappedWaypoint = index?.let(::scrubbedWaypoint)
-                    },
+                    onSelectedIndexChange = { selectedIndex = it },
                     useTimeAxis = preferTimeAxis && current.track.profile.hasTime,
                     onAxisChange = { preferTimeAxis = it },
                     onPeekHeightChange = onPeekHeightChange,
@@ -591,7 +574,16 @@ fun MapScreen(
                 onSelectNothing = {
                     if (tappedWaypoint != null) tappedWaypoint = null else viewModel.focus(null)
                 },
-                onSelectWaypoint = { tappedWaypoint = it },
+                onSelectWaypoint = { waypoint ->
+                    tappedWaypoint = waypoint
+                    // The charts go to the moment it was dropped. Only for the focused
+                    // track's own - the live recording's have no chart to move.
+                    focusedTrack
+                        ?.takeIf { waypoint in it.track.waypoints }
+                        ?.profile?.indexOf(waypoint.point)
+                        ?.takeIf { it >= 0 }
+                        ?.let { selectedIndex = it }
+                },
                 followedWaypoint = tappedWaypoint,
                 onFollowedWaypointMove = { tappedWaypointAt.value = it },
                 contentPadding = canvasPadding,
@@ -681,12 +673,15 @@ fun MapScreen(
                 )
             }
 
+            // The recording bar takes the inset inside its own surface, so the map can't show
+            // through under it - and it's left out of controlsHeight, which is above the inset.
+            val barInset = if (recording is RecordingState.Active) sheetInset else 0.dp
             Column(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .padding(start = panelCover, bottom = sheetInset)
-                    .onSizeChanged { controlsHeight = with(density) { it.height.toDp() } },
+                    .padding(start = panelCover, bottom = sheetInset - barInset)
+                    .onSizeChanged { controlsHeight = with(density) { it.height.toDp() } - barInset },
             ) {
                 // Still no reset button. A real map has a whole world to be lost in rather
                 // than a unit square to pinch back out of - worth adding as a "frame
@@ -712,10 +707,7 @@ fun MapScreen(
                         onStop = recorder::stop,
                         onDiscard = { confirmDiscard = true },
                         onAddWaypoint = recorder::addWaypoint,
-                        // The enclosing Column already pads its bottom edge by sheetInset,
-                        // which covers the nav bar when the sheet isn't focused - padding
-                        // again here left an empty strip with the map showing through it.
-                        applyNavigationBarPadding = false,
+                        bottomInset = barInset,
                     )
                 }
             }
@@ -774,6 +766,15 @@ fun MapScreen(
         )
     }
 
+    val abandoned by viewModel.abandoned.collectAsStateWithLifecycle()
+    abandoned?.let { recording ->
+        RecoveredRecordingDialog(
+            recording = recording,
+            onSave = viewModel::saveAbandoned,
+            onDiscard = viewModel::discardAbandoned,
+        )
+    }
+
     deletingId?.let { id ->
         DeleteTrackDialog(
             count = 1,
@@ -813,9 +814,6 @@ fun MapScreen(
  * saved - so taps on it resolve to nothing rather than to some other track.
  */
 private const val LIVE_TRACK_ID = Long.MIN_VALUE
-
-/** How near a scrub must come to a waypoint to show it, as a share of the track's length. */
-private const val SCRUB_WAYPOINT_REACH = 0.02f
 
 /** Breathing room between the routes and whatever is at the edge of the canvas. */
 private val MapEdgePadding = 24.dp

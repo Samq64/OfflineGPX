@@ -10,6 +10,7 @@ import dev.samuelq.gpx.data.map.MapStore
 import dev.samuelq.gpx.data.map.OfflineMap
 import dev.samuelq.gpx.data.record.LiveTrace
 import dev.samuelq.gpx.data.record.RecordingController
+import dev.samuelq.gpx.data.track.AbandonedRecording
 import dev.samuelq.gpx.data.track.LoadedTrack
 import dev.samuelq.gpx.data.track.TrackRepository
 import dev.samuelq.gpx.di.appContainer
@@ -32,7 +33,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /** Something the map should say, once. The words are the screen's business. */
-enum class MapMessage { RenameFailed, Hidden, ImportFailed }
+enum class MapMessage { RenameFailed, Hidden, ImportFailed, RecoveryFailed }
 
 /** Visible tracks, with their geometry once it has been read off disk. */
 data class MapUiState(
@@ -88,6 +89,11 @@ class MapViewModel(
     private val _messages = Channel<MapMessage>(Channel.BUFFERED)
     val messages: Flow<MapMessage> = _messages.receiveAsFlow()
 
+    /** The oldest recording a crash left unsaved, until it is saved or discarded. */
+    private val _abandoned = MutableStateFlow<AbandonedRecording?>(null)
+    val abandoned: StateFlow<AbandonedRecording?> = _abandoned.asStateFlow()
+    private val skipped = mutableSetOf<java.io.File>()
+
     private var requested: TrackRef? = null
     private var focusJob: Job? = null
 
@@ -104,6 +110,7 @@ class MapViewModel(
     }
 
     init {
+        viewModelScope.launch { nextAbandoned() }
         // `update`, not `value = value.copy(...)`, at all four writers of this state: a
         // read-modify-write that isn't atomic drops one of two concurrent edits. Renaming
         // a track while its geometry loaded was enough to lose the new name.
@@ -185,6 +192,37 @@ class MapViewModel(
                 onFailure = { _messages.trySend(MapMessage.ImportFailed) },
             )
         }
+    }
+
+    /** Saves the abandoned recording on offer and opens it, as a clean stop would. */
+    fun saveAbandoned(name: String) {
+        val recording = _abandoned.value ?: return
+        _abandoned.value = null
+        viewModelScope.launch {
+            repository.saveAbandoned(recording, name).fold(
+                onSuccess = { focus(TrackRef.Saved(it)) },
+                // Still on disk: asked about again next launch.
+                onFailure = {
+                    skipped += recording.file
+                    _messages.trySend(MapMessage.RecoveryFailed)
+                },
+            )
+            nextAbandoned()
+        }
+    }
+
+    fun discardAbandoned() {
+        val recording = _abandoned.value ?: return
+        _abandoned.value = null
+        viewModelScope.launch {
+            repository.discardAbandoned(recording)
+            nextAbandoned()
+        }
+    }
+
+    private suspend fun nextAbandoned() {
+        // A failed save stays on disk, and skipping it keeps the dialog from reopening on it.
+        _abandoned.value = repository.abandonedRecordings().firstOrNull { it.file !in skipped }
     }
 
     /**

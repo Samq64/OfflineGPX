@@ -248,6 +248,7 @@ fun OfflineMapCanvas(
     // Resolved here, where there is a density to resolve it against: a fingertip is a
     // physical size, and 44 raw pixels is a third of one on a modern screen.
     val tapReach = remember(density) { with(density) { TAP_REACH_DP.dp.toPx() } }
+    val waypointReach = remember(density) { with(density) { WAYPOINT_REACH_DP.dp.toPx() } }
     val pinHeadLift = remember(density) { with(density) { Offset(0f, PIN_TIP_LENGTH_DP.dp.toPx()) } }
     val followMargin = remember(density) { with(density) { FOLLOW_MARGIN_DP.dp.roundToPx() } }
 
@@ -289,7 +290,8 @@ fun OfflineMapCanvas(
             TapLayer(map) { x, y ->
                 // Checked first: a waypoint sits on top of its own track's line, and
                 // reading its note is a more specific answer than scrubbing to that point.
-                val waypointHit = pickWaypoint(x, y, map, currentWaypoints, tapReach)
+                // Measured from the pin's head, the part there is to aim at, not its tip.
+                val waypointHit = pickWaypoint(x, y + pinHeadLift.y, map, currentWaypoints, waypointReach)
                 if (waypointHit != null) {
                     selectWaypoint(waypointHit)
                 } else {
@@ -1358,8 +1360,8 @@ private const val ROUTE_WIDTH_DP = 3f
 private const val MARKER_RING_WIDTH_DP = 1.5f
 private const val MARKER_RADIUS_DP = 7f
 private const val PUCK_RADIUS_DP = 8f
-private const val PIN_RADIUS_DP = 6f
-private const val PIN_TIP_LENGTH_DP = 11f
+private const val PIN_RADIUS_DP = 7.5f
+private const val PIN_TIP_LENGTH_DP = 13.5f
 private const val PIN_HOLE_RATIO = 0.4f
 
 /** The pin's head, ring included - for keeping a tooltip clear of it. */
@@ -1382,6 +1384,8 @@ private const val COVERAGE_OPACITY = 0.55f
 
 /** About a fingertip. In dp: a finger is a physical size, whatever the screen's density. */
 private const val TAP_REACH_DP = 40f
+/** Tighter than [TAP_REACH_DP]: a pin is a target of its own, not a thin line to find. */
+private const val WAYPOINT_REACH_DP = 20f
 /** How far inside the uncovered box a scrubbed point is kept. */
 private const val FOLLOW_MARGIN_DP = 36f
 

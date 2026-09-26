@@ -204,10 +204,10 @@ class GpxTrackRepository(
     // Locked before switching threads, so the launch-time call takes the lock during
     // Application.onCreate - ahead of any recording, which would otherwise have its live
     // log claimed out from under it.
-    override suspend fun recoverAbandonedRecording(): Boolean = recovery.withLock {
+    override suspend fun claimAbandonedRecording(): Boolean = recovery.withLock {
         withContext(io) {
-            // Claimed by renaming before a byte is read, under a name of its own so a claim
-            // a failed save left behind is retried rather than overwritten.
+            // Claimed by renaming before a byte is read, under a name of its own so an
+            // earlier claim still waiting on the user is never overwritten.
             val log = File(recordingsDir, RecordingService.WAL_NAME)
             if (log.length() > 0L) {
                 log.renameTo(
@@ -216,42 +216,55 @@ class GpxTrackRepository(
             } else {
                 log.delete()
             }
-
-            recordingsDir
-                .listFiles { file -> file.name.startsWith(RecordingService.WAL_RECOVERY_PREFIX) }
-                .orEmpty()
-                .sortedBy(File::getName)
-                .forEach { claimed ->
-                    try {
-                        recoverClaimed(claimed)
-                    } catch (e: IOException) {
-                        Log.w(TAG, "Could not recover ${claimed.name}", e)
-                    }
-                }
             !log.exists()
         }
     }
 
-    /** Saves one claimed log as a track, deleting it once it is one or never could be. */
-    private suspend fun recoverClaimed(claimed: File) {
-        // Timestamps come from the fixes themselves, so a recovered ride is dated when it
-        // happened rather than when the app next opened.
-        val track = RecordingWal.recover(claimed, name = null)
-        if (track == null) {
-            claimed.delete()
-            return
+    override suspend fun abandonedRecordings(): List<AbandonedRecording> = recovery.withLock {
+        withContext(io) {
+            recordingsDir
+                .listFiles { file -> file.name.startsWith(RecordingService.WAL_RECOVERY_PREFIX) }
+                .orEmpty()
+                .sortedBy(File::getName)
+                .mapNotNull { claimed ->
+                    try {
+                        readClaimed(claimed)
+                    } catch (e: IOException) {
+                        Log.w(TAG, "Could not read ${claimed.name}", e)
+                        null
+                    }
+                }
         }
+    }
 
+    /** One claimed log, or null - deleting it - when there is nothing worth saving. */
+    private fun readClaimed(claimed: File): AbandonedRecording? {
+        val track = RecordingWal.recover(claimed, name = null)
         // The same bar a clean stop applies: a crash must not resurrect what pressing Stop
         // would have thrown away.
-        val profile = TrackAnalyzer.analyze(track)
-        if (profile.stats.distanceMeters < RecordingService.MIN_SAVEABLE_DISTANCE_METERS) {
+        val profile = track?.let(TrackAnalyzer::analyze)
+        if (track == null || profile == null ||
+            profile.stats.distanceMeters < RecordingService.MIN_SAVEABLE_DISTANCE_METERS
+        ) {
             claimed.delete()
-            return
+            return null
+        }
+        return AbandonedRecording(claimed, track, profile, defaultName(profile.stats))
+    }
+
+    override suspend fun saveAbandoned(recording: AbandonedRecording, name: String): Result<Long> =
+        recovery.withLock {
+            // Timestamps come from the fixes themselves, so a recovered ride is dated when
+            // it happened rather than when the app next opened.
+            val startedAt = recording.profile.stats.startedAt ?: Instant.now()
+            val named = recording.track.copy(name = name.trim().ifEmpty { null })
+            saveRecording(named, startedAt, recording.profile).onSuccess {
+                withContext(io) { recording.file.delete() }
+            }
         }
 
-        val startedAt = track.segments.firstOrNull()?.points?.firstOrNull()?.time ?: Instant.now()
-        if (saveRecording(track, startedAt, profile).isSuccess) claimed.delete()
+    override suspend fun discardAbandoned(recording: AbandonedRecording) {
+        recovery.withLock { withContext(io) { recording.file.delete() } }
     }
 
     override suspend fun exportAll(names: Map<Long, String>, treeUri: String): Result<Int> =

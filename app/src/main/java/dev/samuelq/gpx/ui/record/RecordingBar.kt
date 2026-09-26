@@ -12,19 +12,18 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -41,8 +40,10 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.samuelq.gpx.R
 import dev.samuelq.gpx.data.record.RecordingState
@@ -65,8 +66,11 @@ fun RecordingBar(
     /** [description] may be blank - a waypoint with nothing typed is still one. */
     onAddWaypoint: (description: String) -> Unit,
     modifier: Modifier = Modifier,
-    /** False when something below the bar is already clearing the system bars. */
-    applyNavigationBarPadding: Boolean = true,
+    /**
+     * Whatever sits under the bar - the nav bar, a peeked sheet. Padded inside the surface,
+     * so the bar's own background reaches the bottom edge and the map can't show through.
+     */
+    bottomInset: Dp = 0.dp,
 ) {
     val formatters = LocalFormatters.current
     var addingWaypoint by remember { mutableStateOf(false) }
@@ -79,7 +83,7 @@ fun RecordingBar(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .then(if (applyNavigationBarPadding) Modifier.navigationBarsPadding() else Modifier)
+                .padding(bottom = bottomInset)
                 .padding(horizontal = 20.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -152,12 +156,20 @@ fun RecordingBar(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (state.paused) {
-                    Button(onClick = onResume) { Text(stringResource(R.string.record_resume)) }
-                } else {
-                    OutlinedButton(onClick = onPause) { Text(stringResource(R.string.record_pause)) }
-                }
                 Button(onClick = onStop) { Text(stringResource(R.string.record_stop)) }
+
+                if (state.paused) {
+                    IconButton(onClick = onResume) {
+                        Icon(Icons.Default.PlayArrow, contentDescription = stringResource(R.string.record_resume))
+                    }
+                } else {
+                    IconButton(onClick = onPause) {
+                        Icon(
+                            painterResource(R.drawable.ic_pause),
+                            contentDescription = stringResource(R.string.record_pause),
+                        )
+                    }
+                }
 
                 // Disabled rather than hidden before the first fix: there is nowhere yet
                 // to put a waypoint, but the control staying in place means a hand that

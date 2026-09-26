@@ -118,6 +118,8 @@
     <string name="record_discard_body">It won\'t be saved and can\'t be recovered.</string>
     <string name="record_discard_confirm">Discard</string>
     <string name="record_name_title">Name this recording</string>
+    <string name="record_recovered_title">Unsaved recording</string>
+    <string name="record_recovered_body">The app closed before this recording from %1$s (%2$s) was saved.</string>
 
     <!-- Every way starting a recording can fail, said where the user tapped. -->
     <string name="record_location_off">Location is switched off. Turn it on to record.</string>

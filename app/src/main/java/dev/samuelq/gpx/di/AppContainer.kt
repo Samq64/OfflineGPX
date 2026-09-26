@@ -52,13 +52,13 @@ class AppContainer(context: Context) {
     val mapStore by lazy { MapStore(appContext, settingsRepository) }
 
     /**
-     * Rescues a ride whose process died before it was stopped. Runs once per launch, off
-     * the main thread - but undispatched, so it holds the recovery lock before any
-     * recording can start.
+     * Sets aside a ride whose process died before it was stopped, for the map to ask about.
+     * Runs once per launch, off the main thread - but undispatched, so it holds the
+     * recovery lock before any recording can start or the map can ask.
      */
-    fun recoverAbandonedRecording() {
+    fun claimAbandonedRecording() {
         applicationScope.launch(start = CoroutineStart.UNDISPATCHED) {
-            trackRepository.recoverAbandonedRecording()
+            trackRepository.claimAbandonedRecording()
         }
     }
 

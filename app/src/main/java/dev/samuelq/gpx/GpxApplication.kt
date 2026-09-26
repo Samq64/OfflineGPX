@@ -12,7 +12,7 @@ class GpxApplication : Application() {
         super.onCreate()
 
         container = AppContainer(this)
-        container.recoverAbandonedRecording()
+        container.claimAbandonedRecording()
         container.loadOfflineMaps()
     }
 }
