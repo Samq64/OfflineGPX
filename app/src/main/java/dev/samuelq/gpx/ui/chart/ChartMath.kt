@@ -108,49 +108,40 @@ private fun timeStep(range: Float, targetTicks: Int): Float {
 }
 
 /**
- * The series' own lowest to highest value, ignoring the samples that were never recorded.
+ * The series' own lowest to highest value, ignoring the samples that were never recorded,
+ * or 0 to its highest with [fromZero].
  *
  * Public, and computed by the caller rather than inside the chart, because the labels the
  * axis needs depend on its step - the same reason the x scale has always been passed in.
  */
-fun ChartSeries.yScale(perUnit: Float = 1f): Scale {
-    var min = Float.POSITIVE_INFINITY
+fun ChartSeries.yScale(perUnit: Float = 1f, fromZero: Boolean = false): Scale {
+    var min = if (fromZero) 0f else Float.POSITIVE_INFINITY
     var max = Float.NEGATIVE_INFINITY
     for (value in y) {
         if (value.isNaN()) continue
         if (value < min) min = value
         if (value > max) max = value
     }
-    if (!min.isFinite() || !max.isFinite()) return fixedTickScale(0f, 1f / perUnit, perUnit)
+    if (!min.isFinite() || !max.isFinite()) return evenTickScale(0f, 1f / perUnit)
     if (max <= min) {
         // A flat series still needs a readable axis around its single value.
         val pad = if (abs(max) > 0f) abs(max) * 0.1f else 1f / perUnit
         min -= pad
         max += pad
     }
-    return fixedTickScale(min, max, perUnit)
+    return evenTickScale(min, max)
 }
 
-private const val Y_TICKS = 4
+private const val Y_TICKS = 5
 
 /**
- * Exactly [Y_TICKS] round ticks, the domain widened to run from the first to the last:
- * the smallest 1-2-5 step whose ticks still cover the data.
+ * Exactly [Y_TICKS] ticks, evenly spaced from the data's minimum to its maximum, so the top
+ * of the plot is the peak itself. Not round numbers: rounding would move the top off it.
  */
-private fun fixedTickScale(min: Float, max: Float, perUnit: Float): Scale {
-    val lo = min * perUnit
-    val hi = max * perUnit
-    var step = niceStep(hi - lo, Y_TICKS - 1)
-    // A misaligned range can need one step up the progression, occasionally two.
-    while (true) {
-        val first = floor(lo / step)
-        // The epsilon keeps float error from rejecting a step whose last tick is the maximum.
-        if ((first + Y_TICKS - 1) * step >= hi - step * 1e-3f) {
-            val ticks = FloatArray(Y_TICKS) { (first + it) * step / perUnit }
-            return Scale(ticks.first(), ticks.last(), ticks)
-        }
-        step = niceStep(step * 1.01f, 1)
-    }
+private fun evenTickScale(min: Float, max: Float): Scale {
+    val step = (max - min) / (Y_TICKS - 1)
+    val ticks = FloatArray(Y_TICKS) { if (it == Y_TICKS - 1) max else min + it * step }
+    return Scale(min, max, ticks)
 }
 
 /**

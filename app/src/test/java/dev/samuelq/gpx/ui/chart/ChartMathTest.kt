@@ -21,25 +21,34 @@ class ChartMathTest {
     }
 
     @Test
-    fun `a y scale has four round ticks and spans them`() {
+    fun `a y scale spans exactly the data in five even ticks`() {
         val series = ChartSeries(
             x = floatArrayOf(0f, 1f, 2f),
-            y = floatArrayOf(12f, Float.NaN, 30f),
+            y = floatArrayOf(12f, Float.NaN, 31f),
             segmentStartIndices = intArrayOf(0),
             color = Color.Red,
         )
         val scale = series.yScale()
-        assertTicks(listOf(10f, 20f, 30f, 40f), scale.ticks.toList())
-        assertEquals(10f, scale.min)
-        assertEquals(40f, scale.max)
+        assertEquals(12f, scale.min)
+        // The top is the peak itself, not the next round number above it.
+        assertEquals(31f, scale.max)
+        assertTicks(listOf(12f, 16.75f, 21.5f, 26.25f, 31f), scale.ticks.toList())
     }
 
     @Test
-    fun `a y scale always has four ticks`() {
+    fun `a speed scale starts at zero`() {
+        val series = ChartSeries(floatArrayOf(0f, 1f), floatArrayOf(8f, 20f), intArrayOf(0), Color.Red)
+        val scale = series.yScale(fromZero = true)
+        assertEquals(0f, scale.min)
+        assertEquals(20f, scale.max)
+    }
+
+    @Test
+    fun `a y scale always has five ticks`() {
         for ((lo, hi) in listOf(0f to 1f, 0f to 10f, 3f to 97f, 101.5f to 102.3f, -40f to 2500f, 19f to 21f)) {
             val series = ChartSeries(floatArrayOf(0f, 1f), floatArrayOf(lo, hi), intArrayOf(0), Color.Red)
             val scale = series.yScale(3.6f)
-            assertEquals(4, scale.ticks.size, "$lo..$hi: ${scale.ticks.toList()}")
+            assertEquals(5, scale.ticks.size, "$lo..$hi: ${scale.ticks.toList()}")
             assert(scale.min <= lo && scale.max >= hi) { "$lo..$hi: ${scale.ticks.toList()}" }
         }
     }

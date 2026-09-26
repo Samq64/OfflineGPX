@@ -250,7 +250,7 @@ fun TrackSheet(
                         )
                     }
                     val yScale = remember(series, formatters) {
-                        series.yScale(formatters.speedPerMps)
+                        series.yScale(formatters.speedPerMps, fromZero = true)
                     }
                     ProfileChart(
                         series = series,
