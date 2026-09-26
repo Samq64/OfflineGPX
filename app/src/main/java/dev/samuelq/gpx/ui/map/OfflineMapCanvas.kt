@@ -248,7 +248,7 @@ fun OfflineMapCanvas(
     // Resolved here, where there is a density to resolve it against: a fingertip is a
     // physical size, and 44 raw pixels is a third of one on a modern screen.
     val tapReach = remember(density) { with(density) { TAP_REACH_DP.dp.toPx() } }
-    val waypointReach = remember(density) { with(density) { WAYPOINT_REACH_DP.dp.toPx() } }
+    val pinHeadRadius = remember(density) { with(density) { WaypointPinHeadRadius.toPx() } }
     val pinHeadLift = remember(density) { with(density) { Offset(0f, PIN_TIP_LENGTH_DP.dp.toPx()) } }
     val followMargin = remember(density) { with(density) { FOLLOW_MARGIN_DP.dp.roundToPx() } }
 
@@ -290,8 +290,7 @@ fun OfflineMapCanvas(
             TapLayer(map) { x, y ->
                 // Checked first: a waypoint sits on top of its own track's line, and
                 // reading its note is a more specific answer than scrubbing to that point.
-                // Measured from the pin's head, the part there is to aim at, not its tip.
-                val waypointHit = pickWaypoint(x, y + pinHeadLift.y, map, currentWaypoints, waypointReach)
+                val waypointHit = pickWaypoint(x, y, map, currentWaypoints, pinHeadRadius, pinHeadLift.y)
                 if (waypointHit != null) {
                     selectWaypoint(waypointHit)
                 } else {
@@ -1065,21 +1064,27 @@ private fun Map.screenPosition(point: TrackPoint, position: MapPosition = mapPos
 }
 
 /**
- * The nearest waypoint within reach of a tap, or null - checked ahead of [pick] so a
- * waypoint sitting on a track's line is read as itself rather than as a scrub on that line.
+ * The waypoint whose drawn pin a tap landed on, nearest head first, or null - checked ahead
+ * of [pick] so a waypoint sitting on a track's line is read as itself rather than as a scrub.
  */
 private fun pickWaypoint(
     screenX: Float,
     screenY: Float,
     map: Map,
     waypoints: List<Waypoint>,
-    reachPx: Float,
+    headRadiusPx: Float,
+    tipLengthPx: Float,
 ): Waypoint? {
     val tap = Offset(screenX, screenY)
     var best: Waypoint? = null
-    var bestDistance = reachPx * reachPx
+    var bestDistance = Float.MAX_VALUE
     for (waypoint in waypoints) {
-        val distance = (map.screenPosition(waypoint.point) - tap).getDistanceSquared()
+        val tip = map.screenPosition(waypoint.point)
+        // The icon's bounds: head width across, from the tip up to the top of the head.
+        val onIcon = kotlin.math.abs(tap.x - tip.x) <= headRadiusPx &&
+            tap.y <= tip.y && tap.y >= tip.y - tipLengthPx - headRadiusPx
+        if (!onIcon) continue
+        val distance = (tip - Offset(0f, tipLengthPx) - tap).getDistanceSquared()
         if (distance < bestDistance) {
             bestDistance = distance
             best = waypoint
@@ -1360,8 +1365,9 @@ private const val ROUTE_WIDTH_DP = 3f
 private const val MARKER_RING_WIDTH_DP = 1.5f
 private const val MARKER_RADIUS_DP = 7f
 private const val PUCK_RADIUS_DP = 8f
-private const val PIN_RADIUS_DP = 7.5f
-private const val PIN_TIP_LENGTH_DP = 13.5f
+// 40dp tall with the ring's top edge: big enough to tap, since taps only hit the icon.
+private const val PIN_RADIUS_DP = 14f
+private const val PIN_TIP_LENGTH_DP = 25.25f
 private const val PIN_HOLE_RATIO = 0.4f
 
 /** The pin's head, ring included - for keeping a tooltip clear of it. */
@@ -1384,8 +1390,6 @@ private const val COVERAGE_OPACITY = 0.55f
 
 /** About a fingertip. In dp: a finger is a physical size, whatever the screen's density. */
 private const val TAP_REACH_DP = 40f
-/** Tighter than [TAP_REACH_DP]: a pin is a target of its own, not a thin line to find. */
-private const val WAYPOINT_REACH_DP = 20f
 /** How far inside the uncovered box a scrubbed point is kept. */
 private const val FOLLOW_MARGIN_DP = 36f
 
