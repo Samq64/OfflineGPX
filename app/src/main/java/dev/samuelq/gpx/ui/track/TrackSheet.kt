@@ -100,7 +100,7 @@ fun TrackSheet(
     useTimeAxis: Boolean,
     onAxisChange: (Boolean) -> Unit,
     actions: TrackActions?,
-    /** The height of the part shown collapsed - name, date, numbers - so the peek fits it. */
+    /** The height of the part shown collapsed - name, numbers, date - so the peek fits it. */
     onPeekHeightChange: (Dp) -> Unit,
     /** Shown as a close button, for the landscape panel. */
     onClose: (() -> Unit)? = null,
@@ -172,11 +172,10 @@ fun TrackSheet(
     ) {
 
         // What the collapsed sheet shows, measured rather than assumed: a larger font
-        // would otherwise push the numbers under the gesture bar.
+        // would otherwise push the date under the gesture bar.
         Column(Modifier.onSizeChanged { onPeekHeightChange(with(density) { it.height.toDp() }) }) {
             SheetTitle(
                 name = loaded.track.name?.takeIf(String::isNotBlank) ?: loaded.displayName,
-                date = stats.startedAt?.let(Formatters::dateTime),
                 routeColor = routeColor,
                 actions = actions,
                 onClose = onClose,
@@ -186,8 +185,17 @@ fun TrackSheet(
             // Always the whole track - scrubbed values live on the charts themselves instead.
             StatRow(
                 stats = trackHeadline(stats, profile.hasTime),
-                modifier = Modifier.padding(start = SheetPadding, end = 8.dp, bottom = 8.dp),
+                modifier = Modifier.padding(start = SheetPadding, end = 8.dp),
             )
+
+            stats.startedAt?.let {
+                Text(
+                    text = Formatters.dateTime(it),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = SheetPadding, vertical = 8.dp),
+                )
+            }
         }
 
         Column(
@@ -329,7 +337,6 @@ fun TrackSheet(
 @Composable
 private fun SheetTitle(
     name: String,
-    date: String?,
     routeColor: Color,
     actions: TrackActions?,
     onClose: (() -> Unit)?,
@@ -341,22 +348,14 @@ private fun SheetTitle(
     ) {
         Box(Modifier.size(10.dp).clip(CircleShape).background(routeColor))
         Spacer(Modifier.width(10.dp))
-        Column(Modifier.weight(1f)) {
-            Text(
-                text = name,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            date?.let {
-                Text(
-                    text = it,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
+        Text(
+            text = name,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
         actions?.let { TrackMenu(it) }
         onClose?.let {
             IconButton(onClick = it) {
