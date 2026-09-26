@@ -162,12 +162,13 @@ class GpxTrackRepository(
 
     override suspend fun saveRecording(
         track: Track,
-        startedAt: Instant,
         analyzed: TrackProfile?,
     ): Result<Long> =
         withContext(io) {
             runCatching {
                 val profile = analyzed ?: TrackAnalyzer.analyze(track)
+                // Every recorded point is timed; the fallback is for a track that isn't.
+                val startedAt = profile.stats.startedAt ?: Instant.now()
                 val displayName = uniqueRecordingName(startedAt)
                 val file = File(recordingsDir, displayName)
 
@@ -187,8 +188,7 @@ class GpxTrackRepository(
                     location = file.absolutePath,
                     displayName = displayName,
                     trackName = stats.name,
-                    startedAtEpochMillis = stats.startedAt?.toEpochMilli()
-                        ?: startedAt.toEpochMilli(),
+                    startedAtEpochMillis = startedAt.toEpochMilli(),
                     lastOpenedAtEpochMillis = System.currentTimeMillis(),
                     distanceMeters = stats.distanceMeters,
                     movingSeconds = stats.movingDurationSeconds,
@@ -254,11 +254,8 @@ class GpxTrackRepository(
 
     override suspend fun saveAbandoned(recording: AbandonedRecording, name: String): Result<Long> =
         recovery.withLock {
-            // Timestamps come from the fixes themselves, so a recovered ride is dated when
-            // it happened rather than when the app next opened.
-            val startedAt = recording.profile.stats.startedAt ?: Instant.now()
             val named = recording.track.copy(name = name.trim().ifEmpty { null })
-            saveRecording(named, startedAt, recording.profile).onSuccess {
+            saveRecording(named, recording.profile).onSuccess {
                 withContext(io) { recording.file.delete() }
             }
         }

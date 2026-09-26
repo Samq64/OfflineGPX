@@ -10,7 +10,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
-import java.time.Instant
 
 /** What the recorder is doing, as the UI needs to see it. */
 sealed interface RecordingState {
@@ -19,11 +18,10 @@ sealed interface RecordingState {
 
     data class Active(
         val paused: Boolean,
-        val startedAt: Instant,
         val pointCount: Int,
         val distanceMeters: Double,
         /**
-         * Wall-clock time since the recording started, pause included - ticks on its own
+         * Wall-clock time since the first point, pause included - ticks on its own
          * every second rather than only when a fix lands, so it doesn't read as stuck when
          * the GPS goes quiet or nothing new clears the distance filter.
          */

@@ -81,7 +81,6 @@ class RecordingService : Service() {
      */
     private var recording = false
 
-    private var startedAt: Instant = Instant.EPOCH
     private var paused = false
     private var pointCount = 0
     private var distanceMeters = 0.0
@@ -93,8 +92,11 @@ class RecordingService : Service() {
      *  this same list from it, so this copy exists only to publish without waiting on that. */
     private val waypoints = mutableListOf<Waypoint>()
 
-    /** When this recording started, on the clock [totalSeconds] reads - see [startedAt]. */
-    private var startedAtRealtime: Long = 0
+    /**
+     * When the first point was logged, on the clock [totalSeconds] reads. Null while waiting
+     * for a fix: the ride starts where its data does, as the saved track's duration does.
+     */
+    private var startedAtRealtime: Long? = null
     /**
      * Republishes on a plain clock rather than waiting on the next fix, so the duration
      * shown keeps moving through a GPS outage, a stretch of points the filter rejects, or
@@ -156,7 +158,6 @@ class RecordingService : Service() {
         if (recording) return
         recording = true
 
-        startedAt = Instant.now()
         paused = false
         pointCount = 0
         distanceMeters = 0.0
@@ -164,7 +165,7 @@ class RecordingService : Service() {
         currentSpeedMps = null
         lastAccuracyMeters = null
         waypoints.clear()
-        startedAtRealtime = SystemClock.elapsedRealtime()
+        startedAtRealtime = null
 
         val settings = container.settingsRepository.settings.value
         accuracyLimitMeters = settings.maxAccuracyMeters
@@ -263,6 +264,7 @@ class RecordingService : Service() {
             // that earned this point its place is stamped on afterwards, purely to write
             // down for whatever reopens the file later.
             val point = filtered.copy(accuracyMeters = fix.accuracyMeters)
+            if (startedAtRealtime == null) startedAtRealtime = SystemClock.elapsedRealtime()
             lastPoint?.let { distanceMeters += haversineMeters(it, point) }
             lastPoint = point
             pointCount++
@@ -303,13 +305,13 @@ class RecordingService : Service() {
     }
 
     /**
-     * Wall-clock seconds since this recording started, pauses included - the same span
+     * Wall-clock seconds since the first point, pauses included - the same span
      * [dev.samuelq.gpx.core.analysis.TrackAnalyzer]'s `totalDurationSeconds` measures from
      * the saved file's first and last points, so the live number and the one on the sheet
      * afterwards read the same thing.
      */
     private fun totalSeconds(): Double =
-        (SystemClock.elapsedRealtime() - startedAtRealtime) / 1000.0
+        startedAtRealtime?.let { (SystemClock.elapsedRealtime() - it) / 1000.0 } ?: 0.0
 
     /** Keeps the duration moving once a second without waiting on a fix to do it. */
     private fun startTicker() {
@@ -402,7 +404,7 @@ class RecordingService : Service() {
                 )
                 return
             }
-            container.trackRepository.saveRecording(track, startedAt).fold(
+            container.trackRepository.saveRecording(track).fold(
                 onSuccess = {
                     log.file.delete()
                     container.recordingController.emit(RecordingEvent.Saved(it))
@@ -441,7 +443,6 @@ class RecordingService : Service() {
         container.recordingController.update(
             RecordingState.Active(
                 paused = paused,
-                startedAt = startedAt,
                 pointCount = pointCount,
                 distanceMeters = distanceMeters,
                 totalSeconds = totalSeconds(),

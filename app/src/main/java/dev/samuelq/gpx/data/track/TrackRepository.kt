@@ -4,7 +4,6 @@ import dev.samuelq.gpx.core.analysis.TrackProfile
 import dev.samuelq.gpx.core.model.Track
 import dev.samuelq.gpx.data.db.TrackEntity
 import kotlinx.coroutines.flow.Flow
-import java.time.Instant
 
 /** A track that has been read, parsed and analysed, ready to draw. */
 class LoadedTrack(
@@ -70,15 +69,14 @@ interface TrackRepository {
     suspend fun open(id: Long): Result<LoadedTrack>
 
     /**
-     * Writes a finished recording to app-private storage as GPX and indexes it. Returns
-     * the new row id.
+     * Writes a finished recording to app-private storage as GPX and indexes it, named and
+     * dated by its first point. Returns the new row id.
      *
      * @param analyzed the profile of this exact [track], when the caller already has one -
      *   recovery does, and re-deriving it walks every point again for the same answer.
      */
     suspend fun saveRecording(
         track: Track,
-        startedAt: Instant,
         analyzed: TrackProfile? = null,
     ): Result<Long>
 
