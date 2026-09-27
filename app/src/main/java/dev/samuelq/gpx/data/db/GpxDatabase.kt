@@ -1,26 +1,30 @@
 package dev.samuelq.gpx.data.db
 
 import android.content.Context
+import androidx.room.AutoMigration
 import androidx.room.Database
+import androidx.room.DeleteColumn
 import androidx.room.Room
 import androidx.room.RoomDatabase
-import androidx.room.TypeConverter
-import androidx.room.TypeConverters
+import androidx.room.migration.AutoMigrationSpec
 
-/** Stores [TrackSource] as its name, so a new variant does not renumber the old ones. */
-class TrackSourceConverter {
-    @TypeConverter
-    fun toSource(value: String): TrackSource = TrackSource.valueOf(value)
-
-    @TypeConverter
-    fun fromSource(source: TrackSource): String = source.name
-}
-
-@Database(entities = [TrackEntity::class], version = 1, exportSchema = true)
-@TypeConverters(TrackSourceConverter::class)
+@Database(
+    entities = [TrackEntity::class],
+    version = 2,
+    exportSchema = true,
+    autoMigrations = [AutoMigration(from = 1, to = 2, spec = GpxDatabase.DropUnreadColumns::class)],
+)
 abstract class GpxDatabase : RoomDatabase() {
 
     abstract fun trackDao(): TrackDao
+
+    /** Summary columns that were written on every save and never read back. */
+    @DeleteColumn(tableName = "tracks", columnName = "source")
+    @DeleteColumn(tableName = "tracks", columnName = "movingSeconds")
+    @DeleteColumn(tableName = "tracks", columnName = "ascentMeters")
+    @DeleteColumn(tableName = "tracks", columnName = "descentMeters")
+    @DeleteColumn(tableName = "tracks", columnName = "pointCount")
+    class DropUnreadColumns : AutoMigrationSpec
 
     companion object {
         fun create(context: Context): GpxDatabase =

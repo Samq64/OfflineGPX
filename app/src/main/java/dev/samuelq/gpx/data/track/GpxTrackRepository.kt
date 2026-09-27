@@ -11,7 +11,6 @@ import dev.samuelq.gpx.core.model.Track
 import dev.samuelq.gpx.data.db.ColorUse
 import dev.samuelq.gpx.data.db.TrackDao
 import dev.samuelq.gpx.data.db.TrackEntity
-import dev.samuelq.gpx.data.db.TrackSource
 import dev.samuelq.gpx.data.gpx.GpxNameRewriter
 import dev.samuelq.gpx.data.gpx.GpxParseException
 import dev.samuelq.gpx.data.gpx.GpxParser
@@ -93,7 +92,7 @@ class GpxTrackRepository(
                 read(destination.absolutePath, displayName, LoadedTrack.TRANSIENT_ID)
             }.onFailure { destination.delete() }.getOrThrow()
 
-            val entity = newEntity(TrackSource.IMPORTED, destination, displayName, loaded.profile.stats)
+            val entity = newEntity(destination, displayName, loaded.profile.stats)
             val id = dao.upsert(entity)
 
             cached = destination.absolutePath to LoadedTrack(
@@ -153,7 +152,7 @@ class GpxTrackRepository(
                 file.outputStream().use { writer.write(named, it) }
 
                 val stats = profile.stats.copy(name = named.name, startedAt = startedAt)
-                dao.upsert(newEntity(TrackSource.RECORDED, file, file.name, stats))
+                dao.upsert(newEntity(file, file.name, stats))
             }.recoverFailure()
         }
 
@@ -276,12 +275,10 @@ class GpxTrackRepository(
 
     /** A new row for [file], summarised by [stats], in the palette slot least in use. */
     private suspend fun newEntity(
-        source: TrackSource,
         file: File,
         displayName: String,
         stats: TrackStats,
     ) = TrackEntity(
-        source = source,
         colorIndex = leastUsedSlot(dao.colorUsage(), TrackEntity.PALETTE_SIZE),
         location = file.absolutePath,
         displayName = displayName,
@@ -289,11 +286,7 @@ class GpxTrackRepository(
         startedAtEpochMillis = stats.startedAt?.toEpochMilli(),
         lastOpenedAtEpochMillis = System.currentTimeMillis(),
         distanceMeters = stats.distanceMeters,
-        movingSeconds = stats.movingDurationSeconds,
         totalSeconds = stats.totalDurationSeconds,
-        ascentMeters = stats.ascentMeters,
-        descentMeters = stats.descentMeters,
-        pointCount = stats.pointCount,
     )
 
     /**

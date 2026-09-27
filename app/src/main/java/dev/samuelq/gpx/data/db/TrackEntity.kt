@@ -5,21 +5,12 @@ import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
-/** Where a track came from. Both are an app-private file now; this is only their history. */
-enum class TrackSource {
-    /** Copied in from a file the user picked elsewhere. */
-    IMPORTED,
-
-    /** Written by this app's own recorder. */
-    RECORDED,
-}
-
 /**
  * One row per track, over both sources, because the library and the stats screens want
  * them in one query.
  *
- * Holds no geometry - see the README. [location] is an app-private GPX file path for either
- * [TrackSource]. Everything else is summary, denormalised so a list row never reparses a file.
+ * Holds no geometry - see the README. [location] is an app-private GPX file path, imported or
+ * recorded. Everything else is the summary a list row shows, denormalised so a list row never reparses a file.
  */
 @Entity(
     tableName = "tracks",
@@ -29,7 +20,6 @@ enum class TrackSource {
 )
 data class TrackEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val source: TrackSource,
     val location: String,
     /** The filename. The `<name>` inside the file is often absent, so this is the fallback. */
     val displayName: String,
@@ -57,11 +47,7 @@ data class TrackEntity(
     @ColumnInfo(defaultValue = "0") val colorIndex: Int = 0,
 
     val distanceMeters: Double,
-    val movingSeconds: Double,
     val totalSeconds: Double,
-    val ascentMeters: Double,
-    val descentMeters: Double,
-    val pointCount: Int,
 ) {
     companion object {
         /** Slots in the route palette. Six, then hues repeat. */
