@@ -21,6 +21,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.samuelq.gpx.core.model.UnitSystem
+import dev.samuelq.gpx.ui.format.Formatters
 import dev.samuelq.gpx.ui.format.LocalFormatters
 import kotlin.math.floor
 import kotlin.math.log10
@@ -144,5 +145,5 @@ fun MapChrome(metersPerPixel: State<Double>, modifier: Modifier = Modifier) {
 internal val MaxBarWidth = 96.dp
 private val BarHeight = 6.dp
 
-private const val METERS_PER_MILE = 1609.344
-private const val METERS_PER_FOOT = 0.3048
+private const val METERS_PER_MILE = Formatters.METERS_PER_MILE
+private const val METERS_PER_FOOT = 1 / Formatters.FEET_PER_METER

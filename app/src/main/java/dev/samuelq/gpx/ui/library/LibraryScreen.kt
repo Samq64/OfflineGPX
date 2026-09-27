@@ -27,7 +27,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -45,7 +44,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TriStateCheckbox
@@ -65,7 +63,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.input.ImeAction
@@ -78,11 +75,13 @@ import dev.samuelq.gpx.data.db.TrackEntity
 import dev.samuelq.gpx.ui.format.Formatters
 import dev.samuelq.gpx.ui.format.LocalFormatters
 import dev.samuelq.gpx.ui.theme.routePalette
+import dev.samuelq.gpx.ui.theme.slot
 import dev.samuelq.gpx.ui.track.DeleteTrackDialog
 import dev.samuelq.gpx.ui.track.TrackNameDialog
 import dev.samuelq.gpx.ui.track.editableTrackName
 import dev.samuelq.gpx.ui.track.exportFileName
 import dev.samuelq.gpx.ui.track.shareTrackIntent
+import dev.samuelq.gpx.ui.track.trackTitle
 import java.time.Instant
 
 
@@ -259,7 +258,7 @@ fun LibraryScreen(
                 items(tracks, key = TrackEntity::id) { track ->
                     TrackRow(
                         track = track,
-                        color = palette[track.colorIndex % palette.size],
+                        color = palette.slot(track.colorIndex),
                         selected = track.id in selection,
                         selectionActive = selection.isNotEmpty(),
                         onOpen = {
@@ -414,7 +413,7 @@ private fun TrackRow(
         },
         headlineContent = {
             Text(
-                text = track.trackName?.takeIf(String::isNotBlank) ?: track.displayName,
+                text = trackTitle(track.trackName, track.displayName),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )

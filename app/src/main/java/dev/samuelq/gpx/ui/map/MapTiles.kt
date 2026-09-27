@@ -1,7 +1,5 @@
 package dev.samuelq.gpx.ui.map
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import dev.samuelq.gpx.data.map.OfflineMap
 import org.oscim.core.BoundingBox
 import org.oscim.core.MapElement

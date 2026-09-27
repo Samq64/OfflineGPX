@@ -5,6 +5,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import dev.samuelq.gpx.core.model.TrackPoint
+import dev.samuelq.gpx.data.track.LoadedTrack
 
 /**
  * One track as the map should draw it: the positions themselves, in degrees. The map
@@ -39,6 +40,14 @@ class RouteOverlay(
         }
     }
 }
+
+/** [LoadedTrack]'s geometry as the map draws it. */
+fun LoadedTrack.toOverlay(color: Color) = RouteOverlay(
+    trackId = id,
+    points = profile.points,
+    segmentStartIndices = profile.segmentStartIndices,
+    color = color,
+)
 
 /** A route's extent, as the four numbers a camera fit actually needs. */
 @Immutable

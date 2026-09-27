@@ -104,12 +104,16 @@ fun DeleteTrackDialog(
     )
 }
 
+/** What a track is called on screen: its own name, or the file it arrived as. */
+fun trackTitle(trackName: String?, displayName: String): String =
+    trackName?.takeIf(String::isNotBlank) ?: displayName
+
 /**
  * What to put in the field for editing: the track's own name, or the imported filename
  * without its extension - `.gpx` is how the file is stored, not what the track is called.
  */
 fun editableTrackName(trackName: String?, displayName: String): String =
-    trackName?.takeIf(String::isNotBlank) ?: displayName.dropGpxSuffix()
+    trackTitle(trackName, displayName.dropGpxSuffix())
 
 /** Case-insensitively, because a file picked off a desktop may well be `.GPX`. */
 private fun String.dropGpxSuffix(): String =

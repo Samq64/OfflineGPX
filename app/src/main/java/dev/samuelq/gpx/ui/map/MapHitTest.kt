@@ -1,9 +1,7 @@
 package dev.samuelq.gpx.ui.map
 
 import androidx.compose.ui.geometry.Offset
-import dev.samuelq.gpx.core.model.TrackPoint
 import dev.samuelq.gpx.core.model.Waypoint
-import org.oscim.core.MapPosition
 import org.oscim.core.MercatorProjection
 import org.oscim.core.Tile
 import org.oscim.map.Map

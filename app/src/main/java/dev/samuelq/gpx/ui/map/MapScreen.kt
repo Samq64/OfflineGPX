@@ -1,28 +1,17 @@
 package dev.samuelq.gpx.ui.map
 
-import android.Manifest
-import android.content.Context
-import android.content.pm.PackageManager
-import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.calculateStartPadding
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -32,29 +21,19 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomSheetScaffold
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.material3.rememberStandardBottomSheetState
@@ -73,7 +52,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -84,29 +62,23 @@ import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.samuelq.gpx.R
 import dev.samuelq.gpx.core.model.Waypoint
 import dev.samuelq.gpx.data.record.RecordingEvent
 import dev.samuelq.gpx.data.record.RecordingState
-import dev.samuelq.gpx.ui.ArrowTooltip
-import dev.samuelq.gpx.ui.format.Formatters
+import dev.samuelq.gpx.ui.record.DiscardRecordingDialog
 import dev.samuelq.gpx.ui.record.RecordViewModel
-import dev.samuelq.gpx.ui.record.RecordingBar
 import dev.samuelq.gpx.ui.record.RecoveredRecordingDialog
 import dev.samuelq.gpx.ui.theme.routePalette
+import dev.samuelq.gpx.ui.theme.slot
 import dev.samuelq.gpx.ui.track.DeleteTrackDialog
 import dev.samuelq.gpx.ui.track.FocusedTrack
 import dev.samuelq.gpx.ui.track.TrackActions
 import dev.samuelq.gpx.ui.track.TrackNameDialog
 import dev.samuelq.gpx.ui.track.TrackRef
-import dev.samuelq.gpx.ui.track.TrackSheet
-import dev.samuelq.gpx.ui.track.TrackSheetError
-import dev.samuelq.gpx.ui.track.TrackSheetLoading
 import dev.samuelq.gpx.ui.track.TrackSheetPeekHeight
 import dev.samuelq.gpx.ui.track.editableTrackName
 import dev.samuelq.gpx.ui.track.shareTrackIntent
@@ -184,9 +156,6 @@ fun MapScreen(
     // re-places the tooltip without recomposing this screen.
     val tappedWaypointAt = remember { mutableStateOf(Offset.Zero) }
 
-    val locationOff = stringResource(R.string.record_location_off)
-    val locationDenied = stringResource(R.string.record_location_denied)
-    val preciseRequired = stringResource(R.string.record_precise_required)
     val discarded = stringResource(R.string.record_discarded)
     val renameFailed = stringResource(R.string.library_rename_failed)
     val hidden = stringResource(R.string.track_hidden)
@@ -200,24 +169,8 @@ fun MapScreen(
         snackbarHostState.showSnackbar(message)
     }
 
-    fun startRecording() {
-        // Checked here and again in the service: this is the one that can explain itself,
-        // and the service's is for location being switched off between the two.
-        if (recorder.isGpsEnabled) recorder.start() else say(locationOff)
-    }
+    val startRecording = rememberStartRecording(recorder, ::say)
 
-    val permissions = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { granted ->
-        when {
-            // Precise only. Approximate is wifi- and cell-derived and accurate to hundreds
-            // of metres at best; a route from it is noise and a speed from it is a wrong
-            // number presented as a real one. Refusing beats recording garbage.
-            granted[Manifest.permission.ACCESS_FINE_LOCATION] == true -> startRecording()
-            granted[Manifest.permission.ACCESS_COARSE_LOCATION] == true -> say(preciseRequired)
-            else -> say(locationDenied)
-        }
-    }
 
     LaunchedEffect(pendingFocus) {
         pendingFocus?.let {
@@ -326,37 +279,13 @@ fun MapScreen(
     // that discards the extent it measured. The id matters only for `unlisted` below; the
     // focused width is the canvas's to draw.
     val overlays = remember(state.entities, state.geometry, focusedTrack?.id, palette) {
-        val drawable = state.entities.mapNotNull { entity ->
-            state.geometry[entity.id]?.let { entity to it }
-        }
+        val drawable = state.entities.mapNotNull { state.geometry[it.id] }
         // A track opened from the list may be hidden. Showing its numbers without its
         // line would be a readout for something that is not on screen.
-        val unlisted = focusedTrack?.takeIf { focus -> drawable.none { it.first.id == focus.id } }
-
-        buildList {
-            drawable.forEach { (entity, track) ->
-                // Colour comes from the track, never its position: a hue that changed when
-                // you tapped something would be worse than any stacking order.
-                add(
-                    RouteOverlay(
-                        trackId = entity.id,
-                        points = track.profile.points,
-                        segmentStartIndices = track.profile.segmentStartIndices,
-                        color = palette[entity.colorIndex % palette.size],
-                    )
-                )
-            }
-            unlisted?.let { track ->
-                add(
-                    RouteOverlay(
-                        trackId = track.id,
-                        points = track.profile.points,
-                        segmentStartIndices = track.profile.segmentStartIndices,
-                        color = palette[track.colorIndex % palette.size],
-                    )
-                )
-            }
-        }
+        val unlisted = focusedTrack?.takeIf { focus -> drawable.none { it.id == focus.id } }
+        // Colour comes from the track, never its position: a hue that changed when you
+        // tapped something would be worse than any stacking order.
+        (drawable + listOfNotNull(unlisted)).map { it.toOverlay(palette.slot(it.colorIndex)) }
     }
 
     // The live recording's own, plus whichever track's sheet is open - never every track's,
@@ -433,52 +362,45 @@ fun MapScreen(
 
     // The track's details, the same in the sheet and in the side panel. Nothing for no
     // track: each caller decides what stands in for it.
+    // Null for a file opened from an intent: it has no row to rename, hide or delete, and
+    // sharing it would just hand the file back to itself.
+    val actions = focusedTrack?.let { state.entity(it.id) }?.let { entity ->
+        remember(entity.id, entity.displayName, entity.location) {
+            TrackActions(
+                onRename = { renamingId = entity.id },
+                onShare = {
+                    context.startActivity(
+                        shareTrackIntent(context, entity.location, entity.trackName, entity.displayName)
+                    )
+                },
+                onHide = {
+                    viewModel.hide(entity.id)
+                    viewModel.focus(null)
+                },
+                onDelete = { deletingId = entity.id },
+            )
+        }
+    }
+
+    // The same in the sheet and in the side panel. Nothing for no track: each caller
+    // decides what stands in for it.
     val trackContent: @Composable (FocusedTrack, Dp, (() -> Unit)?, (Dp) -> Unit) -> Unit =
         { current, maxHeight, onClose, onPeekHeightChange ->
-            when (current) {
-                FocusedTrack.None -> Unit
-                FocusedTrack.Loading -> TrackSheetLoading()
-                is FocusedTrack.Failed -> TrackSheetError(
-                    messageRes = current.messageRes,
-                    onRetry = viewModel::retryFocus,
-                    onClose = { viewModel.focus(null) },
-                )
-                is FocusedTrack.Ready -> TrackSheet(
-                    loaded = current.track,
-                    routeColor = palette[current.track.colorIndex % palette.size],
-                    maxHeight = maxHeight,
-                    selectedIndex = selectedIndex,
-                    onSelectedIndexChange = { selectedIndex = it },
-                    useTimeAxis = preferTimeAxis && current.track.profile.hasTime,
-                    onAxisChange = { preferTimeAxis = it },
-                    onPeekHeightChange = onPeekHeightChange,
-                    onClose = onClose,
-                    // Null for a file opened from an intent: it has no row to rename,
-                    // hide or delete, and sharing it would just hand the file back to
-                    // itself.
-                    actions = state.entity(current.track.id)?.let { entity ->
-                        remember(entity.id, entity.displayName, entity.location) {
-                            TrackActions(
-                                onRename = { renamingId = entity.id },
-                                onShare = {
-                                    context.startActivity(
-                                        shareTrackIntent(
-                                            context, entity.location, entity.trackName, entity.displayName,
-                                        )
-                                    )
-                                },
-                                onHide = {
-                                    viewModel.hide(entity.id)
-                                    viewModel.focus(null)
-                                },
-                                onDelete = { deletingId = entity.id },
-                            )
-                        }
-                    },
-                )
-            }
+            FocusedTrackContent(
+                focused = current,
+                palette = palette,
+                maxHeight = maxHeight,
+                selectedIndex = selectedIndex,
+                onSelectedIndexChange = { selectedIndex = it },
+                preferTimeAxis = preferTimeAxis,
+                onAxisChange = { preferTimeAxis = it },
+                actions = actions,
+                onRetry = viewModel::retryFocus,
+                onDismiss = { viewModel.focus(null) },
+                onClose = onClose,
+                onPeekHeightChange = onPeekHeightChange,
+            )
         }
-
 
     BottomSheetScaffold(
         modifier = Modifier.onSizeChanged { scaffoldHeight = it.height },
@@ -549,7 +471,7 @@ fun MapScreen(
                 focusedTrackId = focusedTrack?.id,
                 selectedIndex = selectedIndex,
                 markerColor = focusedTrack
-                    ?.let { palette[it.colorIndex % palette.size] }
+                    ?.let { palette.slot(it.colorIndex) }
                     ?: MaterialTheme.colorScheme.primary,
                 puckTrackId = LIVE_TRACK_ID.takeIf { recording is RecordingState.Active },
                 puckColor = liveColor,
@@ -605,24 +527,7 @@ fun MapScreen(
             )
 
             tappedWaypoint?.let { tapped ->
-                ArrowTooltip(
-                    anchor = { tappedWaypointAt.value },
-                    // Beside the tip and hanging below it, clear of the head above.
-                    gap = 4.dp,
-                    maxRise = WaypointPinHeadClearance,
-                    modifier = Modifier.fillMaxSize(),
-                ) {
-                    Column {
-                        Text(
-                            text = Formatters.time(tapped.point.time),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        tapped.description?.takeIf(String::isNotBlank)?.let {
-                            Text(text = it, style = MaterialTheme.typography.bodyMedium)
-                        }
-                    }
-                }
+                WaypointTooltip(tapped, anchor = { tappedWaypointAt.value }, modifier = Modifier.fillMaxSize())
             }
 
             // Only the true first-run case, not "every track happens to be hidden" - that's
@@ -685,64 +590,27 @@ fun MapScreen(
                     .padding(start = panelCover, bottom = sheetInset - barInset)
                     .onSizeChanged { controlsHeight = with(density) { it.height.toDp() } - barInset },
             ) {
-                // Still no reset button. A real map has a whole world to be lost in rather
-                // than a unit square to pinch back out of - worth adding as a "frame
-                // everything" control, but currently a missing feature, not a choice.
-                if (recording !is RecordingState.Active) {
-                    Box(
-                        modifier = Modifier.fillMaxWidth().padding(16.dp),
-                        contentAlignment = Alignment.CenterEnd,
-                    ) {
-                        ExtendedFloatingActionButton(
-                            onClick = { permissions.requestThenStart(context) { startRecording() } },
-                            icon = { Icon(Icons.Default.PlayArrow, contentDescription = null) },
-                            text = { Text(stringResource(R.string.record_start)) },
-                        )
-                    }
-                }
-
-                (recording as? RecordingState.Active)?.let { active ->
-                    RecordingBar(
-                        state = active,
-                        onPause = recorder::pause,
-                        onResume = recorder::resume,
-                        onStop = recorder::stop,
-                        onDiscard = { confirmDiscard = true },
-                        onAddWaypoint = recorder::addWaypoint,
-                        bottomInset = barInset,
-                    )
-                }
+                RecordControls(
+                    recording = recording,
+                    onStart = startRecording,
+                    onPause = recorder::pause,
+                    onResume = recorder::resume,
+                    onStop = recorder::stop,
+                    onDiscard = { confirmDiscard = true },
+                    onAddWaypoint = recorder::addWaypoint,
+                    bottomInset = barInset,
+                )
             }
 
-            // Over the map and the controls, down the start edge. Keeps showing the last
-            // track while it slides away, rather than emptying before it has gone.
-            var panelTrack by remember { mutableStateOf<FocusedTrack>(FocusedTrack.None) }
-            LaunchedEffect(focused) { if (focused != FocusedTrack.None) panelTrack = focused }
-            val fromStart = if (LocalLayoutDirection.current == LayoutDirection.Ltr) -1 else 1
-            AnimatedVisibility(
+            // Over the map and the controls, down the start edge.
+            TrackSidePanel(
                 visible = sidePanel && hasFocus,
-                enter = slideInHorizontally { fromStart * it },
-                exit = slideOutHorizontally { fromStart * it },
-                modifier = Modifier.align(Alignment.TopStart).fillMaxHeight().width(panelWidth),
-            ) {
-                Surface(
-                    color = MaterialTheme.colorScheme.surfaceContainer,
-                    shape = RoundedCornerShape(topEnd = SidePanelCornerRadius),
-                    modifier = Modifier.fillMaxSize(),
-                ) {
-                    Box(
-                        Modifier
-                            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Start))
-                            .padding(top = 16.dp),
-                    ) {
-                        trackContent(
-                            if (focused != FocusedTrack.None) focused else panelTrack,
-                            Dp.Unspecified,
-                            // No drag handle to swipe it away by, unlike the sheet.
-                            { viewModel.focus(null) },
-                        ) {}
-                    }
-                }
+                focused = focused,
+                width = panelWidth,
+                modifier = Modifier.align(Alignment.TopStart),
+            ) { shown ->
+                // No drag handle to swipe it away by, unlike the sheet.
+                trackContent(shown, Dp.Unspecified, { viewModel.focus(null) }) {}
             }
         }
     }
@@ -792,20 +660,11 @@ fun MapScreen(
     }
 
     if (confirmDiscard) {
-        AlertDialog(
-            onDismissRequest = { confirmDiscard = false },
-            title = { Text(stringResource(R.string.record_discard_title)) },
-            text = { Text(stringResource(R.string.record_discard_body)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirmDiscard = false
-                    recorder.discard()
-                }) { Text(stringResource(R.string.record_discard_confirm)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmDiscard = false }) {
-                    Text(stringResource(R.string.action_cancel))
-                }
+        DiscardRecordingDialog(
+            onDismiss = { confirmDiscard = false },
+            onConfirm = {
+                confirmDiscard = false
+                recorder.discard()
             },
         )
     }
@@ -828,99 +687,5 @@ private const val SheetMaxHeightFraction = 0.72f
 
 /** The landscape panel: at least this past any cutout, or this share of the window if wider. */
 private val SidePanelMinWidth = 400.dp
+
 private const val SidePanelWindowFraction = 1f / 3
-private val SidePanelCornerRadius = 28.dp
-
-/** The handle's own height, counted into the measured peek. */
-private val DragHandleHeight = 20.dp
-
-/**
- * Half the height of the Material handle, which spends 44 of its 48dp on padding. Every
- * one of those is a dp of map, and the sheet is dragged by its whole surface anyway.
- */
-@Composable
-private fun CompactDragHandle() {
-    Box(
-        Modifier.fillMaxWidth().height(DragHandleHeight),
-        contentAlignment = Alignment.Center,
-    ) {
-        Box(
-            Modifier
-                .size(width = 32.dp, height = 4.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.outlineVariant)
-        )
-    }
-}
-
-@Composable
-private fun EmptyState(
-    onImportMap: () -> Unit,
-    onImportTrack: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        // Opaque, over the canvas's own flat background, and the same colour as every
-        // other screen's: with nothing to show, this is a page, not a map.
-        modifier = modifier
-            .background(MaterialTheme.colorScheme.background)
-            .padding(32.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(
-            text = stringResource(R.string.map_empty_title),
-            style = MaterialTheme.typography.titleMedium,
-        )
-        Text(
-            text = stringResource(R.string.map_empty_body),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = onImportMap) {
-                Text(stringResource(R.string.map_empty_import_map))
-            }
-            Button(onClick = onImportTrack) {
-                Text(stringResource(R.string.map_empty_import_track))
-            }
-        }
-    }
-}
-
-/**
- * The one state with nothing at all on screen: every track hidden, no basemap. Not the
- * first-run card - the user did this on purpose from the list, and already knows what the
- * app is - just a way back that doesn't require remembering the list icon exists.
- */
-@Composable
-private fun ShowTracksHint(onClick: () -> Unit, modifier: Modifier = Modifier) {
-    TextButton(onClick = onClick, modifier = modifier) {
-        Text(stringResource(R.string.map_hidden_hint))
-    }
-}
-
-/**
- * Asks for what is missing on the tap that starts a recording, nothing before it - no
- * screen explaining itself first. Coarse is listed alongside fine because Android 12+
- * ignores a fine request without it; notifications are requested but not required.
- */
-private fun androidx.activity.compose.ManagedActivityResultLauncher<Array<String>, Map<String, Boolean>>.requestThenStart(
-    context: Context,
-    onAlreadyGranted: () -> Unit,
-) {
-    val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
-    if (fine == PackageManager.PERMISSION_GRANTED) {
-        onAlreadyGranted()
-        return
-    }
-
-    val wanted = buildList {
-        add(Manifest.permission.ACCESS_FINE_LOCATION)
-        add(Manifest.permission.ACCESS_COARSE_LOCATION)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            add(Manifest.permission.POST_NOTIFICATIONS)
-        }
-    }
-    launch(wanted.toTypedArray())
-}

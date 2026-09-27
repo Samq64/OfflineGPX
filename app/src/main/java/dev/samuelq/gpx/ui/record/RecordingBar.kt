@@ -262,3 +262,19 @@ private fun RecordingDot(paused: Boolean) {
             .background(MaterialTheme.colorScheme.error)
     )
 }
+
+/** Confirms throwing a ride away - the one recorder action that can't be taken back. */
+@Composable
+fun DiscardRecordingDialog(onDismiss: () -> Unit, onConfirm: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.record_discard_title)) },
+        text = { Text(stringResource(R.string.record_discard_body)) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) { Text(stringResource(R.string.record_discard_confirm)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+        },
+    )
+}

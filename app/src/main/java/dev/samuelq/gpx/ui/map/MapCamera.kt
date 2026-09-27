@@ -2,8 +2,6 @@ package dev.samuelq.gpx.ui.map
 
 import dev.samuelq.gpx.core.model.TrackPoint
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.IntSize
 import dev.samuelq.gpx.data.map.OfflineMap
 import org.oscim.core.BoundingBox

@@ -3,7 +3,6 @@ package dev.samuelq.gpx.data.gpx
 import dev.samuelq.gpx.core.model.Track
 import org.xmlpull.v1.XmlSerializer
 import java.io.OutputStream
-import java.time.Instant
 import java.time.format.DateTimeFormatter
 
 /** What a provider is told a GPX file is, so it files it as one. */

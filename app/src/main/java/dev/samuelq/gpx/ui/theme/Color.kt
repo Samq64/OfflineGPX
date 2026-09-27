@@ -3,6 +3,7 @@ package dev.samuelq.gpx.ui.theme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
+import dev.samuelq.gpx.data.db.TrackEntity
 
 // Static fallback scheme, used on Android 10/11 (no wallpaper extraction) and whenever
 // the user turns dynamic colour off. Built from the same validated ramp as the charts so
@@ -100,7 +101,7 @@ private val RoutePaletteLight = listOf(
     // and a saved track in nearly the same hue read as one. Checked against every other
     // slot and that red, including under simulated protan, deutan and tritan vision.
     Color(0xFF0F9FB0),
-)
+).also { check(it.size == TrackEntity.PALETTE_SIZE) }
 
 private val RoutePaletteDark = listOf(
     Blue400,
@@ -109,7 +110,10 @@ private val RoutePaletteDark = listOf(
     Color(0xFFA87ADA),
     Color(0xFFD3AC46),
     Color(0xFF30BCC8),
-)
+).also { check(it.size == TrackEntity.PALETTE_SIZE) }
+
+/** A track's colour from its stored palette slot. */
+fun List<Color>.slot(index: Int): Color = this[index.mod(size)]
 
 /** The route palette for the current theme. Follows dark mode, not the wallpaper. */
 @androidx.compose.runtime.Composable

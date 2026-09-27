@@ -1,8 +1,6 @@
 package dev.samuelq.gpx.ui.map
 
 import android.graphics.Paint
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.Density

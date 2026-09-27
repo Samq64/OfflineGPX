@@ -313,18 +313,6 @@ class MapViewModel(
         viewModelScope.launch { repository.forgetAll(listOf(id)) }
     }
 
-    /**
-     * The same track under a new name - geometry is untouched and shared, since a rename
-     * doesn't move a single point.
-     */
-    private fun LoadedTrack.renamed(name: String?) = LoadedTrack(
-        id = id,
-        displayName = displayName,
-        track = track.copy(name = name),
-        profile = profile,
-        colorIndex = colorIndex,
-    )
-
     companion object {
         val Factory = viewModelFactory {
             initializer {

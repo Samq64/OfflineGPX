@@ -175,7 +175,7 @@ fun TrackSheet(
         // would otherwise push the date under the gesture bar.
         Column(Modifier.onSizeChanged { onPeekHeightChange(with(density) { it.height.toDp() }) }) {
             SheetTitle(
-                name = loaded.track.name?.takeIf(String::isNotBlank) ?: loaded.displayName,
+                name = trackTitle(loaded.track.name, loaded.displayName),
                 routeColor = routeColor,
                 actions = actions,
                 onClose = onClose,

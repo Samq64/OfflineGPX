@@ -18,6 +18,9 @@ class LoadedTrack(
      */
     val colorIndex: Int,
 ) {
+    /** The same track under a new name. Geometry is shared: a rename moves no points. */
+    fun renamed(name: String?) = LoadedTrack(id, displayName, track.copy(name = name), profile, colorIndex)
+
     companion object {
         const val TRANSIENT_ID = 0L
     }

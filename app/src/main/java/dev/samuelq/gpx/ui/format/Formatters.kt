@@ -165,8 +165,8 @@ class Formatters(val units: UnitSystem) {
             }
 
         private const val METERS_PER_KM = 1000.0
-        private const val METERS_PER_MILE = 1609.344
-        private const val FEET_PER_METER = 3.280839895
+        internal const val METERS_PER_MILE = 1609.344
+        internal const val FEET_PER_METER = 3.280839895
         private const val SECONDS_PER_HOUR = 3600.0
 
         /** `h:mm:ss` past an hour, `m:ss` below it. The one thing units do not change. */
