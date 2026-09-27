@@ -3,6 +3,7 @@ package dev.samuelq.gpx.data.gpx
 import dev.samuelq.gpx.core.model.Track
 import dev.samuelq.gpx.core.model.TrackPoint
 import dev.samuelq.gpx.core.model.TrackSegment
+import dev.samuelq.gpx.core.model.isValidCoordinate
 import dev.samuelq.gpx.core.model.Waypoint
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserException
@@ -135,7 +136,7 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
         }
 
         if (latitude == null || longitude == null) return null
-        if (latitude !in -90.0..90.0 || longitude !in -180.0..180.0) return null
+        if (!isValidCoordinate(latitude, longitude)) return null
         return Waypoint(TrackPoint(latitude, longitude, elevation, time), description)
     }
 
@@ -183,7 +184,7 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
         }
 
         if (latitude == null || longitude == null) return null
-        if (latitude !in -90.0..90.0 || longitude !in -180.0..180.0) return null
+        if (!isValidCoordinate(latitude, longitude)) return null
         return TrackPoint(latitude, longitude, elevation, time, accuracy)
     }
 

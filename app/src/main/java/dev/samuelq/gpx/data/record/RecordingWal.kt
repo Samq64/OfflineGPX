@@ -3,6 +3,7 @@ package dev.samuelq.gpx.data.record
 import dev.samuelq.gpx.core.model.Track
 import dev.samuelq.gpx.core.model.TrackPoint
 import dev.samuelq.gpx.core.model.TrackSegment
+import dev.samuelq.gpx.core.model.isValidCoordinate
 import dev.samuelq.gpx.core.model.Waypoint
 import java.io.BufferedWriter
 import java.io.Closeable
@@ -127,7 +128,7 @@ class RecordingWal private constructor(
             val millis = parts[0].toLongOrNull() ?: return null
             val latitude = parts[1].toDoubleOrNull() ?: return null
             val longitude = parts[2].toDoubleOrNull() ?: return null
-            if (latitude !in -90.0..90.0 || longitude !in -180.0..180.0) return null
+            if (!isValidCoordinate(latitude, longitude)) return null
             return TrackPoint(
                 latitude = latitude,
                 longitude = longitude,
@@ -145,7 +146,7 @@ class RecordingWal private constructor(
             val millis = parts[1].toLongOrNull() ?: return null
             val latitude = parts[2].toDoubleOrNull() ?: return null
             val longitude = parts[3].toDoubleOrNull() ?: return null
-            if (latitude !in -90.0..90.0 || longitude !in -180.0..180.0) return null
+            if (!isValidCoordinate(latitude, longitude)) return null
             val description = parts.getOrNull(5)?.takeIf(String::isNotEmpty)?.let {
                 runCatching { String(Base64.getDecoder().decode(it), Charsets.UTF_8) }.getOrNull()
             }

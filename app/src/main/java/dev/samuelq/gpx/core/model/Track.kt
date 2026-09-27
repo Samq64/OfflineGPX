@@ -23,6 +23,10 @@ data class TrackPoint(
     val accuracyMeters: Double? = null,
 )
 
+/** Whether a latitude and longitude, in degrees, name a place on the globe. */
+fun isValidCoordinate(latitude: Double, longitude: Double): Boolean =
+    latitude in -90.0..90.0 && longitude in -180.0..180.0
+
 /**
  * A contiguous run of points. A GPX file splits a track into segments wherever the
  * recorder lost signal, so a segment boundary means "these two points are not connected"
