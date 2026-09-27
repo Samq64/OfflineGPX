@@ -41,15 +41,10 @@ class FixFilter(
     /** When anything was last handed back, moved or still, so stillness can be thinned. */
     private var lastRecordedAt: Instant? = null
 
-    /** Accuracy of the most recent reading, believable or not. For telling the user why. */
-    var lastAccuracyMeters: Double? = null
-        private set
-
     /** Call on a pause or a restart: the next fix begins a new run and has nothing to beat. */
     fun reset() {
         lastAccepted = null
         lastRecordedAt = null
-        lastAccuracyMeters = null
     }
 
     /**
@@ -58,7 +53,6 @@ class FixFilter(
      */
     fun pointFor(fix: Fix): TrackPoint? {
         val accuracy = fix.accuracyMeters
-        lastAccuracyMeters = accuracy
 
         // Only the accuracy test needs a number; a source reporting none still gets the
         // displacement floor.

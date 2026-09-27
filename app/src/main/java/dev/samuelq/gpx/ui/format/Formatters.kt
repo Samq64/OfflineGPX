@@ -105,16 +105,13 @@ class Formatters(val units: UnitSystem) {
         return { mps -> speedAxis(mps, decimals, locale) }
     }
 
-    /** Plain rounded metres or feet. Elevation is the usual caller; GPS accuracy the other. */
+    /** Plain rounded metres or feet: elevation, and GPS accuracy. */
     fun meters(value: Double, locale: Locale = Locale.getDefault()): String =
         if (value.isNaN()) {
             EMPTY
         } else {
             String.format(locale, "%,d $elevationUnit", elevationIn(value).roundToInt())
         }
-
-    fun elevation(meters: Double, locale: Locale = Locale.getDefault()): String =
-        meters(meters, locale)
 
     fun elevationAxis(
         meters: Float,

@@ -17,7 +17,6 @@ import dev.samuelq.gpx.data.gpx.GpxNameRewriter
 import dev.samuelq.gpx.data.gpx.GpxParseException
 import dev.samuelq.gpx.data.gpx.GpxParser
 import dev.samuelq.gpx.data.gpx.GpxWriter
-import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -36,10 +35,11 @@ import java.time.format.DateTimeFormatter
 class GpxTrackRepository(
     context: Context,
     private val dao: TrackDao,
-    private val parser: GpxParser = GpxParser(),
-    private val writer: GpxWriter = GpxWriter(),
-    private val io: CoroutineDispatcher = Dispatchers.IO,
 ) : TrackRepository {
+
+    private val parser = GpxParser()
+    private val writer = GpxWriter()
+    private val io = Dispatchers.IO
 
     private val appContext = context.applicationContext
 

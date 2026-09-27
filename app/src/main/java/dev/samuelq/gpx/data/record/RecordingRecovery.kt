@@ -8,7 +8,6 @@ import dev.samuelq.gpx.core.model.Track
 import dev.samuelq.gpx.data.track.TrackFiles
 import dev.samuelq.gpx.data.track.TrackRepository
 import dev.samuelq.gpx.data.track.defaultTrackName
-import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -33,8 +32,8 @@ class AbandonedRecording(
 class RecordingRecovery(
     context: Context,
     private val tracks: TrackRepository,
-    private val io: CoroutineDispatcher = Dispatchers.IO,
 ) {
+    private val io = Dispatchers.IO
     private val appContext = context.applicationContext
     private val dir: File get() = TrackFiles.recordingsDir(appContext)
 

@@ -70,6 +70,7 @@ private val SurfaceRing = 2.dp
 private val LabelGap = 6.dp
 private val RightPad = 10.dp
 private val AxisBand = 18.dp
+private val PlotHeight = 100.dp
 private const val AreaFillAlpha = 0.10f
 private const val BreakWashAlpha = 0.10f
 
@@ -111,7 +112,6 @@ fun ProfileChart(
     onZoom: ((Float, Float, Float) -> Unit)? = null,
     /** Shared by charts stacked on one x domain, so their plots line up column for column. */
     axisGroup: ChartAxisGroup? = null,
-    plotHeight: Dp = 100.dp,
 ) {
     val chartColors = LocalChartColors.current
     val density = LocalDensity.current
@@ -169,7 +169,7 @@ fun ProfileChart(
     Box(
         modifier
             .fillMaxWidth()
-            .height(plotHeight + AxisBand)
+            .height(PlotHeight + AxisBand)
             .onSizeChanged { boxSize = it }
             .semantics { this.contentDescription = contentDescription },
     ) {

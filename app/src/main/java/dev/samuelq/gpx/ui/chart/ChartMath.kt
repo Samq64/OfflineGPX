@@ -48,12 +48,14 @@ class Scale(val min: Float, val max: Float, val ticks: FloatArray) {
  * Values are SI; [perUnit] is display units per SI unit. Ticks are rounded in display
  * units, since a round number of m/s is not a round number of km/h.
  */
-fun axisScale(min: Float, max: Float, targetTicks: Int = 4, perUnit: Float = 1f): Scale =
-    axisScale(min, max, perUnit) { niceStep(it, targetTicks) }
+fun axisScale(min: Float, max: Float, perUnit: Float = 1f): Scale =
+    axisScale(min, max, perUnit) { niceStep(it, TARGET_TICKS) }
 
 /** [axisScale] for elapsed seconds, ticked on steps a clock reads in. */
-fun timeAxisScale(min: Float, max: Float, targetTicks: Int = 4): Scale =
-    axisScale(min, max, 1f) { range -> timeStep(range, targetTicks) }
+fun timeAxisScale(min: Float, max: Float): Scale =
+    axisScale(min, max, 1f) { range -> timeStep(range, TARGET_TICKS) }
+
+private const val TARGET_TICKS = 4
 
 private inline fun axisScale(min: Float, max: Float, perUnit: Float, step: (Float) -> Float): Scale {
     if (!min.isFinite() || !max.isFinite() || max <= min) {

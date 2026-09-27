@@ -18,11 +18,8 @@ data class TrackStats(
     val movingDurationSeconds: Double,
     /** Distance over *moving* time - the number trackers report as "average speed". */
     val averageSpeedMps: Double,
-    val maxSpeedMps: Double,
     val ascentMeters: Double,
     val descentMeters: Double,
-    val minElevationMeters: Double?,
-    val maxElevationMeters: Double?,
 )
 
 /**

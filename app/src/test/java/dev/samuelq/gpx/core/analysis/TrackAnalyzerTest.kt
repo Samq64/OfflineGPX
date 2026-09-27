@@ -53,7 +53,7 @@ class TrackAnalyzerTest {
         // Mid-track, where the centred window is fully populated.
         assertEquals(10.0f, profile.speedMps[30], 0.2f)
         assertEquals(10.0, profile.stats.averageSpeedMps, 0.3)
-        assertEquals(10.0, profile.stats.maxSpeedMps, 0.3)
+        assertEquals(10.0, profile.maxSpeed(), 0.3)
     }
 
     @Test
@@ -75,8 +75,8 @@ class TrackAnalyzerTest {
         // The unsmoothed derivative at the glitch would be ~35 m/s; the window keeps the
         // reported peak close to the real pace.
         assertTrue(
-            profile.stats.maxSpeedMps < 16.0,
-            "expected the window to damp the spike, got ${profile.stats.maxSpeedMps}",
+            profile.maxSpeed() < 16.0,
+            "expected the window to damp the spike, got ${profile.maxSpeed()}",
         )
     }
 
@@ -446,3 +446,6 @@ class TrackAnalyzerTest {
         return Track(name = null, segments = listOf(TrackSegment(points)))
     }
 }
+
+/** The fastest smoothed speed, which is what these tests check the smoothing through. */
+private fun TrackProfile.maxSpeed(): Double = speedMps.filterNot(Float::isNaN).max().toDouble()

@@ -38,10 +38,7 @@ class LocationSource(context: Context) {
      *   first, so a throw here is a bug rather than a user decision.
      */
     @SuppressLint("MissingPermission")
-    fun fixes(
-        intervalMillis: Long = DEFAULT_INTERVAL_MILLIS,
-        onUnavailable: () -> Unit = {},
-    ): Flow<Fix> = callbackFlow {
+    fun fixes(onUnavailable: () -> Unit): Flow<Fix> = callbackFlow {
         val locationManager = manager
             ?: throw IllegalStateException("No LocationManager on this device")
 
@@ -61,7 +58,7 @@ class LocationSource(context: Context) {
 
         locationManager.requestLocationUpdates(
             LocationManager.GPS_PROVIDER,
-            intervalMillis,
+            INTERVAL_MILLIS,
             // No minimum distance, even though the recorder does apply one. This
             // parameter suppresses the *callback*, so a stationary rider would go silent
             // and the recorder would lose the seconds along with the metres. Standing
@@ -75,7 +72,7 @@ class LocationSource(context: Context) {
     }
 
     private companion object {
-        const val DEFAULT_INTERVAL_MILLIS = 1000L
+        const val INTERVAL_MILLIS = 1000L
 
         /** Everything is passed on, believable or not - filtering is [FixFilter]'s job. */
         fun Location.toFix() = Fix(

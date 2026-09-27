@@ -145,25 +145,6 @@ object TrackAnalyzer {
             }
         }
 
-        var maxSpeed = 0f
-        var anySpeed = false
-        for (i in 0 until size) {
-            val v = speed[i]
-            if (!v.isNaN() && v > maxSpeed) {
-                maxSpeed = v
-                anySpeed = true
-            }
-        }
-
-        var minEle = Float.NaN
-        var maxEle = Float.NaN
-        for (i in 0 until size) {
-            val e = elevation[i]
-            if (e.isNaN()) continue
-            if (minEle.isNaN() || e < minEle) minEle = e
-            if (maxEle.isNaN() || e > maxEle) maxEle = e
-        }
-
         val totalDistance = if (size > 0) distance[size - 1].toDouble() else 0.0
         val totalDuration = if (hasTime && size > 0) elapsed[size - 1].toDouble() else 0.0
         // Prefer moving time for the average - a track with a lunch stop in it would
@@ -178,11 +159,8 @@ object TrackAnalyzer {
             totalDurationSeconds = totalDuration,
             movingDurationSeconds = movingSeconds,
             averageSpeedMps = if (averageBasis > 0.0) totalDistance / averageBasis else 0.0,
-            maxSpeedMps = if (anySpeed) maxSpeed.toDouble() else 0.0,
             ascentMeters = ascent,
             descentMeters = descent,
-            minElevationMeters = minEle.takeUnless { it.isNaN() }?.toDouble(),
-            maxElevationMeters = maxEle.takeUnless { it.isNaN() }?.toDouble(),
         )
 
         return TrackProfile(

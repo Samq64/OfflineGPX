@@ -16,7 +16,7 @@ class LoadedTrack(
      * The row's slot in the route palette, carried through so a track is the same colour
      * wherever it's drawn.
      */
-    val colorIndex: Int = 0,
+    val colorIndex: Int,
 ) {
     companion object {
         const val TRANSIENT_ID = 0L

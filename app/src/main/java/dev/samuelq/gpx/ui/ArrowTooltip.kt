@@ -22,7 +22,7 @@ import androidx.compose.ui.unit.dp
 import kotlin.math.min
 
 /** Which edge of the bubble the arrow sits on - the side nearer whatever it points at. */
-enum class TooltipArrow { Left, Right }
+private enum class TooltipArrow { Left, Right }
 
 /**
  * A rounded speech-bubble with a small triangular arrow on one edge, pointing at [anchor] -

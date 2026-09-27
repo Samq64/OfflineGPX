@@ -244,7 +244,7 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
          * A hostile or corrupt file should not be able to OOM the process. Well past any
          * plausible real recording: at 1 Hz this is over 11 days of continuous logging.
          */
-        const val MAX_POINTS_PER_SEGMENT = 1_000_000
+        private const val MAX_POINTS_PER_SEGMENT = 1_000_000
 
         private const val TAG_GPX = "gpx"
         private const val TAG_METADATA = "metadata"

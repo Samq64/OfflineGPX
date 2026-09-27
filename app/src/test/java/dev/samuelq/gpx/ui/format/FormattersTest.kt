@@ -36,8 +36,8 @@ class FormattersTest {
 
     @Test
     fun `elevation converts to feet`() {
-        assertEquals("1,000 m", metric.elevation(1000.0, en))
-        assertEquals("3,281 ft", imperial.elevation(1000.0, en))
+        assertEquals("1,000 m", metric.meters(1000.0, en))
+        assertEquals("3,281 ft", imperial.meters(1000.0, en))
     }
 
     @Test
@@ -88,7 +88,7 @@ class FormattersTest {
     fun `nothing measured reads as nothing measured`() {
         assertEquals(Formatters.EMPTY, metric.distance(Double.NaN, en))
         assertEquals(Formatters.EMPTY, imperial.speed(Double.NaN, en))
-        assertEquals(Formatters.EMPTY, imperial.elevation(Double.NaN, en))
+        assertEquals(Formatters.EMPTY, imperial.meters(Double.NaN, en))
         assertEquals(Formatters.EMPTY, Formatters.duration(Double.NaN))
     }
 

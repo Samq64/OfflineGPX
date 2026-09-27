@@ -878,7 +878,6 @@ private fun teardropPath(cx: Float, cy: Float, radius: Float, tipY: Float): andr
     val d = tipY - cy
     val angle = kotlin.math.acos((radius / d).coerceIn(-1f, 1f))
     val a1 = (Math.PI / 2).toFloat() - angle
-    val a2 = (Math.PI / 2).toFloat() + angle
     val a1Degrees = Math.toDegrees(a1.toDouble()).toFloat()
     // The long way round, over the top of the circle - the short way is the wedge the
     // tangent lines replace.

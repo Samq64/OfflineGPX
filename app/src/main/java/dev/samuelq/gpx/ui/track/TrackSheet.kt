@@ -144,7 +144,7 @@ fun TrackSheet(
     val speedValue: (Float) -> String =
         remember(formatters) { { formatters.speed(it.toDouble()) } }
     val elevationValue: (Float) -> String =
-        remember(formatters) { { formatters.elevation(it.toDouble()) } }
+        remember(formatters) { { formatters.meters(it.toDouble()) } }
     val positionValue: (Float) -> String = remember(formatters, useTimeAxis) {
         if (useTimeAxis) {
             { Formatters.duration(it.toDouble()) }

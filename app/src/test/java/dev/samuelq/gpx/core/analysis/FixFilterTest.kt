@@ -34,13 +34,6 @@ class FixFilterTest {
         assertNull(filter.pointFor(fix(1, 100.0, accuracy = 40.0)))
     }
 
-    @Test
-    fun `accuracy is reported even for a rejected fix`() {
-        val filter = FixFilter()
-        filter.pointFor(fix(0, 0.0, accuracy = 40.0))
-        assertEquals(40.0, filter.lastAccuracyMeters)
-    }
-
     /**
      * The bug this class exists for: a phone on a table, wandering inside its error
      * circle. Every step is smaller than the accuracy it arrived with, so none of them is
