@@ -23,15 +23,6 @@ class LoadedTrack(
     }
 }
 
-/** A recording left unsaved by a crash, read back and waiting to be saved or discarded. */
-class AbandonedRecording(
-    internal val file: java.io.File,
-    val track: Track,
-    val profile: TrackProfile,
-    /** What it would be called if saved without a name. */
-    val defaultName: String,
-)
-
 /** Why a file could not be turned into a [LoadedTrack]. The UI maps these to messages. */
 sealed class TrackLoadException(message: String, cause: Throwable? = null) : Exception(message, cause) {
     /** Gone, renamed, or (for a transient, one-shot URI) no longer granted. */
@@ -79,25 +70,6 @@ interface TrackRepository {
         track: Track,
         analyzed: TrackProfile? = null,
     ): Result<Long>
-
-    /**
-     * Moves a recording that was never saved - the process died, or the save failed - out
-     * of the live log's way, to wait for [abandonedRecordings]. Runs at startup and before
-     * each recording. Returns whether the live log's name is free, so a new recording
-     * can't be appended to an old one.
-     */
-    suspend fun claimAbandonedRecording(): Boolean
-
-    /**
-     * Every claimed recording worth asking about, oldest first. Ones a clean stop would
-     * have thrown away are deleted rather than offered.
-     */
-    suspend fun abandonedRecordings(): List<AbandonedRecording>
-
-    /** Saves [recording] as a track called [name], or the default name if blank. */
-    suspend fun saveAbandoned(recording: AbandonedRecording, name: String): Result<Long>
-
-    suspend fun discardAbandoned(recording: AbandonedRecording)
 
     /**
      * Writes several tracks into [treeUri], a folder chosen through SAF, under the [names]

@@ -18,7 +18,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import dev.samuelq.gpx.R
-import dev.samuelq.gpx.data.track.AbandonedRecording
+import dev.samuelq.gpx.data.record.AbandonedRecording
 import dev.samuelq.gpx.ui.format.Formatters
 import dev.samuelq.gpx.ui.format.LocalFormatters
 

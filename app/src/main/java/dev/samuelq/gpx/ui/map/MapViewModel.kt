@@ -9,8 +9,9 @@ import dev.samuelq.gpx.data.db.TrackEntity
 import dev.samuelq.gpx.data.map.MapStore
 import dev.samuelq.gpx.data.map.OfflineMap
 import dev.samuelq.gpx.data.record.LiveTrace
+import dev.samuelq.gpx.data.record.AbandonedRecording
 import dev.samuelq.gpx.data.record.RecordingController
-import dev.samuelq.gpx.data.track.AbandonedRecording
+import dev.samuelq.gpx.data.record.RecordingRecovery
 import dev.samuelq.gpx.data.track.LoadedTrack
 import dev.samuelq.gpx.data.track.TrackRepository
 import dev.samuelq.gpx.di.appContainer
@@ -58,6 +59,7 @@ data class MapUiState(
 
 class MapViewModel(
     private val repository: TrackRepository,
+    private val recovery: RecordingRecovery,
     controller: RecordingController,
     mapStore: MapStore,
 ) : ViewModel() {
@@ -199,7 +201,7 @@ class MapViewModel(
         val recording = _abandoned.value ?: return
         _abandoned.value = null
         viewModelScope.launch {
-            repository.saveAbandoned(recording, name).fold(
+            recovery.save(recording, name).fold(
                 onSuccess = { focus(TrackRef.Saved(it)) },
                 // Still on disk: asked about again next launch.
                 onFailure = {
@@ -215,14 +217,14 @@ class MapViewModel(
         val recording = _abandoned.value ?: return
         _abandoned.value = null
         viewModelScope.launch {
-            repository.discardAbandoned(recording)
+            recovery.discard(recording)
             nextAbandoned()
         }
     }
 
     private suspend fun nextAbandoned() {
         // A failed save stays on disk, and skipping it keeps the dialog from reopening on it.
-        _abandoned.value = repository.abandonedRecordings().firstOrNull { it.file !in skipped }
+        _abandoned.value = recovery.abandoned().firstOrNull { it.file !in skipped }
     }
 
     /**
@@ -328,6 +330,7 @@ class MapViewModel(
             initializer {
                 MapViewModel(
                     repository = appContainer.trackRepository,
+                    recovery = appContainer.recordingRecovery,
                     controller = appContainer.recordingController,
                     mapStore = appContainer.mapStore,
                 )

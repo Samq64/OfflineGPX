@@ -1,5 +1,7 @@
 package dev.samuelq.gpx.data.record
 
+import android.content.Context
+import android.content.Intent
 import androidx.annotation.StringRes
 import dev.samuelq.gpx.core.analysis.FixFilter
 import dev.samuelq.gpx.core.model.TrackPoint
@@ -72,11 +74,13 @@ sealed interface RecordingEvent {
 }
 
 /**
- * The single place the service and the UI meet: the service publishes here rather than
- * being bound to from a composable, and [dev.samuelq.gpx.di.AppContainer] holds it so state
- * survives the user leaving the app mid-ride.
+ * The single place the service and the UI meet: the UI sends commands through here and the
+ * service publishes back, rather than being bound to from a composable.
+ * [dev.samuelq.gpx.di.AppContainer] holds it so state survives leaving the app mid-ride.
  */
-class RecordingController {
+class RecordingController(context: Context) {
+
+    private val appContext = context.applicationContext
 
     private val _state = MutableStateFlow<RecordingState>(RecordingState.Idle)
     val state: StateFlow<RecordingState> = _state.asStateFlow()
@@ -101,5 +105,31 @@ class RecordingController {
      */
     internal fun emit(event: RecordingEvent) {
         _events.trySend(event)
+    }
+
+    /**
+     * True when the device can actually produce a fix. Read on each call rather than
+     * cached: location is a quick-settings toggle, so the answer goes stale in a second.
+     */
+    val isGpsEnabled: Boolean get() = LocationSource(appContext).isGpsEnabled
+
+    fun start() = send(RecordingService.ACTION_START)
+    fun pause() = send(RecordingService.ACTION_PAUSE)
+    fun resume() = send(RecordingService.ACTION_RESUME)
+    fun stop() = send(RecordingService.ACTION_STOP)
+    fun discard() = send(RecordingService.ACTION_DISCARD)
+
+    /** [description] may be blank - a waypoint with nothing typed is still one. */
+    fun addWaypoint(description: String) = send(RecordingService.ACTION_WAYPOINT) {
+        putExtra(RecordingService.EXTRA_DESCRIPTION, description)
+    }
+
+    private fun send(action: String, extras: Intent.() -> Unit = {}) {
+        val intent = Intent(appContext, RecordingService::class.java).setAction(action).apply(extras)
+        if (action == RecordingService.ACTION_START) {
+            appContext.startForegroundService(intent)
+        } else {
+            appContext.startService(intent)
+        }
     }
 }

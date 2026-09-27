@@ -13,13 +13,10 @@ import dev.samuelq.gpx.data.db.ColorUse
 import dev.samuelq.gpx.data.db.TrackDao
 import dev.samuelq.gpx.data.db.TrackEntity
 import dev.samuelq.gpx.data.db.TrackSource
-import dev.samuelq.gpx.R
 import dev.samuelq.gpx.data.gpx.GpxNameRewriter
 import dev.samuelq.gpx.data.gpx.GpxParseException
 import dev.samuelq.gpx.data.gpx.GpxParser
 import dev.samuelq.gpx.data.gpx.GpxWriter
-import dev.samuelq.gpx.data.record.RecordingService
-import dev.samuelq.gpx.data.record.RecordingWal
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -28,8 +25,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.shareIn
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileNotFoundException
@@ -54,16 +49,8 @@ class GpxTrackRepository(
      */
     private val scope = CoroutineScope(SupervisorJob() + io)
 
-    private val recordingsDir: File get() = RecordingService.recordingsDir(appContext)
-
-    /** Two recoveries at once would both save the same claimed log. */
-    private val recovery = Mutex()
-
-    /**
-     * App-private copy of every imported GPX, same as [recordingsDir] - a recording and an
-     * import are both files this app owns outright, not borrowed via a grant.
-     */
-    private val importsDir: File get() = File(appContext.filesDir, "imports").apply { mkdirs() }
+    private val recordingsDir: File get() = TrackFiles.recordingsDir(appContext)
+    private val importsDir: File get() = TrackFiles.importsDir(appContext)
 
     /**
      * Single-entry cache: re-entering a track the user just looked at would otherwise
@@ -175,7 +162,7 @@ class GpxTrackRepository(
                 // Named before it's written, so the name is inside the GPX and survives an
                 // export. The filename itself stays the sortable stamp - nobody reads those.
                 val named = if (track.name.isNullOrBlank()) {
-                    track.copy(name = defaultName(profile.stats))
+                    track.copy(name = defaultTrackName(appContext, profile.stats))
                 } else {
                     track
                 }
@@ -200,69 +187,6 @@ class GpxTrackRepository(
                 dao.upsert(entity)
             }.recoverFailure()
         }
-
-    // Locked before switching threads, so the launch-time call takes the lock during
-    // Application.onCreate - ahead of any recording, which would otherwise have its live
-    // log claimed out from under it.
-    override suspend fun claimAbandonedRecording(): Boolean = recovery.withLock {
-        withContext(io) {
-            // Claimed by renaming before a byte is read, under a name of its own so an
-            // earlier claim still waiting on the user is never overwritten.
-            val log = File(recordingsDir, RecordingService.WAL_NAME)
-            if (log.length() > 0L) {
-                log.renameTo(
-                    File(recordingsDir, "${RecordingService.WAL_RECOVERY_PREFIX}${System.currentTimeMillis()}.wal")
-                )
-            } else {
-                log.delete()
-            }
-            !log.exists()
-        }
-    }
-
-    override suspend fun abandonedRecordings(): List<AbandonedRecording> = recovery.withLock {
-        withContext(io) {
-            recordingsDir
-                .listFiles { file -> file.name.startsWith(RecordingService.WAL_RECOVERY_PREFIX) }
-                .orEmpty()
-                .sortedBy(File::getName)
-                .mapNotNull { claimed ->
-                    try {
-                        readClaimed(claimed)
-                    } catch (e: IOException) {
-                        Log.w(TAG, "Could not read ${claimed.name}", e)
-                        null
-                    }
-                }
-        }
-    }
-
-    /** One claimed log, or null - deleting it - when there is nothing worth saving. */
-    private fun readClaimed(claimed: File): AbandonedRecording? {
-        val track = RecordingWal.recover(claimed, name = null)
-        // The same bar a clean stop applies: a crash must not resurrect what pressing Stop
-        // would have thrown away.
-        val profile = track?.let(TrackAnalyzer::analyze)
-        if (track == null || profile == null ||
-            profile.stats.distanceMeters < RecordingService.MIN_SAVEABLE_DISTANCE_METERS
-        ) {
-            claimed.delete()
-            return null
-        }
-        return AbandonedRecording(claimed, track, profile, defaultName(profile.stats))
-    }
-
-    override suspend fun saveAbandoned(recording: AbandonedRecording, name: String): Result<Long> =
-        recovery.withLock {
-            val named = recording.track.copy(name = name.trim().ifEmpty { null })
-            saveRecording(named, recording.profile).onSuccess {
-                withContext(io) { recording.file.delete() }
-            }
-        }
-
-    override suspend fun discardAbandoned(recording: AbandonedRecording) {
-        recovery.withLock { withContext(io) { recording.file.delete() } }
-    }
 
     override suspend fun exportAll(names: Map<Long, String>, treeUri: String): Result<Int> =
         withContext(io) {
@@ -380,27 +304,6 @@ class GpxTrackRepository(
         entities.forEach(::deleteFile)
     }
 
-    /**
-     * What a recording is called before anyone renames it: time of day plus walk-or-ride,
-     * inferred from average moving speed (hiking 3-6 km/h, cycling 15-30, safely apart). A
-     * wrong guess costs one rename; the row underneath already carries date/distance/duration.
-     */
-    private fun defaultName(stats: dev.samuelq.gpx.core.analysis.TrackStats): String {
-        val zoned = (stats.startedAt ?: Instant.now()).atZone(ZoneId.systemDefault())
-        val activity = if (stats.averageSpeedMps < WALKING_SPEED_CEILING_MPS) {
-            R.string.track_default_walk
-        } else {
-            R.string.track_default_ride
-        }
-        val partOfDay = when (zoned.hour) {
-            in 5..11 -> R.string.track_default_morning
-            in 12..16 -> R.string.track_default_afternoon
-            in 17..20 -> R.string.track_default_evening
-            else -> R.string.track_default_night
-        }
-        return appContext.getString(partOfDay, appContext.getString(activity))
-    }
-
     private suspend fun nextColorIndex(): Int = leastUsedSlot(dao.colorUsage(), ROUTE_PALETTE_SIZE)
 
     /**
@@ -498,9 +401,6 @@ class GpxTrackRepository(
 
         /** Long enough to cover a rotation or a trip to another screen and back. */
         const val SHARE_GRACE_MILLIS = 5_000L
-
-        /** 9 km/h. Above a brisk walk, well below a bicycle. */
-        const val WALKING_SPEED_CEILING_MPS = 2.5
 
         /** What a provider is told an exported track is, so it files it as one. */
         const val GPX_MIME = "application/gpx+xml"

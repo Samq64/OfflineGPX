@@ -7,6 +7,7 @@ import dev.samuelq.gpx.GpxApplication
 import dev.samuelq.gpx.data.db.GpxDatabase
 import dev.samuelq.gpx.data.map.MapStore
 import dev.samuelq.gpx.data.record.RecordingController
+import dev.samuelq.gpx.data.record.RecordingRecovery
 import dev.samuelq.gpx.data.settings.SettingsRepository
 import dev.samuelq.gpx.data.track.GpxTrackRepository
 import dev.samuelq.gpx.data.track.TrackRepository
@@ -17,7 +18,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
 /**
- * Manual dependency wiring, for a graph of three objects.
+ * Manual dependency wiring, for a graph of a handful of objects.
  *
  * Hilt becomes worth its code generation when this stops fitting on one screen - the
  * recording service reaches it through the Application rather than being injected, which
@@ -40,7 +41,10 @@ class AppContainer(context: Context) {
      * Shared by the recording service and the screens watching it. Held here because it
      * has to outlive any screen: leaving the app mid-ride is the normal case.
      */
-    val recordingController = RecordingController()
+    val recordingController = RecordingController(appContext)
+
+    /** The live recording's log, and whatever a crash left of an earlier one. */
+    val recordingRecovery by lazy { RecordingRecovery(appContext, trackRepository) }
 
     /** Read by the recorder when a recording starts, and by everything that shows a number. */
     val settingsRepository by lazy { SettingsRepository(appContext) }
@@ -58,7 +62,7 @@ class AppContainer(context: Context) {
      */
     fun claimAbandonedRecording() {
         applicationScope.launch(start = CoroutineStart.UNDISPATCHED) {
-            trackRepository.claimAbandonedRecording()
+            recordingRecovery.claim()
         }
     }
 

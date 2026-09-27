@@ -39,7 +39,6 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import java.io.File
 import java.io.IOException
 import java.time.Instant
 
@@ -194,12 +193,12 @@ class RecordingService : Service() {
 
         // A ride whose save failed is still in the log. Set aside first, for the next
         // launch to ask about, so this one starts from an empty file.
-        if (!container.trackRepository.claimAbandonedRecording()) {
+        if (!container.recordingRecovery.claim()) {
             abandon(R.string.record_save_failed)
             return
         }
 
-        wal = RecordingWal.open(File(recordingsDir(this), WAL_NAME))
+        wal = RecordingWal.open(container.recordingRecovery.liveLog)
 
         publish()
         startTicker()
@@ -391,7 +390,7 @@ class RecordingService : Service() {
             // Nothing in the log, or fixes that never went anywhere - either way a library
             // row of three empty charts, and neither the user's decision, so neither is
             // called "discarded". The log only ever holds this ride; see [start].
-            if (track == null || distanceMeters < MIN_SAVEABLE_DISTANCE_METERS) {
+            if (track == null || !RecordingRecovery.isSaveable(distanceMeters)) {
                 log.file.delete()
                 container.recordingController.emit(
                     RecordingEvent.Failed(
@@ -546,14 +545,13 @@ class RecordingService : Service() {
     }
 
     companion object {
-        const val ACTION_START = "dev.samuelq.gpx.RECORD_START"
-        const val ACTION_PAUSE = "dev.samuelq.gpx.RECORD_PAUSE"
-        const val ACTION_RESUME = "dev.samuelq.gpx.RECORD_RESUME"
-        const val ACTION_STOP = "dev.samuelq.gpx.RECORD_STOP"
-        const val ACTION_DISCARD = "dev.samuelq.gpx.RECORD_DISCARD"
-        const val ACTION_WAYPOINT = "dev.samuelq.gpx.RECORD_WAYPOINT"
-
-        private const val EXTRA_DESCRIPTION = "description"
+        internal const val ACTION_START = "dev.samuelq.gpx.RECORD_START"
+        internal const val ACTION_PAUSE = "dev.samuelq.gpx.RECORD_PAUSE"
+        internal const val ACTION_RESUME = "dev.samuelq.gpx.RECORD_RESUME"
+        internal const val ACTION_STOP = "dev.samuelq.gpx.RECORD_STOP"
+        internal const val ACTION_DISCARD = "dev.samuelq.gpx.RECORD_DISCARD"
+        internal const val ACTION_WAYPOINT = "dev.samuelq.gpx.RECORD_WAYPOINT"
+        internal const val EXTRA_DESCRIPTION = "description"
 
         private const val TAG = "RecordingService"
         private const val CHANNEL_ID = "recording"
@@ -567,43 +565,5 @@ class RecordingService : Service() {
 
         /** How often the clock ticks on its own, between whatever fixes arrive. */
         private const val TICK_INTERVAL_MILLIS = 1_000L
-
-        /**
-         * Below this a recording is not a track - not zero, since a handful of fixes that
-         * happened to clear the displacement floor is the same nothing as none at all.
-         * Shared with crash recovery, which must not resurrect what a clean stop would toss.
-         */
-        const val MIN_SAVEABLE_DISTANCE_METERS = 10.0
-
-        /** The in-progress log. Fixed name: there is only ever one recording. */
-        const val WAL_NAME = "recording.wal"
-
-        /**
-         * Prefix of the names recovery moves an abandoned [WAL_NAME] to before reading it.
-         * One per ride, so a claim a failed save left behind is never overwritten. See
-         * `GpxTrackRepository.claimAbandonedRecording`.
-         */
-        const val WAL_RECOVERY_PREFIX = "recovering-"
-
-        /** Where recordings and their logs live. App-private: no permission, and ours to delete. */
-        fun recordingsDir(context: Context): File =
-            File(context.filesDir, "recordings").apply { mkdirs() }
-
-        fun send(context: Context, action: String) {
-            val intent = Intent(context, RecordingService::class.java).setAction(action)
-            if (action == ACTION_START) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
-            }
-        }
-
-        /** [description] may be blank - a waypoint with nothing typed is still one. */
-        fun sendWaypoint(context: Context, description: String) {
-            val intent = Intent(context, RecordingService::class.java)
-                .setAction(ACTION_WAYPOINT)
-                .putExtra(EXTRA_DESCRIPTION, description)
-            context.startService(intent)
-        }
     }
 }
