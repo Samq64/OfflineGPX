@@ -57,11 +57,11 @@ class SettingsViewModel(
     fun setMinDisplacement(meters: Double) = repository.setMinDisplacementMeters(meters)
     fun resetRecording() = repository.resetRecording()
 
-    fun importMap(uri: Uri?, suggestedName: String?) {
+    fun importMap(uri: Uri?) {
         if (uri == null) return
         viewModelScope.launch {
             _importing.value = true
-            val result = mapStore.import(uri, suggestedName)
+            val result = mapStore.import(uri)
             _importing.value = false
             _messages.send(
                 when (result) {

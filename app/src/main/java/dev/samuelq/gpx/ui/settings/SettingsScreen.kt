@@ -1,9 +1,6 @@
 package dev.samuelq.gpx.ui.settings
 
-import android.content.Context
 import android.content.Intent
-import android.net.Uri
-import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -92,7 +89,7 @@ fun SettingsScreen(
     // picked, which is all a copy needs. No storage permission is involved either way.
     val importer = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
-    ) { uri -> viewModel.importMap(uri, uri?.let { context.fileNameOf(it) }) }
+    ) { uri -> viewModel.importMap(uri) }
 
     val imported = stringResource(R.string.settings_maps_imported)
     val deleted = stringResource(R.string.settings_maps_deleted)
@@ -393,17 +390,6 @@ private fun MapRow(
         }
     }
 }
-
-/**
- * The name the provider gives a document, for naming the copy after it. Null when the
- * provider declines to say; the store then falls back to its own name.
- */
-private fun Context.fileNameOf(uri: Uri): String? = runCatching {
-    contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
-        ?.use { cursor ->
-            if (cursor.moveToFirst()) cursor.getString(0) else null
-        }
-}.getOrNull()
 
 /**
  * What the picker will accept. A mapsforge map file has no registered MIME type, so

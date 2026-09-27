@@ -1,13 +1,12 @@
 package dev.samuelq.gpx.data.track
 
 import android.content.Context
-import android.database.Cursor
 import android.net.Uri
 import android.provider.DocumentsContract
-import android.provider.OpenableColumns
 import android.util.Log
 import dev.samuelq.gpx.core.analysis.TrackAnalyzer
 import dev.samuelq.gpx.core.analysis.TrackProfile
+import dev.samuelq.gpx.core.analysis.TrackStats
 import dev.samuelq.gpx.core.model.Track
 import dev.samuelq.gpx.data.db.ColorUse
 import dev.samuelq.gpx.data.db.TrackDao
@@ -17,6 +16,10 @@ import dev.samuelq.gpx.data.gpx.GpxNameRewriter
 import dev.samuelq.gpx.data.gpx.GpxParseException
 import dev.samuelq.gpx.data.gpx.GpxParser
 import dev.samuelq.gpx.data.gpx.GpxWriter
+import dev.samuelq.gpx.data.gpx.GPX_MIME_TYPE
+import dev.samuelq.gpx.data.copyInto
+import dev.samuelq.gpx.data.displayName
+import dev.samuelq.gpx.data.uniqueFile
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -79,32 +82,18 @@ class GpxTrackRepository(
         runCatching {
             val uri = Uri.parse(location)
             val displayName = displayNameOf(uri)
-            val destination = File(importsDir, uniqueImportName(displayName))
+            val destination = uniqueFile(importsDir, displayName, "gpx", fallback = "track")
 
             // Copied before it's parsed, deleted again if either step fails - same order
             // MapStore validates a basemap in, so nothing unusable is left taking up space.
             val loaded = runCatching {
-                copyToPrivateStorage(uri, destination)
+                if (!appContext.contentResolver.copyInto(uri, destination)) {
+                    throw TrackLoadException.Unreadable("No provider could open $uri")
+                }
                 read(destination.absolutePath, displayName, LoadedTrack.TRANSIENT_ID)
             }.onFailure { destination.delete() }.getOrThrow()
 
-            val now = System.currentTimeMillis()
-            val stats = loaded.profile.stats
-            val entity = TrackEntity(
-                colorIndex = nextColorIndex(),
-                source = TrackSource.IMPORTED,
-                location = destination.absolutePath,
-                displayName = displayName,
-                trackName = stats.name,
-                startedAtEpochMillis = stats.startedAt?.toEpochMilli(),
-                lastOpenedAtEpochMillis = now,
-                distanceMeters = stats.distanceMeters,
-                movingSeconds = stats.movingDurationSeconds,
-                totalSeconds = stats.totalDurationSeconds,
-                ascentMeters = stats.ascentMeters,
-                descentMeters = stats.descentMeters,
-                pointCount = stats.pointCount,
-            )
+            val entity = newEntity(TrackSource.IMPORTED, destination, displayName, loaded.profile.stats)
             val id = dao.upsert(entity)
 
             cached = destination.absolutePath to LoadedTrack(
@@ -118,20 +107,9 @@ class GpxTrackRepository(
         }.recoverFailure()
     }
 
-    /** Copies [source] into [destination], or throws if nothing could be read from it. */
-    private fun copyToPrivateStorage(source: Uri, destination: File) {
-        val copied = appContext.contentResolver.openInputStream(source)?.use { input ->
-            destination.outputStream().use { output -> input.copyTo(output) }
-        }
-        if (copied == null) {
-            throw TrackLoadException.Unreadable("No provider could open $source")
-        }
-    }
-
     override suspend fun open(id: Long): Result<LoadedTrack> = withContext(io) {
         runCatching {
-            val entity = dao.byId(id)
-                ?: throw TrackLoadException.Unreadable("No track with id $id")
+            val entity = entity(id)
 
             cached?.let { (location, track) ->
                 if (location == entity.location) {
@@ -156,8 +134,14 @@ class GpxTrackRepository(
                 val profile = analyzed ?: TrackAnalyzer.analyze(track)
                 // Every recorded point is timed; the fallback is for a track that isn't.
                 val startedAt = profile.stats.startedAt ?: Instant.now()
-                val displayName = uniqueRecordingName(startedAt)
-                val file = File(recordingsDir, displayName)
+                // The start time, numbered if taken: local time repeats an hour when the
+                // clocks go back, and a save must never overwrite another ride.
+                val file = uniqueFile(
+                    recordingsDir,
+                    FILE_STAMP.format(startedAt.atZone(ZoneId.systemDefault())),
+                    "gpx",
+                    fallback = "recording",
+                )
 
                 // Named before it's written, so the name is inside the GPX and survives an
                 // export. The filename itself stays the sortable stamp - nobody reads those.
@@ -168,23 +152,8 @@ class GpxTrackRepository(
                 }
                 file.outputStream().use { writer.write(named, it) }
 
-                val stats = profile.stats.copy(name = named.name)
-                val entity = TrackEntity(
-                    source = TrackSource.RECORDED,
-                    colorIndex = nextColorIndex(),
-                    location = file.absolutePath,
-                    displayName = displayName,
-                    trackName = stats.name,
-                    startedAtEpochMillis = startedAt.toEpochMilli(),
-                    lastOpenedAtEpochMillis = System.currentTimeMillis(),
-                    distanceMeters = stats.distanceMeters,
-                    movingSeconds = stats.movingDurationSeconds,
-                    totalSeconds = stats.totalDurationSeconds,
-                    ascentMeters = stats.ascentMeters,
-                    descentMeters = stats.descentMeters,
-                    pointCount = stats.pointCount,
-                )
-                dao.upsert(entity)
+                val stats = profile.stats.copy(name = named.name, startedAt = startedAt)
+                dao.upsert(newEntity(TrackSource.RECORDED, file, file.name, stats))
             }.recoverFailure()
         }
 
@@ -220,7 +189,7 @@ class GpxTrackRepository(
         val target = DocumentsContract.createDocument(
             appContext.contentResolver,
             folder,
-            GPX_MIME,
+            GPX_MIME_TYPE,
             name,
         ) ?: return false
 
@@ -252,8 +221,7 @@ class GpxTrackRepository(
 
     override suspend fun geometry(id: Long): Result<LoadedTrack> = withContext(io) {
         runCatching {
-            val entity = dao.byId(id)
-                ?: throw TrackLoadException.Unreadable("No track with id $id")
+            val entity = entity(id)
             read(entity.location, entity.displayName, id, entity.colorIndex)
         }.recoverFailure()
     }
@@ -264,8 +232,7 @@ class GpxTrackRepository(
 
     override suspend fun rename(id: Long, name: String): Result<Unit> = withContext(io) {
         runCatching {
-            val entity = dao.byId(id)
-                ?: throw TrackLoadException.Unreadable("No track with id $id")
+            val entity = entity(id)
             val trimmed = name.trim().takeIf(String::isNotEmpty)
 
             // Written into the file too: export is a byte copy, so a rename that never
@@ -304,7 +271,30 @@ class GpxTrackRepository(
         entities.forEach(::deleteFile)
     }
 
-    private suspend fun nextColorIndex(): Int = leastUsedSlot(dao.colorUsage(), ROUTE_PALETTE_SIZE)
+    private suspend fun entity(id: Long): TrackEntity =
+        dao.byId(id) ?: throw TrackLoadException.Unreadable("No track with id $id")
+
+    /** A new row for [file], summarised by [stats], in the palette slot least in use. */
+    private suspend fun newEntity(
+        source: TrackSource,
+        file: File,
+        displayName: String,
+        stats: TrackStats,
+    ) = TrackEntity(
+        source = source,
+        colorIndex = leastUsedSlot(dao.colorUsage(), TrackEntity.PALETTE_SIZE),
+        location = file.absolutePath,
+        displayName = displayName,
+        trackName = stats.name,
+        startedAtEpochMillis = stats.startedAt?.toEpochMilli(),
+        lastOpenedAtEpochMillis = System.currentTimeMillis(),
+        distanceMeters = stats.distanceMeters,
+        movingSeconds = stats.movingDurationSeconds,
+        totalSeconds = stats.totalDurationSeconds,
+        ascentMeters = stats.ascentMeters,
+        descentMeters = stats.descentMeters,
+        pointCount = stats.pointCount,
+    )
 
     /**
      * Reads and analyses whatever [location] points at: an app-private path, or a
@@ -342,71 +332,15 @@ class GpxTrackRepository(
         runCatching { File(entity.location).delete() }
     }
 
-    private fun displayNameOf(uri: Uri): String = queryDisplayName(uri)
+    private fun displayNameOf(uri: Uri): String = appContext.contentResolver.displayName(uri)
         ?: uri.lastPathSegment?.substringAfterLast('/')
         ?: "track.gpx"
-
-    private fun queryDisplayName(uri: Uri): String? = try {
-        appContext.contentResolver
-            .query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
-            ?.use { cursor: Cursor ->
-                if (cursor.moveToFirst()) cursor.getString(0)?.takeIf(String::isNotBlank) else null
-            }
-    } catch (e: Exception) {
-        Log.d(TAG, "Could not query a display name for $uri", e)
-        null
-    }
-
-    /**
-     * The start time as a filename, numbered if taken: local time repeats an hour when the
-     * clocks go back, and a save must never overwrite another ride.
-     */
-    private fun uniqueRecordingName(startedAt: Instant): String {
-        val base = FILE_STAMP.format(startedAt.atZone(ZoneId.systemDefault()))
-        var candidate = "$base.gpx"
-        var suffix = 2
-        while (File(recordingsDir, candidate).exists()) {
-            candidate = "$base-$suffix.gpx"
-            suffix++
-        }
-        return candidate
-    }
-
-    /**
-     * A name in [importsDir] not already taken, keeping the picked file's own name where
-     * possible - same reasoning as `MapStore`'s equivalent.
-     */
-    private fun uniqueImportName(displayName: String): String {
-        val base = displayName
-            .substringAfterLast('/')
-            .let { if (it.endsWith(".gpx", ignoreCase = true)) it.dropLast(4) else it }
-            .replace(UNSAFE_FILENAME_CHARACTERS, "_")
-            .take(MAX_IMPORT_NAME_LENGTH)
-            .ifBlank { "track" }
-
-        var candidate = "$base.gpx"
-        var suffix = 2
-        while (File(importsDir, candidate).exists()) {
-            candidate = "$base ($suffix).gpx"
-            suffix++
-        }
-        return candidate
-    }
 
     private companion object {
         const val TAG = "GpxTrackRepository"
 
-        /** Matches `routePalette()` in the theme. Six, then hues repeat. */
-        const val ROUTE_PALETTE_SIZE = 6
-
         /** Long enough to cover a rotation or a trip to another screen and back. */
         const val SHARE_GRACE_MILLIS = 5_000L
-
-        /** What a provider is told an exported track is, so it files it as one. */
-        const val GPX_MIME = "application/gpx+xml"
-
-        const val MAX_IMPORT_NAME_LENGTH = 80
-        val UNSAFE_FILENAME_CHARACTERS = Regex("""[\\/:*?"<>|]""")
 
         /**
          * Sortable, unambiguous, and legible as a filename once exported. `Locale.ROOT` so

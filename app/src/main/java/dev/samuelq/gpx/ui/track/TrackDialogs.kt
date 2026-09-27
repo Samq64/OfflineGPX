@@ -26,6 +26,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.core.content.FileProvider
 import dev.samuelq.gpx.R
+import dev.samuelq.gpx.data.gpx.GPX_MIME_TYPE
 import java.io.File
 
 /**
@@ -135,7 +136,7 @@ fun shareTrackIntent(context: Context, location: String, trackName: String?, dis
         context, "${context.packageName}.fileprovider", File(location),
     )
     val send = Intent(Intent.ACTION_SEND).apply {
-        type = "application/gpx+xml"
+        type = GPX_MIME_TYPE
         putExtra(Intent.EXTRA_STREAM, uri)
         putExtra(Intent.EXTRA_TITLE, exportFileName(trackName, displayName))
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)

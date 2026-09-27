@@ -6,6 +6,9 @@ import java.io.OutputStream
 import java.time.Instant
 import java.time.format.DateTimeFormatter
 
+/** What a provider is told a GPX file is, so it files it as one. */
+const val GPX_MIME_TYPE = "application/gpx+xml"
+
 /**
  * Writes a [Track] as GPX 1.1 - storage, not an export feature. A recording *is* a GPX
  * file on disk, so what this writes is what the app reads back and what the user shares.

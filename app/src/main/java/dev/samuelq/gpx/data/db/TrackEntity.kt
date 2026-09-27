@@ -62,4 +62,9 @@ data class TrackEntity(
     val ascentMeters: Double,
     val descentMeters: Double,
     val pointCount: Int,
-)
+) {
+    companion object {
+        /** Slots in the route palette. Six, then hues repeat. */
+        const val PALETTE_SIZE = 6
+    }
+}

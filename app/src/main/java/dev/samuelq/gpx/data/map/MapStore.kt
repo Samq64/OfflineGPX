@@ -2,7 +2,10 @@ package dev.samuelq.gpx.data.map
 
 import android.content.Context
 import android.net.Uri
+import dev.samuelq.gpx.data.copyInto
+import dev.samuelq.gpx.data.displayName
 import dev.samuelq.gpx.data.settings.SettingsRepository
+import dev.samuelq.gpx.data.uniqueFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -122,18 +125,16 @@ class MapStore(
     }
 
     /**
-     * Copies the document at [uri] into private storage and reads its header, deleting the
-     * copy again if it fails validation. Validated after the copy, not before - SAF makes
-     * no promise a second open returns the same bytes.
+     * Copies the document at [uri] into private storage, named after it, and reads its
+     * header, deleting the copy again if it fails validation. Validated after the copy, not
+     * before - SAF makes no promise a second open returns the same bytes.
      */
-    suspend fun import(uri: Uri, suggestedName: String?): MapImportResult =
+    suspend fun import(uri: Uri): MapImportResult =
         withContext(Dispatchers.IO) {
-            val destination = File(directory, uniqueName(suggestedName))
+            val resolver = appContext.contentResolver
+            val destination = uniqueFile(directory, resolver.displayName(uri), EXTENSION, fallback = "map")
             try {
-                val copied = appContext.contentResolver.openInputStream(uri)?.use { input ->
-                    destination.outputStream().use { output -> input.copyTo(output) }
-                }
-                if (copied == null) {
+                if (!resolver.copyInto(uri, destination)) {
                     destination.delete()
                     return@withContext MapImportResult.Failed(MapImportError.UNREADABLE)
                 }
@@ -186,38 +187,11 @@ class MapStore(
         refresh()
     }
 
-    /**
-     * A name that is not already taken, keeping the user's if it is free.
-     *
-     * Two maps called `ottawa.map` are two different areas someone downloaded a month
-     * apart, and silently overwriting the first is the wrong answer to a name collision.
-     */
-    private fun uniqueName(suggested: String?): String {
-        val base = (suggested ?: DEFAULT_NAME)
-            .substringAfterLast('/')
-            .removeSuffix(".$EXTENSION")
-            .replace(UNSAFE_CHARACTERS, "_")
-            .take(MAX_NAME_LENGTH)
-            .ifBlank { DEFAULT_NAME }
-
-        var candidate = "$base.$EXTENSION"
-        var suffix = 2
-        while (File(directory, candidate).exists()) {
-            candidate = "$base ($suffix).$EXTENSION"
-            suffix++
-        }
-        return candidate
-    }
-
     private companion object {
         const val DIRECTORY = "maps"
         const val EXTENSION = "map"
-        const val DEFAULT_NAME = "map"
-        const val MAX_NAME_LENGTH = 80
 
         /** Below this, a failed copy is read as the disk being full rather than broken. */
         const val LOW_SPACE_BYTES = 64L * 1024 * 1024
-
-        val UNSAFE_CHARACTERS = Regex("""[\\/:*?"<>|]""")
     }
 }
