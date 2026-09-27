@@ -353,8 +353,10 @@ fun OfflineMapCanvas(
 
         val remembered = rememberedCamera
         if (remembered != null) {
-            map.setMapPosition(
-                MapPosition().setPosition(remembered.latitude, remembered.longitude).setZoom(remembered.zoom)
+            map.moveTo(
+                MapPosition().setPosition(remembered.latitude, remembered.longitude).setZoom(remembered.zoom),
+                currentExtent,
+                currentCover,
             )
             hasFramed = true
             return@LaunchedEffect
@@ -364,7 +366,7 @@ fun OfflineMapCanvas(
         val size = viewSize ?: return@LaunchedEffect
         val usable = size.usable(insets) ?: return@LaunchedEffect
 
-        map.setMapPosition(fit(target, size, usable, insets))
+        map.moveTo(fit(target, size, usable, insets), currentExtent, currentCover)
         hasFramed = true
     }
 

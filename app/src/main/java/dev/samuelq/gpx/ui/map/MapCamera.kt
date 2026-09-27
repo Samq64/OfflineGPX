@@ -128,6 +128,21 @@ internal data class Cover(val left: Int, val right: Int, val bottom: Int)
 internal fun Map.keepInView(extent: BoundingBox, cover: Cover) {
     if (width <= 0 || height <= 0) return
     val position = mapPosition
+    if (constrain(position, extent, cover)) setMapPosition(position)
+}
+
+/**
+ * Moves the camera to [target], held inside [extent] as [keepInView] would. The limit is
+ * worked out at [target]'s own scale first: VTM clamps every move to the current limit,
+ * and one left over from a whole-world view pins any framing to the extent's centre.
+ */
+internal fun Map.moveTo(target: MapPosition, extent: BoundingBox?, cover: Cover) {
+    if (extent != null && width > 0 && height > 0) constrain(target, extent, cover)
+    setMapPosition(target)
+}
+
+/** Sets VTM's limit for [position]'s scale and pulls [position] inside it. True if it moved. */
+private fun Map.constrain(position: MapPosition, extent: BoundingBox, cover: Cover): Boolean {
     val mapSize = Tile.SIZE * position.scale
 
     val (minX, maxX) = centreRange(
@@ -144,10 +159,10 @@ internal fun Map.keepInView(extent: BoundingBox, cover: Cover) {
 
     val x = position.x.coerceIn(minX, maxX)
     val y = position.y.coerceIn(minY, maxY)
-    if (x == position.x && y == position.y) return
+    if (x == position.x && y == position.y) return false
     position.x = x
     position.y = y
-    setMapPosition(position)
+    return true
 }
 
 /**
