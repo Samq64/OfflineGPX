@@ -114,7 +114,7 @@ internal class MarkerSymbols(marker: Color, puck: Color, darkTheme: Boolean, den
  * two points tangent to a line down to ([cx],[tipY]) with the two tangent lines themselves -
  * the classic map pin, computed exactly rather than approximated with a fixed-width wedge.
  */
-internal fun teardropPath(cx: Float, cy: Float, radius: Float, tipY: Float): android.graphics.Path {
+private fun teardropPath(cx: Float, cy: Float, radius: Float, tipY: Float): android.graphics.Path {
     val d = tipY - cy
     val angle = kotlin.math.acos((radius / d).coerceIn(-1f, 1f))
     val a1 = (Math.PI / 2).toFloat() - angle
@@ -135,7 +135,7 @@ internal fun teardropPath(cx: Float, cy: Float, radius: Float, tipY: Float): and
     }
 }
 
-internal fun marker(at: TrackPoint, symbol: MarkerSymbol) =
+private fun marker(at: TrackPoint, symbol: MarkerSymbol) =
     MarkerItem("", "", GeoPoint(at.latitude, at.longitude)).apply { marker = symbol }
 
 /**

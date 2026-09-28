@@ -118,7 +118,7 @@ internal fun Map.detach(basemap: Basemap) {
 }
 
 /** A map's own box, filled - the ground it actually covers. */
-internal fun boxDrawable(map: OfflineMap, style: Style): RectangleDrawable {
+private fun boxDrawable(map: OfflineMap, style: Style): RectangleDrawable {
     val h = map.header
     return RectangleDrawable(h.minLatitude, h.minLongitude, h.maxLatitude, h.maxLongitude, style)
 }
@@ -128,7 +128,7 @@ internal fun boxDrawable(map: OfflineMap, style: Style): RectangleDrawable {
  * world cut along every box edge, keeping the cells no box covers. Not one polygon with
  * holes - VTM fills the holes in.
  */
-internal fun outsideDrawables(maps: List<OfflineMap>, background: Color): List<RectangleDrawable> {
+private fun outsideDrawables(maps: List<OfflineMap>, background: Color): List<RectangleDrawable> {
     val style = Style.builder().fillColor(background.toArgb()).fillAlpha(1f).strokeColor(TRANSPARENT).build()
     // Not the whole world: the camera is penned to the extent and can't zoom out past it,
     // so a few spans' margin always covers the screen, and world-sized rectangles were
@@ -154,7 +154,7 @@ internal fun outsideDrawables(maps: List<OfflineMap>, background: Color): List<R
 }
 
 /** The dashed boundary marking where an imported file's detail stops. */
-internal fun outlineDrawable(map: OfflineMap, style: Style): LineDrawable {
+private fun outlineDrawable(map: OfflineMap, style: Style): LineDrawable {
     val h = map.header
     return LineDrawable(
         doubleArrayOf(
@@ -168,7 +168,7 @@ internal fun outlineDrawable(map: OfflineMap, style: Style): LineDrawable {
     )
 }
 
-internal const val TRANSPARENT = 0
+private const val TRANSPARENT = 0
 
 /** How far past the maps the outside mask reaches, in spans of their extent. */
 private const val MASK_MARGIN_SPANS = 3.0

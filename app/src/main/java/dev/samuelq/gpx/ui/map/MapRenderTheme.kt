@@ -271,7 +271,7 @@ object MapRenderTheme {
 }
 
 /** `#rrggbb` - a token in a document, hence `Locale.ROOT`, not a number anybody reads. */
-internal fun Color.css(): String = String.format(java.util.Locale.ROOT, "#%06X", 0xFFFFFF and toArgb())
+private fun Color.css(): String = String.format(java.util.Locale.ROOT, "#%06X", 0xFFFFFF and toArgb())
 
 /**
  * A step away from the background, for deriving a palette from one surface colour. The

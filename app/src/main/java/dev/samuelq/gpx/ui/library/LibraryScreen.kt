@@ -268,11 +268,11 @@ fun LibraryScreen(
                             // Opening a hidden track shows it, rather than drawing it as a
                             // one-off that vanishes with the sheet and leaves the switch
                             // saying off about a line plainly on the map.
-                            if (!track.visible) viewModel.setVisible(listOf(track.id), true)
+                            if (!track.visible) viewModel.setVisible(track.id, true)
                             onOpenTrack(track.id)
                         },
                         onToggleSelected = { viewModel.toggleSelected(track.id) },
-                        onToggleVisible = { viewModel.setVisible(listOf(track.id), !track.visible) },
+                        onToggleVisible = { viewModel.setVisible(track.id, !track.visible) },
                         onShare = {
                             context.startActivity(
                                 shareTrackIntent(context, track.location, track.trackName, track.displayName)

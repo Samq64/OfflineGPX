@@ -120,11 +120,8 @@ class LibraryViewModel(
         }
     }
 
-    fun setVisible(ids: Collection<Long>, visible: Boolean) {
-        viewModelScope.launch {
-            repository.setVisible(ids.toList(), visible)
-            clearSelection()
-        }
+    fun setVisible(id: Long, visible: Boolean) {
+        viewModelScope.launch { repository.setVisible(id, visible) }
     }
 
     fun setAllVisible(visible: Boolean) {

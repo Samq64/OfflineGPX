@@ -289,7 +289,7 @@ class MapViewModel(
      */
     fun hide(id: Long) {
         viewModelScope.launch {
-            repository.setVisible(listOf(id), false)
+            repository.setVisible(id, false)
             _messages.trySend(MapMessage.Hidden)
         }
     }

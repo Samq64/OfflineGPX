@@ -30,8 +30,6 @@ class FormattersTest {
     fun `speed converts and labels itself`() {
         assertEquals("36.0 km/h", metric.speed(10.0, en))
         assertEquals("22.4 mph", imperial.speed(10.0, en))
-        assertEquals("km/h", metric.speedUnit)
-        assertEquals("mph", imperial.speedUnit)
     }
 
     @Test
@@ -42,10 +40,11 @@ class FormattersTest {
 
     @Test
     fun `axis forms carry their unit`() {
-        assertEquals("5.0 km", metric.distanceAxis(5000f, 1, en))
-        assertEquals("3.1 mi", imperial.distanceAxis(5000f, 1, en))
-        assertEquals("1,000 m", metric.elevationAxis(1000f, 0, en))
-        assertEquals("3,281 ft", imperial.elevationAxis(1000f, 0, en))
+        assertEquals("5.0 km", metric.distanceAxisFor(100f, en)(5000f))
+        assertEquals("3.1 mi", imperial.distanceAxisFor(160.9344f, en)(5000f))
+        assertEquals("36 km/h", metric.speedAxisFor(2.5f, en)(10f))
+        assertEquals("1,000 m", metric.elevationAxisFor(10f, en)(1000f))
+        assertEquals("3,281 ft", imperial.elevationAxisFor(10f, en)(1000f))
     }
 
     /**

@@ -86,7 +86,7 @@ internal class ClippedMapSource(maps: List<OfflineMap>) : MultiMapFileTileSource
     }
 }
 
-internal class ClippedMapData(private val files: List<Pair<MapFile, BoundingBox>>) : ITileDataSource {
+private class ClippedMapData(private val files: List<Pair<MapFile, BoundingBox>>) : ITileDataSource {
     override fun query(tile: MapTile, sink: ITileDataSink) {
         val clipping = ClippingSink(sink)
         try {
@@ -113,7 +113,7 @@ internal class ClippedMapData(private val files: List<Pair<MapFile, BoundingBox>
  * that is what a [MapFile] expects to be handed, and it keeps the file's own completion
  * from reaching the real sink once per file.
  */
-internal class ClippingSink(sink: ITileDataSink) : TileDataSink(sink) {
+private class ClippingSink(sink: ITileDataSink) : TileDataSink(sink) {
     private val clipper = TileClipper(0f, 0f, 0f, 0f)
     private var left = 0f
     private var top = 0f

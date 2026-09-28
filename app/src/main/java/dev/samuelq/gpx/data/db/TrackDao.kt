@@ -39,8 +39,8 @@ interface TrackDao {
     @Query("SELECT * FROM tracks WHERE id IN (:ids)")
     suspend fun byIds(ids: List<Long>): List<TrackEntity>
 
-    @Query("UPDATE tracks SET visible = :visible WHERE id IN (:ids)")
-    suspend fun setVisible(ids: List<Long>, visible: Boolean)
+    @Query("UPDATE tracks SET visible = :visible WHERE id = :id")
+    suspend fun setVisible(id: Long, visible: Boolean)
 
     @Query("UPDATE tracks SET visible = :visible")
     suspend fun setAllVisible(visible: Boolean)

@@ -288,7 +288,7 @@ class TrackRepository(
         }.recoverFailure()
     }
 
-    suspend fun setVisible(ids: List<Long>, visible: Boolean) = dao.setVisible(ids, visible)
+    suspend fun setVisible(id: Long, visible: Boolean) = dao.setVisible(id, visible)
 
     suspend fun setAllVisible(visible: Boolean) = dao.setAllVisible(visible)
 
