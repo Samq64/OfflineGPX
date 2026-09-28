@@ -68,8 +68,8 @@ releases after 0.25.0 are on JitPack only; `settings.gradle.kts` lets JitPack se
 group and nothing else.
 
 Basemaps are mapsforge `.map` files, which store three base zooms (5/10/14) and render the
-rest by scaling. `tools/mapcut` cuts an area out of `download.mapsforge.org` by byte-copying
-tile blocks over HTTP range requests.
+rest by scaling. Settings links to the files published at `download.mapsforge.org`, whose
+tags the generated render theme is written for.
 
 Still hand-rolled: the charts (no library gives a shared-domain scrubber or an
 extreme-preserving per-column reduction), `GpxParser`/`GpxWriter` (streaming and tolerant,

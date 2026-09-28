@@ -45,7 +45,7 @@
     <string name="settings_section_maps">Offline maps</string>
     <string name="settings_maps_explanation">No internet access here, so maps come from a .map file you import. Without one, tracks are drawn on a plain background.</string>
     <string name="settings_maps_import">Import map</string>
-    <!-- A direct link to a tool that cuts an extract, so an action, not a heading. -->
+    <!-- A direct link to where the files are published, so an action, not a heading. -->
     <string name="settings_maps_where">Get maps</string>
     <string name="settings_maps_none">No maps imported.</string>
     <string name="settings_maps_delete">Delete map</string>

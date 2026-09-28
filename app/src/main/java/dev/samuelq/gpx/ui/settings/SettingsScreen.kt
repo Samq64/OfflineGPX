@@ -369,8 +369,8 @@ private fun MapRow(
  */
 private val MAP_MIME_TYPES = arrayOf("application/octet-stream", "*/*")
 
-/** Cuts areas from download.mapsforge.org, whose tags the render theme expects. */
-private const val MAP_HELP_URL = "https://mapcut.samruff.dev/"
+/** The published v5 files, by region down to states; the render theme expects their tags. */
+private const val MAP_HELP_URL = "https://download.mapsforge.org/maps/v5/"
 
 private fun ClosedFloatingPointRange<Double>.toFloatRange(): ClosedFloatingPointRange<Float> =
     start.toFloat()..endInclusive.toFloat()
