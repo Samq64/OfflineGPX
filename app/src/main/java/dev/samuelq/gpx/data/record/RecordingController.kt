@@ -48,7 +48,8 @@ sealed interface RecordingEvent {
     /** [id] is the saved track's row. */
     data class Saved(val id: Long) : RecordingEvent
 
-    data object Discarded : RecordingEvent
+    /** [recording] is null when there was nothing worth an undo. */
+    class Discarded(val recording: DiscardedRecording?) : RecordingEvent
 
     data class Failed(@StringRes val messageRes: Int) : RecordingEvent
 }
@@ -67,8 +68,13 @@ class RecordingController(context: Context) {
     private val _events = Channel<RecordingEvent>(Channel.BUFFERED)
     val events: Flow<RecordingEvent> = _events.receiveAsFlow()
 
+    /** Stop was tapped, in the app or the notification; the save dialog is up until answered. */
+    private val _stopRequested = MutableStateFlow(false)
+    val stopRequested: StateFlow<Boolean> = _stopRequested.asStateFlow()
+
     internal fun update(state: RecordingState) {
         _state.value = state
+        if (state == RecordingState.Idle) _stopRequested.value = false
     }
 
     internal fun updateTrace(trace: LiveTrace) {
@@ -86,8 +92,26 @@ class RecordingController(context: Context) {
     fun start() = send(RecordingService.ACTION_START)
     fun pause() = send(RecordingService.ACTION_PAUSE)
     fun resume() = send(RecordingService.ACTION_RESUME)
-    fun stop() = send(RecordingService.ACTION_STOP)
-    fun discard() = send(RecordingService.ACTION_DISCARD)
+    /** Asks first: nothing stops until [stop] or [discard]. */
+    fun requestStop() {
+        if (_state.value is RecordingState.Active) _stopRequested.value = true
+    }
+
+    /** Keeps recording. */
+    fun cancelStop() {
+        _stopRequested.value = false
+    }
+
+    /** A blank [name] uses the default. */
+    fun stop(name: String) = answerStop(RecordingService.ACTION_STOP, name)
+
+    /** [name] is what an undo saves it as. */
+    fun discard(name: String) = answerStop(RecordingService.ACTION_DISCARD, name)
+
+    private fun answerStop(action: String, name: String) {
+        _stopRequested.value = false
+        send(action) { putExtra(RecordingService.EXTRA_NAME, name) }
+    }
 
     /** [description] may be blank. */
     fun addWaypoint(description: String) = send(RecordingService.ACTION_WAYPOINT) {

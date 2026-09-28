@@ -26,7 +26,11 @@ internal class RecordingSession(
     var distanceMeters = 0.0
         private set
     private var pointCount = 0
+    /** Kept through a pause, so a waypoint can still be dropped where the ride stopped. */
     private var lastPoint: TrackPoint? = null
+
+    /** What the next point's distance is measured from; a pause clears it so the gap isn't bridged. */
+    private var distanceFrom: TrackPoint? = null
     private var currentSpeedMps: Double? = null
     private var lastAccuracyMeters: Double? = null
     private val waypoints = mutableListOf<Waypoint>()
@@ -56,7 +60,8 @@ internal class RecordingSession(
         val point = filter.pointFor(fix)?.copy(accuracyMeters = fix.accuracyMeters)
         if (point != null) {
             if (startedAt == null) startedAt = clock()
-            lastPoint?.let { distanceMeters += haversineMeters(it, point) }
+            distanceFrom?.let { distanceMeters += haversineMeters(it, point) }
+            distanceFrom = point
             lastPoint = point
             pointCount++
 
@@ -77,7 +82,7 @@ internal class RecordingSession(
         if (paused) return false
         paused = true
         traceStartsSegment = true
-        lastPoint = null
+        distanceFrom = null
         currentSpeedMps = null
         filter.reset()
         speedWindow.reset()

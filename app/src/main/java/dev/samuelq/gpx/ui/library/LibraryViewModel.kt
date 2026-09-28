@@ -114,12 +114,15 @@ class LibraryViewModel(
         viewModelScope.launch { repository.setAllVisible(visible) }
     }
 
+    /** Undoable until [commitDelete]; see [TrackRepository.deleteLater]. */
     fun delete(ids: Collection<Long>) {
-        viewModelScope.launch {
-            repository.forgetAll(ids.toList())
-            clearSelection()
-        }
+        repository.deleteLater(ids)
+        clearSelection()
     }
+
+    fun undoDelete(ids: Collection<Long>) = repository.undoDelete(ids)
+
+    fun commitDelete(ids: Collection<Long>) = repository.commitDelete(ids)
 
     companion object {
         private const val EXPORT_IDS = "export_ids"

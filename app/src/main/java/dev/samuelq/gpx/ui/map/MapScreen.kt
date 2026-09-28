@@ -3,7 +3,6 @@ package dev.samuelq.gpx.ui.map
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.annotation.StringRes
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -72,12 +71,11 @@ import dev.samuelq.gpx.data.record.RecordingController
 import dev.samuelq.gpx.data.record.RecordingEvent
 import dev.samuelq.gpx.data.record.RecordingState
 import dev.samuelq.gpx.data.track.LoadedTrack
-import dev.samuelq.gpx.ui.record.DiscardRecordingDialog
 import dev.samuelq.gpx.ui.record.RecoveredRecordingDialog
+import dev.samuelq.gpx.ui.showUndo
 import dev.samuelq.gpx.ui.theme.recordingColor
 import dev.samuelq.gpx.ui.theme.routePalette
 import dev.samuelq.gpx.ui.theme.slot
-import dev.samuelq.gpx.ui.track.DeleteTrackDialog
 import dev.samuelq.gpx.ui.track.FocusedTrack
 import dev.samuelq.gpx.ui.track.TrackActions
 import dev.samuelq.gpx.ui.track.TrackNameDialog
@@ -114,10 +112,8 @@ fun MapScreen(
     val density = LocalDensity.current
 
     val snackbarHostState = remember { SnackbarHostState() }
-    var confirmDiscard by remember { mutableStateOf(false) }
     // By id: the prompt waits for the track to load, by which time the sheet may show another.
-    var naming by remember { mutableStateOf<Naming?>(null) }
-    var deletingId by remember { mutableStateOf<Long?>(null) }
+    var renamingId by remember { mutableStateOf<Long?>(null) }
     // Never read here: that would recompose the screen every frame of a pan. ScaleBar reads it.
     val metersPerPixel = remember { mutableDoubleStateOf(0.0) }
 
@@ -140,10 +136,18 @@ fun MapScreen(
     val importFailed = stringResource(R.string.library_import_failed)
     val saveFailed = stringResource(R.string.record_save_failed)
 
-    // Replaces rather than queues: a stale answer to a tap is misleading.
+    val undo = stringResource(R.string.action_undo)
+    val deleted = pluralStringResource(R.plurals.library_deleted, 1, 1)
+
+    // Replaces rather than queues: a stale answer to a tap is misleading. Replacing an undo
+    // commits it.
     fun say(message: String) = scope.launch {
         snackbarHostState.currentSnackbarData?.dismiss()
         snackbarHostState.showSnackbar(message)
+    }
+
+    fun offerUndo(message: String, onUndo: () -> Unit, onCommit: () -> Unit = {}) = scope.launch {
+        snackbarHostState.showUndo(message, undo, onUndo, onCommit)
     }
 
     val startRecording = rememberStartRecording(recorder, ::say)
@@ -165,26 +169,31 @@ fun MapScreen(
 
     LaunchedEffect(viewModel) {
         viewModel.messages.collect { message ->
-            say(
-                when (message) {
-                    MapMessage.RenameFailed -> renameFailed
-                    MapMessage.Hidden -> hidden
-                    MapMessage.ImportFailed -> importFailed
-                    MapMessage.RecoveryFailed -> saveFailed
-                }
-            )
+            when (message) {
+                MapMessage.RenameFailed -> say(renameFailed)
+                MapMessage.ImportFailed -> say(importFailed)
+                MapMessage.RecoveryFailed -> say(saveFailed)
+                is MapMessage.Hidden -> offerUndo(hidden, onUndo = { viewModel.show(message.id) })
+                is MapMessage.AbandonedDiscarded -> offerUndo(
+                    discarded,
+                    onUndo = { viewModel.restoreAbandoned(message.recording, message.name) },
+                    onCommit = { viewModel.forgetAbandoned(message.recording) },
+                )
+            }
         }
     }
 
     LaunchedEffect(recorder) {
         recorder.events.collect { event ->
             when (event) {
-                // Open it and ask for a name while the ride is fresh; the default is a placeholder.
-                is RecordingEvent.Saved -> {
-                    naming = Naming(event.id, R.string.record_name_title)
-                    viewModel.focus(TrackRef.Saved(event.id))
-                }
-                RecordingEvent.Discarded -> say(discarded)
+                is RecordingEvent.Saved -> viewModel.focus(TrackRef.Saved(event.id))
+                is RecordingEvent.Discarded -> event.recording?.let { recording ->
+                    offerUndo(
+                        discarded,
+                        onUndo = { viewModel.restoreDiscarded(recording) },
+                        onCommit = { viewModel.forgetDiscarded(recording) },
+                    )
+                } ?: say(discarded)
                 is RecordingEvent.Failed -> say(resources.getString(event.messageRes))
             }
         }
@@ -210,7 +219,7 @@ fun MapScreen(
         if (hasFocus && !sidePanel) sheetState.partialExpand()
         else if (sheetState.currentValue != SheetValue.Hidden) sheetState.hide()
         // So a stale name prompt can't reappear when the track is reopened.
-        if (!hasFocus) naming = null
+        if (!hasFocus) renamingId = null
     }
 
     // Swiping the sheet away clears focus. drop(1): the initial Hidden emission would clear a
@@ -328,7 +337,7 @@ fun MapScreen(
     val actions = focusedTrack?.let { state.entity(it.id) }?.let { entity ->
         remember(entity.id, entity.displayName, entity.location) {
             TrackActions(
-                onRename = { naming = Naming(entity.id, R.string.library_rename) },
+                onRename = { renamingId = entity.id },
                 onShare = {
                     context.startActivity(
                         shareTrackIntent(context, entity.location, entity.trackName, entity.displayName)
@@ -338,7 +347,16 @@ fun MapScreen(
                     viewModel.hide(entity.id)
                     viewModel.focus(null)
                 },
-                onDelete = { deletingId = entity.id },
+                onDelete = {
+                    // Unfocus first so the sheet doesn't show a deleted row.
+                    viewModel.focus(null)
+                    viewModel.delete(entity.id)
+                    offerUndo(
+                        deleted,
+                        onUndo = { viewModel.undoDelete(entity.id) },
+                        onCommit = { viewModel.commitDelete(entity.id) },
+                    )
+                },
             )
         }
     }
@@ -369,7 +387,6 @@ fun MapScreen(
         sheetDragHandle = { CompactDragHandle() },
         // A step off the map's background so the sheet's edge stays visible.
         sheetContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
@@ -527,8 +544,7 @@ fun MapScreen(
                     onStart = startRecording,
                     onPause = recorder::pause,
                     onResume = recorder::resume,
-                    onStop = recorder::stop,
-                    onDiscard = { confirmDiscard = true },
+                    onStop = recorder::requestStop,
                     onAddWaypoint = recorder::addWaypoint,
                     bottomInset = barInset,
                 )
@@ -542,20 +558,27 @@ fun MapScreen(
             ) { shown ->
                 trackContent(shown, Dp.Unspecified, { viewModel.focus(null) }) {}
             }
+
+            // Here, not the scaffold's slot, which pins it to the bottom edge over the record
+            // controls. Sits on whichever reaches higher: the controls or the sheet.
+            SnackbarHost(
+                snackbarHostState,
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(start = panelCover, bottom = coveredHeight),
+            )
         }
     }
 
     // Only once loaded, which is what knows the name to offer.
-    val named = naming
-    focusedTrack?.takeIf { named != null && it.id == named.id }?.let { track ->
+    focusedTrack?.takeIf { it.id == renamingId }?.let { track ->
         TrackNameDialog(
-            titleRes = named!!.titleRes,
             initialName = editableTrackName(track.track.name, track.displayName),
             // Prefilled, not a hint: dismissing keeps what's shown.
-            onDismiss = { naming = null },
+            onDismiss = { renamingId = null },
             onConfirm = { name ->
                 viewModel.rename(track.id, name)
-                naming = null
+                renamingId = null
             },
         )
     }
@@ -568,35 +591,10 @@ fun MapScreen(
             onDiscard = viewModel::discardAbandoned,
         )
     }
-
-    deletingId?.let { id ->
-        DeleteTrackDialog(
-            count = 1,
-            onDismiss = { deletingId = null },
-            onConfirm = {
-                deletingId = null
-                // Unfocus first so the sheet doesn't show a deleted row.
-                viewModel.focus(null)
-                viewModel.delete(id)
-            },
-        )
-    }
-
-    if (confirmDiscard) {
-        DiscardRecordingDialog(
-            onDismiss = { confirmDiscard = false },
-            onConfirm = {
-                confirmDiscard = false
-                recorder.discard()
-            },
-        )
-    }
 }
 
 /** Live recording layer id; it has no library row, so taps on it resolve to nothing. */
 private const val LIVE_TRACK_ID = Long.MIN_VALUE
-
-private class Naming(val id: Long, @StringRes val titleRes: Int)
 
 private val MapEdgePadding = 24.dp
 

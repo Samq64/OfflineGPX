@@ -17,7 +17,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -38,8 +37,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -59,7 +58,9 @@ import dev.samuelq.gpx.data.map.OfflineMap
 import dev.samuelq.gpx.data.settings.Settings
 import dev.samuelq.gpx.ui.format.LocalFormatters
 import dev.samuelq.gpx.ui.format.tabularFigures
+import dev.samuelq.gpx.ui.showUndo
 import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 
 private val ScreenPadding = 20.dp
 
@@ -79,8 +80,7 @@ fun SettingsScreen(
     val formatters = LocalFormatters.current
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
-    // Confirmed first: a mis-tap costs re-fetching the file.
-    var deletingMap by remember { mutableStateOf<OfflineMap?>(null) }
+    val scope = rememberCoroutineScope()
 
     val importer = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
@@ -88,6 +88,20 @@ fun SettingsScreen(
 
     val imported = stringResource(R.string.settings_maps_imported)
     val deleted = stringResource(R.string.settings_maps_deleted)
+    val undo = stringResource(R.string.action_undo)
+
+    // Undoable rather than confirmed: a mis-tap would cost re-fetching the file.
+    fun deleteMap(map: OfflineMap) {
+        viewModel.deleteMap(map)
+        scope.launch {
+            snackbarHostState.showUndo(
+                message = deleted,
+                undoLabel = undo,
+                onUndo = { viewModel.undoDeleteMap(map) },
+                onCommit = { viewModel.commitDeleteMap(map) },
+            )
+        }
+    }
     val unreadable = stringResource(R.string.settings_maps_failed_unreadable)
     val wrongFormat = stringResource(R.string.settings_maps_failed_format)
     val noSpace = stringResource(R.string.settings_maps_failed_space)
@@ -99,7 +113,6 @@ fun SettingsScreen(
             snackbarHostState.showSnackbar(
                 when (message) {
                     SettingsMessage.MapImported -> imported
-                    SettingsMessage.MapDeleted -> deleted
                     SettingsMessage.MapUnreadable -> unreadable
                     SettingsMessage.MapWrongFormat -> wrongFormat
                     SettingsMessage.MapNoSpace -> noSpace
@@ -138,7 +151,7 @@ fun SettingsScreen(
                 maps = maps,
                 importing = importing,
                 onImport = { importer.launch(MAP_MIME_TYPES) },
-                onDelete = { deletingMap = it },
+                onDelete = ::deleteMap,
                 onOpenHelp = {
                     // The browser fetches it, so no INTERNET permission is needed.
                     val opened = runCatching {
@@ -243,32 +256,6 @@ fun SettingsScreen(
 
             Spacer(Modifier.height(24.dp))
         }
-    }
-
-    deletingMap?.let { map ->
-        AlertDialog(
-            onDismissRequest = { deletingMap = null },
-            title = { Text(stringResource(R.string.settings_maps_delete_title)) },
-            text = { Text(stringResource(R.string.settings_maps_delete_body, map.displayName)) },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        viewModel.deleteMap(map)
-                        deletingMap = null
-                    },
-                ) {
-                    Text(
-                        text = stringResource(R.string.library_delete),
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { deletingMap = null }) {
-                    Text(stringResource(R.string.action_cancel))
-                }
-            },
-        )
     }
 }
 

@@ -5,6 +5,7 @@
     <string name="action_back">Back</string>
     <string name="action_retry">Try again</string>
     <string name="action_cancel">Cancel</string>
+    <string name="action_undo">Undo</string>
     <string name="action_save">Save</string>
     <string name="action_done">Done</string>
 
@@ -48,8 +49,6 @@
     <string name="settings_maps_where">Get maps</string>
     <string name="settings_maps_none">No maps imported.</string>
     <string name="settings_maps_delete">Delete map</string>
-    <string name="settings_maps_delete_title">Delete this map?</string>
-    <string name="settings_maps_delete_body">"%1$s" will be removed. You\'ll need to open the file again to use it.</string>
     <string name="settings_maps_importing">Copying map…</string>
     <string name="settings_maps_imported">Map added.</string>
     <string name="settings_maps_deleted">Map deleted.</string>
@@ -73,17 +72,15 @@
     <string name="library_show_all">Show all</string>
     <string name="library_hide_all">Hide all</string>
     <string name="library_delete">Delete</string>
-    <plurals name="library_delete_title">
-        <item quantity="one">Delete this track?</item>
-        <item quantity="other">Delete %d tracks?</item>
+    <plurals name="library_deleted">
+        <item quantity="one">Track deleted.</item>
+        <item quantity="other">%d tracks deleted.</item>
     </plurals>
-    <string name="library_delete_body">This app\'s copy is deleted. An import can be opened again; a recording cannot be recovered.</string>
     <string name="library_select_all">Select all</string>
     <string name="library_clear_selection">Clear selection</string>
     <string name="library_selected">%d selected</string>
     <string name="library_empty_title">No tracks yet</string>
-    <!-- Not "files are read only when you pick them": import keeps a copy, which
-         library_delete_body says outright. -->
+    <!-- Not "files are read only when you pick them": import keeps a copy. -->
     <string name="library_empty_body">Record one, or open a .gpx file. Opening one keeps a copy here; nothing leaves the device.</string>
     <string name="library_import_failed">Couldn\'t open that file.</string>
     <string name="library_export_failed">Couldn\'t export to that folder.</string>
@@ -114,12 +111,9 @@
     </plurals>
     <string name="record_save_failed">Couldn\'t save that recording. It\'s still on the device.</string>
     <string name="record_discarded">Recording discarded.</string>
-    <string name="record_discard_title">Discard this recording?</string>
-    <string name="record_discard_body">It won\'t be saved and can\'t be recovered.</string>
-    <string name="record_discard_confirm">Discard</string>
-    <string name="record_name_title">Name this recording</string>
+    <string name="record_stop_title">Stop recording</string>
     <string name="record_recovered_title">Unsaved recording</string>
-    <string name="record_recovered_body">The app closed before this recording from %1$s (%2$s) was saved.</string>
+    <string name="record_recovered_body">Started %1$s. The app closed before it was saved.</string>
 
     <!-- Every way starting a recording can fail, said where the user tapped. -->
     <string name="record_location_off">Location is switched off. Turn it on to record.</string>
@@ -148,7 +142,7 @@
     <string name="track_close">Close</string>
     <string name="track_manage">Manage this track</string>
     <string name="track_hide">Hide</string>
-    <string name="track_hidden">Hidden. Show it again from the track list.</string>
+    <string name="track_hidden">Track hidden.</string>
     <string name="track_error_title">Couldn\'t open this file</string>
     <string name="track_error_invalid">This file isn\'t valid GPX.</string>
     <string name="track_error_empty">This GPX file has no track points.</string>

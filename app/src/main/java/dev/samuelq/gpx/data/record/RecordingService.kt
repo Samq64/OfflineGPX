@@ -9,6 +9,7 @@ import androidx.annotation.StringRes
 import dev.samuelq.gpx.GpxApplication
 import dev.samuelq.gpx.R
 import dev.samuelq.gpx.core.model.TrackPoint
+import dev.samuelq.gpx.data.track.asTrackName
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -67,8 +68,8 @@ class RecordingService : Service() {
                     ACTION_START -> start()
                     ACTION_PAUSE -> pause()
                     ACTION_RESUME -> resume()
-                    ACTION_STOP -> stop(save = true)
-                    ACTION_DISCARD -> stop(save = false)
+                    ACTION_STOP -> stop(save = true, name = intent.getStringExtra(EXTRA_NAME).orEmpty())
+                    ACTION_DISCARD -> stop(save = false, name = intent.getStringExtra(EXTRA_NAME).orEmpty())
                     ACTION_WAYPOINT -> addWaypoint(intent.getStringExtra(EXTRA_DESCRIPTION) ?: "")
                 }
                 // By id, so a START queued behind a stop still gets its recording.
@@ -207,7 +208,8 @@ class RecordingService : Service() {
         notifications.update(notificationContent())
     }
 
-    private suspend fun stop(save: Boolean) {
+    /** A blank [name] uses the default; a discard keeps it for an undo. */
+    private suspend fun stop(save: Boolean, name: String) {
         val session = session ?: return
 
         // Joined, not just cancelled: a fix mid-append must land before the log closes.
@@ -218,12 +220,12 @@ class RecordingService : Service() {
         wal = null
 
         try {
+            log.close()
             if (!save) {
-                log.discard()
-                controller.emit(RecordingEvent.Discarded)
+                val aside = container.recordingRecovery.setAside(log.file, session.distanceMeters, name)
+                controller.emit(RecordingEvent.Discarded(aside))
                 return
             }
-            log.close()
             val track = RecordingWal.recover(log.file)
             if (track == null || !RecordingRecovery.isSaveable(session.distanceMeters)) {
                 log.file.delete()
@@ -234,7 +236,7 @@ class RecordingService : Service() {
                 )
                 return
             }
-            container.trackRepository.saveRecording(track).fold(
+            container.trackRepository.saveRecording(track.copy(name = name.asTrackName())).fold(
                 onSuccess = {
                     log.file.delete()
                     controller.emit(RecordingEvent.Saved(it))
@@ -278,6 +280,7 @@ class RecordingService : Service() {
         internal const val ACTION_DISCARD = "dev.samuelq.gpx.RECORD_DISCARD"
         internal const val ACTION_WAYPOINT = "dev.samuelq.gpx.RECORD_WAYPOINT"
         internal const val EXTRA_DESCRIPTION = "description"
+        internal const val EXTRA_NAME = "name"
 
         private const val TAG = "RecordingService"
 

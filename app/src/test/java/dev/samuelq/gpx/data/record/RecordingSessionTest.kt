@@ -105,4 +105,15 @@ class RecordingSessionTest {
         assertNull(session.addWaypoint("   ", at)?.description)
         assertEquals(2, session.state().waypoints.size)
     }
+
+    @Test
+    fun `a waypoint can be added while paused, where the ride stopped`() {
+        val session = session()
+        session.onFix(fix(0, 0.0))
+        session.onFix(fix(1, 10.0))
+        session.pause()
+
+        val waypoint = assertNotNull(session.addWaypoint("lunch", origin.plusSeconds(90)))
+        assertEquals(session.state().lastPoint?.latitude, waypoint.point.latitude)
+    }
 }

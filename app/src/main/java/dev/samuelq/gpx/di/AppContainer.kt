@@ -41,6 +41,7 @@ class AppContainer(context: Context) {
     fun claimAbandonedRecording() {
         applicationScope.launch(start = CoroutineStart.UNDISPATCHED) {
             recordingRecovery.claim()
+            recordingRecovery.purgeDiscarded()
         }
     }
 

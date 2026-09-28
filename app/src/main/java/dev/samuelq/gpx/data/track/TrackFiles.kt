@@ -21,10 +21,16 @@ object TrackFiles {
     fun location(context: Context, file: File): String = file.relativeTo(context.filesDir).path
 }
 
+/** A typed name, or null for blank so the caller falls back to its default. */
+internal fun String.asTrackName(): String? = trim().ifEmpty { null }
+
 /** Time of day plus walk or ride, inferred from average moving speed. */
-internal fun defaultTrackName(context: Context, stats: TrackStats): String {
-    val zoned = (stats.startedAt ?: Instant.now()).atZone(ZoneId.systemDefault())
-    val activity = if (stats.averageSpeedMps < WALKING_SPEED_CEILING_MPS) {
+internal fun defaultTrackName(context: Context, stats: TrackStats): String =
+    defaultTrackName(context, stats.startedAt, stats.averageSpeedMps)
+
+internal fun defaultTrackName(context: Context, startedAt: Instant?, averageSpeedMps: Double): String {
+    val zoned = (startedAt ?: Instant.now()).atZone(ZoneId.systemDefault())
+    val activity = if (averageSpeedMps < WALKING_SPEED_CEILING_MPS) {
         R.string.track_default_walk
     } else {
         R.string.track_default_ride

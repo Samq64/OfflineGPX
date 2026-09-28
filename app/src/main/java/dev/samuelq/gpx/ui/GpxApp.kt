@@ -17,6 +17,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import dev.samuelq.gpx.GpxApplication
+import dev.samuelq.gpx.data.record.RecordingState
 import dev.samuelq.gpx.ui.format.Formatters
 import dev.samuelq.gpx.ui.format.LocalFormatters
 import dev.samuelq.gpx.ui.library.LibraryScreen
@@ -24,6 +25,7 @@ import dev.samuelq.gpx.ui.map.MapScreen
 import dev.samuelq.gpx.ui.nav.LibraryRoute
 import dev.samuelq.gpx.ui.nav.MapRoute
 import dev.samuelq.gpx.ui.nav.SettingsRoute
+import dev.samuelq.gpx.ui.record.StopRecordingDialog
 import dev.samuelq.gpx.ui.settings.SettingsScreen
 import dev.samuelq.gpx.ui.track.TrackRef
 
@@ -83,6 +85,19 @@ fun GpxApp(
             composable<SettingsRoute> {
                 SettingsScreen(onBack = dropUnlessResumed { navController.popBackStack() })
             }
+        }
+
+        // Here, not on the map, so the notification's Stop is answered over any screen.
+        val recorder = container.recordingController
+        val recording by recorder.state.collectAsStateWithLifecycle()
+        val stopRequested by recorder.stopRequested.collectAsStateWithLifecycle()
+        (recording as? RecordingState.Active)?.takeIf { stopRequested }?.let { active ->
+            StopRecordingDialog(
+                state = active,
+                onSave = recorder::stop,
+                onDiscard = recorder::discard,
+                onDismiss = recorder::cancelStop,
+            )
         }
     }
 }

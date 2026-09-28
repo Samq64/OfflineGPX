@@ -25,9 +25,13 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.shareIn
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.InputStream
@@ -60,9 +64,16 @@ class TrackRepository(
     @Volatile
     private var cached: Pair<String, LoadedTrack>? = null
 
+    /**
+     * Deleted but still undoable, so left out of every list. In memory only: if the process
+     * dies first, the delete just doesn't happen.
+     */
+    private val pendingDelete = MutableStateFlow<Set<Long>>(emptySet())
+
     /** Most recent first. Shared with [visibleTracks] so a write wakes one query. */
-    val tracks: Flow<List<TrackEntity>> = dao.observeByRecent()
-        .shareIn(scope, SharingStarted.WhileSubscribed(SHARE_GRACE_MILLIS), replay = 1)
+    val tracks: Flow<List<TrackEntity>> =
+        combine(dao.observeByRecent(), pendingDelete) { all, pending -> all.filter { it.id !in pending } }
+            .shareIn(scope, SharingStarted.WhileSubscribed(SHARE_GRACE_MILLIS), replay = 1)
 
     /** Reversed so the most recently touched is painted last, on top. */
     val visibleTracks: Flow<List<TrackEntity>> =
@@ -235,7 +246,7 @@ class TrackRepository(
     suspend fun rename(id: Long, name: String): Result<Unit> = withContext(io) {
         runCatching {
             val entity = entity(id)
-            val trimmed = name.trim().takeIf(String::isNotEmpty)
+            val trimmed = name.asTrackName()
 
             // Written into the file since export is a byte copy. Via a temp file so a
             // crash never truncates it.
@@ -259,12 +270,20 @@ class TrackRepository(
 
     suspend fun setAllVisible(visible: Boolean) = dao.setAllVisible(visible)
 
-    suspend fun forgetAll(ids: List<Long>) = withContext(io) {
-        if (ids.isEmpty()) return@withContext
-        val entities = dao.byIds(ids)
-        if (entities.any { it.location == cached?.first }) cached = null
-        ids.forEach { dao.delete(it) }
-        entities.forEach(::deleteFile)
+    /** Hides [ids] until [undoDelete] or [commitDelete]. */
+    fun deleteLater(ids: Collection<Long>) = pendingDelete.update { it + ids }
+
+    fun undoDelete(ids: Collection<Long>) = pendingDelete.update { it - ids.toSet() }
+
+    /** In the repository's scope, so it finishes even as the screen that asked goes away. */
+    fun commitDelete(ids: Collection<Long>) {
+        scope.launch {
+            val entities = dao.byIds(ids.toList())
+            if (entities.any { it.location == cached?.first }) cached = null
+            ids.forEach { dao.delete(it) }
+            entities.forEach(::deleteFile)
+            pendingDelete.update { it - ids.toSet() }
+        }
     }
 
     private suspend fun entity(id: Long): TrackEntity =

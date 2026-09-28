@@ -9,6 +9,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,12 +20,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -49,17 +51,18 @@ import dev.samuelq.gpx.R
 import dev.samuelq.gpx.data.record.RecordingState
 import dev.samuelq.gpx.ui.format.Formatters
 import dev.samuelq.gpx.ui.format.LocalFormatters
-import dev.samuelq.gpx.ui.format.tabularFigures
+import dev.samuelq.gpx.ui.track.Stat
 import dev.samuelq.gpx.ui.theme.recordingColor
+import dev.samuelq.gpx.ui.track.StatRow
 
 /** Live recording controls, kept small so the map stays visible. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun RecordingBar(
     state: RecordingState.Active,
     onPause: () -> Unit,
     onResume: () -> Unit,
     onStop: () -> Unit,
-    onDiscard: () -> Unit,
     /** [description] may be blank. */
     onAddWaypoint: (description: String) -> Unit,
     modifier: Modifier = Modifier,
@@ -81,29 +84,6 @@ fun RecordingBar(
                 .padding(horizontal = 20.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                RecordingDot(paused = state.paused)
-                Spacer(Modifier.width(12.dp))
-
-                Text(
-                    text = formatters.distance(state.distanceMeters),
-                    style = MaterialTheme.typography.headlineSmall,
-                )
-                Spacer(Modifier.width(20.dp))
-                Text(
-                    text = Formatters.duration(state.totalSeconds),
-                    style = MaterialTheme.typography.titleMedium.tabularFigures(),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.width(20.dp))
-                Text(
-                    // Blank, not zero, until the first fix.
-                    text = state.currentSpeedMps?.let(formatters::speed) ?: Formatters.EMPTY,
-                    style = MaterialTheme.typography.titleMedium.tabularFigures(),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
             // Tells a cold start (settles soon) from being indoors (never will).
             val poorSignal = state.accuracyMeters?.takeIf { it > state.accuracyLimitMeters }
 
@@ -132,29 +112,49 @@ fun RecordingBar(
                 null
             }
 
-            Text(
-                text = listOfNotNull(status, waypointCount).joinToString("  ·  "),
-                style = MaterialTheme.typography.labelMedium,
-                color = if (poorSignal != null && state.lastPoint == null) {
-                    MaterialTheme.colorScheme.error
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
+            // A header, like the sheet's title: what's happening, then the numbers, then controls.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                RecordingDot(paused = state.paused)
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = listOfNotNull(status, waypointCount).joinToString("  ·  "),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = if (poorSignal != null && state.lastPoint == null) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
+            }
+
+            val speedLabel = stringResource(R.string.chart_speed)
+            StatRow(
+                recordingStats(state.distanceMeters, state.totalSeconds) + Stat(
+                    speedLabel,
+                    // Blank, not zero, until the first fix.
+                    state.currentSpeedMps?.let(formatters::speed) ?: Formatters.EMPTY,
+                ),
             )
 
-            Row(
+            // Weighted outlined < tonal < filled. Wraps, not clips, at large font scales.
+            FlowRow(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Button(onClick = onStop) { Text(stringResource(R.string.record_stop)) }
+                // Apart from pause and stop: it marks the ride rather than controlling it.
+                // Disabled, not hidden, before the first fix so the layout doesn't shift.
+                OutlinedButton(onClick = { addingWaypoint = true }, enabled = state.lastPoint != null) {
+                    Text(stringResource(R.string.record_add_waypoint))
+                }
 
-                if (state.paused) {
-                    IconButton(onClick = onResume) {
+                Spacer(Modifier.weight(1f))
+
+                // Icon only, so flipping between the two can't change its width.
+                FilledTonalIconButton(onClick = if (state.paused) onResume else onPause) {
+                    if (state.paused) {
                         Icon(Icons.Default.PlayArrow, contentDescription = stringResource(R.string.record_resume))
-                    }
-                } else {
-                    IconButton(onClick = onPause) {
+                    } else {
                         Icon(
                             painterResource(R.drawable.ic_pause),
                             contentDescription = stringResource(R.string.record_pause),
@@ -162,19 +162,7 @@ fun RecordingBar(
                     }
                 }
 
-                // Disabled, not hidden, before the first fix so the layout doesn't shift.
-                IconButton(onClick = { addingWaypoint = true }, enabled = state.lastPoint != null) {
-                    Icon(Icons.Default.Place, contentDescription = stringResource(R.string.record_add_waypoint))
-                }
-
-                Spacer(Modifier.weight(1f))
-
-                TextButton(onClick = onDiscard) {
-                    Text(
-                        text = stringResource(R.string.record_discard),
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
+                Button(onClick = onStop) { Text(stringResource(R.string.record_stop)) }
             }
         }
     }
@@ -190,6 +178,13 @@ fun RecordingBar(
         )
     }
 }
+
+/** Distance and elapsed time, shared by the bar and the save dialogs. */
+@Composable
+internal fun recordingStats(distanceMeters: Double, elapsedSeconds: Double): List<Stat> = listOf(
+    Stat(stringResource(R.string.axis_distance), LocalFormatters.current.distance(distanceMeters)),
+    Stat(stringResource(R.string.stat_elapsed), Formatters.duration(elapsedSeconds)),
+)
 
 @Composable
 private fun WaypointDialog(
@@ -239,20 +234,5 @@ private fun RecordingDot(paused: Boolean) {
             .alpha(if (paused) 0.35f else alpha)
             .clip(CircleShape)
             .background(recordingColor())
-    )
-}
-
-@Composable
-fun DiscardRecordingDialog(onDismiss: () -> Unit, onConfirm: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.record_discard_title)) },
-        text = { Text(stringResource(R.string.record_discard_body)) },
-        confirmButton = {
-            TextButton(onClick = onConfirm) { Text(stringResource(R.string.record_discard_confirm)) }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
-        },
     )
 }

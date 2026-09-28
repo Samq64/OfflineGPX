@@ -48,12 +48,7 @@ internal class RecordingNotifications(private val service: Service) {
     fun remove() = ServiceCompat.stopForeground(service, ServiceCompat.STOP_FOREGROUND_REMOVE)
 
     private fun build(content: NotificationContent): Notification {
-        val open = PendingIntent.getActivity(
-            service,
-            0,
-            Intent(service, MainActivity::class.java),
-            PendingIntent.FLAG_IMMUTABLE,
-        )
+        val open = activity(null)
         val paused = content.paused
         val text = Formatters(content.units).distance(content.distanceMeters) +
             "  ·  " + Formatters.duration(content.totalSeconds)
@@ -76,9 +71,20 @@ internal class RecordingNotifications(private val service: Service) {
                 service.getString(if (paused) R.string.record_resume else R.string.record_pause),
                 command(if (paused) RecordingService.ACTION_RESUME else RecordingService.ACTION_PAUSE),
             )
-            .addAction(0, service.getString(R.string.record_stop), command(RecordingService.ACTION_STOP))
+            // Opens the app to ask save or discard, rather than stopping unasked.
+            .addAction(0, service.getString(R.string.record_stop), activity(MainActivity.ACTION_REQUEST_STOP))
             .build()
     }
+
+    /** Single-top, so it reaches a running app through onNewIntent. */
+    private fun activity(action: String?): PendingIntent = PendingIntent.getActivity(
+        service,
+        action.hashCode(),
+        Intent(service, MainActivity::class.java)
+            .setAction(action)
+            .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+        PendingIntent.FLAG_IMMUTABLE,
+    )
 
     private fun command(action: String): PendingIntent = PendingIntent.getService(
         service,

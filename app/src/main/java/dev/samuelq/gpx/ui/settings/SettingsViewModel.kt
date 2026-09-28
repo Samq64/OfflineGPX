@@ -23,7 +23,6 @@ import kotlinx.coroutines.launch
 
 enum class SettingsMessage {
     MapImported,
-    MapDeleted,
     MapUnreadable,
     MapWrongFormat,
     MapNoSpace,
@@ -70,12 +69,12 @@ class SettingsViewModel(
         }
     }
 
-    fun deleteMap(map: OfflineMap) {
-        viewModelScope.launch {
-            mapStore.delete(map)
-            _messages.send(SettingsMessage.MapDeleted)
-        }
-    }
+    /** Undoable until [commitDeleteMap]. */
+    fun deleteMap(map: OfflineMap) = mapStore.deleteLater(map)
+
+    fun undoDeleteMap(map: OfflineMap) = mapStore.undoDelete(map)
+
+    fun commitDeleteMap(map: OfflineMap) = mapStore.commitDelete(map)
 
     fun reportNoBrowser() {
         viewModelScope.launch { _messages.send(SettingsMessage.NoBrowser) }

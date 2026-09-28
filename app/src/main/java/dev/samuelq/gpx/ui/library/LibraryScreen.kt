@@ -52,6 +52,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -75,9 +76,9 @@ import dev.samuelq.gpx.R
 import dev.samuelq.gpx.data.db.TrackEntity
 import dev.samuelq.gpx.ui.format.Formatters
 import dev.samuelq.gpx.ui.format.LocalFormatters
+import dev.samuelq.gpx.ui.showUndo
 import dev.samuelq.gpx.ui.theme.routePalette
 import dev.samuelq.gpx.ui.theme.slot
-import dev.samuelq.gpx.ui.track.DeleteTrackDialog
 import dev.samuelq.gpx.ui.track.TrackMenu
 import dev.samuelq.gpx.ui.track.TrackNameDialog
 import dev.samuelq.gpx.ui.track.editableTrackName
@@ -85,6 +86,7 @@ import dev.samuelq.gpx.ui.track.exportFileName
 import dev.samuelq.gpx.ui.track.shareTrackIntent
 import dev.samuelq.gpx.ui.track.trackTitle
 import java.time.Instant
+import kotlinx.coroutines.launch
 
 
 /** Track management. Long-press starts a multi-selection. */
@@ -126,7 +128,20 @@ fun LibraryScreen(
         }
     }
     var renaming by remember { mutableStateOf<TrackEntity?>(null) }
-    var deleting by remember { mutableStateOf<Set<Long>>(emptySet()) }
+    val scope = rememberCoroutineScope()
+    val undo = stringResource(R.string.action_undo)
+
+    fun delete(ids: Set<Long>) {
+        viewModel.delete(ids)
+        scope.launch {
+            snackbarHostState.showUndo(
+                message = resources.getQuantityString(R.plurals.library_deleted, ids.size, ids.size),
+                undoLabel = undo,
+                onUndo = { viewModel.undoDelete(ids) },
+                onCommit = { viewModel.commitDelete(ids) },
+            )
+        }
+    }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let(viewModel::import)
@@ -167,7 +182,7 @@ fun LibraryScreen(
                         )
                         folderExporter.launch(null)
                     },
-                    onDelete = { deleting = selection },
+                    onDelete = { delete(selection) },
                 )
             } else if (searching) {
                 SearchBar(
@@ -263,7 +278,7 @@ fun LibraryScreen(
                             )
                         },
                         onRename = { renaming = track },
-                        onDelete = { deleting = setOf(track.id) },
+                        onDelete = { delete(setOf(track.id)) },
                     )
                     HorizontalDivider()
                 }
@@ -274,23 +289,11 @@ fun LibraryScreen(
 
     renaming?.let { track ->
         TrackNameDialog(
-            titleRes = R.string.library_rename,
             initialName = editableTrackName(track.trackName, track.displayName),
             onDismiss = { renaming = null },
             onConfirm = { name ->
                 viewModel.rename(track.id, name)
                 renaming = null
-            },
-        )
-    }
-
-    if (deleting.isNotEmpty()) {
-        DeleteTrackDialog(
-            count = deleting.size,
-            onDismiss = { deleting = emptySet() },
-            onConfirm = {
-                viewModel.delete(deleting)
-                deleting = emptySet()
             },
         )
     }
@@ -495,4 +498,3 @@ private fun SearchBar(
         },
     )
 }
-

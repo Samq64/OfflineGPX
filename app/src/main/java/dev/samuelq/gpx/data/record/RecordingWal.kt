@@ -61,12 +61,6 @@ class RecordingWal private constructor(
 
     override fun close() = writer.close()
 
-    /** Deletes the log, ignoring a failed close. */
-    fun discard() {
-        runCatching(::close)
-        file.delete()
-    }
-
     companion object {
         private const val BREAK = "-"
         private const val WAYPOINT = "W"

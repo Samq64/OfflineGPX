@@ -10,6 +10,7 @@ import dev.samuelq.gpx.data.map.MapStore
 import dev.samuelq.gpx.data.map.OfflineMap
 import dev.samuelq.gpx.data.record.LiveTrace
 import dev.samuelq.gpx.data.record.AbandonedRecording
+import dev.samuelq.gpx.data.record.DiscardedRecording
 import dev.samuelq.gpx.data.record.RecordingController
 import dev.samuelq.gpx.data.record.RecordingRecovery
 import dev.samuelq.gpx.data.track.LoadedTrack
@@ -34,7 +35,17 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /** One-shot messages; the screen resolves the words. */
-enum class MapMessage { RenameFailed, Hidden, ImportFailed, RecoveryFailed }
+sealed interface MapMessage {
+    data object RenameFailed : MapMessage
+    data object ImportFailed : MapMessage
+    data object RecoveryFailed : MapMessage
+
+    /** Undone with [MapViewModel.show]. */
+    class Hidden(val id: Long) : MapMessage
+
+    /** Undone with [MapViewModel.restoreAbandoned], else [MapViewModel.forgetAbandoned]. */
+    class AbandonedDiscarded(val recording: AbandonedRecording, val name: String) : MapMessage
+}
 
 /** Visible tracks, with their geometry once it has been read off disk. */
 data class MapUiState(
@@ -166,6 +177,11 @@ class MapViewModel(
     fun saveAbandoned(name: String) {
         val recording = _abandoned.value ?: return
         _abandoned.value = null
+        restoreAbandoned(recording, name)
+    }
+
+    /** Also what undoing its discard runs. */
+    fun restoreAbandoned(recording: AbandonedRecording, name: String) {
         viewModelScope.launch {
             recovery.save(recording, name).fold(
                 onSuccess = { focus(TrackRef.Saved(it)) },
@@ -179,14 +195,28 @@ class MapViewModel(
         }
     }
 
-    fun discardAbandoned() {
+    /** Kept on disk, and skipped here, until the undo lapses. [name] is what an undo saves. */
+    fun discardAbandoned(name: String) {
         val recording = _abandoned.value ?: return
         _abandoned.value = null
+        skipped += recording.file
+        _messages.trySend(MapMessage.AbandonedDiscarded(recording, name))
+        viewModelScope.launch { nextAbandoned() }
+    }
+
+    fun forgetAbandoned(recording: AbandonedRecording) = recovery.forget(recording)
+
+    /** Undoes a Stop dialog's discard: saves the ride and opens it, as Save would have. */
+    fun restoreDiscarded(recording: DiscardedRecording) {
         viewModelScope.launch {
-            recovery.discard(recording)
-            nextAbandoned()
+            recovery.restore(recording).fold(
+                onSuccess = { focus(TrackRef.Saved(it)) },
+                onFailure = { _messages.trySend(MapMessage.RecoveryFailed) },
+            )
         }
     }
+
+    fun forgetDiscarded(recording: DiscardedRecording) = recovery.forget(recording)
 
     private suspend fun nextAbandoned() {
         // Skipping a failed save keeps the dialog from reopening on it.
@@ -247,13 +277,20 @@ class MapViewModel(
     fun hide(id: Long) {
         viewModelScope.launch {
             repository.setVisible(id, false)
-            _messages.trySend(MapMessage.Hidden)
+            _messages.trySend(MapMessage.Hidden(id))
         }
     }
 
-    fun delete(id: Long) {
-        viewModelScope.launch { repository.forgetAll(listOf(id)) }
+    fun show(id: Long) {
+        viewModelScope.launch { repository.setVisible(id, true) }
     }
+
+    /** Undoable until [commitDelete]; see [TrackRepository.deleteLater]. */
+    fun delete(id: Long) = repository.deleteLater(listOf(id))
+
+    fun undoDelete(id: Long) = repository.undoDelete(listOf(id))
+
+    fun commitDelete(id: Long) = repository.commitDelete(listOf(id))
 
     companion object {
         val Factory = viewModelFactory {

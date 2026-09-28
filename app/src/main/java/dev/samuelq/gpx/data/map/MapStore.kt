@@ -6,12 +6,16 @@ import dev.samuelq.gpx.data.copyInto
 import dev.samuelq.gpx.data.displayName
 import dev.samuelq.gpx.data.settings.SettingsRepository
 import dev.samuelq.gpx.data.uniqueFile
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
@@ -71,6 +75,12 @@ class MapStore(
             maps.filter { it.file.name in current.activeMapFiles }
         }
 
+    /** Filenames deleted but still undoable; in memory, like pending track deletes. */
+    private val pendingDelete = ConcurrentHashMap.newKeySet<String>()
+
+    /** Deletes after an undo lapses finish even if Settings has closed. */
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     /** Parsed headers, keyed by path and mtime so unchanged files aren't re-read each launch. */
     private val readMaps = ConcurrentHashMap<Key, OfflineMap>()
 
@@ -87,9 +97,9 @@ class MapStore(
 
         readMaps.keys.retainAll(keys.keys)
 
-        _maps.value = found
+        _maps.value = found.filter { it.file.name !in pendingDelete }
 
-        // Drop selections of files that are gone.
+        // Drop selections of files that are gone. Not pending ones, so an undo restores them.
         val names = found.mapTo(HashSet()) { it.file.name }
         val selected = settings.settings.value.activeMapFiles
         val surviving = selected.filterTo(HashSet()) { it in names }
@@ -146,9 +156,23 @@ class MapStore(
         return OfflineMap(file = file, header = header, sizeBytes = file.length())
     }
 
-    suspend fun delete(map: OfflineMap) = withContext(Dispatchers.IO) {
-        map.file.delete()
-        refresh()
+    /** Hides [map] until [undoDelete] or [commitDelete]. */
+    fun deleteLater(map: OfflineMap) {
+        pendingDelete += map.file.name
+        _maps.update { maps -> maps.filter { it.file != map.file } }
+    }
+
+    fun undoDelete(map: OfflineMap) {
+        pendingDelete -= map.file.name
+        scope.launch { refresh() }
+    }
+
+    fun commitDelete(map: OfflineMap) {
+        scope.launch {
+            map.file.delete()
+            pendingDelete -= map.file.name
+            refresh()
+        }
     }
 
     private companion object {

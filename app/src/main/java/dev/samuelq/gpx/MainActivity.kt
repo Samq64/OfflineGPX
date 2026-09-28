@@ -23,6 +23,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         incomingTrack = intent?.let(::trackUriOf)
+        // Not on a restore, which would re-ask a question already answered.
+        if (savedInstanceState == null) intent?.let(::requestStopIfAsked)
 
         setContent {
             GpxTheme {
@@ -38,11 +40,23 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         trackUriOf(intent)?.let { incomingTrack = it }
+        requestStopIfAsked(intent)
+    }
+
+    private fun requestStopIfAsked(intent: Intent) {
+        if (intent.action == ACTION_REQUEST_STOP) {
+            (application as GpxApplication).container.recordingController.requestStop()
+        }
     }
 
     private fun trackUriOf(intent: Intent): Uri? = when (intent.action) {
         Intent.ACTION_VIEW -> intent.data
         Intent.ACTION_SEND -> IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
         else -> null
+    }
+
+    companion object {
+        /** From the recording notification's Stop. */
+        internal const val ACTION_REQUEST_STOP = "dev.samuelq.gpx.REQUEST_STOP"
     }
 }

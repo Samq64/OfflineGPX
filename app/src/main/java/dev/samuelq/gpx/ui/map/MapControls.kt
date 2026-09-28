@@ -63,7 +63,6 @@ internal fun RecordControls(
     onPause: () -> Unit,
     onResume: () -> Unit,
     onStop: () -> Unit,
-    onDiscard: () -> Unit,
     onAddWaypoint: (String) -> Unit,
     bottomInset: Dp,
 ) {
@@ -83,7 +82,6 @@ internal fun RecordControls(
             onPause = onPause,
             onResume = onResume,
             onStop = onStop,
-            onDiscard = onDiscard,
             onAddWaypoint = onAddWaypoint,
             bottomInset = bottomInset,
         )
