@@ -1,8 +1,13 @@
 package dev.samuelq.gpx.ui.map
 
 import dev.samuelq.gpx.core.model.TrackPoint
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import dev.samuelq.gpx.data.map.OfflineMap
 import org.oscim.core.BoundingBox
 import org.oscim.core.MapPosition
@@ -27,6 +32,15 @@ internal inline fun <T> Viewport.withFullZoomRange(block: () -> T): T {
 
 /** Pixels kept clear on each edge, for whatever is floating over the map. */
 internal class Insets(val left: Int, val top: Int, val right: Int, val bottom: Int)
+
+internal fun PaddingValues.toInsets(density: Density, layoutDirection: LayoutDirection) = with(density) {
+    Insets(
+        left = calculateStartPadding(layoutDirection).roundToPx(),
+        top = calculateTopPadding().roundToPx(),
+        right = calculateEndPadding(layoutDirection).roundToPx(),
+        bottom = calculateBottomPadding().roundToPx(),
+    )
+}
 
 /**
  * Where [point] sits on screen with the camera at [position]. The map is never rotated or
@@ -77,6 +91,27 @@ internal fun extentOf(
     return BoundingBox(south, west, north, east)
 }
 
+/** The smallest box holding both. */
+internal fun BoundingBox.including(other: BoundingBox?): BoundingBox = if (other == null) this else BoundingBox(
+    minOf(minLatitude, other.minLatitude),
+    minOf(minLongitude, other.minLongitude),
+    maxOf(maxLatitude, other.maxLatitude),
+    maxOf(maxLongitude, other.maxLongitude),
+)
+
+/** What a [size] view shows with the camera at [this]. */
+internal fun MapPosition.visibleBox(size: IntSize): BoundingBox {
+    val mapSize = Tile.SIZE * scale
+    val halfWidth = size.width / 2.0 / mapSize
+    val halfHeight = size.height / 2.0 / mapSize
+    return BoundingBox(
+        MercatorProjection.toLatitude(y + halfHeight),
+        MercatorProjection.toLongitude(x - halfWidth),
+        MercatorProjection.toLatitude(y - halfHeight),
+        MercatorProjection.toLongitude(x + halfWidth),
+    )
+}
+
 /**
  * [this] expanded outward by [fraction] of its own span on every side, for a pan clamp
  * that stops just past the edge of the data rather than dead against it.
@@ -104,8 +139,10 @@ internal fun IntSize?.usable(insets: Insets): IntSize? {
  * [target] fitted into the uncovered part of the view, centred there rather than on the
  * screen - otherwise the sheet covers the bottom of whatever was just framed.
  */
-internal fun fit(target: BoundingBox, size: IntSize, usable: IntSize, insets: Insets): MapPosition {
+internal fun fit(target: BoundingBox, size: IntSize, usable: IntSize, insets: Insets, maxScale: Double): MapPosition {
     val position = MapPosition().apply { setByBoundingBox(target, usable.width, usable.height) }
+    // Capped here rather than by VTM, so the offset below is worked out at the scale it lands at.
+    position.setScale(minOf(position.scale, maxScale))
     val mapSize = Tile.SIZE * position.scale
     // Where the uncovered box's centre sits relative to the screen's, in pixels.
     val offsetX = (insets.left - insets.right) / 2.0

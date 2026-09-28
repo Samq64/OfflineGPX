@@ -2,8 +2,6 @@ package dev.samuelq.gpx.ui.map
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.calculateEndPadding
-import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -36,6 +34,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.oscim.android.MapView
 import org.oscim.android.canvas.AndroidBitmap
+import org.oscim.core.BoundingBox
 import org.oscim.core.MapPosition
 import org.oscim.core.MercatorProjection
 import org.oscim.layers.marker.ItemizedLayer
@@ -97,6 +96,11 @@ fun OfflineMapCanvas(
     onFollowedWaypointMove: (Offset) -> Unit,
     /** Space kept clear of routes when framing, for the sheet and the controls. */
     contentPadding: PaddingValues,
+    /** A track to frame once, then [onFramed]. Map taps pass null. */
+    frameTrackId: Long?,
+    /** [contentPadding] as it will be once the sheet or panel has settled. */
+    framePadding: PaddingValues,
+    onFramed: () -> Unit,
     /**
      * How much of the bottom a sheet covers, zero with none open. Panning is measured from
      * its top edge, so nothing can be stranded underneath it.
@@ -152,15 +156,12 @@ fun OfflineMapCanvas(
     val followMargin = remember(density) { with(density) { FOLLOW_MARGIN_DP.dp.roundToPx() } }
 
     val insets = remember(contentPadding, layoutDirection, density) {
-        with(density) {
-            Insets(
-                left = contentPadding.calculateStartPadding(layoutDirection).roundToPx(),
-                top = contentPadding.calculateTopPadding().roundToPx(),
-                right = contentPadding.calculateEndPadding(layoutDirection).roundToPx(),
-                bottom = contentPadding.calculateBottomPadding().roundToPx(),
-            )
-        }
+        contentPadding.toInsets(density, layoutDirection)
     }
+    val frameInsets = remember(framePadding, layoutDirection, density) {
+        framePadding.toInsets(density, layoutDirection)
+    }
+    val framed by rememberUpdatedState(onFramed)
 
     AndroidView(
         factory = { mapView },
@@ -321,17 +322,23 @@ fun OfflineMapCanvas(
             bottom = sheetHeight.roundToPx(),
         )
     }
+    // Where the last framing put the camera, which the clamp admits too: a track at the
+    // edge of everything could otherwise never be centred.
+    var framedView by remember { mutableStateOf<BoundingBox?>(null) }
+    val clampExtent = remember(extent, framedView) { extent?.including(framedView) }
     val currentExtent by rememberUpdatedState(extent)
+    // Read fresh, not via recomposition: a framing move's own update must already see its view.
+    fun currentClamp() = currentExtent?.including(framedView)
     val currentCover by rememberUpdatedState(cover)
     DisposableEffect(map) {
         val listener = Map.UpdateListener { _, _ ->
-            currentExtent?.let { map.keepInView(it, currentCover) }
+            currentClamp()?.let { map.keepInView(it, currentCover) }
         }
         map.events.bind(listener)
         onDispose { map.events.unbind(listener) }
     }
-    LaunchedEffect(map, extent, viewSize, cover) {
-        extent?.let { map.keepInView(it, cover) }
+    LaunchedEffect(map, clampExtent, viewSize, cover) {
+        clampExtent?.let { map.keepInView(it, cover) }
     }
 
     // Only reached once per process at most: the moment a camera is ever remembered (see
@@ -355,7 +362,7 @@ fun OfflineMapCanvas(
         if (remembered != null) {
             map.moveTo(
                 MapPosition().setPosition(remembered.latitude, remembered.longitude).setZoom(remembered.zoom),
-                currentExtent,
+                currentClamp(),
                 currentCover,
             )
             hasFramed = true
@@ -366,8 +373,25 @@ fun OfflineMapCanvas(
         val size = viewSize ?: return@LaunchedEffect
         val usable = size.usable(insets) ?: return@LaunchedEffect
 
-        map.moveTo(fit(target, size, usable, insets), currentExtent, currentCover)
+        map.moveTo(fit(target, size, usable, insets, map.viewport().maxScale), currentClamp(), currentCover)
         hasFramed = true
+    }
+
+    // After the cold-start frame, so it wins when both land on the same composition.
+    LaunchedEffect(map, frameTrackId, frameInsets, routes, viewSize) {
+        val id = frameTrackId ?: return@LaunchedEffect
+        val route = routes.firstOrNull { it.trackId == id } ?: return@LaunchedEffect
+        val size = viewSize ?: return@LaunchedEffect
+        val usable = size.usable(frameInsets) ?: return@LaunchedEffect
+        // Null for a single point, which is left where the camera already is.
+        extentOf(listOf(route), null, emptyList())?.let { target ->
+            val position = fit(target, size, usable, frameInsets, map.viewport().maxScale)
+            val view = position.visibleBox(size)
+            framedView = view
+            map.moveTo(position, currentClamp(), currentCover)
+        }
+        hasFramed = true
+        framed()
     }
 
     // Scrubbing a chart moves the marker; moves the camera the least it can rather than

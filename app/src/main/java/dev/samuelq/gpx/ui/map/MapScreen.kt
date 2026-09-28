@@ -69,6 +69,7 @@ import dev.samuelq.gpx.R
 import dev.samuelq.gpx.core.model.Waypoint
 import dev.samuelq.gpx.data.record.RecordingEvent
 import dev.samuelq.gpx.data.record.RecordingState
+import dev.samuelq.gpx.data.track.LoadedTrack
 import dev.samuelq.gpx.ui.record.DiscardRecordingDialog
 import dev.samuelq.gpx.ui.record.RecordViewModel
 import dev.samuelq.gpx.ui.record.RecoveredRecordingDialog
@@ -138,10 +139,6 @@ fun MapScreen(
         ActivityResultContracts.OpenDocument()
     ) { uri -> uri?.let(viewModel::importTrack) }
 
-    // The camera belongs to the map view. This file only keeps the policy: frame once at a
-    // cold start, never move on a selection - a map that rearranges on a tap is one you
-    // have to re-read.
-    //
     // Distance by default: on a time axis a stop is a hole as wide as the stop was, most
     // of the chart on a long lunch; on a distance axis it's no width at all.
     var preferTimeAxis by rememberSaveable { mutableStateOf(false) }
@@ -172,8 +169,16 @@ fun MapScreen(
     val startRecording = rememberStartRecording(recorder, ::say)
 
 
+    // A track opened from the list or another app is framed once it loads. A tap on the
+    // map never moves the camera: that track is already in view.
+    var framing by remember { mutableStateOf<TrackRef?>(null) }
+    LaunchedEffect(focused) {
+        if (focused is FocusedTrack.None || focused is FocusedTrack.Failed) framing = null
+    }
+
     LaunchedEffect(pendingFocus) {
         pendingFocus?.let {
+            framing = it
             viewModel.focus(it)
             onFocusConsumed()
         }
@@ -360,8 +365,25 @@ fun MapScreen(
         bottom = MapEdgePadding + coveredHeight,
     )
 
-    // The track's details, the same in the sheet and in the side panel. Nothing for no
-    // track: each caller decides what stands in for it.
+    // The padding once the sheet or panel has settled, so the frame isn't fitted to a
+    // screen the sheet is about to cover.
+    val framePadding = PaddingValues(
+        start = MapEdgePadding + if (sidePanel) panelWidth else 0.dp,
+        end = MapEdgePadding,
+        top = MapEdgePadding,
+        bottom = MapEdgePadding + controlsHeight + if (sidePanel) navigationBarInset else peekHeight,
+    )
+    val frameTrackId = focusedTrack?.id
+        ?.takeIf { id ->
+            when (val ref = framing) {
+                is TrackRef.Saved -> ref.id == id
+                is TrackRef.Transient -> id == LoadedTrack.TRANSIENT_ID
+                null -> false
+            }
+        }
+        // The peek is measured off the loaded sheet.
+        ?.takeIf { sidePanel || peekContentHeight > 0.dp }
+
     // Null for a file opened from an intent: it has no row to rename, hide or delete, and
     // sharing it would just hand the file back to itself.
     val actions = focusedTrack?.let { state.entity(it.id) }?.let { entity ->
@@ -509,6 +531,9 @@ fun MapScreen(
                 followedWaypoint = tappedWaypoint,
                 onFollowedWaypointMove = { tappedWaypointAt.value = it },
                 contentPadding = canvasPadding,
+                frameTrackId = frameTrackId,
+                framePadding = framePadding,
+                onFramed = { framing = null },
                 sheetHeight = sheetCover,
                 panelWidth = panelCover,
                 // A step apart, not the same colour twice: ground no imported file covers
