@@ -1,7 +1,7 @@
 [versions]
-# AGP 9.4.0 (Sept 2026) supports up to API 37 and requires Gradle 9.1+ and JDK 17+.
-agp = "9.4.0"
-# Kotlin 2.4.20 (7 Sept 2026). Only the Compose *compiler* plugin is applied from this:
+# AGP 9.4 supports up to API 37 and requires Gradle 9.1+ and JDK 17+.
+agp = "9.4.1"
+# Only the Compose *compiler* plugin is applied from this:
 # since AGP 9.0, Kotlin support is built in and applying org.jetbrains.kotlin.android
 # is an error ("...plugin is no longer required for Kotlin support since AGP 9.0").
 kotlin = "2.4.20"
@@ -10,16 +10,16 @@ compileSdk = "37"
 minSdk = "29"
 targetSdk = "37"
 
-# Compose BOM 2026.08.00 = Compose 1.12, which itself requires compileSdk 37 / AGP 9.1.1+.
-composeBom = "2026.08.00"
-core = "1.19.0"
-activityCompose = "1.11.0"
+# Compose 1.12+ requires compileSdk 37 / AGP 9.1.1+.
+composeBom = "2026.09.00"
+core = "1.19.1"
+activityCompose = "1.13.0"
 lifecycle = "2.11.0"
 
 # Versioned independently of Kotlin since 2.3.0.
 ksp = "2.3.12"
 room = "2.8.5"
-navigation = "2.10.1"
+navigation = "2.10.2"
 serialization = "1.11.0"
 
 kxml2 = "2.3.0"

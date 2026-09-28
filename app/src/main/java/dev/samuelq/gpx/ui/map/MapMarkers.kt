@@ -5,6 +5,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import androidx.core.graphics.createBitmap
 import dev.samuelq.gpx.core.model.TrackPoint
 import dev.samuelq.gpx.core.model.Waypoint
 import org.oscim.layers.marker.MarkerInterface
@@ -53,7 +54,7 @@ internal class MarkerSymbols(marker: Color, puck: Color, darkTheme: Boolean, den
     ): MarkerSymbol {
         val outer = maxOf(radius + ringWidth / 2, haloRadius)
         val size = kotlin.math.ceil(outer * 2).toInt() + 2
-        val bitmap = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
+        val bitmap = createBitmap(size, size)
         val canvas = android.graphics.Canvas(bitmap)
         val centre = size / 2f
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -89,7 +90,7 @@ internal class MarkerSymbols(marker: Color, puck: Color, darkTheme: Boolean, den
         val cy = topPad + radius
         val tipY = cy + tipLength
 
-        val bitmap = android.graphics.Bitmap.createBitmap(width, height, android.graphics.Bitmap.Config.ARGB_8888)
+        val bitmap = createBitmap(width, height)
         val canvas = android.graphics.Canvas(bitmap)
         val path = teardropPath(cx, cy, radius, tipY)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)

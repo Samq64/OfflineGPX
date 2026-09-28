@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
 import android.util.Log
+import androidx.core.net.toUri
 import dev.samuelq.gpx.core.analysis.TrackAnalyzer
 import dev.samuelq.gpx.core.analysis.TrackProfile
 import dev.samuelq.gpx.core.analysis.TrackStats
@@ -85,7 +86,7 @@ class TrackRepository(
      */
     suspend fun import(location: String): Result<Long> = withContext(io) {
         runCatching {
-            val uri = Uri.parse(location)
+            val uri = location.toUri()
             val displayName = displayNameOf(uri)
             val destination = uniqueFile(importsDir, displayName, "gpx", fallback = "track")
 
@@ -176,7 +177,7 @@ class TrackRepository(
     suspend fun exportAll(names: Map<Long, String>, treeUri: String): Result<Int> =
         withContext(io) {
             runCatching {
-                val tree = Uri.parse(treeUri)
+                val tree = treeUri.toUri()
                 // A tree URI is not a document URI: the folder has to be named as the
                 // document it also is before anything can be created inside it.
                 val folder = DocumentsContract.buildDocumentUriUsingTree(
@@ -233,7 +234,7 @@ class TrackRepository(
             cached?.let { (cachedLocation, track) ->
                 if (cachedLocation == location) return@runCatching track
             }
-            val uri = Uri.parse(location)
+            val uri = location.toUri()
             val stream = appContext.contentResolver.openInputStream(uri)
                 ?: throw TrackLoadException.Unreadable("No provider could open $location")
             val loaded = read(stream, displayNameOf(uri), LoadedTrack.TRANSIENT_ID)
