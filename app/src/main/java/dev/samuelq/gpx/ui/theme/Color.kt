@@ -86,31 +86,32 @@ internal val StaticDarkColors = darkColorScheme(
 )
 
 /**
- * The categorical set the map overlays routes with. Unlike [ChartColors], colour here
- * encodes *which track* (arbitrary identity), so the set only has to stay mutually
- * distinguishable - separated by lightness as well as hue for colourblind readability.
- * Six, then it repeats; past that the canvas is unreadable regardless.
+ * The categorical set the map overlays routes with, one hue per slot in both themes.
+ * Picked by search, not by eye: at least 3:1 against the map's land and background (2:1
+ * against water and vegetation), and at least 25 CIEDE2000 apart from each other and
+ * from [recordingColor] - 12 under simulated protan, deutan and tritan vision. Ordered so
+ * the first tracks, which take the lowest free slot, are the furthest apart.
  */
 private val RoutePaletteLight = listOf(
-    Blue450,
-    Orange,
-    Color(0xFF2E8B6F),
-    Color(0xFF8E5BC4),
-    Color(0xFFB8912B),
-    // Cyan, not the pinkish red this slot once was: the recording draws in the error red,
-    // and a saved track in nearly the same hue read as one. Checked against every other
-    // slot and that red, including under simulated protan, deutan and tritan vision.
-    Color(0xFF0F9FB0),
+    Color(0xFF1292C0),
+    Color(0xFF722756),
+    Color(0xFF187C49),
+    Color(0xFF9D8519),
+    Color(0xFFD65C88),
+    Color(0xFF6B3CFB),
 ).also { check(it.size == TrackEntity.PALETTE_SIZE) }
 
 private val RoutePaletteDark = listOf(
-    Blue400,
-    OrangeDark,
-    Color(0xFF45A587),
-    Color(0xFFA87ADA),
-    Color(0xFFD3AC46),
-    Color(0xFF30BCC8),
+    Color(0xFF30C0F8),
+    Color(0xFFB82989),
+    Color(0xFF269E5F),
+    Color(0xFFD6BD5C),
+    Color(0xFFEF90AE),
+    Color(0xFF8472FE),
 ).also { check(it.size == TrackEntity.PALETTE_SIZE) }
+
+private val RecordingLight = Color(0xFFBA0D01)
+private val RecordingDark = Color(0xFFDF2414)
 
 /** A track's colour from its stored palette slot. */
 fun List<Color>.slot(index: Int): Color = this[index.mod(size)]
@@ -120,6 +121,15 @@ fun List<Color>.slot(index: Int): Color = this[index.mod(size)]
 @androidx.compose.runtime.ReadOnlyComposable
 fun routePalette(): List<Color> =
     if (androidx.compose.foundation.isSystemInDarkTheme()) RoutePaletteDark else RoutePaletteLight
+
+/**
+ * The live recording's line, puck and dot. Its own red rather than the scheme's error
+ * colour, which is wallpaper-derived and a pale pink in dark mode.
+ */
+@androidx.compose.runtime.Composable
+@androidx.compose.runtime.ReadOnlyComposable
+fun recordingColor(): Color =
+    if (androidx.compose.foundation.isSystemInDarkTheme()) RecordingDark else RecordingLight
 
 /**
  * Colours the charts draw with, held apart from the Material scheme - these two hues were

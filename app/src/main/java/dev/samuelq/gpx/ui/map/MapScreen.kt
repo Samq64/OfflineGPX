@@ -74,6 +74,7 @@ import dev.samuelq.gpx.data.record.RecordingState
 import dev.samuelq.gpx.data.track.LoadedTrack
 import dev.samuelq.gpx.ui.record.DiscardRecordingDialog
 import dev.samuelq.gpx.ui.record.RecoveredRecordingDialog
+import dev.samuelq.gpx.ui.theme.recordingColor
 import dev.samuelq.gpx.ui.theme.routePalette
 import dev.samuelq.gpx.ui.theme.slot
 import dev.samuelq.gpx.ui.track.DeleteTrackDialog
@@ -116,7 +117,7 @@ fun MapScreen(
     val basemaps by viewModel.basemaps.collectAsStateWithLifecycle()
 
     val palette = routePalette()
-    val liveColor = MaterialTheme.colorScheme.error
+    val liveColor = recordingColor()
     val density = LocalDensity.current
 
     val snackbarHostState = remember { SnackbarHostState() }

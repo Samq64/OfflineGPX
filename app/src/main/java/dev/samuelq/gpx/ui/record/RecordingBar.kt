@@ -50,6 +50,7 @@ import dev.samuelq.gpx.data.record.RecordingState
 import dev.samuelq.gpx.ui.format.Formatters
 import dev.samuelq.gpx.ui.format.LocalFormatters
 import dev.samuelq.gpx.ui.format.tabularFigures
+import dev.samuelq.gpx.ui.theme.recordingColor
 
 /**
  * The live recording, docked under the map. Two rows and no more - the route drawing
@@ -259,7 +260,7 @@ private fun RecordingDot(paused: Boolean) {
             .size(10.dp)
             .alpha(if (paused) 0.35f else alpha)
             .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.error)
+            .background(recordingColor())
     )
 }
 
