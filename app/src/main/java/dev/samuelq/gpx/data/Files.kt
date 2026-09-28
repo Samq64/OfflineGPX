@@ -22,18 +22,25 @@ internal fun ContentResolver.copyInto(uri: Uri, destination: File): Boolean =
     } != null
 
 /** A sanitised, numbered-if-taken file in [dir]; never overwrites. */
-internal fun uniqueFile(dir: File, name: String?, extension: String, fallback: String): File {
+internal fun uniqueFile(dir: File, name: String?, extension: String, fallback: String): File =
+    File(dir, uniqueName(name, extension, fallback) { File(dir, it).exists() })
+
+/**
+ * [name] sanitised, with [extension], numbered before the extension while [taken]. Ours, not
+ * a provider's: some number after it, turning `a.gpx` into `a.gpx (1)`.
+ */
+internal fun uniqueName(name: String?, extension: String, fallback: String, taken: (String) -> Boolean): String {
+    // A slash is replaced, not cut at: a track called "Mon/Tue ride" keeps both halves.
     val base = name.orEmpty()
-        .substringAfterLast('/')
         .let { if (it.endsWith(".$extension", ignoreCase = true)) it.dropLast(extension.length + 1) else it }
         .replace(UNSAFE_FILENAME_CHARACTERS, "_")
         .take(MAX_FILENAME_LENGTH)
         .ifBlank { fallback }
 
-    var candidate = File(dir, "$base.$extension")
+    var candidate = "$base.$extension"
     var suffix = 2
-    while (candidate.exists()) {
-        candidate = File(dir, "$base ($suffix).$extension")
+    while (taken(candidate)) {
+        candidate = "$base ($suffix).$extension"
         suffix++
     }
     return candidate

@@ -20,6 +20,7 @@ import dev.samuelq.gpx.data.gpx.GPX_MIME_TYPE
 import dev.samuelq.gpx.data.copyInto
 import dev.samuelq.gpx.data.displayName
 import dev.samuelq.gpx.data.uniqueFile
+import dev.samuelq.gpx.data.uniqueName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -35,6 +36,7 @@ import java.io.IOException
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 /** The single way the app gets at track data: Room rows plus the GPX files they index. */
 class TrackRepository(
@@ -158,17 +160,30 @@ class TrackRepository(
                     DocumentsContract.getTreeDocumentId(tree),
                 )
 
+                // Lowercased: shared storage is case-insensitive, so `A.gpx` would collide with `a.gpx`.
+                val taken = childNames(tree).mapTo(HashSet()) { it.lowercase(Locale.ROOT) }
+
                 // Per track, so a failure halfway still reports the ones written.
                 names.count { (id, name) ->
-                    runCatching { writeExport(folder, id, name) }.getOrDefault(false)
+                    val unique = uniqueName(name, "gpx", fallback = "track") { it.lowercase(Locale.ROOT) in taken }
+                    taken += unique.lowercase(Locale.ROOT)
+                    runCatching { writeExport(folder, id, unique) }.getOrDefault(false)
                 }
             }.recoverFailure()
         }
 
+    /** What [tree] already holds, so exports can be numbered around it. */
+    private fun childNames(tree: Uri): List<String> {
+        val children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree))
+        return appContext.contentResolver
+            .query(children, arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null)
+            ?.use { cursor -> buildList { while (cursor.moveToNext()) cursor.getString(0)?.let(::add) } }
+            .orEmpty()
+    }
+
     /** Copies one track into [folder], deleting the document on failure to avoid a zero-byte file. */
     private suspend fun writeExport(folder: Uri, id: Long, name: String): Boolean {
         val entity = dao.byId(id) ?: return false
-        // The provider numbers a name that is already taken.
         val target = DocumentsContract.createDocument(
             appContext.contentResolver,
             folder,
