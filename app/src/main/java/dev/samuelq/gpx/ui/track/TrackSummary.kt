@@ -129,17 +129,18 @@ fun TrackDetails(
                 horizontalArrangement = Arrangement.spacedBy(20.dp),
             ) {
                 details.forEach { (label, value) ->
+                    // Value over label, like StatRow.
                     Column(Modifier.weight(1f)) {
-                        Text(
-                            text = label,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                        )
                         Text(
                             text = value,
                             style = MaterialTheme.typography.bodyLarge.tabularFigures(),
                             fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                        )
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
                         )
                     }

@@ -10,7 +10,7 @@
     <string name="action_done">Done</string>
 
     <string name="map_open_list">Tracks</string>
-    <string name="map_description">Map showing your routes. Tap a route to open it. Drag to move, pinch to zoom.</string>
+    <string name="map_description">Map showing your tracks. Tap a track to open it. Drag to move, pinch to zoom.</string>
     <string name="map_empty_title">Nothing to show</string>
     <string name="map_empty_body">Record a ride or a walk, or import a track or a map.</string>
     <string name="map_empty_import_map">Import map</string>
@@ -43,24 +43,24 @@
     <string name="settings_reset">Reset recording settings</string>
 
     <string name="settings_section_maps">Offline maps</string>
-    <string name="settings_maps_explanation">No internet access here, so maps come from a .map file you open. Without one, routes are drawn on a plain background.</string>
-    <string name="settings_maps_import">Open map file</string>
+    <string name="settings_maps_explanation">No internet access here, so maps come from a .map file you import. Without one, tracks are drawn on a plain background.</string>
+    <string name="settings_maps_import">Import map</string>
     <!-- A direct link to a tool that cuts an extract, so an action, not a heading. -->
     <string name="settings_maps_where">Get maps</string>
     <string name="settings_maps_none">No maps imported.</string>
     <string name="settings_maps_delete">Delete map</string>
     <string name="settings_maps_importing">Copying map…</string>
-    <string name="settings_maps_imported">Map added.</string>
+    <string name="settings_maps_imported">Map imported.</string>
     <string name="settings_maps_deleted">Map deleted.</string>
-    <string name="settings_maps_failed_unreadable">That file couldn\'t be read.</string>
-    <string name="settings_maps_failed_format">That isn\'t a mapsforge map file.</string>
+    <string name="settings_maps_failed_unreadable">Couldn\'t read that file.</string>
+    <string name="settings_maps_failed_format">That isn\'t a supported map format.</string>
     <string name="settings_maps_failed_space">Not enough free space for that map.</string>
     <string name="settings_maps_no_browser">No app on this device can open a web page.</string>
 
     <string name="library_title">Tracks</string>
-    <string name="library_import">Open GPX file</string>
-    <string name="library_share">Share…</string>
-    <string name="library_export_all">Export to a folder…</string>
+    <string name="library_import">Import track</string>
+    <string name="library_share">Share</string>
+    <string name="library_export_all">Export to a folder</string>
     <string name="library_search">Search tracks</string>
     <string name="library_search_hint">Search tracks</string>
     <string name="library_search_close">Close search</string>
@@ -81,8 +81,8 @@
     <string name="library_selected">%d selected</string>
     <string name="library_empty_title">No tracks yet</string>
     <!-- Not "files are read only when you pick them": import keeps a copy. -->
-    <string name="library_empty_body">Record one, or open a .gpx file. Opening one keeps a copy here; nothing leaves the device.</string>
-    <string name="library_import_failed">Couldn\'t open that file.</string>
+    <string name="library_empty_body">Record one, or import a .gpx file. Importing keeps a copy here; nothing leaves the device.</string>
+    <string name="library_import_failed">Couldn\'t import that file.</string>
     <string name="library_export_failed">Couldn\'t export to that folder.</string>
     <plurals name="library_exported_all">
         <item quantity="one">Exported %1$d track.</item>
@@ -146,7 +146,8 @@
     <string name="track_error_title">Couldn\'t open this file</string>
     <string name="track_error_invalid">This file isn\'t valid GPX.</string>
     <string name="track_error_empty">This GPX file has no track points.</string>
-    <string name="track_error_unreadable">The file couldn\'t be read. It may have been moved, renamed or deleted.</string>
+    <!-- Under track_error_title, which already says it couldn\'t be opened. -->
+    <string name="track_error_unreadable">It may have been moved, renamed or deleted.</string>
 
     <string name="chart_speed">Speed</string>
     <string name="chart_elevation">Elevation</string>
