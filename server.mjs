@@ -24,6 +24,9 @@ const MAX_EXTRACT_BYTES = 256 * 1024 * 1024;
 const MAX_EXTRACTS = 2;
 let extracts = 0;
 
+// Running cuts by the page's job id, so it can poll how far upstream reading has got.
+const jobs = new Map();
+
 /** One level of the upstream tree: the sub-directories and the .map files in it. */
 async function list(path) {
   const cached = listings.get(path);
@@ -79,6 +82,12 @@ const routes = {
     });
   },
 
+  /** Null counts once the job has finished, or for one that never started. */
+  async '/api/progress'(url, response) {
+    const source = jobs.get(url.searchParams.get('job'));
+    json(response, { bytes: source?.bytes ?? null, requests: source?.requests ?? null });
+  },
+
   async '/api/extract'(url, response) {
     const path = safePath(url.searchParams.get('path'));
     const bbox = parseBbox(url.searchParams.get('bbox'));
@@ -88,13 +97,17 @@ const routes = {
     }
 
     const source = new HttpSource(ROOT + path);
+    const job = url.searchParams.get('job');
+    const tracked = job && /^[a-z0-9]{1,32}$/i.test(job);
     const started = Date.now();
     extracts += 1;
+    if (tracked) jobs.set(job, source);
     let output;
     try {
       output = await cut(source, bbox, { maxBytes: MAX_EXTRACT_BYTES });
     } finally {
       extracts -= 1;
+      if (tracked) jobs.delete(job);
     }
     const name = `${path.split('/').pop().replace(/\.map$/, '')}-extract.map`;
 

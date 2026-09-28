@@ -235,21 +235,53 @@ function update() {
   $('go').disabled = !source;
 }
 
+const mb = (bytes) => `${(bytes / 1e6).toFixed(2)} MB`;
+const seconds = (since) => `${((Date.now() - since) / 1000).toFixed(1)}s`;
+
 $('go').onclick = async () => {
   $('go').disabled = true;
-  $('status').textContent = 'Cutting…';
   // A cut is tens of seconds. On a phone the status sits below the fold, where an
   // unexplained wait looks like a button that did nothing.
   $('status').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   const started = Date.now();
+
+  // Not crypto.randomUUID: it needs a secure context, and this is served over plain http.
+  const job = Math.random().toString(36).slice(2);
+  let upstream = null;
+  let received = null, total = null;
+  const render = () => {
+    const read = upstream?.bytes != null
+      ? ` · ${mb(upstream.bytes)} read upstream in ${upstream.requests} requests` : '';
+    $('status').textContent = received == null
+      ? `Cutting… ${seconds(started)}${read}`
+      : `Downloading… ${seconds(started)} · ${mb(received)}` +
+        (total ? ` of ${mb(total)} (${Math.round((received / total) * 100)}%)` : '');
+  };
+  const clock = setInterval(render, 100);
+  const poll = setInterval(async () => {
+    upstream = await api('/api/progress', { job }).catch(() => upstream);
+  }, 500);
+  render();
+
   try {
     const url = new URL('/api/extract', location.origin);
     url.searchParams.set('path', source.path);
     url.searchParams.set('bbox', bbox.join(','));
+    url.searchParams.set('job', job);
     const response = await fetch(url);
+    clearInterval(poll);
     if (!response.ok) throw new Error((await response.json()).error);
 
-    const blob = await response.blob();
+    // Read in chunks rather than blob(), to count the file arriving.
+    total = Number(response.headers.get('content-length')) || null;
+    received = 0;
+    const chunks = [];
+    const reader = response.body.getReader();
+    for (let r = await reader.read(); !r.done; r = await reader.read()) {
+      chunks.push(r.value);
+      received += r.value.length;
+    }
+    const blob = new Blob(chunks);
     const link = Object.assign(document.createElement('a'), {
       href: URL.createObjectURL(blob),
       download: response.headers.get('content-disposition')?.match(/"(.+)"/)?.[1] ?? 'extract.map',
@@ -258,12 +290,15 @@ $('go').onclick = async () => {
     // Revoking straight away can cancel the download before the browser has started it.
     setTimeout(() => URL.revokeObjectURL(link.href), 60_000);
 
-    $('status').innerHTML = `<b>${(blob.size / 1e6).toFixed(2)} MB</b> in ` +
-      `${((Date.now() - started) / 1000).toFixed(1)}s — ` +
+    clearInterval(clock);
+    $('status').innerHTML = `<b>${mb(blob.size)}</b> in ${seconds(started)} — ` +
       `${response.headers.get('x-upstream-requests')} upstream range requests, ` +
-      `${(Number(response.headers.get('x-upstream-bytes')) / 1e6).toFixed(2)} MB read`;
+      `${mb(Number(response.headers.get('x-upstream-bytes')))} read`;
   } catch (error) {
+    clearInterval(clock);
     $('status').textContent = error.message;
+  } finally {
+    clearInterval(poll);
   }
   $('go').disabled = false;
 };
