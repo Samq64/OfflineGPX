@@ -4,22 +4,14 @@ An Android app for cycling and hiking stats. Record a ride or a walk, or import 
 file, and get a **route** over an offline map, a **speed timeline** and an **elevation
 profile**, all on one shared, synchronised scrubber.
 
-## Build and sign
+## Build
 
 Needs the Android SDK (`sdk.dir` in `local.properties`, or `ANDROID_HOME`). Gradle fetches
 the JDK it runs on (`gradle/gradle-daemon-jvm.properties`).
 
 ```sh
-./gradlew :app:assembleDebug     # app/build/outputs/apk/debug/app-debug.apk, debug-signed
+./gradlew :app:assembleDebug     # app/build/outputs/apk/debug/app-debug.apk
 ./gradlew :app:assembleRelease   # app/build/outputs/apk/release/app-release-unsigned.apk
-```
-
-The release build has no signing config; sign it with your own keystore, kept out of the
-repo (`*.jks` is ignored):
-
-```sh
-"$ANDROID_HOME"/build-tools/<version>/apksigner sign --ks release.jks \
-    --out app-release.apk app/build/outputs/apk/release/app-release-unsigned.apk
 ```
 
 ## The permission budget
