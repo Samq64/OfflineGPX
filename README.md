@@ -281,3 +281,21 @@ This is a track recorder and viewer with an offline basemap under it, not a maps
 routing, tile fetching, search and turn-by-turn are out of scope on purpose. Anything that
 makes it feel like a port of something else, or like it's chasing feature parity with a
 mapping app, is a bug.
+
+## License
+
+Copyright (C) 2026 Samq64
+
+This program is free software: you can redistribute it and/or modify it under the terms of
+the GNU General Public License as published by the Free Software Foundation, either version 3
+of the License, or (at your option) any later version. It is distributed in the hope that it
+will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See [LICENSE](LICENSE) for the full text.
+
+Dependencies keep their own licences: AndroidX (Compose, Room, navigation included), the
+Kotlin libraries and their other transitive dependencies are Apache 2.0; VTM is LGPL 3.0;
+JTS (via `vtm-jts`) is EPL 2.0 or EDL 1.0. All are compatible with the GPL.
+
+`app/src/test/resources/andorra-fragment.map` is cut from a mapsforge extract of
+OpenStreetMap data, © OpenStreetMap contributors, available under the
+[Open Database License](https://opendatacommons.org/licenses/odbl/).
