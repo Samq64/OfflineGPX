@@ -5,15 +5,12 @@ import org.xmlpull.v1.XmlSerializer
 import java.io.OutputStream
 import java.time.format.DateTimeFormatter
 
-/** What a provider is told a GPX file is, so it files it as one. */
 const val GPX_MIME_TYPE = "application/gpx+xml"
 
 /**
- * Writes a [Track] as GPX 1.1 - storage, not an export feature. A recording *is* a GPX
- * file on disk, so what this writes is what the app reads back and what the user shares.
+ * Writes a [Track] as GPX 1.1, the on-disk format for recordings.
  *
- * @param newSerializer injected for the same reason [GpxParser] injects its parser: the
- *   framework's xmlpull classes are unimplemented stubs in unit tests.
+ * @param newSerializer injected for plain-JVM tests, like [GpxParser]'s parser.
  */
 class GpxWriter(private val newSerializer: () -> XmlSerializer = DEFAULT_SERIALIZER) {
 
@@ -35,8 +32,7 @@ class GpxWriter(private val newSerializer: () -> XmlSerializer = DEFAULT_SERIALI
             xml.endTag(NAMESPACE, "metadata")
         }
 
-        // Ahead of <trk>: the schema orders wpt*, rte*, trk*, and a reader that enforces it
-        // would otherwise reject a file this app wrote itself.
+        // The schema orders wpt before trk.
         for (waypoint in track.waypoints) {
             xml.startTag(NAMESPACE, "wpt")
             xml.attribute(null, "lat", format(waypoint.point.latitude))
@@ -55,14 +51,12 @@ class GpxWriter(private val newSerializer: () -> XmlSerializer = DEFAULT_SERIALI
             xml.startTag(NAMESPACE, "trkseg")
             for (point in segment.points) {
                 xml.startTag(NAMESPACE, "trkpt")
-                // Six decimals is ~0.1 m at the equator - past what consumer GPS resolves,
-                // and it keeps a long ride's file from doubling in size for noise.
+                // Six decimals is ~0.1 m, past what consumer GPS resolves.
                 xml.attribute(null, "lat", format(point.latitude))
                 xml.attribute(null, "lon", format(point.longitude))
                 point.elevation?.let { xml.textTag("ele", String.format(java.util.Locale.ROOT, "%.1f", it)) }
                 point.time?.let { xml.textTag("time", TIMESTAMP.format(it)) }
-                // Not a true dilution-of-precision figure - see TrackPoint.accuracyMeters -
-                // but the closest slot GPX has, and after `<time>` is where the schema puts it.
+                // Accuracy in metres, not true HDOP; see TrackPoint.accuracyMeters.
                 point.accuracyMeters?.let { xml.textTag("hdop", String.format(java.util.Locale.ROOT, "%.1f", it)) }
                 xml.endTag(NAMESPACE, "trkpt")
             }
@@ -88,7 +82,6 @@ class GpxWriter(private val newSerializer: () -> XmlSerializer = DEFAULT_SERIALI
         private const val NAMESPACE = "http://www.topografix.com/GPX/1/1"
         private const val CREATOR = "Offline GPX"
 
-        /** GPX 1.1 wants ISO 8601 in UTC, which is what [Instant] renders by default. */
         private val TIMESTAMP: DateTimeFormatter = DateTimeFormatter.ISO_INSTANT
 
         private val DEFAULT_SERIALIZER: () -> XmlSerializer = {

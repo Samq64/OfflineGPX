@@ -7,13 +7,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
-/**
- * The header reader, against a real file and against the shapes that have to be refused.
- *
- * `andorra-fragment.map` is a genuine extract cut from `download.mapsforge.org`, truncated
- * to exactly its own header - the reader never looks past it, and 4 KB is a fixture where
- * 300 KB would be a liability.
- */
+/** `andorra-fragment.map` is a real mapsforge extract truncated to its header, which is all the reader reads. */
 class MapFileHeaderTest {
 
     private fun fixture(): File =
@@ -29,17 +23,14 @@ class MapFileHeaderTest {
         assertEquals(1.545, header.maxLongitude)
     }
 
-    /**
-     * The deepest of the file's three stored base zooms, not the z21 it claims: the camera
-     * is capped from this, and z15 to z21 are the z14 tile scaled up.
-     */
+    /** Not the z21 it claims: z15 to z21 are the z14 tile scaled up. */
     @Test
     fun `the base zoom is the deepest stored`() {
         val header = assertNotNull(MapFileHeader.read(fixture()))
         assertEquals(14, header.baseZoom)
     }
 
-    /** Where an extract's ODbL credit actually lives, and what the settings screen shows. */
+    /** Where an extract's ODbL credit lives. */
     @Test
     fun `attribution comes from the comment`() {
         val header = assertNotNull(MapFileHeader.read(fixture()))
@@ -58,7 +49,6 @@ class MapFileHeaderTest {
         assertNull(header.attribution)
     }
 
-    /** A blank comment is a file that did not say, not a file that said nothing. */
     @Test
     fun `a blank comment is not attribution`() {
         val header = assertNotNull(MapFileHeader.parse(header(comment = "   ", createdBy = "osmosis")))
@@ -83,10 +73,7 @@ class MapFileHeaderTest {
         assertNull(MapFileHeader.read(truncated))
     }
 
-    /**
-     * Debug files interleave 32-byte signatures through the data. Reading one as if it
-     * were ordinary would draw noise, so it is refused outright.
-     */
+    /** Debug files interleave 32-byte signatures through the data. */
     @Test
     fun `a debug build is refused`() {
         assertNull(MapFileHeader.parse(header(debug = true)))
@@ -97,11 +84,7 @@ class MapFileHeaderTest {
         assertNull(MapFileHeader.parse(header(minLatitude = 50.0, maxLatitude = 40.0)))
     }
 
-    /**
-     * String lengths are VBE-U, not the 2-byte short the rest of the header uses. A tag
-     * list long enough to need a two-byte length is where getting that wrong shows up:
-     * everything after it decodes as garbage.
-     */
+    /** String lengths are VBE-U, not the 2-byte short used elsewhere in the header. */
     @Test
     fun `reads past a multi-byte string length`() {
         val header = assertNotNull(
@@ -111,8 +94,7 @@ class MapFileHeaderTest {
         assertEquals(14, header.baseZoom)
     }
 
-    // --- A header, built to the spec so the reader can be pointed at edges -------------
-
+    /** A header built to the spec. */
     private fun header(
         minLatitude: Double = 42.0,
         maxLatitude: Double = 43.0,

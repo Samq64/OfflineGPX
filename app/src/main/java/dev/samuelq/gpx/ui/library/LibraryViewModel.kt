@@ -25,10 +25,9 @@ import kotlinx.coroutines.launch
 sealed interface LibraryEvent {
     data class Open(val id: Long) : LibraryEvent
     data object ImportFailed : LibraryEvent
-    /** The batch export to a folder failed outright - see [ExportedAll] for a partial one. */
+    /** Failed outright; see [ExportedAll] for a partial one. */
     data object ExportFailed : LibraryEvent
 
-    /** [written] of [requested] tracks reached the folder. */
     data class ExportedAll(val written: Int, val requested: Int) : LibraryEvent
     data object RenameFailed : LibraryEvent
 }
@@ -40,15 +39,10 @@ class LibraryViewModel(
     private val savedState: SavedStateHandle,
 ) : ViewModel() {
 
-    /** What the user has typed into the search field. Blank means they have not. */
     private val _query = MutableStateFlow("")
     val query: StateFlow<String> = _query.asStateFlow()
 
-    /**
-     * The rows to show, filtered by [query]. Null until the first read comes back, which
-     * is not the same as empty - starting at `emptyList()` flashed "No tracks yet" during
-     * the entry animation before the real list swapped in.
-     */
+    /** Null until loaded, so the empty state doesn't flash during the entry animation. */
     val tracks: StateFlow<List<TrackEntity>?> =
         combine(repository.tracks, _query) { tracks, query ->
             tracks.filter { it.matches(query) }
@@ -58,14 +52,11 @@ class LibraryViewModel(
         _query.value = query
     }
 
-    /** Ids ticked for a batch action. Empty means the list is in its normal mode. */
+    /** Empty means not in selection mode. */
     private val _selection = MutableStateFlow<Set<Long>>(emptySet())
     val selection: StateFlow<Set<Long>> = _selection.asStateFlow()
 
-    /**
-     * One-shot events, not state - a Channel delivers each exactly once, so a rotation
-     * can't re-trigger navigation or re-show an error.
-     */
+    // A Channel delivers each once, so a rotation can't replay one.
     private val _events = Channel<LibraryEvent>(Channel.BUFFERED)
     val events: Flow<LibraryEvent> = _events.receiveAsFlow()
 
@@ -90,11 +81,7 @@ class LibraryViewModel(
         }
     }
 
-    /**
-     * The filenames a pending batch will be written under, by row id. Saved state because
-     * the folder picker can outlive this process, and the result would otherwise land on
-     * an empty batch and silently write nothing.
-     */
+    /** Saved state, since the folder picker can outlive this process. */
     fun beginExportAll(names: Map<Long, String>) {
         savedState[EXPORT_IDS] = names.keys.toLongArray()
         savedState[EXPORT_NAMES] = ArrayList(names.values)
@@ -106,7 +93,6 @@ class LibraryViewModel(
         if (folder == null || names.isEmpty()) return
         viewModelScope.launch {
             repository.exportAll(names, folder.toString()).fold(
-                // A count, not a boolean: a half-written folder is likelier than all-or-nothing.
                 onSuccess = { _events.send(LibraryEvent.ExportedAll(it, names.size)) },
                 onFailure = { _events.send(LibraryEvent.ExportFailed) },
             )
@@ -145,10 +131,7 @@ class LibraryViewModel(
     }
 }
 
-/**
- * Whether a row answers to what was typed. Checks both names, not just the one on screen -
- * an import keeps the filename it arrived under even after a rename.
- */
+/** Checks both names: a renamed import still answers to its filename. */
 private fun TrackEntity.matches(query: String): Boolean {
     val needle = query.trim()
     if (needle.isEmpty()) return true

@@ -62,10 +62,9 @@ import dev.samuelq.gpx.ui.theme.LocalChartColors
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-// Mark specs. Thin marks, hairline chrome, generous air - the data is the only loud thing.
 private val LineWidth = 2.dp
 private val GridWidth = 1.dp
-private val MarkerRadius = 4.dp // an 8dp mark
+private val MarkerRadius = 4.dp
 private val SurfaceRing = 2.dp
 private val LabelGap = 6.dp
 private val RightPad = 10.dp
@@ -75,41 +74,27 @@ private const val AreaFillAlpha = 0.10f
 private const val BreakWashAlpha = 0.10f
 
 /**
- * A single-series line chart with an area wash and a shared scrubber. No legend: one
- * series, and the section title names it.
- *
- * [xScale] is passed in rather than derived, so every chart shares one domain - which is
- * what makes the scrubber meaningful, the same pixel column being the same moment in both.
+ * A single-series line chart with an area wash and a scrubber. [xScale] is passed in so
+ * stacked charts share one domain and the scrubber points at the same moment in each.
  */
 @Composable
 fun ProfileChart(
     series: ChartSeries,
     xScale: Scale,
-    /** From [yScale]. Passed in so the caller can label it to the precision of its step. */
     yScale: Scale,
     formatX: (Float) -> String,
     formatY: (Float) -> String,
     selectedIndex: Int?,
     onSelectedIndexChange: (Int?) -> Unit,
     contentDescription: String,
-    /**
-     * Names a gap in the data, given its width in x units, or null to leave it unnamed. An
-     * unexplained hole otherwise reads as a rendering fault rather than a fact about the ride.
-     */
+    /** Labels a data gap by its width in x units; null leaves gaps unlabelled. */
     breakLabel: ((Float) -> String)?,
-    /**
-     * The scrubbed value *with* its unit, for the tooltip. Distinct from [formatY], which
-     * labels bare axis ticks read in a column, not on their own.
-     */
+    /** Tooltip value with its unit; [formatY] labels bare axis ticks. */
     formatValue: (Float) -> String,
-    /** The scrubbed position with its unit, shown in the same tooltip ahead of the value. */
     formatPosition: (Float) -> String,
-    /**
-     * A two-finger pinch or pan, as (anchor, zoom, pan) - anchor and pan as fractions of
-     * the plot's width, for [zoomView].
-     */
+    /** Pinch or pan as (anchor, zoom, pan), anchor and pan as fractions of plot width. */
     onZoom: (Float, Float, Float) -> Unit,
-    /** Shared by charts stacked on one x domain, so their plots line up column for column. */
+    /** Shared by stacked charts so their plots line up. */
     axisGroup: ChartAxisGroup,
     modifier: Modifier = Modifier,
 ) {
@@ -121,9 +106,7 @@ fun ProfileChart(
         color = chartColors.label,
     )
 
-    // Labels are measured during composition, not while drawing: their width decides the
-    // gutter, the gutter decides the plot rect, and the pointer handler needs that same
-    // rect to map a touch back to a sample.
+    // Measured in composition: label width sets the plot rect the pointer handler also needs.
     val render = remember(
         series, xScale, yScale, formatX, formatY, labelStyle, breakLabel,
     ) {
@@ -146,8 +129,7 @@ fun ProfileChart(
     val ownGutter = render.yTicks.maxOfOrNull { it.size.width }?.toFloat() ?: 0f
     SideEffect { if (ownGutter > axisGroup.gutterPx) axisGroup.gutterPx = ownGutter }
     val gutter = maxOf(ownGutter, axisGroup.gutterPx)
-    // Keyed on what it's measured from, not on [render]: a pinch makes a new render every
-    // frame, and a new geometry would restart the gesture reading it.
+    // Not keyed on render: a pinch makes a new one every frame and would restart the gesture.
     val geometry = remember(gutter, density) {
         with(density) {
             ChartGeometry(
@@ -192,10 +174,7 @@ fun ProfileChart(
     }
 }
 
-/**
- * Everything that depends only on the data. Split out with exclusively stable parameters
- * so Compose skips it while the scrubber moves, rather than rebuilding the path every frame.
- */
+/** Stable params only, so Compose skips it while the scrubber moves. */
 @Composable
 private fun StaticLayer(
     render: ChartRender,
@@ -213,8 +192,7 @@ private fun StaticLayer(
 
                 onDrawBehind {
                     drawGrid(render.yScale, plot, chartColors.grid, GridWidth.toPx())
-                    // Zoomed in, the data runs on past both edges. Widened by the line's
-                    // own width, so a peak at the top isn't shaved flat.
+                    // Bleed above so a peak at the top isn't shaved flat.
                     val bleed = LineWidth.toPx()
                     clipRect(plot.left, plot.top - bleed, plot.right, plot.bottom) {
                         drawBreaks(render, plot, chartColors.label)
@@ -243,11 +221,7 @@ private fun StaticLayer(
     )
 }
 
-/**
- * A hairline and a dot at the scrubbed position - what it's pointing at is [ChartTooltip]'s
- * business, drawn as a separate composable overlay rather than here, so its text can be a
- * real `Text` instead of a `TextLayoutResult` measured and drawn by hand.
- */
+/** Hairline and dot at the scrubbed position; the text is [ChartTooltip]. */
 @Composable
 private fun ScrubberLayer(
     render: ChartRender,
@@ -258,10 +232,8 @@ private fun ScrubberLayer(
     onZoom: (Float, Float, Float) -> Unit,
 ) {
     val series = render.series
-    // What the charts sit on, so the ring reads as a gap in the line.
     val ringColor = MaterialTheme.colorScheme.surfaceContainer
-    // Read through state, not keyed on: a pinch changes the scale every frame, and
-    // restarting the gesture each time would drop it after the first.
+    // Read through state, not keyed on, or each pinch frame would restart the gesture.
     val currentRender by rememberUpdatedState(render)
     val currentOnZoom by rememberUpdatedState(onZoom)
 
@@ -297,8 +269,7 @@ private fun ScrubberLayer(
                             if (change.isConsumed) return@awaitEachGesture
                             if (!scrubbing) {
                                 drift += change.positionChange()
-                                // Horizontal-only, so dragging across the chart never
-                                // steals the vertical scroll of the page it sits on.
+                                // Leave vertical drags to the page scroll.
                                 if (abs(drift.y) > viewConfiguration.touchSlop && abs(drift.y) > abs(drift.x)) {
                                     return@awaitEachGesture
                                 }
@@ -319,7 +290,6 @@ private fun ScrubberLayer(
 
         val plot = geometry.plotRect(size)
         val x = plot.xFor(series.x[index], render.xScale)
-        // Zoomed away from it: nothing to point at in this view.
         if (x < plot.left - 1f || x > plot.right + 1f) return@Canvas
 
         drawLine(
@@ -333,13 +303,12 @@ private fun ScrubberLayer(
         if (value.isNaN()) return@Canvas
 
         val y = plot.yFor(value, render.yScale)
-        // Surface ring first, so the dot stays legible where it sits on the line.
+        // Surface ring keeps the dot legible on the line.
         drawCircle(ringColor, MarkerRadius.toPx() + SurfaceRing.toPx(), Offset(x, y))
         drawCircle(series.color, MarkerRadius.toPx(), Offset(x, y))
     }
 }
 
-/** Where you are and what is there, beside the scrubbed dot and free to leave the chart. */
 @Composable
 private fun ChartTooltip(
     render: ChartRender,
@@ -381,13 +350,12 @@ private fun ChartTooltip(
     }
 }
 
-/** The widest y-axis labels among a stack of charts, which all of them then make room for. */
+/** Widest y-axis label gutter across a stack of charts. */
 @Stable
 class ChartAxisGroup {
     internal var gutterPx by mutableFloatStateOf(0f)
 }
 
-/** Everything derived from the data, measured once. */
 @Immutable
 private class ChartRender(
     val series: ChartSeries,
@@ -398,17 +366,10 @@ private class ChartRender(
     val breaks: List<ChartBreak>,
 )
 
-/** A stretch of x where the recorder said nothing. */
 @Immutable
 private class ChartBreak(val from: Float, val to: Float, val layout: TextLayoutResult?)
 
-/**
- * The spans between segments, in x units.
- *
- * A segment boundary means the two points either side of it are not connected - signal
- * loss, or a stop long enough that the analyser cut the track there. The line already
- * stops; this is what lets the chart say why.
- */
+/** The x spans between segments (signal loss or long stops). */
 private fun ChartSeries.breaks(): List<Pair<Float, Float>> {
     if (segmentStartIndices.size < 2) return emptyList()
     return buildList {
@@ -422,7 +383,6 @@ private fun ChartSeries.breaks(): List<Pair<Float, Float>> {
     }
 }
 
-/** Insets in pixels, resolved once from the measured labels. */
 @Immutable
 private class ChartGeometry(
     val gutterPx: Float,
@@ -465,7 +425,7 @@ private fun buildPaths(
 ) {
     val starts = series.segmentStartIndices
     val builder = PolylineBuilder(line, area, plot.bottom)
-    // Only what's in view, plus one either side so the line runs on off both edges.
+    // Visible range plus one either side, so the line runs off both edges.
     val first = (nearestIndex(series.x, xScale.min) - 1).coerceAtLeast(0)
     val last = (nearestIndex(series.x, xScale.max) + 2).coerceAtMost(series.size)
 
@@ -475,7 +435,6 @@ private fun buildPaths(
         for (i in from until to) {
             val value = series.y[i]
             if (value.isNaN()) {
-                // A missing sample is a hole, not a straight line drawn across the hole.
                 builder.breakLine()
                 continue
             }
@@ -486,17 +445,13 @@ private fun buildPaths(
     builder.finish()
 }
 
-/**
- * A wash over each gap, labelled where there's room. Deliberately not a line drawn down to
- * zero and back, which would invent decelerations that were never measured.
- */
+/** A wash over each gap, not a drop to zero, which would invent unmeasured decelerations. */
 private fun DrawScope.drawBreaks(render: ChartRender, plot: Rect, color: Color) {
     for (gap in render.breaks) {
         val left = plot.xFor(gap.from, render.xScale)
         val right = plot.xFor(gap.to, render.xScale)
         val width = right - left
-        // Under a pixel it is not a gap the reader can see, and a hairline band there
-        // would read as a grid line. On a distance axis every stop lands here.
+        // A sub-pixel band would read as a grid line.
         if (width < 1f) continue
 
         drawRect(
@@ -518,7 +473,6 @@ private fun DrawScope.drawGrid(yScale: Scale, plot: Rect, color: Color, width: F
     for (tick in yScale.ticks) {
         val y = plot.yFor(tick, yScale)
         if (y < plot.top - 1f || y > plot.bottom + 1f) continue
-        // Solid hairlines. Dashes would read as a threshold or a projection.
         drawLine(color, Offset(plot.left, y), Offset(plot.right, y), width)
     }
 }
@@ -528,14 +482,13 @@ private fun DrawScope.drawAxisLabels(render: ChartRender, plot: Rect, geometry: 
         val layout = render.yTicks.getOrNull(index) ?: return@forEachIndexed
         val y = plot.yFor(tick, render.yScale) - layout.size.height / 2f
         if (y < -layout.size.height || y > plot.bottom) return@forEachIndexed
-        // Right-aligned against the plot edge, so the digits form a clean column.
         drawText(layout, topLeft = Offset(geometry.gutterPx - layout.size.width, y))
     }
 
     render.xScale.ticks.forEachIndexed { index, tick ->
         val layout = render.xTicks.getOrNull(index) ?: return@forEachIndexed
         val centered = plot.xFor(tick, render.xScale) - layout.size.width / 2f
-        // Clamped rather than clipped: a tick at either end stays fully readable.
+        // Clamped, not clipped, so end ticks stay readable.
         val x = centered.coerceIn(0f, (plot.right - layout.size.width).coerceAtLeast(0f))
         drawText(layout, topLeft = Offset(x, plot.bottom + geometry.labelGap))
     }

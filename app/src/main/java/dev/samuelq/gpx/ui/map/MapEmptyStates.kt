@@ -24,8 +24,7 @@ internal fun EmptyState(
     modifier: Modifier = Modifier,
 ) {
     Column(
-        // Opaque, over the canvas's own flat background, and the same colour as every
-        // other screen's: with nothing to show, this is a page, not a map.
+        // Opaque and page-coloured: with nothing to show, this is a page, not a map.
         modifier = modifier
             .background(MaterialTheme.colorScheme.background)
             .padding(32.dp),
@@ -52,11 +51,7 @@ internal fun EmptyState(
     }
 }
 
-/**
- * The one state with nothing at all on screen: every track hidden, no basemap. Not the
- * first-run card - the user did this on purpose from the list, and already knows what the
- * app is - just a way back that doesn't require remembering the list icon exists.
- */
+/** Every track hidden on purpose and no basemap: just a way back to the list. */
 @Composable
 internal fun ShowTracksHint(onClick: () -> Unit, modifier: Modifier = Modifier) {
     TextButton(onClick = onClick, modifier = modifier) {

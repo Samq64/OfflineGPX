@@ -28,17 +28,10 @@ import kotlin.math.log10
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
-/**
- * How far across the map a hundred-odd points of screen actually is - useful on an offline
- * extract with no surrounding context to judge distance against. Snaps to a round distance
- * and changes width to match, rather than showing an awkward number at a fixed width.
- */
+/** Snaps to a round distance and sizes the bar to match. */
 @Composable
 fun ScaleBar(
-    /**
-     * The live scale, passed as state rather than a number, and read only here - so a
-     * pinch recomposes the bar and not the screen it sits on.
-     */
+    /** State, read only here, so a pinch recomposes the bar and not the screen. */
     metersPerPixel: State<Double>,
     modifier: Modifier = Modifier,
 ) {
@@ -48,8 +41,7 @@ fun ScaleBar(
 
     val maxWidthPx = with(density) { MaxBarWidth.toPx() }
 
-    // Snapped behind a `derivedStateOf`: the rounded distance changes a handful of times
-    // during a pinch, where the raw scale changes every frame.
+    // The rounded distance changes a few times per pinch; the raw scale every frame.
     val snapped by remember(metersPerPixel, maxWidthPx, formatters.units, density) {
         derivedStateOf {
             val scale = metersPerPixel.value
@@ -74,8 +66,7 @@ fun ScaleBar(
             style = MaterialTheme.typography.labelSmall,
             color = color,
         )
-        // Drawn rather than composed from boxes: it is three lines, and a Canvas keeps it
-        // to one node instead of four.
+        // One Canvas node rather than four boxes.
         Canvas(Modifier.width(bar.width).height(BarHeight)) {
             val stroke = with(density) { 1.5.dp.toPx() }
             val top = size.height - stroke / 2f
@@ -91,17 +82,11 @@ fun ScaleBar(
     }
 }
 
-/**
- * A round distance and the width it occupies. A data class so `derivedStateOf`'s
- * structural equality can skip a downstream rebuild when nothing actually changed.
- */
+/** A data class so `derivedStateOf` skips unchanged results. */
 @Immutable
 private data class SnappedScale(val meters: Double, val width: Dp)
 
-/**
- * The snapped distance as a whole number and a unit - not the general distance formatter,
- * whose decimal would imply a precision a snapped bar doesn't have.
- */
+/** Whole number and unit; the general formatter's decimal would imply false precision. */
 private fun scaleLabel(meters: Double, units: UnitSystem): String = when {
     units == UnitSystem.METRIC && meters >= 1000 -> "${(meters / 1000).roundToInt()} km"
     units == UnitSystem.METRIC -> "${meters.roundToInt()} m"
@@ -109,15 +94,11 @@ private fun scaleLabel(meters: Double, units: UnitSystem): String = when {
     else -> "${(meters / METERS_PER_FOOT).roundToInt()} ft"
 }
 
-/**
- * The largest round distance that still fits: 1, 2 and 5 at every power, as every map
- * scale has used forever.
- */
+/** The largest 1-2-5 round distance that fits. */
 private fun roundDistance(maxMeters: Double, units: UnitSystem): Double {
     if (maxMeters <= 0.0) return 0.0
 
-    // Imperial is chosen in feet below a mile and in miles above it, because a scale bar
-    // reading "2640 ft" is a conversion rather than a distance.
+    // Feet below a mile, miles above: "2640 ft" is a conversion, not a distance.
     val unit = when {
         units == UnitSystem.METRIC -> 1.0
         maxMeters >= METERS_PER_MILE -> METERS_PER_MILE
@@ -135,7 +116,6 @@ private fun roundDistance(maxMeters: Double, units: UnitSystem): Double {
     return snapped * power * unit
 }
 
-/** Wide enough to be worth reading, narrow enough to leave the map alone. */
 private val MaxBarWidth = 96.dp
 private val BarHeight = 6.dp
 

@@ -7,29 +7,19 @@ import androidx.compose.ui.graphics.Color
 import dev.samuelq.gpx.core.model.TrackPoint
 import dev.samuelq.gpx.data.track.LoadedTrack
 
-/**
- * One track as the map should draw it: the positions themselves, in degrees. The map
- * does its own projecting.
- */
+/** One track's positions in degrees; the map projects. */
 @Immutable
 class RouteOverlay(
     val trackId: Long,
     val points: List<TrackPoint>,
-    /** Indices into [points] where a new polyline starts. Never drawn across. */
+    /** Indices into [points] where a new polyline starts. */
     val segmentStartIndices: IntArray,
     val color: Color,
 ) {
-    /**
-     * The box this route occupies, measured once and kept - four numbers rather than
-     * re-walking every position on every change. Lazy, since most overlays are never
-     * framed against. `PUBLICATION`, not a lock: a race just computes the same answer twice.
-     */
+    /** Measured once, lazily. `PUBLICATION`, not a lock: a race just computes it twice. */
     val bounds: RouteBounds? by lazy(LazyThreadSafetyMode.PUBLICATION) { RouteBounds.of(points) }
 
-    /**
-     * Calls [block] with each segment's `[from, to)` range of [points]. Both producers hand
-     * the starts over ascending and from 0, so this neither sorts nor dedupes.
-     */
+    /** Each segment's `[from, to)` range. Starts are ascending from 0, so no sort or dedupe. */
     inline fun forEachRun(block: (from: Int, to: Int) -> Unit) {
         val starts = segmentStartIndices
         val runs = if (starts.isEmpty()) 1 else starts.size
@@ -41,7 +31,6 @@ class RouteOverlay(
     }
 }
 
-/** [LoadedTrack]'s geometry as the map draws it. */
 fun LoadedTrack.toOverlay(color: Color) = RouteOverlay(
     trackId = id,
     points = profile.points,
@@ -49,7 +38,6 @@ fun LoadedTrack.toOverlay(color: Color) = RouteOverlay(
     color = color,
 )
 
-/** A route's extent, as the four numbers a camera fit actually needs. */
 @Immutable
 class RouteBounds(
     val southLatitude: Double,
@@ -58,15 +46,14 @@ class RouteBounds(
     val eastLongitude: Double,
 ) {
     companion object {
-        /** Null for no points at all: an empty route has no box, not a box of zero size. */
+        /** Null for no points. */
         fun of(points: List<TrackPoint>): RouteBounds? {
             if (points.isEmpty()) return null
             var south = Double.POSITIVE_INFINITY
             var west = Double.POSITIVE_INFINITY
             var north = Double.NEGATIVE_INFINITY
             var east = Double.NEGATIVE_INFINITY
-            // Indexed doubles, not objects: this touches every position of every drawn
-            // route, so it allocates nothing.
+            // Indexed loop: this touches every drawn position, so it allocates nothing.
             for (i in points.indices) {
                 val point = points[i]
                 if (point.latitude < south) south = point.latitude
@@ -79,11 +66,6 @@ class RouteBounds(
     }
 }
 
-/**
- * Where the camera is, in the three numbers worth remembering across a screen this
- * composable doesn't survive - navigating away and back recomposes it from scratch, and
- * without this the camera re-fits from nothing every time, discarding wherever the user
- * had actually panned to.
- */
+/** Camera position, kept so returning to the map doesn't re-fit. */
 @Immutable
 data class CameraSnapshot(val latitude: Double, val longitude: Double, val zoom: Double)

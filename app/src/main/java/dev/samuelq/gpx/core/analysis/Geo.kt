@@ -11,11 +11,8 @@ import kotlin.math.sqrt
 private const val EARTH_RADIUS_METERS = 6_371_008.8
 
 /**
- * Great-circle distance between two points, in metres.
- *
- * Haversine, not Vincenty: over tens-of-metres hops the spherical-vs-ellipsoidal error is
- * far below the GPS noise in the same data, and haversine cannot fail to converge.
- * Horizontal only - "distance" in every mainstream tracker means ground distance.
+ * Horizontal great-circle distance in metres. Haversine, not Vincenty: the spherical error
+ * is far below GPS noise and it cannot fail to converge.
  */
 fun haversineMeters(from: TrackPoint, to: TrackPoint): Double {
     val lat1 = Math.toRadians(from.latitude)
@@ -26,6 +23,6 @@ fun haversineMeters(from: TrackPoint, to: TrackPoint): Double {
     val sinHalfLat = sin(dLat / 2.0)
     val sinHalfLon = sin(dLon / 2.0)
     val a = sinHalfLat * sinHalfLat + cos(lat1) * cos(lat2) * sinHalfLon * sinHalfLon
-    // min(1.0, ...) guards asin against a > 1 from floating-point error at antipodes.
+    // Guards asin against rounding past 1 at antipodes.
     return 2.0 * EARTH_RADIUS_METERS * asin(min(1.0, sqrt(a)))
 }

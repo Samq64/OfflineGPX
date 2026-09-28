@@ -42,10 +42,7 @@ internal fun PaddingValues.toInsets(density: Density, layoutDirection: LayoutDir
     )
 }
 
-/**
- * Where [point] sits on screen with the camera at [position]. The map is never rotated or
- * tilted, so this is the whole projection.
- */
+/** Where [point] sits on screen at [position]; valid since the map never rotates or tilts. */
 internal fun Map.screenPosition(point: TrackPoint, position: MapPosition = mapPosition): Offset {
     val mapSize = Tile.SIZE * position.scale
     val x = (MercatorProjection.longitudeToX(point.longitude) - position.x) * mapSize + width / 2.0
@@ -54,9 +51,8 @@ internal fun Map.screenPosition(point: TrackPoint, position: MapPosition = mapPo
 }
 
 /**
- * Everything worth looking at, as one box: every route's extent, with a margin so a line
- * doesn't run along the screen edge, and every shown map's, flush - past a map's edge is
- * nothing. Null when there's neither - a fresh install with nothing to frame.
+ * Every route's extent with a margin, plus every shown map's flush (past a map's edge is
+ * nothing). Null when there's neither.
  */
 internal fun extentOf(
     routes: List<RouteOverlay>,
@@ -74,8 +70,7 @@ internal fun extentOf(
         if (e > east) east = e
     }
 
-    // A box of boxes: each route already knows its own extent, so this doesn't walk every
-    // position of every ride on the map each time the one being recorded grows.
+    // From each route's cached bounds, so a growing recording doesn't re-walk every position.
     for (route in routes + listOfNotNull(liveRoute)) {
         val b = route.bounds ?: continue
         val latPad = (b.northLatitude - b.southLatitude) * TRACK_MARGIN
@@ -88,13 +83,12 @@ internal fun extentOf(
     }
 
     if (!south.isFinite() || !north.isFinite() || !west.isFinite() || !east.isFinite()) return null
-    // A single position isn't a box - nothing to fit a camera to, same as no routes at all.
+    // A single position isn't a box to fit.
     if (north == south && east == west) return null
 
     return BoundingBox(south, west, north, east)
 }
 
-/** The smallest box holding both. */
 internal fun BoundingBox.including(other: BoundingBox?): BoundingBox = if (other == null) this else BoundingBox(
     minOf(minLatitude, other.minLatitude),
     minOf(minLongitude, other.minLongitude),
@@ -118,10 +112,7 @@ internal fun MapPosition.visibleBox(size: IntSize): BoundingBox {
 /** A track's margin on each side, as a fraction of its own span. */
 private const val TRACK_MARGIN = 0.05
 
-/**
- * [this] expanded outward by [fraction] of its own span on every side, for a pan clamp
- * that stops just past the edge of the data rather than dead against it.
- */
+/** Expanded by [fraction] of its span per side, so a pan clamp stops just past the data. */
 internal fun BoundingBox.padded(fraction: Double): BoundingBox {
     val latitudePad = latitudeSpan * fraction
     val longitudePad = longitudeSpan * fraction
@@ -141,16 +132,12 @@ internal fun IntSize?.usable(insets: Insets): IntSize? {
     return if (usableWidth > 0 && usableHeight > 0) IntSize(usableWidth, usableHeight) else null
 }
 
-/**
- * [target] fitted into the uncovered part of the view, centred there rather than on the
- * screen - otherwise the sheet covers the bottom of whatever was just framed.
- */
+/** [target] fitted and centred in the uncovered part of the view, not the screen. */
 internal fun fit(target: BoundingBox, usable: IntSize, insets: Insets, maxScale: Double): MapPosition {
     val position = MapPosition().apply { setByBoundingBox(target, usable.width, usable.height) }
     // Capped here rather than by VTM, so the offset below is worked out at the scale it lands at.
     position.setScale(minOf(position.scale, maxScale))
     val mapSize = Tile.SIZE * position.scale
-    // Where the uncovered box's centre sits relative to the screen's, in pixels.
     val offsetX = (insets.left - insets.right) / 2.0
     val offsetY = (insets.top - insets.bottom) / 2.0
     position.x -= offsetX / mapSize
@@ -159,11 +146,9 @@ internal fun fit(target: BoundingBox, usable: IntSize, insets: Insets, maxScale:
 }
 
 /**
- * Moves the camera the least it can so no edge of [extent] comes inside the screen's - or
- * inside whatever [cover] hides - holding it centred on any axis where it fits.
- *
- * The range is also handed to VTM as its map limit, so a drag stops cleanly against it; a
- * pinch changes the scale that range was worked out for, which the correction here catches.
+ * Moves the camera the least it can so [extent]'s edges stay outside the screen's (or
+ * [cover]'s), centred on an axis where it fits. The range is also VTM's map limit so drags
+ * stop cleanly; this catches pinches, which change the scale it was worked out for.
  */
 internal fun Map.keepInView(extent: BoundingBox, cover: Insets) {
     if (width <= 0 || height <= 0) return
@@ -172,9 +157,8 @@ internal fun Map.keepInView(extent: BoundingBox, cover: Insets) {
 }
 
 /**
- * Moves the camera to [target], held inside [extent] as [keepInView] would. The limit is
- * worked out at [target]'s own scale first: VTM clamps every move to the current limit,
- * and one left over from a whole-world view pins any framing to the extent's centre.
+ * Moves to [target] clamped as [keepInView] would. The limit is set at [target]'s scale first:
+ * VTM clamps to the current limit, and a whole-world one pins framing to the extent's centre.
  */
 internal fun Map.moveTo(target: MapPosition, extent: BoundingBox?, cover: Insets) {
     if (extent != null && width > 0 && height > 0) constrain(target, extent, cover)
@@ -206,10 +190,8 @@ private fun Map.constrain(position: MapPosition, extent: BoundingBox, cover: Ins
 }
 
 /**
- * Where the camera centre may sit on one axis, in projected units: [start] no further in
- * than [visibleStart] and [end] no further in than [visibleEnd] - the screen's edges, or
- * those of whatever covers them. When both can't hold at once the extent is narrower than
- * what is visible, and the only answer is centred in it.
+ * Camera-centre range on one axis keeping [start] and [end] no further in than [visibleStart]
+ * and [visibleEnd]. If both can't hold, the extent is narrower than visible and is centred.
  */
 private fun centreRange(
     start: Double,
@@ -226,10 +208,7 @@ private fun centreRange(
     return centred to centred
 }
 
-/**
- * Pans the least it can to bring the target inside the uncovered box, or not at all -
- * expressed as a camera-centre move so the amount moved equals the amount out of bounds.
- */
+/** Pans the least it can to bring the point inside the uncovered box, or not at all. */
 internal fun Map.nudgeIntoView(point: TrackPoint, insets: Insets, margin: Int) {
     if (width <= 0 || height <= 0) return
     val position = mapPosition
@@ -256,9 +235,7 @@ internal fun Map.nudgeIntoView(point: TrackPoint, insets: Insets, margin: Int) {
     }
     if (dx == 0.0 && dy == 0.0) return
 
-    // Moving the picture right by dx means moving the camera left by dx. Not animated:
-    // this answers a drag happening right now, and an easing curve would arrive after the
-    // finger had moved on.
+    // Not animated: this follows a drag, and easing would lag the finger.
     position.x -= dx / mapSize
     position.y -= dy / mapSize
     setMapPosition(position)

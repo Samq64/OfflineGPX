@@ -21,7 +21,6 @@ class RecordingSessionTest {
         clock = { now },
     )
 
-    /** Metres north of the origin, as a fix at [second]. */
     private fun fix(second: Long, metersNorth: Double, accuracy: Double = 5.0) = TrackPoint(
         latitude = 51.5 + metersNorth / 111_320.0,
         longitude = -0.1,

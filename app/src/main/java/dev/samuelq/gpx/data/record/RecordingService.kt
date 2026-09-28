@@ -25,25 +25,16 @@ import kotlinx.coroutines.sync.withLock
 import java.io.IOException
 import java.time.Instant
 
-/**
- * Owns a recording for as long as it runs.
- *
- * A foreground service because that is the only honest way to keep sampling with the
- * screen off. Commands arrive as intents from [RecordingController]; state goes back
- * through it.
- */
+/** Foreground service owning a recording; commands arrive as intents from [RecordingController]. */
 class RecordingService : Service() {
 
     private val container get() = (application as GpxApplication).container
     private val controller get() = container.recordingController
 
-    /**
-     * Every field below, and the WAL, is touched only from here: one fix at a time, never
-     * racing a pause or a stop. IO rather than Main because each fix is a flushed write.
-     */
+    /** All fields below and the WAL are confined to this; IO since each fix is a flushed write. */
     private val recorder = Dispatchers.IO.limitedParallelism(1)
 
-    /** A write that fails ends the recording rather than the process; see [fail]. */
+    /** A failed write ends the recording rather than the process. */
     private val scope: CoroutineScope = CoroutineScope(
         SupervisorJob() + recorder + CoroutineExceptionHandler { _, e ->
             Log.e(TAG, "Recording failed", e)
@@ -51,31 +42,24 @@ class RecordingService : Service() {
         }
     )
 
-    /** Commands suspend (recovery, saving), and must not interleave with each other. */
+    /** Commands suspend and must not interleave. */
     private val commands = Mutex()
 
     private val notifications = RecordingNotifications(this)
 
-    /**
-     * Non-null from START until the recording ends, pause included - a START arriving
-     * while paused would otherwise reopen the WAL in append mode over the ride in it.
-     */
+    /** Non-null while paused too, so a START then can't reopen the WAL over the ride. */
     private var session: RecordingSession? = null
     private var collection: Job? = null
     private var wal: RecordingWal? = null
 
-    /**
-     * Republishes on a plain clock rather than waiting on the next fix, so the duration
-     * keeps moving through a GPS outage, rejected fixes, or a pause.
-     */
+    /** Keeps the duration moving between fixes. */
     private var ticker: Job? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action
-        // Now, not once the command gets its turn: a START queued behind a long save would
-        // miss the deadline startForegroundService sets, and that is a crash.
+        // Immediately: a START queued behind a save would miss the startForegroundService deadline.
         if (action == ACTION_START) notifications.startForeground(notificationContent())
         scope.launch {
             commands.withLock {
@@ -91,8 +75,7 @@ class RecordingService : Service() {
                 if (session == null) stopSelf(startId)
             }
         }
-        // Not sticky: a restart with no intent cannot know whether the user still wants to
-        // be recorded, and resuming location sampling unasked is exactly the wrong default.
+        // Never resume location sampling unasked.
         return START_NOT_STICKY
     }
 
@@ -105,20 +88,17 @@ class RecordingService : Service() {
             clock = SystemClock::elapsedRealtime,
         )
 
-        // Again, now the state it shows is this ride's. Also covers a START that waited
-        // behind a stop, whose finish() took the first one down.
+        // Again: a preceding stop's finish() may have removed the first one.
         notifications.startForeground(notificationContent())
 
         val source = LocationSource(this)
-        // Location off system-wide means requestLocationUpdates succeeds and then never
-        // calls back, which looks exactly like waiting for a fix that never comes.
+        // With location off, requestLocationUpdates succeeds but never calls back.
         if (!source.isGpsEnabled) {
             abandon(R.string.record_location_off)
             return
         }
 
-        // A ride whose save failed is still in the log. Set aside first, for the next
-        // launch to ask about, so this one starts from an empty file.
+        // Set aside any unsaved ride for recovery so this one starts from an empty log.
         if (!container.recordingRecovery.claim()) {
             abandon(R.string.record_save_failed)
             return
@@ -138,7 +118,6 @@ class RecordingService : Service() {
             .launchIn(scope)
     }
 
-    /** Give up before a recording exists: say why, drop the notification, go away. */
     private fun abandon(@StringRes messageRes: Int) {
         controller.emit(RecordingEvent.Failed(messageRes))
         finish()
@@ -165,11 +144,7 @@ class RecordingService : Service() {
         notifications.remove()
     }
 
-    /**
-     * Location switched off mid-ride. The recording stays up - the points already logged
-     * are real, and the provider often comes back - but the user is told, because from the
-     * outside this is indistinguishable from standing still.
-     */
+    /** Keeps recording, but tells the user since it otherwise looks like standing still. */
     private fun onLocationUnavailable() {
         controller.emit(RecordingEvent.Failed(R.string.record_location_lost))
     }
@@ -200,10 +175,7 @@ class RecordingService : Service() {
         }
     }
 
-    /**
-     * Stops sampling outright, which is the one thing auto-detection cannot do: save the
-     * battery, and write a real `<trkseg>` boundary that travels with the file.
-     */
+    /** Stops sampling to save battery and writes a real `<trkseg>` boundary. */
     private suspend fun pause() {
         val session = session ?: return
         if (!session.pause()) return
@@ -223,8 +195,7 @@ class RecordingService : Service() {
         if (!session.paused) return
 
         val source = LocationSource(this)
-        // Location is a quick-settings toggle, and a paused recording is exactly when
-        // someone would reach for it. Staying paused and saying so beats resuming into silence.
+        // Stay paused and say so rather than resuming into silence.
         if (!source.isGpsEnabled) {
             controller.emit(RecordingEvent.Failed(R.string.record_location_off))
             return
@@ -254,8 +225,6 @@ class RecordingService : Service() {
             }
             log.close()
             val track = RecordingWal.recover(log.file)
-            // Nothing in the log, or fixes that never went anywhere - either way not the
-            // user's decision, so neither is called "discarded".
             if (track == null || !RecordingRecovery.isSaveable(session.distanceMeters)) {
                 log.file.delete()
                 controller.emit(
@@ -270,8 +239,7 @@ class RecordingService : Service() {
                     log.file.delete()
                     controller.emit(RecordingEvent.Saved(it))
                 },
-                // Keep the log: a failed save that also deleted the ride would be the
-                // worst outcome this class exists to prevent.
+                // Keep the log for recovery.
                 onFailure = { controller.emit(RecordingEvent.Failed(R.string.record_save_failed)) },
             )
         } catch (e: IOException) {
@@ -282,7 +250,6 @@ class RecordingService : Service() {
         }
     }
 
-    /** Hands the map a snapshot of the route so far. See [RecordingSession.traceDue]. */
     private fun publishTrace(session: RecordingSession) = controller.updateTrace(session.trace())
 
     private fun publish() {
@@ -314,7 +281,6 @@ class RecordingService : Service() {
 
         private const val TAG = "RecordingService"
 
-        /** How often the clock ticks on its own, between whatever fixes arrive. */
         private const val TICK_INTERVAL_MILLIS = 1_000L
     }
 }

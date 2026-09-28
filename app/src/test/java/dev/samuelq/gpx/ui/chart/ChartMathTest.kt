@@ -13,7 +13,6 @@ class ChartMathTest {
         expected.zip(actual).forEach { (e, a) -> assertEquals(e, a, 1e-3f, "ticks $actual") }
     }
 
-    /** Round in km/h, not in m/s: 8 m/s used to tick at 0, 7.2, 14.4, 21.6, 28.8 km/h. */
     @Test
     fun `speed ticks are round in display units`() {
         val kmh = axisScale(0f, 8f, perUnit = 3.6f)
@@ -30,7 +29,6 @@ class ChartMathTest {
         )
         val scale = series.yScale()
         assertEquals(12f, scale.min)
-        // The top is the peak itself, not the next round number above it.
         assertEquals(31f, scale.max)
         assertTicks(listOf(12f, 16.75f, 21.5f, 26.25f, 31f), scale.ticks.toList())
     }
@@ -58,7 +56,7 @@ class ChartMathTest {
         val perMile = (1 / 1609.344).toFloat()
         val scale = axisScale(0f, 8000f, perUnit = perMile)
         assertTicks(listOf(0f, 2f, 4f), scale.ticksIn(perMile))
-        // The domain stays as measured, in metres.
+        // The domain stays in metres.
         assertEquals(8000f, scale.max)
     }
 

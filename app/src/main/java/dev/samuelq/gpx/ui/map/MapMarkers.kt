@@ -15,7 +15,7 @@ import org.oscim.layers.marker.MarkerItem
 import org.oscim.layers.marker.MarkerSymbol
 import org.oscim.layers.vector.geometries.Style
 
-/** The circles, drawn once per colour - see where [MarkerSymbols] is remembered. */
+/** Marker bitmaps, built once per colour. */
 internal class MarkerSymbols(marker: Color, puck: Color, darkTheme: Boolean, density: Density) {
     val marker: MarkerSymbol
     val puck: MarkerSymbol
@@ -27,15 +27,12 @@ internal class MarkerSymbols(marker: Color, puck: Color, darkTheme: Boolean, den
             this@MarkerSymbols.marker = symbol(
                 MARKER_RADIUS_DP.dp.toPx(), ringWidth, fill = marker, ring = MARKER_RING, halo = null, haloRadius = 0f,
             )
-            // Bigger than the scrub marker and wearing a halo: one points at a moment in a
-            // ride that's over, this is the only thing on screen about right now.
+            // Bigger and haloed: the only marker about right now.
             this@MarkerSymbols.puck = symbol(
                 PUCK_RADIUS_DP.dp.toPx(), ringWidth, fill = puck, ring = MARKER_RING,
                 halo = puck.copy(alpha = PUCK_HALO_ALPHA), haloRadius = PUCK_HALO_RADIUS_DP.dp.toPx(),
             )
-            // A pin, not a dot: a waypoint is a place someone marked, and the shape says so
-            // on its own - the tip is the hotspot, so it points at the position exactly the
-            // way the puck and the scrub marker sit centred on theirs.
+            // Hotspot at the tip, so the pin points at the position exactly.
             this@MarkerSymbols.waypoint = pin(
                 PIN_RADIUS_DP.dp.toPx(), PIN_TIP_LENGTH_DP.dp.toPx(), ringWidth,
                 fill = if (darkTheme) WAYPOINT_LIGHT_GREY else WAYPOINT_DARK_GREY,
@@ -71,17 +68,9 @@ internal class MarkerSymbols(marker: Color, puck: Color, darkTheme: Boolean, den
         return MarkerSymbol(AndroidBitmap(bitmap), MarkerSymbol.HotspotPlace.CENTER, false)
     }
 
-    /**
-     * A teardrop: a circle of [radius] tangent to two lines converging [tipLength] below its
-     * centre, at the exact angle that meets the circle smoothly rather than a triangle
-     * glued onto it. The tip is the hotspot - see [MarkerSymbol.HotspotPlace.BOTTOM_CENTER] -
-     * so the point the pin actually marks is where the geometry says it is, not the middle
-     * of the bitmap holding it.
-     */
+    /** A teardrop pin: a circle with exact tangent lines to a tip [tipLength] below its centre. */
     private fun pin(radius: Float, tipLength: Float, ringWidth: Float, fill: Color, ring: Color): MarkerSymbol {
-        // Full margin above and to the sides, for the stroke's overflow past the circle;
-        // only half below, and a round join there rather than the default miter - a sharp
-        // point mitred would spike well past the ring's own width.
+        // Half margin below, with a round join: a mitred sharp tip would spike past the ring.
         val topPad = ringWidth
         val bottomPad = ringWidth / 2
         val width = kotlin.math.ceil(2 * radius + 2 * topPad).toInt() + 1
@@ -101,7 +90,7 @@ internal class MarkerSymbols(marker: Color, puck: Color, darkTheme: Boolean, den
         paint.strokeWidth = ringWidth
         paint.color = ring.toArgb()
         canvas.drawPath(path, paint)
-        // Punched through rather than painted, so the map shows in it in either theme.
+        // Punched through, so the map shows in it in either theme.
         paint.style = Paint.Style.FILL
         paint.xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.CLEAR)
         canvas.drawCircle(cx, cy, radius * PIN_HOLE_RATIO, paint)
@@ -109,18 +98,12 @@ internal class MarkerSymbols(marker: Color, puck: Color, darkTheme: Boolean, den
     }
 }
 
-/**
- * A circle centred at ([cx],[cy]) with radius [radius], its outline replaced between the
- * two points tangent to a line down to ([cx],[tipY]) with the two tangent lines themselves -
- * the classic map pin, computed exactly rather than approximated with a fixed-width wedge.
- */
 private fun teardropPath(cx: Float, cy: Float, radius: Float, tipY: Float): android.graphics.Path {
     val d = tipY - cy
     val angle = kotlin.math.acos((radius / d).coerceIn(-1f, 1f))
     val a1 = (Math.PI / 2).toFloat() - angle
     val a1Degrees = Math.toDegrees(a1.toDouble()).toFloat()
-    // The long way round, over the top of the circle - the short way is the wedge the
-    // tangent lines replace.
+    // The long way round, over the top; the short way is the wedge the tangents replace.
     val sweepDegrees = -(360f - Math.toDegrees((2 * angle).toDouble()).toFloat())
 
     return android.graphics.Path().apply {
@@ -138,12 +121,7 @@ private fun teardropPath(cx: Float, cy: Float, radius: Float, tipY: Float): andr
 private fun marker(at: TrackPoint, symbol: MarkerSymbol) =
     MarkerItem("", "", GeoPoint(at.latitude, at.longitude)).apply { marker = symbol }
 
-/**
- * Everything [MarkerSymbols] draws, bottom first. Waypoints first, so the puck and the
- * scrub marker - both about right now - are never underneath one dropped earlier; [onTop]
- * last among them. The [selected] point last of all, so what is being read about is never
- * underneath anything.
- */
+/** Bottom first: waypoints ([onTop] last among them), then the puck, then [selected]. */
 internal fun MarkerSymbols.items(
     waypoints: List<Waypoint>,
     onTop: Waypoint?,
@@ -174,8 +152,7 @@ internal val WaypointPinHeadRadius = (PIN_RADIUS_DP + MARKER_RING_WIDTH_DP).dp
 /** White in both themes: a surface-coloured ring vanished against dark-mode land. */
 private val MARKER_RING = Color.White
 
-// Greys rather than a theme colour, so a pin never reads as belonging to any one track.
-// Inverted in dark mode, where a dark pin sank into the land.
+// Greys so a pin never reads as one track's; inverted in dark mode, where a dark pin sank.
 private val WAYPOINT_DARK_GREY = Color(0xFF424242)
 
 private val WAYPOINT_LIGHT_GREY = Color(0xFFE0E0E0)

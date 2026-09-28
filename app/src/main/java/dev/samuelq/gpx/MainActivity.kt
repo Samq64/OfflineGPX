@@ -15,11 +15,7 @@ import dev.samuelq.gpx.ui.theme.GpxTheme
 
 class MainActivity : ComponentActivity() {
 
-    /**
-     * A track handed to the app by another app. Held as state rather than read from
-     * `intent` during composition so that [onNewIntent] - reached when the app is already
-     * running and the user opens a second file - actually reaches the UI.
-     */
+    /** State rather than `intent`, so tracks from [onNewIntent] reach the UI. */
     private var incomingTrack by mutableStateOf<Uri?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -44,12 +40,6 @@ class MainActivity : ComponentActivity() {
         trackUriOf(intent)?.let { incomingTrack = it }
     }
 
-    /**
-     * The URI carried by a VIEW or SEND intent.
-     *
-     * These grants are read-only and scoped to this one launch, which is exactly as much
-     * access as opening a file needs.
-     */
     private fun trackUriOf(intent: Intent): Uri? = when (intent.action) {
         Intent.ACTION_VIEW -> intent.data
         Intent.ACTION_SEND -> IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)

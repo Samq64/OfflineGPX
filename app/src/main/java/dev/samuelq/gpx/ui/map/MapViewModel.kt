@@ -33,22 +33,17 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-/** Something the map should say, once. The words are the screen's business. */
+/** One-shot messages; the screen resolves the words. */
 enum class MapMessage { RenameFailed, Hidden, ImportFailed, RecoveryFailed }
 
 /** Visible tracks, with their geometry once it has been read off disk. */
 data class MapUiState(
     val entities: List<TrackEntity> = emptyList(),
     val geometry: Map<Long, LoadedTrack> = emptyMap(),
-    // True from the start, not false: a read is already in flight when this is constructed,
-    // and the map frames itself once, on the first state that says there is nothing more
-    // coming. Starting false let that happen before the tracks had arrived - the camera
-    // settled on the basemap and latched, which is the one thing `tracksLoading` is for.
+    // Starts true: a read is already in flight, and the map frames once on the first
+    // not-loading state, so starting false latched the camera on the basemap.
     val loading: Boolean = true,
-    /**
-     * Every row, visible or not - the sheet's rename/export/delete questions are about
-     * the row, not the geometry.
-     */
+    /** Every row, visible or not; the sheet's actions are about the row. */
     val all: List<TrackEntity> = emptyList(),
 ) {
     /** Distinguishes "no tracks at all" from "all of them are hidden". */
@@ -64,30 +59,18 @@ class MapViewModel(
     mapStore: MapStore,
 ) : ViewModel() {
 
-    /**
-     * The basemaps to draw under the routes, empty when none is shown - a perfectly good
-     * screen, since routes drew on a plain background before basemaps existed.
-     */
     val basemaps: StateFlow<List<OfflineMap>> = mapStore.active
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private val _state = MutableStateFlow(MapUiState())
     val state: StateFlow<MapUiState> = _state.asStateFlow()
 
-    /**
-     * The in-progress recording's geometry, drawn alongside saved tracks - its numbers
-     * belong to [RecordingController.state], its shape to the map.
-     */
     val trace: StateFlow<LiveTrace> = controller.trace
 
     private val _focused = MutableStateFlow<FocusedTrack>(FocusedTrack.None)
     val focused: StateFlow<FocusedTrack> = _focused.asStateFlow()
 
-    /**
-     * Things that happened and are worth a word, named rather than worded - the screen
-     * resolves its own text at composition, so a locale change re-resolves it. A channel,
-     * not state, so a rotation can't re-announce an export that already happened.
-     */
+    /** A channel, not state, so a rotation can't re-announce something. */
     private val _messages = Channel<MapMessage>(Channel.BUFFERED)
     val messages: Flow<MapMessage> = _messages.receiveAsFlow()
 
@@ -99,11 +82,7 @@ class MapViewModel(
     private var requested: TrackRef? = null
     private var focusJob: Job? = null
 
-    /**
-     * Where the camera was, last time this screen was on top of the stack. The map's own
-     * composition doesn't survive navigating away and back - a plain var here does, since
-     * this ViewModel is scoped to the route's back-stack entry, not the composition.
-     */
+    /** Outlives the map's composition, which doesn't survive navigating away. */
     var lastCamera: CameraSnapshot? = null
         private set
 
@@ -113,9 +92,7 @@ class MapViewModel(
 
     init {
         viewModelScope.launch { nextAbandoned() }
-        // `update`, not `value = value.copy(...)`, at all four writers of this state: a
-        // read-modify-write that isn't atomic drops one of two concurrent edits. Renaming
-        // a track while its geometry loaded was enough to lose the new name.
+        // `update` at every writer: a non-atomic read-modify-write lost renames during geometry loads.
         viewModelScope.launch {
             repository.visibleTracks.collect { entities ->
                 _state.update { it.copy(entities = entities, loading = true) }
@@ -126,14 +103,10 @@ class MapViewModel(
             repository.tracks.collect { all ->
                 val before = _state.value.all
                 _state.update { it.copy(all = all) }
-                // The row is the name's only source of truth - a rename made from the
-                // library, where this screen has no hand in it, would otherwise leave the
-                // sheet showing what the track used to be called until it's reopened.
+                // The row is the name's source of truth, including renames made from the library.
                 resyncNames(all)
-                // The sheet has no other way to learn its track was deleted or hidden
-                // elsewhere (the library, a batch action) - without this it stays open, and
-                // a hidden one stays drawn as the focused track. Hidden means just now: a
-                // track opened while already hidden is meant to be shown.
+                // Close the sheet if its track was deleted, or just hidden, elsewhere. A track opened
+                // while already hidden is meant to be shown.
                 val focusedId = (requested as? TrackRef.Saved)?.id ?: return@collect
                 val row = all.firstOrNull { it.id == focusedId }
                 val wasVisible = before.firstOrNull { it.id == focusedId }?.visible == true
@@ -162,10 +135,7 @@ class MapViewModel(
         }
     }
 
-    /**
-     * Shows a track's detail, or clears it with null. Idempotent for the track already
-     * showing - a repeated tap on the same route shouldn't reload and blank the sheet.
-     */
+    /** Shows a track's detail, or clears it with null. A repeat for the same track doesn't reload. */
     fun focus(ref: TrackRef?) {
         if (ref == null) {
             requested = null
@@ -182,11 +152,7 @@ class MapViewModel(
         if (requested != null) reload()
     }
 
-    /**
-     * Imports a `.gpx` file straight from the empty state and opens what it brought in -
-     * the same [TrackRepository.import] the track list uses, but focused rather than
-     * navigated to.
-     */
+    /** Imports a `.gpx` file from the empty state and focuses it. */
     fun importTrack(uri: Uri) {
         viewModelScope.launch {
             repository.import(uri.toString()).fold(
@@ -223,11 +189,11 @@ class MapViewModel(
     }
 
     private suspend fun nextAbandoned() {
-        // A failed save stays on disk, and skipping it keeps the dialog from reopening on it.
+        // Skipping a failed save keeps the dialog from reopening on it.
         _abandoned.value = recovery.abandoned().firstOrNull { it.file !in skipped }
     }
 
-    /** Renames a track. The row's update brings the new name to the sheet via [resyncNames]. */
+    /** The row's update brings the new name to the sheet via [resyncNames]. */
     fun rename(id: Long, name: String) {
         viewModelScope.launch {
             repository.rename(id, name).onFailure { _messages.trySend(MapMessage.RenameFailed) }
@@ -239,8 +205,7 @@ class MapViewModel(
         focusJob?.cancel()
         _focused.value = FocusedTrack.Loading
         focusJob = viewModelScope.launch {
-            // Already parsed and in hand for a visible track - the repository would just
-            // re-read the file to reproduce what's on screen.
+            // A visible track is already parsed.
             val cached = (ref as? TrackRef.Saved)?.let { _state.value.geometry[it.id] }
             if (cached != null) {
                 _focused.value = FocusedTrack.Ready(cached)
@@ -259,11 +224,7 @@ class MapViewModel(
         }
     }
 
-    /**
-     * Parses only what is newly visible and drops what no longer is - a hide/show toggle
-     * has to be cheap. The missing ones are read concurrently, since a file read plus
-     * parse plus analysis of each has nothing to say to any of the others.
-     */
+    /** Parses only newly visible tracks, concurrently, and drops hidden ones, so toggles are cheap. */
     private suspend fun loadMissing(entities: List<TrackEntity>) {
         val wanted = entities.map { it.id }.toSet()
         val missing = wanted - _state.value.geometry.keys
@@ -273,8 +234,7 @@ class MapViewModel(
         }
         val read = missing.zip(loaded).mapNotNull { (id, track) -> track?.let { id to it } }
 
-        // Merged against what the state holds *now*, not the snapshot from before the
-        // reads above suspended - a rename landing in between is only in the former.
+        // Merged against the current state, not the pre-suspend one, so a concurrent rename survives.
         _state.update { current ->
             current.copy(
                 geometry = current.geometry.filterKeys { it in wanted } + read,
@@ -283,10 +243,7 @@ class MapViewModel(
         }
     }
 
-    /**
-     * Takes a track off the map. The caller drops focus too, so the sheet doesn't linger
-     * over a line that's no longer drawn.
-     */
+    /** The caller drops focus too. */
     fun hide(id: Long) {
         viewModelScope.launch {
             repository.setVisible(id, false)

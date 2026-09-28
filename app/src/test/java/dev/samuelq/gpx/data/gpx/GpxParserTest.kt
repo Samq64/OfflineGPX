@@ -10,8 +10,7 @@ import kotlin.test.assertTrue
 
 class GpxParserTest {
 
-    // kxml2 supplies a real XmlPullParser; android.jar's is an unimplemented stub in
-    // unit tests, which is the whole reason GpxParser takes its parser as a parameter.
+    // android.jar's XmlPullParser is a stub in unit tests, hence kxml2.
     private val parser = GpxParser { KXmlParser() }
 
     private fun parse(xml: String) = parser.parse(xml.byteInputStream())

@@ -23,22 +23,16 @@ import dev.samuelq.gpx.ui.format.Formatters
 import dev.samuelq.gpx.ui.format.LocalFormatters
 import dev.samuelq.gpx.ui.format.tabularFigures
 
-/** One reading in a [StatRow]. */
 @Immutable
 class Stat(val label: String, val value: String)
 
-/**
- * The line of numbers the sheet leads with. Value leads, label follows - the reader came
- * for the number. Always the whole track; a scrubbed value is drawn on its own chart instead.
- */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun StatRow(
     stats: List<Stat>,
     modifier: Modifier = Modifier,
 ) {
-    // A FlowRow, not a Row: wide units or a large font scale can eat the width, and
-    // wrapping beats clipping.
+    // Wraps rather than clips at large font scales.
     FlowRow(
         modifier = modifier.fillMaxWidth().heightIn(min = RowHeight),
         horizontalArrangement = Arrangement.spacedBy(24.dp),
@@ -66,16 +60,12 @@ fun StatRow(
 
 private val RowHeight = 48.dp
 
-/**
- * The three readings that answer "what was this ride". Moving time, since that is what the
- * average speed is measured over - the wall clock goes in [TrackDetails].
- */
+/** Moving time, since average speed is measured over it. */
 @Composable
 fun trackHeadline(stats: TrackStats, hasTime: Boolean): List<Stat> {
     val formatters = LocalFormatters.current
 
-    // Labels resolved first, then the row built once - the sheet recomposes on every scrub
-    // frame, and these numbers don't change with the scrub.
+    // Remembered: the sheet recomposes on every scrub frame.
     val distanceLabel = stringResource(R.string.axis_distance)
     val timeLabel = stringResource(R.string.stat_moving)
     val speedLabel = stringResource(R.string.stat_avg_speed)
@@ -99,10 +89,6 @@ fun trackHeadline(stats: TrackStats, hasTime: Boolean): List<Stat> {
     }
 }
 
-/**
- * Everything worth keeping that didn't earn a place in the headline - numbers you go
- * looking for, not ones you glance at, so opening the sheet is the right price.
- */
 @Composable
 fun TrackDetails(
     stats: TrackStats,
@@ -117,13 +103,12 @@ fun TrackDetails(
     val descentLabel = stringResource(R.string.stat_descent)
     val pointsLabel = stringResource(R.string.stat_points)
 
-    // Built once per track, not per recomposition - same reason as [trackHeadline].
     val details = remember(
         stats, hasTime, hasElevation, formatters,
         elapsedLabel, ascentLabel, descentLabel, pointsLabel,
     ) {
         buildList {
-            // Shown even when it equals moving time, so the layout never depends on stops.
+            // Shown even when equal to moving time, for a stable layout.
             if (hasTime) {
                 add(elapsedLabel to Formatters.duration(stats.totalDurationSeconds))
             }

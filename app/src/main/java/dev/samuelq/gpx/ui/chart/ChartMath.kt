@@ -9,43 +9,31 @@ import kotlin.math.floor
 import kotlin.math.log10
 import kotlin.math.pow
 
-/**
- * One line's worth of data.
- *
- * Primitive arrays, shared by index with the owning profile, so that a scrub can go from
- * a pixel to a value without allocating.
- */
+/** Primitive arrays indexed like the owning profile, so scrubbing doesn't allocate. */
 @Immutable
 class ChartSeries(
-    /** Monotonically non-decreasing - required for the nearest-point binary search. */
+    /** Non-decreasing, for the binary search in [nearestIndex]. */
     val x: FloatArray,
-    /** `NaN` breaks the line: no value was recorded at this index. */
+    /** `NaN` breaks the line. */
     val y: FloatArray,
-    /** Indices where a new polyline starts. The line is never drawn across these. */
+    /** Indices where a new polyline starts. */
     val segmentStartIndices: IntArray,
     val color: Color,
 ) {
     val size: Int get() = x.size
 }
 
-/** An inclusive value range plus the tick positions to label it with. */
 @Immutable
 class Scale(val min: Float, val max: Float, val ticks: FloatArray) {
     val span: Float get() = (max - min).takeIf { it > 0f } ?: 1f
 
-    /**
-     * The gap between ticks, which is what decides how precisely they have to be labelled:
-     * a formatter coarser than the step prints two neighbouring ticks the same.
-     */
+    /** Tick gap; labels coarser than this would print neighbouring ticks the same. */
     val step: Float get() = if (ticks.size >= 2) ticks[1] - ticks[0] else span
 }
 
 /**
- * Keeps the domain exactly as measured but puts the ticks on round values inside it, so
- * the data's extremes are the plot's edges rather than a stretch of empty plot.
- *
- * Values are SI; [perUnit] is display units per SI unit. Ticks are rounded in display
- * units, since a round number of m/s is not a round number of km/h.
+ * Keeps the measured domain but ticks on round values inside it. Values are SI; [perUnit]
+ * is display units per SI unit, so ticks round in display units.
  */
 fun axisScale(min: Float, max: Float, perUnit: Float = 1f): Scale =
     axisScale(min, max, perUnit) { niceStep(it, TARGET_TICKS) }
@@ -66,8 +54,7 @@ private inline fun axisScale(min: Float, max: Float, perUnit: Float, step: (Floa
     val first = ceil(lo / gap)
     val ticks = buildList {
         var i = 0
-        // The epsilon keeps a tick that lands exactly on the maximum from being dropped
-        // by float error.
+        // Epsilon keeps a tick exactly on the max despite float error.
         while ((first + i) * gap <= hi + gap * 1e-3f) {
             add((first + i) * gap / perUnit)
             i++
@@ -76,7 +63,7 @@ private inline fun axisScale(min: Float, max: Float, perUnit: Float, step: (Floa
     return Scale(min, max, ticks.toFloatArray())
 }
 
-/** The classic 1-2-5 progression: the only step sizes that produce round labels. */
+/** 1-2-5 progression. */
 private fun niceStep(range: Float, targetTicks: Int): Float {
     if (range <= 0f || targetTicks <= 0) return 1f
     val rough = range / targetTicks
@@ -103,17 +90,14 @@ private const val SECONDS_PER_DAY = 86_400f
 private fun timeStep(range: Float, targetTicks: Int): Float {
     if (range <= 0f || targetTicks <= 0) return 1f
     val rough = range / targetTicks
-    // Below a second is not a track; past half a day, whole days on the 1-2-5 progression.
+    // Past half a day, whole days on 1-2-5.
     return TimeSteps.firstOrNull { it >= rough }
         ?: (niceStep(rough / SECONDS_PER_DAY, 1) * SECONDS_PER_DAY)
 }
 
 /**
- * The series' own lowest to highest value, ignoring the samples that were never recorded,
- * or 0 to its highest with [fromZero].
- *
- * Public, and computed by the caller rather than inside the chart, because the labels the
- * axis needs depend on its step - the same reason the x scale has always been passed in.
+ * Min to max of the recorded values, or 0 to max with [fromZero]. Computed by the caller
+ * because axis label precision depends on the step.
  */
 fun ChartSeries.yScale(perUnit: Float = 1f, fromZero: Boolean = false): Scale {
     var min = if (fromZero) 0f else Float.POSITIVE_INFINITY
@@ -125,7 +109,6 @@ fun ChartSeries.yScale(perUnit: Float = 1f, fromZero: Boolean = false): Scale {
     }
     if (!min.isFinite() || !max.isFinite()) return evenTickScale(0f, 1f / perUnit)
     if (max <= min) {
-        // A flat series still needs a readable axis around its single value.
         val pad = if (abs(max) > 0f) abs(max) * 0.1f else 1f / perUnit
         min -= pad
         max += pad
@@ -135,10 +118,7 @@ fun ChartSeries.yScale(perUnit: Float = 1f, fromZero: Boolean = false): Scale {
 
 private const val Y_TICKS = 5
 
-/**
- * Exactly [Y_TICKS] ticks, evenly spaced from the data's minimum to its maximum, so the top
- * of the plot is the peak itself. Not round numbers: rounding would move the top off it.
- */
+/** Evenly spaced, not round, ticks so the top of the plot is the peak itself. */
 private fun evenTickScale(min: Float, max: Float): Scale {
     val step = (max - min) / (Y_TICKS - 1)
     val ticks = FloatArray(Y_TICKS) { if (it == Y_TICKS - 1) max else min + it * step }
@@ -146,9 +126,8 @@ private fun evenTickScale(min: Float, max: Float): Scale {
 }
 
 /**
- * [view] after a pinch: scaled by [zoom] about [anchor], then shifted by [pan] - both as
- * fractions of the plot's width, so the value under the fingers stays under them. Kept
- * within [domain], and no narrower than [maxZoom] allows.
+ * [view] scaled by [zoom] about [anchor] and shifted by [pan] (fractions of plot width),
+ * kept within [domain] and [maxZoom].
  */
 fun zoomView(
     view: ClosedFloatingPointRange<Float>,
@@ -168,10 +147,7 @@ fun zoomView(
     return start..(start + span)
 }
 
-/**
- * Index of the sample closest to [target] in a sorted [values]. Binary search because this
- * runs on every pointer move, and a 30k-point scan per frame is a visible stutter.
- */
+/** Closest index in sorted [values]; binary search since it runs on every pointer move. */
 fun nearestIndex(values: FloatArray, target: Float): Int {
     if (values.isEmpty()) return -1
     var low = 0
@@ -185,12 +161,8 @@ fun nearestIndex(values: FloatArray, target: Float): Int {
 }
 
 /**
- * Builds a polyline reduced to one column of pixels at a time.
- *
- * A 30k-point track on a 1000px chart has thirty samples per column, which is thirty times
- * the geometry for no more detail than the screen can show. Each column collapses to the
- * four values carrying its shape - first, both extremes, last. Every-nth subsampling would
- * instead delete the peaks, which on a speed chart are the point of looking.
+ * Polyline reduced to first, min, max, last per pixel column. Every-nth subsampling would
+ * drop the peaks.
  */
 class PolylineBuilder(
     private val line: Path,
@@ -255,8 +227,6 @@ class PolylineBuilder(
             line.lineTo(column, first)
             area?.lineTo(column, first)
         }
-        // Only emit the vertical extent when the column actually spans a range;
-        // otherwise this adds two duplicate points per column for nothing.
         if (min != max) {
             line.lineTo(column, min)
             line.lineTo(column, max)

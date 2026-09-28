@@ -28,39 +28,23 @@ class AppContainer(context: Context) {
 
     val trackRepository by lazy { TrackRepository(appContext, database.trackDao()) }
 
-    /**
-     * Shared by the recording service and the screens watching it. Held here because it
-     * has to outlive any screen: leaving the app mid-ride is the normal case.
-     */
+    /** Held here so state outlives any screen during a ride. */
     val recordingController = RecordingController(appContext)
 
-    /** The live recording's log, and whatever a crash left of an earlier one. */
     val recordingRecovery by lazy { RecordingRecovery(appContext, trackRepository) }
 
-    /** Read by the recorder when a recording starts, and by everything that shows a number. */
     val settingsRepository by lazy { SettingsRepository(appContext) }
 
-    /**
-     * The offline basemaps on this device. Shared rather than per-screen: settings manages
-     * them and the map draws with them, and the two have to agree on which one is active.
-     */
     val mapStore by lazy { MapStore(appContext, settingsRepository) }
 
-    /**
-     * Sets aside a ride whose process died before it was stopped, for the map to ask about.
-     * Runs once per launch, off the main thread - but undispatched, so it holds the
-     * recovery lock before any recording can start or the map can ask.
-     */
+    /** Undispatched, so it holds the recovery lock before any recording can start. */
     fun claimAbandonedRecording() {
         applicationScope.launch(start = CoroutineStart.UNDISPATCHED) {
             recordingRecovery.claim()
         }
     }
 
-    /**
-     * Reads the maps directory once at launch, off the main thread. Eager, since the map
-     * screen is shown first - lazy loading would flash an empty background before tiles appear.
-     */
+    /** Eager, since the map screen is shown first. */
     fun loadOfflineMaps() {
         applicationScope.launch { mapStore.refresh() }
     }

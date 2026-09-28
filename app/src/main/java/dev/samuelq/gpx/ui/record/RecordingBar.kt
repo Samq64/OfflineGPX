@@ -52,11 +52,7 @@ import dev.samuelq.gpx.ui.format.LocalFormatters
 import dev.samuelq.gpx.ui.format.tabularFigures
 import dev.samuelq.gpx.ui.theme.recordingColor
 
-/**
- * The live recording, docked under the map. Two rows and no more - the route drawing
- * itself above is the interesting part, and a recorder that ate the map would trade the
- * thing you want to look at for numbers you already know.
- */
+/** Live recording controls, kept small so the map stays visible. */
 @Composable
 fun RecordingBar(
     state: RecordingState.Active,
@@ -64,13 +60,10 @@ fun RecordingBar(
     onResume: () -> Unit,
     onStop: () -> Unit,
     onDiscard: () -> Unit,
-    /** [description] may be blank - a waypoint with nothing typed is still one. */
+    /** [description] may be blank. */
     onAddWaypoint: (description: String) -> Unit,
     modifier: Modifier = Modifier,
-    /**
-     * Whatever sits under the bar - the nav bar, a peeked sheet. Padded inside the surface,
-     * so the bar's own background reaches the bottom edge and the map can't show through.
-     */
+    /** Padded inside the surface so its background reaches the bottom edge. */
     bottomInset: Dp = 0.dp,
 ) {
     val formatters = LocalFormatters.current
@@ -104,16 +97,14 @@ fun RecordingBar(
                 )
                 Spacer(Modifier.width(20.dp))
                 Text(
-                    // Blank until the first fix rather than a zero, which would be a
-                    // measurement the recorder has not made.
+                    // Blank, not zero, until the first fix.
                     text = state.currentSpeedMps?.let(formatters::speed) ?: Formatters.EMPTY,
                     style = MaterialTheme.typography.titleMedium.tabularFigures(),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
 
-            // Nothing recorded yet has two causes accuracy tells apart: a cold start
-            // settles in seconds, a phone indoors never will.
+            // Tells a cold start (settles soon) from being indoors (never will).
             val poorSignal = state.accuracyMeters?.takeIf { it > state.accuracyLimitMeters }
 
             val status = when {
@@ -131,7 +122,6 @@ fun RecordingBar(
 
                 else -> stringResource(R.string.record_waiting_for_fix)
             }
-            // The count only, never what any of them say - the bar is a glance, not a log.
             val waypointCount = if (state.waypoints.isNotEmpty()) {
                 pluralStringResource(
                     R.plurals.record_waypoints_logged,
@@ -172,9 +162,7 @@ fun RecordingBar(
                     }
                 }
 
-                // Disabled rather than hidden before the first fix: there is nowhere yet
-                // to put a waypoint, but the control staying in place means a hand that
-                // already knows where it is doesn't have to go looking for it once there is.
+                // Disabled, not hidden, before the first fix so the layout doesn't shift.
                 IconButton(onClick = { addingWaypoint = true }, enabled = state.lastPoint != null) {
                     Icon(Icons.Default.Place, contentDescription = stringResource(R.string.record_add_waypoint))
                 }
@@ -203,12 +191,6 @@ fun RecordingBar(
     }
 }
 
-/**
- * One button, one field, one word to close it - dropping a waypoint mid-ride has to cost
- * as little attention as possible. Title carries the running count so far rather than a
- * generic one, which is also the count kept visible in [RecordingBar] itself: what's asked
- * for elsewhere is the number, not a list of what's already been noted.
- */
 @Composable
 private fun WaypointDialog(
     number: Int,
@@ -241,10 +223,6 @@ private fun WaypointDialog(
     )
 }
 
-/**
- * The one piece of decoration in the app: a pulse tells running and paused apart at a
- * glance, without a word of text.
- */
 @Composable
 private fun RecordingDot(paused: Boolean) {
     val transition = rememberInfiniteTransition(label = "recording")
@@ -264,7 +242,6 @@ private fun RecordingDot(paused: Boolean) {
     )
 }
 
-/** Confirms throwing a ride away - the one recorder action that can't be taken back. */
 @Composable
 fun DiscardRecordingDialog(onDismiss: () -> Unit, onConfirm: () -> Unit) {
     AlertDialog(

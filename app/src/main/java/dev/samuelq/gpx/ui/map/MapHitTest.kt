@@ -6,11 +6,7 @@ import org.oscim.core.MercatorProjection
 import org.oscim.core.Tile
 import org.oscim.map.Map
 
-/**
- * The waypoint whose drawn pin a tap landed on, [onTop] first since it's drawn over the
- * rest, then nearest head, or null - checked ahead of [pick] so a waypoint sitting on a
- * track's line is read as itself rather than as a scrub.
- */
+/** The waypoint whose pin was tapped: [onTop] first, since it's drawn over the rest, else the nearest. */
 internal fun pickWaypoint(
     screenX: Float,
     screenY: Float,
@@ -25,7 +21,6 @@ internal fun pickWaypoint(
     var bestDistance = Float.MAX_VALUE
     for (waypoint in waypoints) {
         val tip = map.screenPosition(waypoint.point)
-        // The icon's bounds: head width across, from the tip up to the top of the head.
         val onIcon = kotlin.math.abs(tap.x - tip.x) <= headRadiusPx &&
             tap.y <= tip.y && tap.y >= tip.y - tipLengthPx - headRadiusPx
         if (!onIcon) continue
@@ -40,16 +35,9 @@ internal fun pickWaypoint(
 }
 
 /**
- * Which track was tapped, and where along it.
- *
- * VTM's vector layers can say whether a tap hit *something*, not what or where along it,
- * so this projects the drawn positions itself and measures to the *line* rather than to
- * its vertices. An imported route can be a point per kilometre, and a tap halfway along one
- * of those must still land on the track someone can plainly see.
- *
- * The index reported back is the nearer end of whichever segment was hit, since that is
- * what the charts and the marker are addressed by. One scan per tap over every route,
- * allocating nothing.
+ * Which track was tapped, and the nearer end of the hit segment. VTM can only say whether
+ * something was hit, so this measures to the line, not its vertices: an imported route can
+ * have a point per kilometre.
  */
 internal fun pick(
     screenX: Float,
@@ -59,8 +47,7 @@ internal fun pick(
     liveRoute: RouteOverlay?,
     reachPx: Float,
 ): Pair<Long, Int>? {
-    // In map pixels at the current scale, where a screen pixel is a map pixel: the map is
-    // never rotated or tilted.
+    // Screen pixels equal map pixels, since the map never rotates or tilts.
     val position = map.mapPosition
     val mapSize = Tile.SIZE * position.scale
     val tapX = position.x * mapSize + (screenX - map.width / 2.0)
@@ -70,12 +57,11 @@ internal fun pick(
     var bestIndex = 0
     var bestDistance = (reachPx * reachPx).toDouble()
 
-    // The recording is checked too - a tap on it must not read as a tap on the bare map.
+    // The recording too, so a tap on it doesn't read as the bare map.
     for (route in (routes + listOfNotNull(liveRoute))) {
         route.forEachRun { from, to ->
             if (to <= from) return@forEachRun
 
-            // Nothing is drawn across a segment break, so nothing is hit across one either.
             var previousX = 0.0
             var previousY = 0.0
             for (index in from until to) {

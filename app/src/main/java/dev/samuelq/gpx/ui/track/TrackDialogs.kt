@@ -29,11 +29,7 @@ import dev.samuelq.gpx.R
 import dev.samuelq.gpx.data.gpx.GPX_MIME_TYPE
 import dev.samuelq.gpx.data.track.TrackFiles
 
-/**
- * Names a track, wherever the naming happens. One dialog for library rename and the
- * post-recording prompt - the same act, differing only in [titleRes]. Opens focused with
- * the current name selected, so the first keystroke replaces it.
- */
+/** Opens with the name selected, so the first keystroke replaces it. */
 @Composable
 fun TrackNameDialog(
     @StringRes titleRes: Int,
@@ -60,8 +56,6 @@ fun TrackNameDialog(
                 onValueChange = { field = it },
                 singleLine = true,
                 label = { Text(stringResource(R.string.library_rename_label)) },
-                // Done rather than a newline: the field holds one line, and reaching for
-                // a button after typing a name is a step the keyboard can absorb.
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { confirm() }),
                 modifier = Modifier.focusRequester(focusRequester),
@@ -76,10 +70,6 @@ fun TrackNameDialog(
     )
 }
 
-/**
- * Confirms before a track (or forty) is gone for good - shown from the library's row menu,
- * selection bar, and the map's sheet, so one and forty go through the same question.
- */
 @Composable
 fun DeleteTrackDialog(
     count: Int,
@@ -104,37 +94,25 @@ fun DeleteTrackDialog(
     )
 }
 
-/** What a track is called on screen: its own name, or the file it arrived as. */
+/** The track's own name, or the file it arrived as. */
 fun trackTitle(trackName: String?, displayName: String): String =
     trackName?.takeIf(String::isNotBlank) ?: displayName
 
-/**
- * What to put in the field for editing: the track's own name, or the imported filename
- * without its extension - `.gpx` is how the file is stored, not what the track is called.
- */
+/** [trackTitle] without the `.gpx` extension. */
 fun editableTrackName(trackName: String?, displayName: String): String =
     trackTitle(trackName, displayName.dropGpxSuffix())
 
-/** Case-insensitively, because a file picked off a desktop may well be `.GPX`. */
 private fun String.dropGpxSuffix(): String =
     if (endsWith(GPX, ignoreCase = true)) dropLast(GPX.length) else this
 
-/**
- * What to offer the export picker: the track's own name with the suffix restored, not the
- * sortable-timestamp filename it's stored under.
- */
+/** The track's name, not the timestamp filename it's stored under. */
 fun exportFileName(trackName: String?, displayName: String): String =
     editableTrackName(trackName, displayName).ensureGpxSuffix()
 
-/** The suffix belongs to the filename, and is put back at the one moment the two meet. */
 fun String.ensureGpxSuffix(): String =
     if (endsWith(GPX, ignoreCase = true)) this else "$this$GPX"
 
-/**
- * A chooser Intent for a track's own GPX file - straight off disk, through a [FileProvider]
- * grant scoped to that one file, since app-private storage isn't otherwise readable by
- * another app.
- */
+/** Shares the stored file via a [FileProvider] grant scoped to it. */
 fun shareTrackIntent(context: Context, location: String, trackName: String?, displayName: String): Intent {
     val uri = FileProvider.getUriForFile(
         context, "${context.packageName}.fileprovider", TrackFiles.file(context, location),

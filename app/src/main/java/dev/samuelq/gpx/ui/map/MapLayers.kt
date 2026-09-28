@@ -17,12 +17,9 @@ import org.oscim.layers.vector.geometries.Style
 import org.oscim.map.Map
 
 /**
- * The stacking order, bottom first. VTM keeps each group's layers together however late
- * they are added, so a rebuilt basemap lands back under the routes rather than on top.
- *
- * Names over the routes, haloed, so a road stays readable where a track runs along it.
- * That puts them over the mask too, which is why [ClippedMapSource] drops what is past a
- * file's edge before a name can be placed on it.
+ * Stacking order, bottom first; VTM keeps each group together however late it's added.
+ * Labels sit over routes (haloed) and so over the mask too, which is why [ClippedMapSource]
+ * drops data past a file's edge before a name can be placed there.
  */
 internal enum class LayerGroup { Land, Tiles, Mask, Outline, Routes, Trace, Labels, Markers, Tap }
 
@@ -36,11 +33,7 @@ internal class TapLayer(map: Map, private val onTap: (x: Float, y: Float) -> Uni
     }
 }
 
-/**
- * One style per colour, shared by every line drawn with it. VectorLayer batches
- * consecutive lines of the *same* style into one draw, so a style per line would cost a
- * draw call each.
- */
+/** One style per colour: VectorLayer batches consecutive same-style lines into one draw. */
 internal class RouteStyles(density: Density) {
     private val width = with(density) { ROUTE_WIDTH_DP.dp.toPx() }
     private val cache = HashMap<Int, Style>()
@@ -52,22 +45,17 @@ internal class RouteStyles(density: Density) {
             .strokeWidth(width)
             .cap(org.oscim.backend.canvas.Paint.Cap.ROUND)
             .fixed(true)
-            // Simplified to a pixel at the zoom it is drawn at: a long ride has far more
-            // positions than the screen has pixels to show them with.
+            // A long ride has far more positions than pixels.
             .generalization(Style.GENERALIZATION_SMALL)
             .build()
     }
 }
 
-/**
- * Every route as lines, one per segment - the gap between segments is signal loss and
- * nothing should be drawn across it. Stacked in list order, the last on top.
- */
+/** One line per segment, never across a gap. Stacked in list order, the last on top. */
 internal fun List<RouteOverlay>.toLines(styles: RouteStyles): List<LineDrawable> {
     val out = ArrayList<LineDrawable>()
     forEachIndexed { priority, route ->
-        // VTM draws by priority, higher later. Within one priority the order is whatever its
-        // spatial index returns, not the order added, so each route gets its own.
+        // Within one priority VTM orders by spatial index, not insertion, so each route gets its own.
         val style = styles.of(route.color)
         route.forEachRun { from, to ->
             // A single position isn't a line; still drawn as the puck if it is live.
@@ -86,12 +74,9 @@ internal fun List<RouteOverlay>.toLines(styles: RouteStyles): List<LineDrawable>
 }
 
 /**
- * A [VectorLayer] that keeps up with the camera. VTM recomputes one on camera events, but a
- * layer attached around the start-up framing move regularly missed it and went on showing
- * the whole-world view it was first computed for - the outside mask most visibly, which
- * left every map's surroundings unmasked until the camera next moved. So after any map
- * event, each layer checks whether its last pass was for the current camera, and goes
- * again until it was.
+ * A [VectorLayer] that keeps up with the camera. Layers attached around the start-up framing
+ * often missed VTM's recompute and kept a whole-world pass (visibly, an unmasked outside), so
+ * after any map event it re-checks until its last pass matches the current camera.
  */
 internal class OverlayLayer(private val owner: Map) : VectorLayer(owner) {
     private val drawnFor = MapPosition()
@@ -100,7 +85,7 @@ internal class OverlayLayer(private val owner: Map) : VectorLayer(owner) {
     @Volatile private var checking = false
 
     override fun processFeatures(t: Task, b: Box) {
-        // Skipped by VTM while the view has no size; not a pass for any camera.
+        // VTM passes NaN while the view has no size; not a pass for any camera.
         if (b.xmin.isNaN()) return
         super.processFeatures(t, b)
         synchronized(drawnFor) { drawnFor.copy(t.position) }
@@ -134,7 +119,6 @@ internal class LineLayer(map: Map) {
     val layer = OverlayLayer(map)
     private val drawn = ArrayList<LineDrawable>()
 
-    /** Swaps every line for [next] and asks for one redraw. */
     fun replaceWith(next: List<LineDrawable>) {
         synchronized(layer) {
             drawn.forEach { layer.remove(it) }
@@ -148,5 +132,5 @@ internal class LineLayer(map: Map) {
 
 private const val ROUTE_WIDTH_DP = 3f
 
-/** How long an overlay lets the camera settle before checking it drew for it. */
+/** Settle time before an overlay checks it drew for the current camera. */
 private const val OVERLAY_CHECK_MS = 150L

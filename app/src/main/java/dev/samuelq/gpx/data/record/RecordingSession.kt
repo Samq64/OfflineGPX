@@ -8,13 +8,10 @@ import dev.samuelq.gpx.core.model.Waypoint
 import java.time.Instant
 
 /**
- * One ride's running numbers and route, apart from the service feeding it fixes. The WAL
- * is the record of truth; this is what the UI is shown while it is written.
+ * One ride's running numbers and route for the UI; the WAL is the record of truth.
+ * Thresholds are fixed for the run so both halves of a track mean the same thing.
  *
- * Thresholds are fixed for the run: a filter changed mid-ride would make the two halves of
- * one track mean different things.
- *
- * @param clock monotonic milliseconds, for the duration.
+ * @param clock monotonic milliseconds.
  */
 internal class RecordingSession(
     private val maxAccuracyMeters: Double,
@@ -34,33 +31,22 @@ internal class RecordingSession(
     private var lastAccuracyMeters: Double? = null
     private val waypoints = mutableListOf<Waypoint>()
 
-    /**
-     * When the first point was logged, on [clock]. Null while waiting for a fix: the ride
-     * starts where its data does, as the saved track's duration does.
-     */
+    /** First logged point, on [clock]; the ride starts where its data does. */
     private var startedAt: Long? = null
 
-    /** The route so far, kept purely so the map can draw it live. */
     private val tracePoints = mutableListOf<TrackPoint>()
     private val traceSegmentStarts = mutableListOf<Int>()
     private var traceStartsSegment = true
     private var tracePublishedAt = 0
 
-    /**
-     * Wall-clock seconds since the first point, pauses included - the same span the saved
-     * track's `totalDurationSeconds` measures, so the live and saved numbers agree.
-     */
+    /** Pauses included, matching the saved track's `totalDurationSeconds`. */
     val totalSeconds: Double
         get() = startedAt?.let { (clock() - it) / 1000.0 } ?: 0.0
 
-    /** Whether enough new points have landed to be worth re-projecting the live route. */
     val traceDue: Boolean
         get() = tracePoints.size - tracePublishedAt >= TRACE_PUBLISH_EVERY
 
-    /**
-     * One reading. Returns the point to log, or null when [FixFilter] rejects it or the
-     * ride is paused.
-     */
+    /** Returns the point to log, or null if rejected or paused. */
     fun onFix(fix: TrackPoint): TrackPoint? {
         if (paused) return null
         val at = fix.time ?: return null
@@ -86,10 +72,7 @@ internal class RecordingSession(
         return point
     }
 
-    /**
-     * Starts a gap in the track. Resuming somewhere else must not read as having travelled
-     * there, so the next fix has nothing to measure against. False if already paused.
-     */
+    /** Starts a gap so resuming elsewhere doesn't count as travel. False if already paused. */
     fun pause(): Boolean {
         if (paused) return false
         paused = true
@@ -108,11 +91,7 @@ internal class RecordingSession(
         return true
     }
 
-    /**
-     * A waypoint at the last known position, stamped [at] rather than with the fix's own
-     * time - the moment worth marking is when the button was pressed. Null before the first
-     * fix: there is nowhere to put it yet.
-     */
+    /** At the last known position, stamped [at] (the button press). Null before the first fix. */
     fun addWaypoint(description: String, at: Instant): Waypoint? {
         val point = lastPoint ?: return null
         val waypoint = Waypoint(point.copy(time = at), description.trim().takeIf(String::isNotEmpty))
@@ -138,10 +117,7 @@ internal class RecordingSession(
     )
 
     private companion object {
-        /**
-         * Fixes between live-trace snapshots. Each one re-projects every route on the map,
-         * so at 1 Hz the line grows every 5s rather than every second.
-         */
+        /** Fixes between live-trace snapshots, since each re-projects every route on the map. */
         const val TRACE_PUBLISH_EVERY = 5
     }
 }

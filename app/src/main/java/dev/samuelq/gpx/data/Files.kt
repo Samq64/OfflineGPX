@@ -6,7 +6,6 @@ import android.provider.OpenableColumns
 import android.util.Log
 import java.io.File
 
-/** The name the provider gives a document, or null when it declines to say. */
 internal fun ContentResolver.displayName(uri: Uri): String? = try {
     query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
         if (cursor.moveToFirst()) cursor.getString(0)?.takeIf(String::isNotBlank) else null
@@ -22,10 +21,7 @@ internal fun ContentResolver.copyInto(uri: Uri, destination: File): Boolean =
         destination.outputStream().use { output -> input.copyTo(output) }
     } != null
 
-/**
- * A file in [dir] not already taken, named after [name] where possible: a second
- * `ottawa.map` is a different area, and overwriting the first is the wrong answer.
- */
+/** A sanitised, numbered-if-taken file in [dir]; never overwrites. */
 internal fun uniqueFile(dir: File, name: String?, extension: String, fallback: String): File {
     val base = name.orEmpty()
         .substringAfterLast('/')

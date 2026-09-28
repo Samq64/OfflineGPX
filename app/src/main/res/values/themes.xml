@@ -1,10 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!--
-      A bare platform theme: everything visible is drawn by Compose. Deliberately not
-      Theme.Material3.DayNight, which would pull in the com.google.android.material
-      *views* library purely to style a window this app never shows.
-    -->
+    <!-- Platform theme: Theme.Material3 would pull in the Material views library. -->
     <style name="Theme.GpxViewer" parent="@android:style/Theme.Material.Light.NoActionBar">
         <item name="android:windowBackground">@color/window_background</item>
         <item name="android:windowLightStatusBar">true</item>

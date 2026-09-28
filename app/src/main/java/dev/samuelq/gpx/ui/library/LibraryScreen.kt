@@ -87,10 +87,7 @@ import dev.samuelq.gpx.ui.track.trackTitle
 import java.time.Instant
 
 
-/**
- * Where tracks are managed rather than read. Long-press starts a selection, for deleting
- * several tracks at once; visibility is a switch per row plus an all-at-once pair in the menu.
- */
+/** Track management. Long-press starts a multi-selection. */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun LibraryScreen(
@@ -104,8 +101,7 @@ fun LibraryScreen(
     val query by viewModel.query.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     var menuOpen by remember { mutableStateOf(false) }
-    // Separate from the query being blank: the field is open from the moment it is asked
-    // for, and an empty one is how every search starts.
+    // Separate from a blank query: an open field starts empty.
     var searching by rememberSaveable { mutableStateOf(false) }
 
     fun closeSearch() {
@@ -113,8 +109,6 @@ fun LibraryScreen(
         viewModel.search("")
     }
 
-    // Back closes the field before it leaves the screen: the filter is state the user put
-    // there, and dropping them onto the map still holding it would be a step too far.
     BackHandler(enabled = searching) { closeSearch() }
     BackHandler(enabled = selection.isNotEmpty()) { viewModel.clearSelection() }
 
@@ -122,9 +116,8 @@ fun LibraryScreen(
     val exportFailed = stringResource(R.string.library_export_failed)
     val renameFailed = stringResource(R.string.library_rename_failed)
     val context = LocalContext.current
-    // Not `context.resources`: that one misses a locale change made while this screen is up.
+    // Not `context.resources`, which misses a locale change while the screen is up.
     val resources = LocalResources.current
-    // A count, and a different sentence when it is not the count that was asked for.
     val exportedAll: (Int, Int) -> String = { written, requested ->
         if (written == requested) {
             resources.getQuantityString(R.plurals.library_exported_all, written, written)
@@ -139,8 +132,7 @@ fun LibraryScreen(
         uri?.let(viewModel::import)
     }
 
-    // A folder for a batch, because there is no one file forty tracks could be. Still a
-    // place the user pointed at by hand, and the grant is not persisted.
+    // The folder grant is not persisted.
     val folderExporter = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
     ) { folder -> viewModel.finishExportAll(folder) }
@@ -195,8 +187,6 @@ fun LibraryScreen(
                         }
                     },
                     actions = {
-                        // Same condition as the overflow beside it: nothing to search in
-                        // an empty library, no threshold beyond that.
                         if (loaded == null || tracks.isNotEmpty()) {
                             IconButton(onClick = { searching = true }) {
                                 Icon(Icons.Default.Search, stringResource(R.string.library_search))
@@ -205,8 +195,7 @@ fun LibraryScreen(
                         IconButton(onClick = { picker.launch(arrayOf("*/*")) }) {
                             Icon(Icons.Default.Add, stringResource(R.string.library_import))
                         }
-                        // Shown while still loading too. Deciding on an empty list would
-                        // pop the icon into existence a frame later, during the slide.
+                        // Shown while loading so icons don't pop in during the slide.
                         if (loaded == null || tracks.isNotEmpty()) {
                             IconButton(onClick = { menuOpen = true }) {
                                 Icon(Icons.Default.MoreVert, stringResource(R.string.library_more))
@@ -234,12 +223,9 @@ fun LibraryScreen(
         },
     ) { padding ->
         when {
-            // Nothing yet. An empty surface for a frame or two beats telling the user they
-            // have no tracks and then taking it back.
+            // Blank rather than flashing the empty state.
             loaded == null -> Unit
 
-            // An empty list under a search is a fact about the search, not the library:
-            // "No tracks yet" over forty hidden ones would be plainly wrong.
             tracks.isEmpty() && query.isNotBlank() -> NoMatches(
                 query = query,
                 modifier = Modifier.fillMaxSize().padding(padding),
@@ -265,9 +251,7 @@ fun LibraryScreen(
                         selected = track.id in selection,
                         selectionActive = selection.isNotEmpty(),
                         onOpen = {
-                            // Opening a hidden track shows it, rather than drawing it as a
-                            // one-off that vanishes with the sheet and leaves the switch
-                            // saying off about a line plainly on the map.
+                            // Otherwise the switch would say off for a line on the map.
                             if (!track.visible) viewModel.setVisible(track.id, true)
                             onOpenTrack(track.id)
                         },
@@ -312,13 +296,7 @@ fun LibraryScreen(
     }
 }
 
-/**
- * The bar that replaces the title while rows are ticked.
- *
- * Select-all is a tri-state checkbox, not an icon: `material-icons-core` has no
- * `select_all`, and a checkbox also *shows* whether everything is selected. Show/hide
- * aren't here - every row has a switch, and show-all/hide-all are in the list's menu.
- */
+/** Select-all is a tri-state checkbox since `material-icons-core` has no `select_all`. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SelectionBar(
@@ -348,8 +326,6 @@ private fun SelectionBar(
                 onClick = { if (allSelected) onClose() else onSelectAll() },
                 modifier = Modifier.semantics { contentDescription = selectAll },
             )
-            // The selection already exists for deleting several at once; exporting them
-            // is the same gesture with a destination instead of a confirmation.
             IconButton(onClick = onExport) {
                 Icon(Icons.Default.Share, stringResource(R.string.library_export_all))
             }
@@ -376,8 +352,7 @@ private fun TrackRow(
 ) {
     val formatters = LocalFormatters.current
 
-    // Built once per row, not once per composition - a localized `DateTimeFormatter`'s
-    // first use loads locale data, which otherwise lands on the entry animation's frames.
+    // Remembered: a DateTimeFormatter's first use loads locale data, janking the entry animation.
     val summary = remember(track, formatters) {
         buildString {
             append(formatters.distance(track.distanceMeters))
@@ -403,8 +378,7 @@ private fun TrackRow(
             if (selectionActive) {
                 Checkbox(checked = selected, onCheckedChange = { onToggleSelected() })
             } else {
-                // The swatch is the same hue the map draws this track in, so the two
-                // surfaces can be read against each other without a legend.
+                // Same hue as the map line.
                 Box(
                     Modifier
                         .size(16.dp)
@@ -465,7 +439,6 @@ private fun EmptyState(modifier: Modifier = Modifier) {
     }
 }
 
-/** Quotes what was typed back, so a typo is visible without reopening the field. */
 @Composable
 private fun NoMatches(query: String, modifier: Modifier = Modifier) {
     Box(modifier.padding(32.dp), contentAlignment = Alignment.Center) {
@@ -477,10 +450,7 @@ private fun NoMatches(query: String, modifier: Modifier = Modifier) {
     }
 }
 
-/**
- * The title replaced by a field. Not a Material `SearchBar` - that expands over the screen
- * to offer suggestions, and there's nothing here to suggest; the library filters as you type.
- */
+/** Not Material's `SearchBar`, which expands for suggestions there are none of. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SearchBar(
@@ -489,7 +459,6 @@ private fun SearchBar(
     onClose: () -> Unit,
 ) {
     val focusRequester = remember { FocusRequester() }
-    // Opened by a tap on the icon, so the keyboard is what was asked for.
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
 
     TopAppBar(
@@ -500,8 +469,6 @@ private fun SearchBar(
                 placeholder = { Text(stringResource(R.string.library_search_hint)) },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                // Stripped back to just the text: a filled field with its own underline
-                // inside an app bar is two containers deep for one line of input.
                 colors = TextFieldDefaults.colors(
                     focusedContainerColor = Color.Transparent,
                     unfocusedContainerColor = Color.Transparent,

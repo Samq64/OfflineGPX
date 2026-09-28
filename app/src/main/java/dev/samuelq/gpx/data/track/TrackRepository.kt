@@ -48,50 +48,32 @@ class TrackRepository(
 
     private val appContext = context.applicationContext
 
-    /**
-     * Holds the shared table observer. Never needs cancelling - the repository is a
-     * process-lifetime singleton; `WhileSubscribed` stops the query when nobody's watching.
-     */
+    /** Never cancelled: the repository is a process-lifetime singleton. */
     private val scope = CoroutineScope(SupervisorJob() + io)
 
     private val recordingsDir: File get() = TrackFiles.recordingsDir(appContext)
     private val importsDir: File get() = TrackFiles.importsDir(appContext)
 
-    /**
-     * Single-entry cache: re-entering a track the user just looked at would otherwise
-     * reparse tens of thousands of points for a visible stall. One entry, since the sheet
-     * shows one track at a time.
-     */
+    /** Avoids reparsing the track the user just looked at; the sheet shows one at a time. */
     @Volatile
     private var cached: Pair<String, LoadedTrack>? = null
 
-    /**
-     * Most recently interacted with first, the app's only ordering. One shared query behind
-     * this and [visibleTracks], so a write wakes one observer rather than two.
-     */
+    /** Most recent first. Shared with [visibleTracks] so a write wakes one query. */
     val tracks: Flow<List<TrackEntity>> = dao.observeByRecent()
         .shareIn(scope, SharingStarted.WhileSubscribed(SHARE_GRACE_MILLIS), replay = 1)
 
-    /**
-     * What the map draws: [tracks] filtered to the visible ones and reversed, so the most
-     * recently touched is painted last and lands on top.
-     */
+    /** Reversed so the most recently touched is painted last, on top. */
     val visibleTracks: Flow<List<TrackEntity>> =
         tracks.map { all -> all.filter(TrackEntity::visible).asReversed() }
 
-    /**
-     * Copies [location] into app-private storage, reads it, and indexes the copy. Returns
-     * the row id. No dedupe - picking the same file twice makes two rows, like recording
-     * twice does.
-     */
+    /** Copies [location] into app-private storage and indexes it. Returns the row id. No dedupe. */
     suspend fun import(location: String): Result<Long> = withContext(io) {
         runCatching {
             val uri = location.toUri()
             val displayName = displayNameOf(uri)
             val destination = uniqueFile(importsDir, displayName, "gpx", fallback = "track")
 
-            // Copied before it's parsed, deleted again if either step fails - same order
-            // MapStore validates a basemap in, so nothing unusable is left taking up space.
+            // Deleted again if copy or parse fails, so nothing unusable is left behind.
             val loaded = runCatching {
                 if (!appContext.contentResolver.copyInto(uri, destination)) {
                     throw TrackLoadException.Unreadable("No provider could open $uri")
@@ -132,11 +114,9 @@ class TrackRepository(
     }
 
     /**
-     * Writes a finished recording to app-private storage as GPX and indexes it, named and
-     * dated by its first point. Returns the new row id.
+     * Writes a finished recording as GPX and indexes it. Returns the new row id.
      *
-     * @param analyzed the profile of this exact [track], when the caller already has one -
-     *   recovery does, and re-deriving it walks every point again for the same answer.
+     * @param analyzed the profile of this exact [track], if already computed.
      */
     suspend fun saveRecording(
         track: Track,
@@ -145,10 +125,8 @@ class TrackRepository(
         withContext(io) {
             runCatching {
                 val profile = analyzed ?: TrackAnalyzer.analyze(track)
-                // Every recorded point is timed; the fallback is for a track that isn't.
                 val startedAt = profile.stats.startedAt ?: Instant.now()
-                // The start time, numbered if taken: local time repeats an hour when the
-                // clocks go back, and a save must never overwrite another ride.
+                // Numbered if taken: local time repeats an hour when the clocks go back.
                 val file = uniqueFile(
                     recordingsDir,
                     FILE_STAMP.format(startedAt.atZone(ZoneId.systemDefault())),
@@ -156,8 +134,7 @@ class TrackRepository(
                     fallback = "recording",
                 )
 
-                // Named before it's written, so the name is inside the GPX and survives an
-                // export. The filename itself stays the sortable stamp - nobody reads those.
+                // Named inside the GPX so the name survives an export.
                 val named = if (track.name.isNullOrBlank()) {
                     track.copy(name = defaultTrackName(appContext, profile.stats))
                 } else {
@@ -170,39 +147,28 @@ class TrackRepository(
             }.recoverFailure()
         }
 
-    /**
-     * Writes several tracks into [treeUri], a folder chosen through SAF, under the [names]
-     * given here. Returns how many landed - one unwritable name doesn't cost the rest.
-     */
+    /** Writes tracks into the SAF folder [treeUri] under [names]. Returns how many landed. */
     suspend fun exportAll(names: Map<Long, String>, treeUri: String): Result<Int> =
         withContext(io) {
             runCatching {
                 val tree = treeUri.toUri()
-                // A tree URI is not a document URI: the folder has to be named as the
-                // document it also is before anything can be created inside it.
+                // A tree URI must be turned into a document URI before creating children.
                 val folder = DocumentsContract.buildDocumentUriUsingTree(
                     tree,
                     DocumentsContract.getTreeDocumentId(tree),
                 )
 
-                // One runCatching per track, not one around the batch: a folder filling up
-                // halfway is exactly what the count exists to report, and letting that
-                // escape would report zero for a folder holding twenty files.
+                // Per track, so a failure halfway still reports the ones written.
                 names.count { (id, name) ->
                     runCatching { writeExport(folder, id, name) }.getOrDefault(false)
                 }
             }.recoverFailure()
         }
 
-    /**
-     * Copies one track into [folder]. Deletes the document again if the copy fails: it is
-     * created before it can be written, and a zero-byte `.gpx` in the user's own folder is
-     * worse than the track simply not being there.
-     */
+    /** Copies one track into [folder], deleting the document on failure to avoid a zero-byte file. */
     private suspend fun writeExport(folder: Uri, id: Long, name: String): Boolean {
         val entity = dao.byId(id) ?: return false
-        // The provider resolves a name that is already taken by adding a number, so two
-        // rides called the same thing cost nothing here.
+        // The provider numbers a name that is already taken.
         val target = DocumentsContract.createDocument(
             appContext.contentResolver,
             folder,
@@ -225,10 +191,7 @@ class TrackRepository(
         return written
     }
 
-    /**
-     * Reads a track without indexing it, for VIEW and SEND intents. Those URIs are
-     * one-shot grants, so a library row for one would only fail when tapped.
-     */
+    /** Reads a track without indexing it, for VIEW/SEND intents whose URI grants are one-shot. */
     suspend fun openTransient(location: String): Result<LoadedTrack> = withContext(io) {
         runCatching {
             cached?.let { (cachedLocation, track) ->
@@ -243,10 +206,7 @@ class TrackRepository(
         }.recoverFailure()
     }
 
-    /**
-     * Reads a track's geometry without recording that it was opened - the map drawing a
-     * track isn't the user looking at it, and [open] would rewrite the sort order every redraw.
-     */
+    /** Like [open] but without touching the sort order, for map redraws. */
     suspend fun geometry(id: Long): Result<LoadedTrack> = withContext(io) {
         runCatching {
             val entity = entity(id)
@@ -254,23 +214,16 @@ class TrackRepository(
         }.recoverFailure()
     }
 
-    /** Records that the user touched this track, which is what the map stacks on. */
     suspend fun touch(id: Long) = dao.touch(id, System.currentTimeMillis())
 
-    /**
-     * Renames a track. A blank [name] clears it, falling the row back to its filename.
-     *
-     * The GPX on disk is rewritten too, whichever source it came from, so an export
-     * carries the name the user gave it rather than the one the file arrived with.
-     */
+    /** Renames a track; a blank [name] clears it, falling back to the filename. */
     suspend fun rename(id: Long, name: String): Result<Unit> = withContext(io) {
         runCatching {
             val entity = entity(id)
             val trimmed = name.trim().takeIf(String::isNotEmpty)
 
-            // Written into the file too: export is a byte copy, so a rename that never
-            // touched it wouldn't survive one. Spliced rather than reparsed and rewritten
-            // - see [GpxNameRewriter]. Via a temp file, so a crash never truncates it.
+            // Written into the file since export is a byte copy. Via a temp file so a
+            // crash never truncates it.
             val file = fileOf(entity)
             val temp = File(file.parentFile, "${file.name}.tmp")
             try {
@@ -278,8 +231,7 @@ class TrackRepository(
                     throw TrackLoadException.Unreadable("Could not rewrite ${file.name}")
                 }
             } finally {
-                // A no-op once renamed; this is for the failure paths, which would
-                // otherwise leave a half-written .tmp behind for good.
+                // No-op once renamed; cleans up on failure.
                 temp.delete()
             }
             if (cached?.first == entity.location) cached = null
@@ -303,7 +255,6 @@ class TrackRepository(
     private suspend fun entity(id: Long): TrackEntity =
         dao.byId(id) ?: throw TrackLoadException.Unreadable("No track with id $id")
 
-    /** A new row for [file], summarised by [stats], in the palette slot least in use. */
     private suspend fun newEntity(
         file: File,
         displayName: String,
@@ -342,7 +293,6 @@ class TrackRepository(
 
     private fun fileOf(entity: TrackEntity) = TrackFiles.file(appContext, entity.location)
 
-    /** Every track is this app's own file, so deleting the row deletes it. */
     private fun deleteFile(entity: TrackEntity) {
         runCatching { fileOf(entity).delete() }
     }
@@ -357,11 +307,7 @@ class TrackRepository(
         /** Long enough to cover a rotation or a trip to another screen and back. */
         const val SHARE_GRACE_MILLIS = 5_000L
 
-        /**
-         * Sortable, unambiguous, and legible as a filename once exported. `Locale.ROOT` so
-         * the digits are the ones that sort - `ofPattern` otherwise takes its
-         * `DecimalStyle` from the default locale, numerals and all.
-         */
+        /** `Locale.ROOT` keeps ASCII digits so filenames sort. */
         private val FILE_STAMP: DateTimeFormatter =
             DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HHmmss", java.util.Locale.ROOT)
 
@@ -371,8 +317,7 @@ class TrackRepository(
                 is TrackLoadException -> e
                 is GpxParseException -> TrackLoadException.Invalid(e.message ?: "Not valid GPX", e)
                 is FileNotFoundException -> TrackLoadException.Unreadable("File no longer exists", e)
-                // Only a transient, one-shot URI reaches this - an import's own copy needs
-                // no grant - and that access can still be revoked mid-read.
+                // A transient URI grant can be revoked mid-read.
                 is SecurityException ->
                     TrackLoadException.Unreadable("No longer permitted to read this file", e)
 
@@ -386,10 +331,7 @@ class TrackRepository(
     }
 }
 
-/**
- * The palette slot fewest tracks on the map use, then fewest overall, then the lowest.
- * A round-robin over the row count repeated a colour still in use after any delete.
- */
+/** The palette slot fewest visible tracks use, then fewest overall, then the lowest. */
 internal fun leastUsedSlot(usage: List<ColorUse>, size: Int): Int {
     val shown = IntArray(size)
     val all = IntArray(size)

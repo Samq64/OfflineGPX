@@ -13,22 +13,16 @@ import java.time.Instant
 import java.util.Base64
 
 /**
- * The append-only log a recording is written to as it happens.
- *
- * A half-finished GPX file has no closing tags, so a crash mid-ride would leave nothing
- * recoverable; one flushed line per fix does. The only format the app invents, and it
- * exists so that losing a ride is not a possible outcome.
+ * Append-only recording log, one flushed line per fix, so a crash mid-ride stays
+ * recoverable (a half-written GPX would not be).
  *
  * ```
  * <epochMillis>,<lat>,<lon>[,<ele>][,<accuracyMeters>]   a fix
- * -                                                       a segment break (a pause, or lost signal)
+ * -                                                       a segment break
  * W,<epochMillis>,<lat>,<lon>[,<ele>][,<base64 desc>]     a waypoint
  * ```
  *
- * The waypoint line is its own kind rather than a fix with an extra field: a free-text
- * description can hold a comma or a newline, either of which would otherwise be read back
- * as more fields or more lines. Base64 sidesteps escaping it, since only this class reads
- * the log back.
+ * Base64 keeps commas and newlines in descriptions from breaking the format.
  */
 class RecordingWal private constructor(
     val file: File,
@@ -42,8 +36,6 @@ class RecordingWal private constructor(
             "${point.time?.toEpochMilli() ?: 0},${point.latitude},${point.longitude},$elevation,$accuracy"
         )
         writer.newLine()
-        // Flushed per fix, at 1 Hz. The cost is negligible and it is the entire point:
-        // an unflushed buffer is a lost ride.
         writer.flush()
     }
 
@@ -69,7 +61,7 @@ class RecordingWal private constructor(
 
     override fun close() = writer.close()
 
-    /** Deletes the log. A failed close is ignored: the contents are going either way. */
+    /** Deletes the log, ignoring a failed close. */
     fun discard() {
         runCatching(::close)
         file.delete()
@@ -80,21 +72,13 @@ class RecordingWal private constructor(
         private const val WAYPOINT = "W"
         private const val WAYPOINT_PREFIX = "$WAYPOINT,"
 
-        /**
-         * Opens [file] for appending. Append mode matters: opening for write would
-         * truncate the log this class exists to protect.
-         */
+        /** Opens [file] for appending, never truncating. */
         fun open(file: File): RecordingWal {
             file.parentFile?.mkdirs()
             return RecordingWal(file, FileWriter(file, true).buffered())
         }
 
-        /**
-         * Rebuilds a track from a log.
-         *
-         * Tolerant on purpose: a line half-written when the power went is dropped rather
-         * than failing the recovery of everything before it.
-         */
+        /** Rebuilds a track from a log, dropping malformed (half-written) lines. */
         fun recover(file: File): Track? {
             if (!file.exists()) return null
 
@@ -139,8 +123,6 @@ class RecordingWal private constructor(
         }
 
         private fun parseWaypoint(line: String): Waypoint? {
-            // limit = 6: a base64 description never contains a comma, but split has no way
-            // to know that, and one more field than expected would otherwise be silently lost.
             val parts = line.split(',', limit = 6)
             if (parts.size < 4) return null
             val millis = parts[1].toLongOrNull() ?: return null

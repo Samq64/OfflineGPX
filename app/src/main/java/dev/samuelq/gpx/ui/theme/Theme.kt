@@ -10,7 +10,6 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.platform.LocalContext
 
-/** Chart colours for the current theme. See [ChartColors] for why these aren't Material's. */
 val LocalChartColors = staticCompositionLocalOf { ChartColors.Light }
 
 @Composable
@@ -18,8 +17,7 @@ fun GpxTheme(content: @Composable () -> Unit) {
     val context = LocalContext.current
     val darkTheme = isSystemInDarkTheme()
     val colorScheme = when {
-        // Material You, gated on the *device's* version: wallpaper palette extraction
-        // does not exist before Android 12, so older devices get the static scheme.
+        // Wallpaper colours need Android 12.
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
 

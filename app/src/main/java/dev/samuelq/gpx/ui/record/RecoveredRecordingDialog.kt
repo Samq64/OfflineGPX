@@ -22,10 +22,7 @@ import dev.samuelq.gpx.data.record.AbandonedRecording
 import dev.samuelq.gpx.ui.format.Formatters
 import dev.samuelq.gpx.ui.format.LocalFormatters
 
-/**
- * Asks what to do with a recording a crash left unsaved. Only its buttons close it: the
- * ride is on disk either way, and a tap outside is not a decision about it.
- */
+/** For a recording a crash left unsaved. Only its buttons close it. */
 @Composable
 fun RecoveredRecordingDialog(
     recording: AbandonedRecording,
@@ -33,8 +30,7 @@ fun RecoveredRecordingDialog(
     onDiscard: () -> Unit,
 ) {
     val formatters = LocalFormatters.current
-    // Not focused on open, unlike the other naming dialogs: this one appears at launch,
-    // and a keyboard nobody asked for would hide the map behind it.
+    // Not auto-focused: it appears at launch, and an unasked-for keyboard would hide the map.
     var name by remember(recording) { mutableStateOf(recording.defaultName) }
     val stats = recording.profile.stats
 

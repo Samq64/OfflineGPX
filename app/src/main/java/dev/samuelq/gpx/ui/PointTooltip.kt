@@ -23,10 +23,9 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntOffset
 
 /**
- * A tooltip beside a box that moves: a scrubbed chart point, a tapped map pin. [anchorAt] is
- * the box's top-left in the parent's coordinates, read during layout so a drag or pan moves
- * the tooltip without recomposing. Shown while composed and the box is mostly on screen - a
- * popup isn't clipped, so a chart under a collapsed sheet would otherwise show it anyway.
+ * A tooltip beside a moving box. [anchorAt] is the box's top-left in the parent, read during
+ * layout so moving it doesn't recompose. Hidden when the box is mostly off screen, since a
+ * popup isn't clipped.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

@@ -23,7 +23,7 @@ import java.io.ByteArrayInputStream
 import java.io.IOException
 import java.io.InputStream
 
-/** The generated theme, handed to VTM as the stream it insists on. */
+/** The generated theme, as the stream VTM insists on. */
 internal class GeneratedRenderTheme(xml: String) : ThemeFile {
     private val bytes = xml.toByteArray()
     private var menuCallback: XmlRenderThemeMenuCallback? = null
@@ -48,23 +48,16 @@ internal fun OfflineMap.opens(): Boolean = MapFileTileSource().run {
 }
 
 /**
- * How far in the camera may go over this map. Measured from the deepest zoom the file
- * *stores*, not the one it advertises: a published file keeps tiles at z14 and claims
- * z21, and everything past the base zoom is that tile's geometry drawn bigger.
+ * How far in the camera may go. From the deepest zoom the file stores, not the one it
+ * advertises: published files keep z14 tiles and claim z21.
  */
 internal val OfflineMap.maxViewZoom: Int
     get() = (header.baseZoom + OVERZOOM_ALLOWANCE).coerceAtMost(Viewport.MAX_ZOOM_LEVEL)
 
 /**
- * The maps as one source, each file's data cut to its own box. A file's low zooms are
- * whole tiles tens of kilometres wide, so it carries lakes, roads and towns well past its
- * box - painted over by the mask, but names are drawn above that, and a town floating on
- * empty ground reads as broken.
- *
- * Queries the files itself rather than through [MultiMapFileTileSource]'s own data source,
- * which hands every file the same sink and so can't say which box an element belongs to.
- * No de-duplication across files: they don't overlap, and what two share past their
- * edges is cut away here.
+ * The maps as one source, each file's data cut to its own box: low-zoom tiles carry towns
+ * far past the box, and names draw above the mask. Queries files directly because
+ * [MultiMapFileTileSource] hands every file the same sink, losing which box an element is from.
  */
 internal class ClippedMapSource(maps: List<OfflineMap>) : MultiMapFileTileSource() {
     private val files = maps.map { map ->
@@ -109,8 +102,7 @@ private class ClippedMapData(private val files: List<Pair<MapFile, BoundingBox>>
 }
 
 /**
- * Passes on what lies inside one box, in the tile's own pixels. A [TileDataSink] because
- * that is what a [MapFile] expects to be handed, and it keeps the file's own completion
+ * Passes on what lies inside one box, in tile pixels. Also keeps each file's completion
  * from reaching the real sink once per file.
  */
 private class ClippingSink(sink: ITileDataSink) : TileDataSink(sink) {
@@ -127,7 +119,7 @@ private class ClippingSink(sink: ITileDataSink) : TileDataSink(sink) {
         right = (MercatorProjection.longitudeToX(box.maxLongitude) * scale - tile.tileX * Tile.SIZE).toFloat()
         top = (MercatorProjection.latitudeToY(box.maxLatitude) * scale - tile.tileY * Tile.SIZE).toFloat()
         bottom = (MercatorProjection.latitudeToY(box.minLatitude) * scale - tile.tileY * Tile.SIZE).toFloat()
-        // Most tiles are wholly inside, and those need no clipping at all.
+        // Most tiles are wholly inside and need no clipping.
         whole = left <= 0f && top <= 0f && right >= Tile.SIZE && bottom >= Tile.SIZE
         clipper.setRect(left, top, right, bottom)
     }

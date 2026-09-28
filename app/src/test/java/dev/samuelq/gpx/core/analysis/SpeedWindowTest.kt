@@ -15,14 +15,13 @@ class SpeedWindowTest {
         window.add(0.0, 0.0)
         assertNull(window.speedMps)
         window.add(1.0, 10.0)
-        // One second in, the quotient is just whatever the last hop was.
+        // One second in, that is just the last hop.
         assertNull(window.speedMps)
     }
 
     @Test
     fun `averages over the window rather than the last hop`() {
         val window = SpeedWindow()
-        // A steady 5 m/s with a single wild sample in the middle of it.
         repeat(11) { second ->
             val distance = second * 5.0 + if (second == 5) 30.0 else 0.0
             window.add(second.toDouble(), distance)
@@ -31,10 +30,7 @@ class SpeedWindowTest {
         assertTrue(speed in 4.5..5.5, "got $speed, expected about 5")
     }
 
-    /**
-     * The reason it is fed on every reading and not every recorded point: when the ride
-     * stops, distance stops growing but time does not, so the number has to come down.
-     */
+    /** Why it is fed every reading, not every recorded point. */
     @Test
     fun `decays to zero when distance stops growing`() {
         val window = SpeedWindow()
@@ -49,7 +45,6 @@ class SpeedWindowTest {
     fun `keeps at least the window's worth of samples`() {
         val window = SpeedWindow()
         repeat(100) { window.add(it.toDouble(), it * 2.0) }
-        // Steady 2 m/s throughout, so however it trims, the answer is 2.
         assertEquals(2.0, assertNotNull(window.speedMps), 0.001)
     }
 

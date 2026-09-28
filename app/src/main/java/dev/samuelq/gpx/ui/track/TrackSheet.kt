@@ -66,17 +66,10 @@ import dev.samuelq.gpx.ui.theme.LocalChartColors
 
 private val SheetPadding = 20.dp
 
-/**
- * The collapsed height before a track has loaded, and the least it can be after. Once one
- * has, the peek is measured from what it shows instead; see `onPeekHeightChange`.
- */
+/** Peek height before a track loads, and the minimum after. */
 val TrackSheetPeekHeight = 128.dp
 
-/**
- * Everything the sheet can do to the track it is showing. Null for a track that arrived
- * through an intent - no library row, so the sheet leaves the menu off rather than
- * offering actions that would all have to refuse.
- */
+/** Null for a track opened via intent, which has no library row to act on. */
 @Immutable
 class TrackActions(
     val onRename: () -> Unit,
@@ -85,12 +78,7 @@ class TrackActions(
     val onDelete: () -> Unit,
 )
 
-/**
- * What the map knows about the track it is focused on. A sheet rather than a screen: the
- * route is already drawn on the map behind it. Height is the only thing that hides
- * anything - there's no separate fold/details button stacking a second disclosure system
- * on top of the sheet's own; the column just runs on, and dragging reveals more of it.
- */
+/** Stats and charts for the focused track; dragging the sheet is the only disclosure. */
 @Composable
 fun TrackSheet(
     loaded: LoadedTrack,
@@ -101,9 +89,9 @@ fun TrackSheet(
     useTimeAxis: Boolean,
     onAxisChange: (Boolean) -> Unit,
     actions: TrackActions?,
-    /** The height of the part shown collapsed - name, numbers, date - so the peek fits it. */
+    /** Measured height of the collapsed content, so the peek fits it. */
     onPeekHeightChange: (Dp) -> Unit,
-    /** Shown as a close button, for the landscape panel. */
+    /** Close button, for the landscape panel. */
     onClose: (() -> Unit)? = null,
 ) {
     val density = LocalDensity.current
@@ -114,15 +102,13 @@ fun TrackSheet(
 
     val xValues = if (useTimeAxis) profile.elapsedSeconds else profile.distanceMeters
     val xDomain = (xValues.firstOrNull() ?: 0f)..(xValues.lastOrNull() ?: 1f)
-    // The stretch a pinch has zoomed to. A new track or axis starts zoomed out again.
     var xView by remember(profile, useTimeAxis) { mutableStateOf(xDomain) }
-    // New per track and unit system, since the widest label only ever grows within one.
+    // Reset per track and units, since the gutter only ever grows.
     val axisGroup = remember(profile, formatters) { ChartAxisGroup() }
     val onZoom: (Float, Float, Float) -> Unit = remember(profile, useTimeAxis) {
         { anchor, zoom, pan -> xView = zoomView(xView, xDomain, anchor, zoom, pan) }
     }
-    // One view, shared by both charts, so the same pixel column is the same moment in
-    // each and the scrubber means the same thing in both - and on the route behind.
+    // Shared by both charts so the scrubber lines up.
     val xScale = remember(xView, useTimeAxis, formatters) {
         if (useTimeAxis) {
             timeAxisScale(xView.start, xView.endInclusive)
@@ -130,8 +116,7 @@ fun TrackSheet(
             axisScale(xView.start, xView.endInclusive, perUnit = formatters.distancePerMeter)
         }
     }
-    // Keyed on the scale as well as the units: the ticks are labelled to whatever precision
-    // tells one of them from the next, and that is a property of the scale.
+    // Keyed on the scale: label precision follows the step.
     val formatX: (Float) -> String = remember(formatters, useTimeAxis, xScale) {
         if (useTimeAxis) {
             Formatters.durationAxisFor(xScale.max)
@@ -140,8 +125,7 @@ fun TrackSheet(
         }
     }
 
-    // With units, unlike the axis formatters, since a tooltip is read on its own. Remembered
-    // because the chart keys its measured layout on the identity of these.
+    // Remembered: the chart keys its measured layout on these lambdas' identity.
     val speedValue: (Float) -> String =
         remember(formatters) { { formatters.speed(it.toDouble()) } }
     val elevationValue: (Float) -> String =
@@ -154,8 +138,7 @@ fun TrackSheet(
         }
     }
 
-    // Only on the time axis. On a distance axis a stop is zero wide - correctly, because
-    // no distance passed during it - so there is no band to label and nothing missing.
+    // Time axis only: on a distance axis a stop is zero wide.
     val gapFormat = stringResource(R.string.chart_gap)
     val breakLabel: ((Float) -> String)? = remember(useTimeAxis, gapFormat) {
         if (!useTimeAxis) null else { seconds -> gapFormat.format(Formatters.durationAxis(seconds)) }
@@ -165,15 +148,13 @@ fun TrackSheet(
         Modifier
             .fillMaxWidth()
             .heightIn(max = maxHeight)
-            // A tap anywhere not a chart goes back to the whole-track numbers - charts and
-            // buttons consume their own taps, so this only sees ones that landed on nothing.
+            // Taps not consumed by charts or buttons clear the selection.
             .pointerInput(Unit) {
                 detectTapGestures { onSelectedIndexChange(null) }
             }
     ) {
 
-        // What the collapsed sheet shows, measured rather than assumed: a larger font
-        // would otherwise push the date under the gesture bar.
+        // Measured, since a larger font would push the date under the gesture bar.
         Column(Modifier.onSizeChanged { onPeekHeightChange(with(density) { it.height.toDp() }) }) {
             SheetTitle(
                 name = trackTitle(loaded.track.name, loaded.displayName),
@@ -183,7 +164,6 @@ fun TrackSheet(
                 modifier = Modifier.padding(start = SheetPadding, end = 4.dp),
             )
 
-            // Always the whole track - scrubbed values live on the charts themselves instead.
             StatRow(
                 stats = trackHeadline(stats, profile.hasTime),
                 modifier = Modifier.padding(start = SheetPadding, end = 8.dp),
@@ -202,16 +182,14 @@ fun TrackSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                // fill = false: with nothing to scroll the sheet should be short, not
-                // padded out to the cap.
+                // fill = false keeps a short sheet short.
                 .weight(1f, fill = false)
                 .verticalScroll(rememberScrollState())
                 .navigationBarsPadding(),
         ) {
             HorizontalDivider(Modifier.padding(horizontal = SheetPadding, vertical = 8.dp))
 
-            // Whatever the file itself said this ride was, verbatim - the app never writes
-            // one, so this only ever shows up on an import that carried its own <desc>.
+            // The file's own <desc>; the app never writes one.
             loaded.track.description?.takeIf(String::isNotBlank)?.let {
                 Text(
                     text = it,
@@ -220,8 +198,6 @@ fun TrackSheet(
                 )
             }
 
-            // Elapsed time, ascent, descent, point count: answers you go looking for
-            // rather than glance at, hence under the fold and not the row above it.
             Column(Modifier.padding(horizontal = SheetPadding, vertical = 4.dp)) {
                 TrackDetails(
                     stats = stats,
@@ -232,8 +208,6 @@ fun TrackSheet(
 
             Spacer(Modifier.height(20.dp))
 
-            // With the charts, because it is a fact about them - what they are plotted
-            // against - and not a fact about the ride.
             if (profile.hasTime) {
                 AxisSelector(
                     useTimeAxis = useTimeAxis,
@@ -243,7 +217,6 @@ fun TrackSheet(
                 Spacer(Modifier.height(16.dp))
             }
 
-            // The two charts differ only in what they plot.
             @Composable
             fun Profile(
                 @StringRes title: Int,
@@ -305,8 +278,6 @@ fun TrackSheet(
 
             Spacer(Modifier.height(12.dp))
 
-            // A flat towpath gets half-metre gridlines, which whole metres can't label
-            // without repeating themselves - hence the step-aware axis.
             Profile(
                 title = R.string.chart_elevation,
                 empty = R.string.chart_elevation_empty,
@@ -324,13 +295,7 @@ fun TrackSheet(
     }
 }
 
-/**
- * The name, beside the swatch the map and the list know it by - the only thing tying these
- * numbers to one line among several overlaid routes.
- *
- * No close control on the sheet: dragged away, tapped away on the bare map and backed out
- * of are three ways out already. The landscape panel has no handle, so it gets one.
- */
+/** Name beside the route swatch, tying the sheet to one of several overlaid routes. */
 @Composable
 private fun SheetTitle(
     name: String,
@@ -362,7 +327,7 @@ private fun SheetTitle(
     }
 }
 
-/** While the file is being read. Sized like the peek so the sheet does not jump open. */
+/** Sized like the peek so the sheet does not jump open. */
 @Composable
 fun TrackSheetLoading(modifier: Modifier = Modifier) {
     Row(
@@ -414,7 +379,6 @@ private fun AxisSelector(
     onChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // Full width, halves shared equally: the same span as the charts it switches.
     SingleChoiceSegmentedButtonRow(modifier.fillMaxWidth()) {
         SegmentedButton(
             selected = !useTimeAxis,
@@ -432,10 +396,6 @@ private fun AxisSelector(
     }
 }
 
-/**
- * A titled chart block. No card chrome: a border and a fill around every chart is ink
- * that isn't data, and the title plus the spacing already separate the two sections.
- */
 @Composable
 private fun ChartSection(
     title: String,

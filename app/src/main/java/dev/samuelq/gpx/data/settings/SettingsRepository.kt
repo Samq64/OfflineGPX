@@ -9,41 +9,28 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-/**
- * Everything the user can change, with the defaults the app shipped with. The recording
- * thresholds are judgements about a phone in a jersey pocket, not measurements - which is
- * why they're exposed rather than fixed.
- */
 data class Settings(
     val units: UnitSystem = UnitSystem.METRIC,
 
-    /** Fixes less certain than this are not positions. See [FixFilter]. */
+    /** See [FixFilter]. */
     val maxAccuracyMeters: Double = FixFilter.MAX_ACCURACY_METERS,
 
-    /** The floor under the accuracy rule, for the rare very confident fix. */
     val minDisplacementMeters: Double = FixFilter.MIN_DISPLACEMENT_METERS,
 
-    /**
-     * Filenames (not paths - the directory is the app's own) of the offline basemaps to
-     * draw. A set because adjacent areas are the normal case; only ever non-overlapping,
-     * which is what keeps this from needing a stacking order.
-     */
+    /** Filenames of the basemaps to draw; never overlapping, so no stacking order. */
     val activeMapFiles: Set<String> = emptySet(),
 
 ) {
     companion object {
         val Defaults = Settings()
 
-        /** What the sliders may offer. Wider than useful in both directions, on purpose. */
+        /** Slider ranges, deliberately wider than useful. */
         val ACCURACY_RANGE = 5.0..100.0
         val DISPLACEMENT_RANGE = 0.0..25.0
     }
 }
 
-/**
- * Settings, on disk. `SharedPreferences` rather than DataStore: a handful of keys read once
- * at startup, and DataStore would be a new dependency for no benefit at this size.
- */
+/** `SharedPreferences` rather than DataStore, to avoid a dependency for a handful of keys. */
 class SettingsRepository(context: Context) {
 
     private val prefs: SharedPreferences =
@@ -51,7 +38,6 @@ class SettingsRepository(context: Context) {
 
     private val _settings = MutableStateFlow(read())
 
-    /** Always current. The recorder reads it when a recording starts; the UI observes it. */
     val settings: StateFlow<Settings> = _settings.asStateFlow()
 
     fun setUnits(units: UnitSystem) = update { putString(KEY_UNITS, units.name) }
@@ -64,7 +50,7 @@ class SettingsRepository(context: Context) {
 
     fun setActiveMapFiles(names: Set<String>) = update { putStringSet(KEY_ACTIVE_MAPS, names) }
 
-    /** The recording filters back to shipped defaults; units and maps are left alone. */
+    /** Resets only the recording filters. */
     fun resetRecording() = update {
         remove(KEY_ACCURACY)
         remove(KEY_DISPLACEMENT)

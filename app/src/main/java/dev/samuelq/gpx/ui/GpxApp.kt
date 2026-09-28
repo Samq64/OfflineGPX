@@ -27,10 +27,7 @@ import dev.samuelq.gpx.ui.nav.SettingsRoute
 import dev.samuelq.gpx.ui.settings.SettingsScreen
 import dev.samuelq.gpx.ui.track.TrackRef
 
-/**
- * Three destinations. A track isn't one - it's a selection on the map, shown in a sheet
- * there - so back means one thing: close what's open, then leave.
- */
+/** A track is a selection on the map, not a destination. */
 @Composable
 fun GpxApp(
     incomingTrack: Uri?,
@@ -40,14 +37,11 @@ fun GpxApp(
     val container = (LocalContext.current.applicationContext as GpxApplication).container
     val settings by container.settingsRepository.settings.collectAsStateWithLifecycle()
 
-    // Remembered per unit system, not rebuilt per recomposition: the charts key their
-    // scales and tick labels on this instance.
+    // Remembered: the charts key their labels on this instance.
     val formatters = remember(settings.units) { Formatters(settings.units) }
 
     LaunchedEffect(incomingTrack) {
         val uri = incomingTrack ?: return@LaunchedEffect
-        // Straight onto the map, wherever the user happened to be. A file handed over by
-        // another app is a track to look at, not a reason to build a stack.
         navController.focusOnMap(FocusRequest.uri(uri.toString()))
         onIncomingTrackHandled()
     }
@@ -81,8 +75,7 @@ fun GpxApp(
             composable<LibraryRoute> {
                 LibraryScreen(
                     onOpenTrack = { id -> navController.focusOnMap(FocusRequest.saved(id)) },
-                    // Only while resumed: a second tap during the exit transition would
-                    // otherwise pop the map too, leaving an empty NavHost.
+                    // A second tap mid-transition would otherwise pop the map too.
                     onBack = dropUnlessResumed { navController.popBackStack() },
                 )
             }
@@ -94,14 +87,9 @@ fun GpxApp(
     }
 }
 
-/** Long enough to read as movement, short enough not to be a wait. */
 private val NavigationSpec = tween<IntOffset>(durationMillis = 300)
 
-/**
- * A track handed to the map from somewhere else, as one bundle-safe value. The
- * discriminator rides along with the value rather than using two separate keys, which would
- * have a meaningless third state where both are set.
- */
+/** One prefixed string rather than two keys, which could both be set. */
 private object FocusRequest {
     const val KEY = "focus"
 
@@ -118,17 +106,11 @@ private object FocusRequest {
     }
 }
 
-/**
- * Shows a track on the map, from wherever the caller is. A pop rather than a navigate,
- * since the map is always on the stack.
- */
+/** A pop, not a navigate: the map is always on the stack. */
 private fun NavController.focusOnMap(request: String) {
     getBackStackEntry(MapRoute).savedStateHandle[FocusRequest.KEY] = request
     popBackStack(MapRoute, inclusive = false)
 }
 
-/**
- * Navigate, but never onto a copy of where we already are - a double tap otherwise pushes
- * a duplicate entry that back then peels away to reveal itself.
- */
+/** Single-top, so a double tap doesn't push a duplicate. */
 private fun NavController.open(route: Any) = navigate(route) { launchSingleTop = true }

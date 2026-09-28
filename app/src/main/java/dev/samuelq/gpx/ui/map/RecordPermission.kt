@@ -15,10 +15,7 @@ import dev.samuelq.gpx.R
 import dev.samuelq.gpx.data.record.RecordingController
 import kotlinx.coroutines.launch
 
-/**
- * Starts a recording, first asking for whatever is missing - on the tap itself, with no
- * screen explaining itself first. [say] explains a refusal.
- */
+/** Starts a recording, asking for missing permissions on the tap. [say] explains a refusal. */
 @Composable
 internal fun rememberStartRecording(recorder: RecordingController, say: (String) -> Unit): () -> Unit {
     val context = LocalContext.current
@@ -26,17 +23,14 @@ internal fun rememberStartRecording(recorder: RecordingController, say: (String)
     val locationDenied = stringResource(R.string.record_location_denied)
     val preciseRequired = stringResource(R.string.record_precise_required)
 
-    // Checked here and again in the service: this is the one that can explain itself, and
-    // the service's is for location being switched off between the two.
+    // Also checked in the service, for location switched off in between; only this one can explain.
     val start = { if (recorder.isGpsEnabled) recorder.start() else say(locationOff) }
 
     val permissions = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { granted ->
         when {
-            // Precise only. Approximate is wifi- and cell-derived and accurate to hundreds
-            // of metres at best; a route from it is noise and a speed from it is a wrong
-            // number presented as a real one. Refusing beats recording garbage.
+            // Precise only: approximate is hundreds of metres off, making route and speed noise.
             granted[Manifest.permission.ACCESS_FINE_LOCATION] == true -> start()
             granted[Manifest.permission.ACCESS_COARSE_LOCATION] == true -> say(preciseRequired)
             else -> say(locationDenied)
@@ -46,9 +40,8 @@ internal fun rememberStartRecording(recorder: RecordingController, say: (String)
 }
 
 /**
- * Asks for what is missing on the tap that starts a recording, nothing before it - no
- * screen explaining itself first. Coarse is listed alongside fine because Android 12+
- * ignores a fine request without it; notifications are requested but not required.
+ * Coarse is requested with fine because Android 12+ ignores fine alone; notifications are
+ * requested but not required.
  */
 private fun ManagedActivityResultLauncher<Array<String>, Map<String, Boolean>>.requestThenStart(
     context: Context,

@@ -5,8 +5,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
 import dev.samuelq.gpx.data.db.TrackEntity
 
-// Static scheme for Android 10/11, which have no wallpaper colours. Built from the charts'
-// ramp so the two never look like they came from different apps.
+// Static scheme for Android 10/11, which lack wallpaper colours; shares the charts' ramp.
 
 private val Blue450 = Color(0xFF2A78D6)
 private val Blue400 = Color(0xFF3987E5)
@@ -85,11 +84,9 @@ internal val StaticDarkColors = darkColorScheme(
 )
 
 /**
- * The categorical set the map overlays routes with, one hue per slot in both themes.
- * Picked by search, not by eye: at least 3:1 against the map's land and background (2:1
- * against water and vegetation), and at least 25 CIEDE2000 apart from each other and
- * from [recordingColor] - 12 under simulated protan, deutan and tritan vision. Ordered so
- * the first tracks, which take the lowest free slot, are the furthest apart.
+ * Picked by search: at least 3:1 against map land (2:1 against water and vegetation), and
+ * 25 CIEDE2000 apart from each other and [recordingColor] (12 under simulated CVD). Ordered
+ * so the lowest slots are furthest apart.
  */
 private val RoutePaletteLight = listOf(
     Color(0xFF1292C0),
@@ -112,29 +109,21 @@ private val RoutePaletteDark = listOf(
 private val RecordingLight = Color(0xFFBA0D01)
 private val RecordingDark = Color(0xFFDF2414)
 
-/** A track's colour from its stored palette slot. */
 fun List<Color>.slot(index: Int): Color = this[index.mod(size)]
 
-/** The route palette for the current theme. Follows dark mode, not the wallpaper. */
+/** Follows dark mode, not the wallpaper. */
 @androidx.compose.runtime.Composable
 @androidx.compose.runtime.ReadOnlyComposable
 fun routePalette(): List<Color> =
     if (androidx.compose.foundation.isSystemInDarkTheme()) RoutePaletteDark else RoutePaletteLight
 
-/**
- * The live recording's line, puck and dot. Its own red rather than the scheme's error
- * colour, which is wallpaper-derived and a pale pink in dark mode.
- */
+/** Not the scheme's error colour, which is wallpaper-derived and pale pink in dark mode. */
 @androidx.compose.runtime.Composable
 @androidx.compose.runtime.ReadOnlyComposable
 fun recordingColor(): Color =
     if (androidx.compose.foundation.isSystemInDarkTheme()) RecordingDark else RecordingLight
 
-/**
- * Colours the charts draw with, held apart from the Material scheme - these two hues were
- * checked for lightness, chroma, CVD separation and contrast, which a wallpaper-derived
- * palette guarantees none of. Chrome follows the wallpaper; data does not.
- */
+/** Fixed, not wallpaper-derived, since the hues were checked for contrast and CVD separation. */
 data class ChartColors(
     val speed: Color,
     val elevation: Color,

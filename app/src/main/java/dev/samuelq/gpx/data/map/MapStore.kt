@@ -23,17 +23,11 @@ class OfflineMap(
     val header: MapFileHeader,
     val sizeBytes: Long,
 ) {
-    /** What the file itself says its data came from, or null if it does not say. */
     val attribution: String? get() = header.attribution
 
-    /** The filename without its extension, which is whatever the user named the download. */
     val displayName: String get() = file.nameWithoutExtension
 
-    /**
-     * True if this and [other] cover any of the same ground. Compared as bounding boxes,
-     * not true coverage - deliberately conservative, so a false "overlaps" costs a
-     * needlessly superseded map rather than two maps drawn on top of each other.
-     */
+    /** Bounding-box overlap; conservative, as a false positive only supersedes a map. */
     fun overlaps(other: OfflineMap): Boolean =
         header.minLongitude < other.header.maxLongitude &&
             other.header.minLongitude < header.maxLongitude &&
@@ -41,15 +35,12 @@ class OfflineMap(
             other.header.minLatitude < header.maxLatitude
 }
 
-/** Why an import did not produce a map. */
 enum class MapImportError {
-    /** The file could not be read through the content resolver at all. */
     UNREADABLE,
 
-    /** It was read, and it is not a mapsforge map file. */
+    /** Not a mapsforge map file. */
     NOT_A_MAP_FILE,
 
-    /** There is not enough free space to copy it. */
     NO_SPACE,
 }
 
@@ -58,15 +49,7 @@ sealed interface MapImportResult {
     class Failed(val error: MapImportError) : MapImportResult
 }
 
-/**
- * The offline maps on this device.
- *
- * Copied into app-private storage rather than read where they sit: a map file is seeked
- * around in constantly as tiles are drawn, and a SAF document is a stream through another
- * process. VTM's map reader needs a real path anyway.
- *
- * Nothing here fetches anything - maps arrive through the file picker or not at all.
- */
+/** Offline maps, copied into app-private storage since VTM's reader needs a seekable real path. */
 class MapStore(
     context: Context,
     private val settings: SettingsRepository,
@@ -74,34 +57,25 @@ class MapStore(
 
     private val appContext = context.applicationContext
 
-    /** Private to the app, so no storage permission is involved on either side. */
     private val directory: File
         get() = File(appContext.filesDir, DIRECTORY).apply { mkdirs() }
 
     private val _maps = MutableStateFlow<List<OfflineMap>>(emptyList())
 
-    /** Every imported map, newest first. Refreshed by [refresh] and by every mutation. */
+    /** Newest first. */
     val maps: StateFlow<List<OfflineMap>> = _maps.asStateFlow()
 
-    /**
-     * The maps the renderer should draw. Resolved from stored filenames, not held as
-     * objects, since the selection lives in settings and a file can vanish out from under it.
-     */
+    /** The maps the renderer should draw, per the filenames selected in settings. */
     val active: Flow<List<OfflineMap>> =
         combine(_maps, settings.settings) { maps, current ->
             maps.filter { it.file.name in current.activeMapFiles }
         }
 
-    /**
-     * What has already been read off each file. Only the header, which is small - but it
-     * only changes when the file does, where this runs at every launch.
-     */
+    /** Parsed headers, keyed by path and mtime so unchanged files aren't re-read each launch. */
     private val readMaps = ConcurrentHashMap<Key, OfflineMap>()
 
-    /** A file is the same file as long as neither its path nor its mtime has moved. */
     private data class Key(val path: String, val modifiedAt: Long)
 
-    /** Re-reads the directory, reusing what was already read off unchanged files. */
     suspend fun refresh() = withContext(Dispatchers.IO) {
         val files = directory.listFiles().orEmpty()
             .filter { it.isFile && it.extension.equals(EXTENSION, ignoreCase = true) }
@@ -111,13 +85,11 @@ class MapStore(
             .mapNotNull { (key, file) -> readMaps[key] ?: read(file)?.also { readMaps[key] = it } }
             .sortedByDescending { it.file.lastModified() }
 
-        // A deleted file shouldn't go on holding its header in memory.
         readMaps.keys.retainAll(keys.keys)
 
         _maps.value = found
 
-        // A selection pointing at a file that is no longer there is worse than none: the
-        // map screen would report a basemap it cannot draw.
+        // Drop selections of files that are gone.
         val names = found.mapTo(HashSet()) { it.file.name }
         val selected = settings.settings.value.activeMapFiles
         val surviving = selected.filterTo(HashSet()) { it in names }
@@ -125,9 +97,8 @@ class MapStore(
     }
 
     /**
-     * Copies the document at [uri] into private storage, named after it, and reads its
-     * header, deleting the copy again if it fails validation. Validated after the copy, not
-     * before - SAF makes no promise a second open returns the same bytes.
+     * Copies [uri] into private storage and validates the copy, deleting it on failure.
+     * Validated after copying since SAF doesn't promise a second open returns the same bytes.
      */
     suspend fun import(uri: Uri): MapImportResult =
         withContext(Dispatchers.IO) {
@@ -140,9 +111,7 @@ class MapStore(
                 }
             } catch (_: IOException) {
                 destination.delete()
-                // Out of space is the one IO failure worth naming separately: it is the
-                // user's to fix, and "couldn't read it" would send them looking in the
-                // wrong place for a 90 MB file that did not fit.
+                // Out of space is named separately since it's the user's to fix.
                 val error = if (appContext.filesDir.usableSpace < LOW_SPACE_BYTES) {
                     MapImportError.NO_SPACE
                 } else {
@@ -154,7 +123,6 @@ class MapStore(
                 return@withContext MapImportResult.Failed(MapImportError.UNREADABLE)
             }
 
-            // Handed to the cache below, so refresh() doesn't re-walk what this just read.
             val map = read(destination)
             if (map == null) {
                 destination.delete()
@@ -162,11 +130,8 @@ class MapStore(
             }
             readMaps[Key(destination.path, destination.lastModified())] = map
 
-            // Superseded rather than refused: a newer map over the same ground replaces
-            // whichever shown one it overlaps, since two renderings of the same place
-            // stacked is still not a thing any z-order makes legible. Resolved here instead
-            // of asking the user to go delete the old one first - refresh() below notices
-            // the deleted files are gone and drops them from the active set on its own.
+            // A new map replaces any active one it overlaps, since stacked renderings are
+            // illegible. refresh() then drops them from the active set.
             val activeMaps = _maps.value.filter { it.file.name in settings.settings.value.activeMapFiles }
             activeMaps.filter { it.overlaps(map) }.forEach { it.file.delete() }
 
@@ -175,7 +140,7 @@ class MapStore(
             MapImportResult.Imported(map)
         }
 
-    /** Everything read off one file, or null if it is not a mapsforge map file at all. */
+    /** Null if not a mapsforge map file. */
     private fun read(file: File): OfflineMap? {
         val header = MapFileHeader.read(file) ?: return null
         return OfflineMap(file = file, header = header, sizeBytes = file.length())
@@ -183,7 +148,6 @@ class MapStore(
 
     suspend fun delete(map: OfflineMap) = withContext(Dispatchers.IO) {
         map.file.delete()
-        // refresh() clears the selection if this was it.
         refresh()
     }
 
@@ -191,7 +155,7 @@ class MapStore(
         const val DIRECTORY = "maps"
         const val EXTENSION = "map"
 
-        /** Below this, a failed copy is read as the disk being full rather than broken. */
+        /** Below this, a failed copy is reported as out of space. */
         const val LOW_SPACE_BYTES = 64L * 1024 * 1024
     }
 }

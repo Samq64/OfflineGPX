@@ -26,7 +26,6 @@ class GpxNameRewriterTest {
         return destination.readText()
     }
 
-    /** What the app itself reads back out of the file afterwards. */
     private fun nameOf(xml: String): String? =
         GpxParser { KXmlParser() }.parse(xml.byteInputStream()).name
 
@@ -58,7 +57,7 @@ class GpxNameRewriterTest {
     fun `keeps everything the parser does not model`() {
         val out = requireNotNull(rewrite(gpx("<name>Old name</name>"), "New name"))
 
-        // The whole point: a round trip through GpxWriter would drop all three of these.
+        // A round trip through GpxWriter would drop these.
         assertTrue(out.contains("gpxtpx:hr"), "heart rate extension survived")
         assertTrue(out.contains("""<wpt lat="47.0" lon="8.0">"""), "waypoint survived")
         assertTrue(out.contains("<metadata><name>Not the track name</name></metadata>"))
@@ -81,8 +80,7 @@ class GpxNameRewriterTest {
 
     @Test
     fun `clearing a name leaves the track unnamed`() {
-        // Without a `<metadata><name>`, which the parser would otherwise fall back to -
-        // that fallback is the point of `gpx()` above, and not what this is checking.
+        // No `<metadata><name>`, which the parser would fall back to.
         val xml = """
             <?xml version="1.0" encoding="UTF-8"?>
             <gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
@@ -160,7 +158,6 @@ class GpxNameRewriterTest {
         """.trimIndent()
         assertNull(rewrite(utf16, "New"))
 
-        // Nothing shaped like a track at all.
         assertNull(rewrite("""<?xml version="1.0"?><gpx><wpt lat="1" lon="2"/></gpx>""", "New"))
     }
 

@@ -18,7 +18,6 @@ class FormattersTest {
         assertEquals("42.2 km", metric.distance(42_195.0, en))
     }
 
-    /** The small unit runs to a tenth of a mile: 0.9 miles in feet is not a distance. */
     @Test
     fun `imperial distance uses feet below a tenth of a mile`() {
         assertEquals("328 ft", imperial.distance(100.0, en))
@@ -47,10 +46,7 @@ class FormattersTest {
         assertEquals("3,281 ft", imperial.elevationAxisFor(10f, en)(1000f))
     }
 
-    /**
-     * Whole metres are right for a mountain and wrong for a towpath: at half-metre ticks
-     * the integer form labels 9.5 and 10.0 both "10".
-     */
+    /** At half-metre ticks, whole metres would label 9.5 and 10.0 both "10". */
     @Test
     fun `elevation ticks resolve the gap between them`() {
         val flat = metric.elevationAxisFor(0.5f, en)
@@ -60,10 +56,7 @@ class FormattersTest {
         assertEquals(listOf("0 m", "100 m", "1,000 m"), listOf(0f, 100f, 1000f).map(hilly))
     }
 
-    /**
-     * The whole point of taking the step: at one decimal a 50 m step labels two ticks
-     * "0.1", which is a chart quietly lying about where its own gridlines are.
-     */
+    /** At one decimal, a 50 m step would label two ticks "0.1". */
     @Test
     fun `distance ticks resolve the gap between them`() {
         val short = metric.distanceAxisFor(50f, en)
@@ -72,7 +65,6 @@ class FormattersTest {
         val long = metric.distanceAxisFor(5000f, en)
         assertEquals(listOf("0 km", "5 km", "10 km"), listOf(0f, 5000f, 10000f).map(long))
 
-        // Miles are the smaller unit, so the same ground needs one more decimal to split.
         val miles = imperial.distanceAxisFor(50f, en)
         assertEquals(listOf("0.00 mi", "0.03 mi", "0.06 mi"), listOf(0f, 50f, 100f).map(miles))
     }

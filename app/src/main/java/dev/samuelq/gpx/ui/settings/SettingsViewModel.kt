@@ -21,7 +21,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 
-/** Something the settings screen should say once. The words are the screen's business. */
 enum class SettingsMessage {
     MapImported,
     MapDeleted,
@@ -40,12 +39,7 @@ class SettingsViewModel(
 
     val maps: StateFlow<List<OfflineMap>> = mapStore.maps
 
-    /**
-     * True while a map is being copied in.
-     *
-     * Worth showing: these files run to tens of megabytes, and a copy through SAF from a
-     * downloads folder is seconds of nothing happening otherwise.
-     */
+    /** Maps run to tens of megabytes, so the copy takes visible seconds. */
     private val _importing = MutableStateFlow(false)
     val importing: StateFlow<Boolean> = _importing.asStateFlow()
 
@@ -83,7 +77,6 @@ class SettingsViewModel(
         }
     }
 
-    /** Reported when nothing on the device can open the "where to get maps" link. */
     fun reportNoBrowser() {
         viewModelScope.launch { _messages.send(SettingsMessage.NoBrowser) }
     }

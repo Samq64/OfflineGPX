@@ -1,9 +1,7 @@
 [versions]
 # AGP 9.4 supports up to API 37 and requires Gradle 9.1+ and JDK 17+.
 agp = "9.4.1"
-# Only the Compose *compiler* plugin is applied from this:
-# since AGP 9.0, Kotlin support is built in and applying org.jetbrains.kotlin.android
-# is an error ("...plugin is no longer required for Kotlin support since AGP 9.0").
+# Only for the Compose compiler plugin; AGP 9 has Kotlin built in.
 kotlin = "2.4.20"
 
 compileSdk = "37"
@@ -24,10 +22,7 @@ serialization = "1.11.0"
 
 kxml2 = "2.3.0"
 
-# VTM, mapsforge's OpenGL renderer. Draws the basemap from a .map file the user supplied.
-#
-# Plain jars rather than AARs, so it contributes no AndroidManifest and therefore no
-# permissions. Its one native library (a polygon tessellator) is ~45 KB per ABI.
+# Plain jars, so no manifest or permissions. Its native tessellator is ~45 KB per ABI.
 vtm = "0.30.0"
 
 [libraries]
@@ -40,8 +35,7 @@ androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", versi
 androidx-compose-ui = { group = "androidx.compose.ui", name = "ui" }
 androidx-compose-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
-# The small icon set only. Deliberately not material-icons-extended, which is a very large
-# artifact for the handful of glyphs this app uses.
+# Not material-icons-extended, which is huge for a handful of glyphs.
 androidx-compose-material-icons-core = { group = "androidx.compose.material", name = "material-icons-core" }
 
 androidx-room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
@@ -57,8 +51,7 @@ vtm-android = { group = "com.github.mapsforge.vtm", name = "vtm-android", versio
 vtm-jts = { group = "com.github.mapsforge.vtm", name = "vtm-jts", version.ref = "vtm" }
 
 kotlin-test-junit = { group = "org.jetbrains.kotlin", name = "kotlin-test-junit", version.ref = "kotlin" }
-# Test-only: a real XmlPullParser so GpxParser is testable on the JVM without
-# Robolectric - android.jar's xmlpull classes are unimplemented stubs in unit tests.
+# A real XmlPullParser for JVM tests; android.jar's is a stub.
 kxml2 = { group = "net.sf.kxml", name = "kxml2", version.ref = "kxml2" }
 
 [plugins]

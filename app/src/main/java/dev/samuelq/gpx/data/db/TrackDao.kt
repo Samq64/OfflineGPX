@@ -8,13 +8,7 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface TrackDao {
 
-    /**
-     * Most recently interacted with first.
-     *
-     * The only ordering in the app. The list and the map agree by construction - the map
-     * just walks it backwards, so the track at the top of the list is the one drawn on
-     * top of the pile.
-     */
+    /** The app's only ordering; the map walks it backwards so the list's top is drawn on top. */
     @Query("SELECT * FROM tracks ORDER BY lastOpenedAtEpochMillis DESC")
     fun observeByRecent(): Flow<List<TrackEntity>>
 
@@ -46,5 +40,5 @@ interface TrackDao {
     suspend fun setAllVisible(visible: Boolean)
 }
 
-/** One track's palette slot and whether it is on the map, for picking the next slot. */
+/** For picking the next palette slot. */
 data class ColorUse(val colorIndex: Int, val visible: Boolean)

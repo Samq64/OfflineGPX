@@ -35,9 +35,8 @@ internal class Basemap(
 internal class BasemapColors(val background: Color, val land: Color, val label: Color)
 
 /**
- * Puts [maps] under the routes: land, tiles, labels, the mask past their edges and the
- * dashed outline of each. [onAttached] hears each stage as it goes up, so a build cancelled
- * halfway can still be taken down with [detach].
+ * Puts [maps] under the routes. [onAttached] hears each stage, so a build cancelled halfway
+ * can still be taken down with [detach].
  */
 internal suspend fun Map.attachBasemap(
     maps: List<OfflineMap>,
@@ -45,8 +44,7 @@ internal suspend fun Map.attachBasemap(
     density: Density,
     onAttached: (Basemap) -> Unit,
 ) {
-    // VTM fails the whole source if any one file won't open, so each is tried alone
-    // and a broken one is left out rather than blanking the rest.
+    // VTM fails the whole source if any file won't open, so a broken one is left out.
     val (shown, theme) = withContext(Dispatchers.IO) {
         val shown = maps.filter { it.opens() }
         val theme = if (shown.isEmpty()) null else ThemeLoader.load(
@@ -57,8 +55,7 @@ internal suspend fun Map.attachBasemap(
         shown to theme
     }
 
-    // Land under the tiles, not painted by them: the render theme's background is
-    // transparent so ground no imported file covers reads as empty rather than as land.
+    // Land under the tiles, since the theme background is transparent (see MapRenderTheme).
     val land = OverlayLayer(this)
     val outline = OverlayLayer(this)
     layers().add(land, LayerGroup.Land.ordinal)
@@ -95,12 +92,10 @@ internal suspend fun Map.attachBasemap(
         theme.dispose()
         return
     }
-    // Against the full zoom range, not the camera's: the label layer copies the
-    // viewport's limits at construction, throws if they are narrower than its own, and
-    // places no labels outside them - and the camera's limits change with the extent.
+    // Full zoom range: LabelLayer copies the viewport's limits at construction, throws if they're
+    // narrower than its own, and places no labels outside them.
     val labels = viewport().withFullZoomRange { LabelLayer(this, tiles) }
-    // The source already cuts each file to its box; this covers what still overhangs
-    // it, like half a road's width at the edge.
+    // Covers what overhangs the clipped source, like half a road's width at the edge.
     val mask = OverlayLayer(this)
     layers().add(tiles, LayerGroup.Tiles.ordinal)
     layers().add(labels, LayerGroup.Labels.ordinal)
@@ -108,7 +103,7 @@ internal suspend fun Map.attachBasemap(
     onAttached(Basemap(land, outline, tiles, labels, mask, theme))
     outsideDrawables(shown, colors.background).forEach { mask.add(it) }
     mask.update()
-    // Also clears to the theme's map-background-outside, which is the screen background.
+    // Also clears to map-background-outside.
     setTheme(theme)
 }
 
@@ -117,22 +112,16 @@ internal fun Map.detach(basemap: Basemap) {
     basemap.theme?.dispose()
 }
 
-/** A map's own box, filled - the ground it actually covers. */
 private fun boxDrawable(map: OfflineMap, style: Style): RectangleDrawable {
     val h = map.header
     return RectangleDrawable(h.minLatitude, h.minLongitude, h.maxLatitude, h.maxLongitude, style)
 }
 
-/**
- * Everywhere but the maps' own boxes, in the background colour, as plain rectangles: the
- * world cut along every box edge, keeping the cells no box covers. Not one polygon with
- * holes - VTM fills the holes in.
- */
+/** Everything outside the maps' boxes, as grid cells: VTM fills in a polygon's holes. */
 private fun outsideDrawables(maps: List<OfflineMap>, background: Color): List<RectangleDrawable> {
     val style = Style.builder().fillColor(background.toArgb()).fillAlpha(1f).strokeColor(TRANSPARENT).build()
-    // Not the whole world: the camera is penned to the extent and can't zoom out past it,
-    // so a few spans' margin always covers the screen, and world-sized rectangles were
-    // sometimes not drawn at all.
+    // A few spans past the extent, not the whole world: world-sized rectangles sometimes didn't
+    // draw, and the camera can't zoom out past the extent anyway.
     val extent = extentOf(emptyList(), null, maps) ?: return emptyList()
     val outer = extent.padded(MASK_MARGIN_SPANS)
     val latitudes = (maps.flatMap { listOf(it.header.minLatitude, it.header.maxLatitude) } +
@@ -153,7 +142,6 @@ private fun outsideDrawables(maps: List<OfflineMap>, background: Color): List<Re
     return out
 }
 
-/** The dashed boundary marking where an imported file's detail stops. */
 private fun outlineDrawable(map: OfflineMap, style: Style): LineDrawable {
     val h = map.header
     return LineDrawable(
@@ -173,7 +161,6 @@ private const val TRANSPARENT = 0
 /** How far past the maps the outside mask reaches, in spans of their extent. */
 private const val MASK_MARGIN_SPANS = 3.0
 
-/** Visible as a boundary, not as a feature of the landscape. */
 private const val COVERAGE_WIDTH_DP = 1.2f
 
 private const val COVERAGE_DASH_DP = 4f

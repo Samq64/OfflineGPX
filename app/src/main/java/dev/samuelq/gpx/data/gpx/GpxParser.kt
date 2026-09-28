@@ -18,15 +18,10 @@ import java.time.format.DateTimeParseException
 class GpxParseException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
 /**
- * Streaming GPX reader. Pull-parses rather than building a DOM: a long ride is tens of
- * thousands of points and nothing needs random access to the XML.
+ * Streaming, tolerant GPX reader: anything unrecognised is skipped; only a non-GPX
+ * document is an error.
  *
- * Tolerant by design - GPX in the wild mixes 1.0 and 1.1 namespaces, omits `<ele>`, spells
- * timestamps several ways and carries vendor `<extensions>`. Anything unrecognised is
- * skipped; only a document that is not GPX at all is an error.
- *
- * @param newPullParser injected so this is testable on a plain JVM, where the framework's
- *   xmlpull classes are unimplemented stubs.
+ * @param newPullParser injected for plain-JVM tests, where framework xmlpull is stubbed.
  */
 class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PARSER) {
 
@@ -34,9 +29,8 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
         val parser = try {
             newPullParser().apply {
                 setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, true)
-                // FEATURE_PROCESS_DOCDECL stays false by default, so an internal DTD is
-                // never expanded - that closes off entity-expansion attacks.
-                setInput(input, null) // null: take the encoding from the XML declaration
+                // FEATURE_PROCESS_DOCDECL stays false, blocking entity-expansion attacks.
+                setInput(input, null) // null: encoding from the XML declaration
             }
         } catch (e: XmlPullParserException) {
             throw GpxParseException("Could not start an XML parser", e)
@@ -89,8 +83,7 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
                     }
                 }
 
-                // A route has no timestamps, but it is still a polyline with elevation,
-                // so it is worth showing rather than reporting the file as empty.
+                // Routes are untimed but still worth showing.
                 TAG_RTE -> {
                     var routeName: String? = null
                     val routePoints = mutableListOf<TrackPoint>()
@@ -117,7 +110,7 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
         )
     }
 
-    /** Reads a `<wpt>`. Returns null - rather than throwing - if lat/lon are unusable. */
+    /** Null if lat/lon are unusable. */
     private fun readWaypoint(parser: XmlPullParser): Waypoint? {
         val latitude = parser.getAttributeValue(null, ATTR_LAT)?.toDoubleOrNull()
         val longitude = parser.getAttributeValue(null, ATTR_LON)?.toDoubleOrNull()
@@ -149,9 +142,7 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
                     if (points.size < MAX_POINTS_PER_SEGMENT) {
                         points += it
                     } else {
-                        // forEachChild is inline, so this returns from readSegment itself
-                        // rather than just the lambda, leaving the parser on this
-                        // <trkseg>'s own END_TAG exactly as a normal exit would.
+                        // Non-local return, leaving the parser on this <trkseg>'s END_TAG.
                         skipRest(parser, depth)
                         return TrackSegment(points)
                     }
@@ -163,7 +154,7 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
         return if (points.isEmpty()) null else TrackSegment(points)
     }
 
-    /** Reads a `<trkpt>`/`<rtept>`. Returns null - rather than throwing - if lat/lon are unusable. */
+    /** Null if lat/lon are unusable. */
     private fun readPoint(parser: XmlPullParser): TrackPoint? {
         val latitude = parser.getAttributeValue(null, ATTR_LAT)?.toDoubleOrNull()
         val longitude = parser.getAttributeValue(null, ATTR_LON)?.toDoubleOrNull()
@@ -184,11 +175,7 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
         return TrackPoint(latitude, longitude, elevation, time)
     }
 
-    /**
-     * Runs [body] once per child element, with the parser positioned on that child's
-     * START_TAG. [body] must leave the parser on the matching END_TAG - which [readText],
-     * [skip] and the nested `forEachChild` calls all do.
-     */
+    /** Runs [body] per child START_TAG; [body] must leave the parser on the matching END_TAG. */
     private inline fun forEachChild(parser: XmlPullParser, body: () -> Unit) {
         val depth = parser.depth
         while (true) {
@@ -200,7 +187,6 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
         }
     }
 
-    /** Consumes the current element and everything inside it. */
     private fun skip(parser: XmlPullParser) {
         if (parser.eventType != XmlPullParser.START_TAG) return
         var depth = 1
@@ -213,11 +199,7 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
         }
     }
 
-    /**
-     * Escape hatch for a segment that blows past [MAX_POINTS_PER_SEGMENT]: consumes the
-     * remainder of the enclosing element (whose depth is [depth]) and stops, rather than
-     * running to the end of the document and silently dropping every track after it.
-     */
+    /** Consumes the rest of the element at [depth], so later tracks still get parsed. */
     private fun skipRest(parser: XmlPullParser, depth: Int) {
         while (true) {
             when (parser.next()) {
@@ -237,10 +219,7 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
     }
 
     companion object {
-        /**
-         * A hostile or corrupt file should not be able to OOM the process. Well past any
-         * plausible real recording: at 1 Hz this is over 11 days of continuous logging.
-         */
+        /** OOM guard; over 11 days at 1 Hz. */
         private const val MAX_POINTS_PER_SEGMENT = 1_000_000
 
         private const val TAG_GPX = "gpx"
@@ -263,19 +242,14 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
         }
 
         /**
-         * GPX says ISO 8601 UTC, but exporters disagree: most write a `Z` suffix, some an
-         * offset, a few neither. A timestamp matching none is dropped, downgrading the
-         * track to untimed rather than failing the file.
-         *
-         * The spelling is inspected before a parser is chosen rather than trying all three:
-         * this runs once per point, and try/catch meant a filled-in stack trace per point.
+         * Accepts `Z`, an offset, or no zone (UTC); null otherwise. Picks the parser up
+         * front since a try-each approach costs an exception per point.
          */
         internal fun parseGpxTime(raw: String): Instant? {
             val text = raw.trim()
             if (text.isEmpty()) return null
             return try {
                 when {
-                    // `Z`, and only `Z`, is what Instant.parse accepts of the three.
                     text.endsWith('Z') || text.endsWith('z') -> Instant.parse(text)
                     hasOffset(text) -> OffsetDateTime.parse(text).toInstant()
                     else -> LocalDateTime.parse(text).toInstant(ZoneOffset.UTC)
@@ -285,12 +259,7 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
             }
         }
 
-        /**
-         * Whether a timestamp carries a `+hh:mm` or `-hh:mm` zone.
-         *
-         * Looked for in the time part only: the date's own separators are hyphens, so
-         * anything that simply searched for a minus sign would call every date an offset.
-         */
+        /** Searches after the `T` only, since the date itself contains hyphens. */
         private fun hasOffset(text: String): Boolean {
             val timeStart = text.indexOf('T').takeIf { it >= 0 } ?: return false
             for (i in timeStart + 1 until text.length) {

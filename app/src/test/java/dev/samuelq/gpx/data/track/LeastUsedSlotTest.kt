@@ -14,13 +14,11 @@ class LeastUsedSlotTest {
         assertEquals(0, leastUsedSlot(emptyList(), 6))
     }
 
-    /** The case round-robin got wrong: six tracks, the first deleted, and slot 5 reused. */
     @Test
     fun `a slot freed by a delete is reused before any doubles up`() {
         assertEquals(0, leastUsedSlot(shown(1, 2, 3, 4, 5), 6))
     }
 
-    /** A colour only a hidden track has is as good as free on the map. */
     @Test
     fun `slots on the map count before hidden ones`() {
         assertEquals(1, leastUsedSlot(shown(0, 2, 3, 4, 5) + hidden(1, 1), 6))

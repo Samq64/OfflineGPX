@@ -10,13 +10,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
-/**
- * What the camera is fitted to and penned inside of.
- *
- * The extent is assembled from each route's own remembered box, so these check it matches
- * the positions - including at the two edges where "there is nothing to frame" has to
- * keep meaning that.
- */
+/** The extent is built from each route's cached box, so check it matches the positions. */
 class MapExtentTest {
 
     private fun route(vararg positions: Pair<Double, Double>, id: Long = 1) = RouteOverlay(
@@ -89,18 +83,13 @@ class MapExtentTest {
         assertNull(extentOf(listOf(route()), null, emptyList()))
     }
 
-    /**
-     * The first fix of a recording, with no map imported. A point is not an area: fitting
-     * to it means an arbitrary zoom, and penning the camera inside it means a map that
-     * cannot be panned at all.
-     */
+    /** Fitting to a point means an arbitrary zoom and a camera that cannot pan. */
     @Test
     fun `a single position is not a box`() {
         assertNull(extentOf(routes = emptyList(), liveRoute = route(51.5 to -0.1), basemaps = emptyList()))
         assertNull(extentOf(routes = listOf(route(51.5 to -0.1)), liveRoute = null, basemaps = emptyList()))
     }
 
-    /** Two tracks that each stood still, in two different places, are still an area. */
     @Test
     fun `two separate single positions are a box`() {
         val extent = assertNotNull(

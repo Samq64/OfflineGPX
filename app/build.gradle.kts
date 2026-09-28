@@ -8,25 +8,17 @@ plugins {
 }
 
 /**
- * Fails the build if the merged manifest asks for the network.
+ * Fails the build if the merged manifest asks for the network: the merger folds in every
+ * dependency's permissions, so a library bump can add INTERNET silently.
  *
- * The app's one structural promise is that it cannot phone home, and that promise is kept
- * by an absence - which is exactly the kind of thing that goes missing quietly. The
- * manifest merger folds in every dependency's permissions, so a library bump can add
- * INTERNET without a line changing in this repo. No current dependency declares one -
- * VTM ships as jars with no manifest at all - so this now guards against the next
- * dependency rather than the present ones, which is the point: it fires before a review does.
- *
- * Wired as a *transform* of the merged manifest rather than hung off `assemble`: a
- * transform is the only way to be unskippable. Every build that produces an APK produces
- * this artifact, and producing it now means passing through here.
+ * A transform of the merged manifest rather than an `assemble` hook, so it can't be skipped.
  */
 abstract class CheckNoNetworkPermissions : DefaultTask() {
 
     @get:InputFile
     abstract val mergedManifest: RegularFileProperty
 
-    /** The same manifest, unchanged. A transform has to hand its artifact onwards. */
+    /** Passed through unchanged; a transform must produce its artifact. */
     @get:OutputFile
     abstract val checkedManifest: RegularFileProperty
 
@@ -65,8 +57,7 @@ android {
     defaultConfig {
         applicationId = "dev.samuelq.gpx"
         minSdk = libs.versions.minSdk.get().toInt()
-        // AGP 9 defaults targetSdk to compileSdk; set explicitly so a compileSdk bump
-        // can never silently change runtime behaviour.
+        // AGP 9 defaults this to compileSdk; pinned so a compileSdk bump can't change behaviour.
         targetSdk = libs.versions.targetSdk.get().toInt()
         versionCode = 1
         versionName = "0.1.0"
@@ -92,15 +83,14 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    // AGP 9's built-in-Kotlin DSL. The old `android.kotlinOptions` spelling was removed.
+    // AGP 9's built-in-Kotlin DSL; `kotlinOptions` is gone.
     kotlin {
         compilerOptions {
             jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
         }
     }
 
-    // The app has no network access; don't ship the dependency-metadata blob Play would
-    // otherwise embed in the artifact.
+    // Skip the dependency-metadata blob Play would embed.
     dependenciesInfo {
         includeInApk = false
         includeInBundle = false
@@ -123,9 +113,7 @@ androidComponents {
     }
 }
 
-// Exports the schema as JSON so a future migration can be diffed against it and tested.
-// Checked in; Room warns on every build without it. This is the plugin-free spelling -
-// the `room { schemaDirectory(...) }` block needs the separate androidx.room plugin.
+// Checked-in schema for future migrations. Plugin-free spelling of `room { schemaDirectory }`.
 ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
 }
@@ -147,8 +135,7 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.kotlinx.serialization.core)
 
-    // Renders the basemap from a .map file the user supplied. Ships as plain jars, so it
-    // declares no permissions of its own and has no manifest to merge.
+    // Basemap renderer. Plain jars, so no manifest or permissions to merge.
     implementation(libs.vtm)
     implementation(libs.vtm.android)
     implementation(libs.vtm.jts)

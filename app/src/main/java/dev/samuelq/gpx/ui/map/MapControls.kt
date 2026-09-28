@@ -29,7 +29,7 @@ import dev.samuelq.gpx.ui.format.Formatters
 import dev.samuelq.gpx.ui.record.RecordingBar
 import kotlin.math.roundToInt
 
-/** A tapped waypoint's time and note, beside its pin. [tipAt] is where the pin's tip is. */
+/** A tapped waypoint's time and note, beside its pin tip at [tipAt]. */
 @Composable
 internal fun WaypointTooltip(waypoint: Waypoint, tipAt: () -> Offset) {
     val density = LocalDensity.current
@@ -55,9 +55,7 @@ internal fun WaypointTooltip(waypoint: Waypoint, tipAt: () -> Offset) {
     }
 }
 
-/**
- * The record button, or the live recording's bar once one is running.
- */
+/** The record button, or the live recording's bar. */
 @Composable
 internal fun RecordControls(
     recording: RecordingState,

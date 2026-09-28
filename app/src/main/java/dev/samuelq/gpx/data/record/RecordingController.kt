@@ -12,7 +12,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 
-/** What the recorder is doing, as the UI needs to see it. */
 sealed interface RecordingState {
 
     data object Idle : RecordingState
@@ -21,36 +20,22 @@ sealed interface RecordingState {
         val paused: Boolean,
         val pointCount: Int,
         val distanceMeters: Double,
-        /**
-         * Wall-clock time since the first point, pause included - ticks on its own
-         * every second rather than only when a fix lands, so it doesn't read as stuck when
-         * the GPS goes quiet or nothing new clears the distance filter.
-         */
+        /** Wall-clock time since the first point, pauses included. */
         val totalSeconds: Double,
         val lastPoint: TrackPoint?,
-        /** Null until the first fix lands - GPS takes a few seconds to settle outdoors. */
         val currentSpeedMps: Double?,
-        /**
-         * Accuracy of the last reading, believed or not - lets the UI distinguish a cold
-         * start from fixes that just aren't good enough, which look identical otherwise.
-         */
+        /** Of the last reading, accepted or not, to tell a cold start from poor fixes. */
         val accuracyMeters: Double?,
-        /** The limit [accuracyMeters] is being judged against, since the user can move it. */
         val accuracyLimitMeters: Double,
-        /** Dropped by hand so far this ride, oldest first. */
+        /** Oldest first. */
         val waypoints: List<Waypoint>,
     ) : RecordingState
 }
 
-/**
- * The recording so far, in the shape the map draws it.
- *
- * Held apart from [RecordingState] because the two change at different rates: the numbers
- * are worth a redraw every fix, re-projecting every route on the map is not.
- */
+/** The live route for the map; apart from [RecordingState] since it updates less often. */
 class LiveTrace(
     val points: List<TrackPoint>,
-    /** Index of each run's first point. A pause starts a new one, as in a GPX segment. */
+    /** A pause starts a new segment. */
     val segmentStartIndices: IntArray,
 ) {
     companion object {
@@ -58,25 +43,17 @@ class LiveTrace(
     }
 }
 
-/** Something the recorder finished doing, delivered once. */
+/** Delivered once. */
 sealed interface RecordingEvent {
-    /** A recording was stopped and saved. [id] is its row in the library. */
+    /** [id] is the saved track's row. */
     data class Saved(val id: Long) : RecordingEvent
 
     data object Discarded : RecordingEvent
 
-    /**
-     * A resource id rather than a message: these are shown to the user verbatim, and a
-     * string assembled in the service is one the translators never see.
-     */
     data class Failed(@StringRes val messageRes: Int) : RecordingEvent
 }
 
-/**
- * The single place the service and the UI meet: the UI sends commands through here and the
- * service publishes back, rather than being bound to from a composable.
- * [dev.samuelq.gpx.di.AppContainer] holds it so state survives leaving the app mid-ride.
- */
+/** Where the UI sends commands to [RecordingService] and observes what it publishes. */
 class RecordingController(context: Context) {
 
     private val appContext = context.applicationContext
@@ -98,18 +75,12 @@ class RecordingController(context: Context) {
         _trace.value = trace
     }
 
-    /**
-     * Deliberately not suspending: many of these fire while the service is shutting down,
-     * and a `send` from a scope about to be cancelled would be an event nobody hears.
-     */
+    /** Non-suspending, so events from a scope being cancelled aren't lost. */
     internal fun emit(event: RecordingEvent) {
         _events.trySend(event)
     }
 
-    /**
-     * True when the device can actually produce a fix. Read on each call rather than
-     * cached: location is a quick-settings toggle, so the answer goes stale in a second.
-     */
+    /** Not cached: location can be toggled at any time. */
     val isGpsEnabled: Boolean get() = LocationSource(appContext).isGpsEnabled
 
     fun start() = send(RecordingService.ACTION_START)
@@ -118,7 +89,7 @@ class RecordingController(context: Context) {
     fun stop() = send(RecordingService.ACTION_STOP)
     fun discard() = send(RecordingService.ACTION_DISCARD)
 
-    /** [description] may be blank - a waypoint with nothing typed is still one. */
+    /** [description] may be blank. */
     fun addWaypoint(description: String) = send(RecordingService.ACTION_WAYPOINT) {
         putExtra(RecordingService.EXTRA_DESCRIPTION, description)
     }

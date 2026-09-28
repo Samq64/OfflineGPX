@@ -64,10 +64,8 @@ import kotlin.math.roundToInt
 private val ScreenPadding = 20.dp
 
 /**
- * The three things worth changing, each said in full - two are signal-processing
- * thresholds, so both carry a sentence about what moving them costs. Deliberately absent:
- * sampling rate (a fixed "worse route" vs "worse battery" trade) and the pause-detection
- * threshold (a file property that would re-summarise the whole library on change).
+ * Pause detection is deliberately not a setting: changing it would re-summarise the whole
+ * library.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -81,12 +79,9 @@ fun SettingsScreen(
     val formatters = LocalFormatters.current
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
-    // Held rather than deleted straight from the row: a mis-tap on a big map costs a
-    // real trip back to wherever the file came from.
+    // Confirmed first: a mis-tap costs re-fetching the file.
     var deletingMap by remember { mutableStateOf<OfflineMap?>(null) }
 
-    // OpenDocument rather than GetContent: it grants read access to exactly the file
-    // picked, which is all a copy needs. No storage permission is involved either way.
     val importer = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri -> viewModel.importMap(uri) }
@@ -145,8 +140,7 @@ fun SettingsScreen(
                 onImport = { importer.launch(MAP_MIME_TYPES) },
                 onDelete = { deletingMap = it },
                 onOpenHelp = {
-                    // Needs no INTERNET permission: handing a URL to whatever handles web
-                    // pages is an intent, and the browser fetches it in its own process.
+                    // The browser fetches it, so no INTERNET permission is needed.
                     val opened = runCatching {
                         context.startActivity(
                             Intent(Intent.ACTION_VIEW, MAP_HELP_URL.toUri())
@@ -189,8 +183,8 @@ fun SettingsScreen(
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
             SectionHeading(stringResource(R.string.settings_section_recording))
 
-            // Committed when the thumb is let go, not while it moves - a write per drag
-            // frame would be sixty disk writes a second.
+            // Committed on release, not per drag frame, to avoid a disk write each frame.
+            // No `steps`: ~95 discrete steps would draw a dotted track.
             var accuracy by remember(settings.maxAccuracyMeters) {
                 mutableFloatStateOf(settings.maxAccuracyMeters.toFloat())
             }
@@ -231,8 +225,6 @@ fun SettingsScreen(
                 )
             }
 
-            // Said once, here, rather than on each: they are read when a recording
-            // starts, so changing one mid-ride would otherwise look broken.
             Text(
                 text = stringResource(R.string.settings_recording_applies_next),
                 style = MaterialTheme.typography.bodySmall,
@@ -280,11 +272,7 @@ fun SettingsScreen(
     }
 }
 
-/**
- * Where maps come from - explained, not offered. No download button, since the app holds
- * no network permission: this says plainly that maps arrive from elsewhere, links to a
- * page on how, and opens the file picker.
- */
+/** No download button: the app has no network permission, so it links to how instead. */
 @Composable
 private fun MapsSection(
     maps: List<OfflineMap>,
@@ -344,7 +332,6 @@ private fun MapsSection(
     }
 }
 
-/** One imported map: its name, who the data is from, and its size. */
 @Composable
 private fun MapRow(
     map: OfflineMap,
@@ -366,8 +353,6 @@ private fun MapRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            // Only when the file says so itself - the app has no source of its own to
-            // credit.
             map.attribution?.let { attribution ->
                 Text(
                     text = attribution,
@@ -392,32 +377,19 @@ private fun MapRow(
 }
 
 /**
- * What the picker will accept. A mapsforge map file has no registered MIME type, so
- * providers hand it over as `application/octet-stream`; the wildcard covers a file manager
- * that types it as something else. Import validates the header regardless of what the
- * picker claimed.
+ * `.map` has no registered MIME type; the wildcard covers providers that mistype it. Import
+ * validates the header regardless.
  */
 private val MAP_MIME_TYPES = arrayOf("application/octet-stream", "*/*")
 
-/**
- * Where to go to get a map file. Provisional - a tool that cuts an area straight to a
- * download, since every other source of .map files ships whole countries. Extracts are cut
- * from download.mapsforge.org, whose tag vocabulary [dev.samuelq.gpx.ui.map.MapRenderTheme]
- * expects. Opened through a browser intent; nothing is fetched on the app's behalf.
- */
+/** Cuts areas from download.mapsforge.org, whose tags the render theme expects. */
 private const val MAP_HELP_URL = "https://mapcut.samruff.dev/"
-
-// No `steps`: a discrete slider over ~95 metre-steps draws a dotted line, not a scale. The
-// track is continuous; the value rounds to a whole metre only when the thumb is released.
 
 private fun ClosedFloatingPointRange<Double>.toFloatRange(): ClosedFloatingPointRange<Float> =
     start.toFloat()..endInclusive.toFloat()
 
 @Composable
 private fun SectionHeading(text: String) {
-    // Material 3's list subheader: title small in primary. A title role, not a label -
-    // labels are for text inside components - and a heading to TalkBack, so it can skip
-    // between sections.
     Text(
         text = text,
         style = MaterialTheme.typography.titleSmall,
@@ -428,10 +400,6 @@ private fun SectionHeading(text: String) {
     )
 }
 
-/**
- * A setting: what it is, what it costs, and the control. The current value sits on the
- * title's line rather than under the control, so it can be read without following a thumb.
- */
 @Composable
 private fun Setting(
     title: String,

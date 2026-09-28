@@ -82,10 +82,7 @@ internal fun FocusedTrackContent(
     }
 }
 
-/**
- * The track down the start edge, for a window wider than tall. Keeps showing the last track
- * while it slides away, rather than emptying before it has gone.
- */
+/** The landscape side panel. Keeps the last track while sliding away rather than emptying first. */
 @Composable
 internal fun TrackSidePanel(
     visible: Boolean,
@@ -124,10 +121,7 @@ private val SidePanelCornerRadius = 28.dp
 /** The handle's own height, counted into the measured peek. */
 internal val DragHandleHeight = 20.dp
 
-/**
- * Half the height of the Material handle, which spends 44 of its 48dp on padding. Every
- * one of those is a dp of map, and the sheet is dragged by its whole surface anyway.
- */
+/** Half the Material handle, which spends 44 of 48dp on padding; the whole sheet drags anyway. */
 @Composable
 internal fun CompactDragHandle() {
     Box(

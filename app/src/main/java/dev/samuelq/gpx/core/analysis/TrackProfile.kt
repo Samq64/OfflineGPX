@@ -12,40 +12,34 @@ data class TrackStats(
     val totalDurationSeconds: Double,
     /** Time spent above [TrackAnalyzer.MOVING_SPEED_THRESHOLD_MPS]. */
     val movingDurationSeconds: Double,
-    /** Distance over *moving* time - the number trackers report as "average speed". */
+    /** Over moving time when there is any. */
     val averageSpeedMps: Double,
     val ascentMeters: Double,
     val descentMeters: Double,
 )
 
 /**
- * A track with everything the charts need, precomputed once.
- *
- * Parallel primitive arrays, not a list of objects: a long ride is 30-50k points and the
- * chart re-reads these every scrub frame. All are length [size] and share indices with
- * [points]. Not a `data class` - array equality would be O(n), where `remember` keys want
- * identity.
+ * A track's chart series, precomputed as parallel primitive arrays indexed like [points].
+ * Not a `data class`: array equality is O(n), and `remember` keys want identity.
  */
 class TrackProfile(
     val points: List<TrackPoint>,
-    /** Index at which each recording segment starts. The chart breaks its line here. */
     val segmentStartIndices: IntArray,
-    /** Seconds since the first point. All zeroes when [hasTime] is false. */
+    /** All zeroes when [hasTime] is false. */
     val elapsedSeconds: FloatArray,
-    /** Cumulative ground distance in metres. Does not increase across a segment boundary. */
+    /** Cumulative; flat across segment boundaries. */
     val distanceMeters: FloatArray,
-    /** Smoothed speed in m/s; `NaN` throughout when [hasTime] is false. */
+    /** Smoothed; `NaN` throughout when [hasTime] is false. */
     val speedMps: FloatArray,
-    /** Elevation in metres; `NaN` at any point whose `<ele>` was missing. */
+    /** `NaN` where `<ele>` was missing. */
     val elevationMeters: FloatArray,
     val hasTime: Boolean,
     val hasElevation: Boolean,
     val stats: TrackStats,
 ) {
     /**
-     * The one index [point] belongs to, or -1 on an empty track. Nearest in time when both
-     * have it, so a round trip past the same spot still picks the right leg; nearest in
-     * space otherwise.
+     * Index nearest [point], or -1 if empty. By time when available, so a round trip picks
+     * the right leg; by distance otherwise.
      */
     fun indexOf(point: TrackPoint): Int {
         val at = point.time

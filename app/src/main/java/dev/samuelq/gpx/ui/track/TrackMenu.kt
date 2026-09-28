@@ -20,10 +20,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import dev.samuelq.gpx.R
 
-/**
- * Managing a track, behind one glyph: in the library and in the sheet, since these are
- * decisions made while looking at the ride too. [onHide] only where hiding closes something.
- */
+/** [onHide] only where hiding closes something. */
 @Composable
 fun TrackMenu(
     onRename: () -> Unit,
@@ -51,7 +48,7 @@ fun TrackMenu(
         IconButton(onClick = { open = true }) {
             Icon(Icons.Default.MoreVert, stringResource(R.string.track_manage))
         }
-        // Only composed once wanted: a list row each carrying a menu's setup adds up.
+        // Composed only when open; per-row menu setup adds up in a list.
         if (open) DropdownMenu(expanded = true, onDismissRequest = { open = false }) {
             Item(R.string.library_rename, onRename)
             Item(R.string.library_share, onShare)

@@ -8,10 +8,7 @@ import java.io.File
 import java.time.Instant
 import java.time.ZoneId
 
-/**
- * Where a track's GPX file lives. Both are app-private: no permission, and ours to delete.
- * `res/xml/file_paths.xml` shares both with other apps.
- */
+/** App-private track directories; `res/xml/file_paths.xml` shares both. */
 object TrackFiles {
     fun recordingsDir(context: Context): File = File(context.filesDir, "recordings").apply { mkdirs() }
 
@@ -20,14 +17,11 @@ object TrackFiles {
     /** The file behind a [TrackEntity.location]. */
     fun file(context: Context, location: String): File = File(context.filesDir, location)
 
-    /** Relative to filesDir, which a device transfer may restore under another path. */
+    /** Relative, since a device transfer may restore filesDir under another path. */
     fun location(context: Context, file: File): String = file.relativeTo(context.filesDir).path
 }
 
-/**
- * What a recording is called before anyone renames it: time of day plus walk-or-ride,
- * inferred from average moving speed (hiking 3-6 km/h, cycling 15-30, safely apart).
- */
+/** Time of day plus walk or ride, inferred from average moving speed. */
 internal fun defaultTrackName(context: Context, stats: TrackStats): String {
     val zoned = (stats.startedAt ?: Instant.now()).atZone(ZoneId.systemDefault())
     val activity = if (stats.averageSpeedMps < WALKING_SPEED_CEILING_MPS) {
@@ -44,5 +38,5 @@ internal fun defaultTrackName(context: Context, stats: TrackStats): String {
     return context.getString(partOfDay, context.getString(activity))
 }
 
-/** 9 km/h. Above a brisk walk, well below a bicycle. */
+/** 9 km/h. */
 private const val WALKING_SPEED_CEILING_MPS = 2.5

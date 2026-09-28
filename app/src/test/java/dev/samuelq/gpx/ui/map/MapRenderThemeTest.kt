@@ -17,14 +17,8 @@ import kotlin.test.assertContains
 import kotlin.test.assertNotNull
 
 /**
- * The generated render theme, parsed by the same parser the renderer uses.
- *
- * This is the check worth having: a malformed theme answers with a map that draws nothing
- * at all rather than with an error anyone would notice, and the theme is built from
- * strings at runtime, so nothing else would catch a typo in a rule.
- *
- * Parsed here with a do-nothing graphics backend. The parser only asks it for paints and
- * the dash textures, whose contents don't matter to whether the theme parses.
+ * A malformed theme draws a blank map rather than erroring, so parse it with VTM's own
+ * parser. The null graphics backend is enough: the parser only asks it for paints and textures.
  */
 class MapRenderThemeTest {
 
@@ -62,21 +56,13 @@ class MapRenderThemeTest {
         assertNotNull(parse(lightXml))
     }
 
-    /**
-     * Built separately rather than by inverting the light one - every derived colour moves
-     * away from the background, so the dark branch takes a different path through the
-     * generator and can break on its own.
-     */
+    /** The dark branch takes its own path through the generator. */
     @Test
     fun `the dark theme is a theme VTM accepts`() {
         assertNotNull(parse(darkXml))
     }
 
-    /**
-     * The tags the app actually depends on being drawn. A rule silently dropped because
-     * its key was misspelled parses perfectly well and renders nothing, so the presence of
-     * each is asserted rather than inferred from the parse succeeding.
-     */
+    /** A misspelled key still parses, so each key's presence is asserted. */
     @Test
     fun `the vocabulary the app relies on is present`() {
         listOf(
@@ -99,16 +85,12 @@ class MapRenderThemeTest {
         assert(!lightXml.contains("subway")) { "subway should not be drawn" }
     }
 
-    /**
-     * The transparent background is load-bearing: the map screen paints each file's own box
-     * underneath, so that ground no file covers reads as empty rather than as land.
-     */
+    /** Each file's land box is painted underneath, so uncovered ground reads as empty. */
     @Test
     fun `the background is transparent`() {
         assertContains(lightXml, """map-background="#00000000"""")
     }
 
-    /** Every whole zoom gets its own width, and the stops themselves are kept exactly. */
     @Test
     fun `widths are filled in between stops`() {
         kotlin.test.assertEquals(
@@ -117,7 +99,7 @@ class MapRenderThemeTest {
         )
     }
 
-    /** VTM's own 1.4-per-zoom growth above z12 is divided back out, and nothing below. */
+    /** VTM grows widths 1.4x per zoom above z12. */
     @Test
     fun `widths undo VTM's zoom growth`() {
         kotlin.test.assertEquals(2f, MapRenderTheme.unscaled(12, 2f))
@@ -125,7 +107,6 @@ class MapRenderThemeTest {
         kotlin.test.assertEquals(1.02f, MapRenderTheme.unscaled(14, 2f))
     }
 
-    /** What VTM clears the screen to, so ground beyond every file matches the app's own. */
     @Test
     fun `outside the maps is the background colour`() {
         assertContains(darkXml, """map-background-outside="#111316"""")

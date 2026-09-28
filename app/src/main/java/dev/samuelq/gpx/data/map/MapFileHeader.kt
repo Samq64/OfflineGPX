@@ -5,37 +5,23 @@ import java.io.IOException
 import java.io.RandomAccessFile
 
 /**
- * What a mapsforge map file says about itself: the ground it covers, how deep its detail
- * goes, and who the data came from - and whether it is a map file at all, before it
- * becomes a blank screen.
- *
- * Read here rather than through mapsforge's own `MapFile`, which opens the whole file
- * and holds it: this runs over every file in the maps directory at every launch, and all
- * it needs is the header.
- *
- * Everything multi-byte is big-endian. Strings carry a VBE-U length rather than the 2-byte
- * one the rest of the header uses - the single thing in this format that desynchronises a
- * parser silently instead of loudly.
+ * A mapsforge map file's header, read directly since mapsforge's `MapFile` opens and holds
+ * the whole file. Big-endian; strings carry a VBE-U length, unlike the header's 2-byte counts.
  */
 class MapFileHeader(
-    /**
-     * The deepest zoom the file actually stores tiles at. Everything past it is the same
-     * data scaled up, so this - not the maximum the file claims - is where the detail
-     * really stops. Published files store 5/10/14 and claim 21.
-     */
+    /** The deepest zoom with stored tiles, where detail really stops (files claim more). */
     val baseZoom: Int,
     val minLongitude: Double,
     val minLatitude: Double,
     val maxLongitude: Double,
     val maxLatitude: Double,
-    /** Where the data came from, as the file states it. Null when it does not. */
     val attribution: String?,
 ) {
 
     companion object {
         private const val MAGIC = "mapsforge binary OSM"
 
-        /** The magic string plus the 4-byte length of the header that follows it. */
+        /** The magic string plus the 4-byte header length. */
         private const val PREAMBLE_BYTES = 24
 
         /** Beyond this the file is malformed, not merely large. */
@@ -50,11 +36,7 @@ class MapFileHeader(
 
         private const val COORDINATE_SCALE = 1e6
 
-        /**
-         * Reads [file]'s header, or null if it is not a mapsforge map file. Null rather
-         * than an exception - "not a map" is an ordinary answer - and a genuine IO failure
-         * folds into the same null, since the caller fails identically either way.
-         */
+        /** Null if not a mapsforge map file or unreadable. */
         fun read(file: File): MapFileHeader? = try {
             RandomAccessFile(file, "r").use { handle ->
                 if (handle.length() < PREAMBLE_BYTES) return null
@@ -74,7 +56,6 @@ class MapFileHeader(
             null
         }
 
-        /** Split out from [read] so the layout can be tested without touching a disk. */
         fun parse(body: ByteArray): MapFileHeader? {
             val cursor = Cursor(body)
             return try {
@@ -92,8 +73,7 @@ class MapFileHeader(
                 cursor.string() // projection
 
                 val flags = cursor.byte()
-                // Debug files interleave 32-byte signatures through the data. Nothing
-                // published ships them, and a reader that ignores them reads noise.
+                // Debug files interleave signatures through the data; unsupported.
                 if (flags and FLAG_DEBUG != 0) return null
                 if (flags and FLAG_START_POSITION != 0) cursor.skip(8)
                 if (flags and FLAG_START_ZOOM != 0) cursor.skip(1)
@@ -104,7 +84,6 @@ class MapFileHeader(
                 repeat(cursor.short()) { cursor.string() } // POI tag dictionary
                 repeat(cursor.short()) { cursor.string() } // way tag dictionary
 
-                // Zoom intervals, each serving a band of zooms from one stored base zoom.
                 val intervals = cursor.byte()
                 if (intervals <= 0) return null
                 var deepestBase = Int.MIN_VALUE
@@ -120,12 +99,10 @@ class MapFileHeader(
                     minLatitude = minLatitude,
                     maxLongitude = maxLongitude,
                     maxLatitude = maxLatitude,
-                    // The comment is where an extract carries its data credit; created-by
-                    // names the tool, which is the weaker answer but better than none.
+                    // The comment carries the data credit; created-by is a fallback.
                     attribution = comment?.takeIf { it.isNotBlank() } ?: createdBy?.takeIf { it.isNotBlank() },
                 )
             } catch (_: IndexOutOfBoundsException) {
-                // A truncated or malformed header runs off the end of the array. Not a map.
                 null
             }
         }
