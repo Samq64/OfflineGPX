@@ -1,6 +1,5 @@
 package dev.samuelq.gpx.data.db
 
-import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -23,7 +22,7 @@ data class TrackEntity(
     val trackName: String?,
 
     /** When the activity happened. Null for a file with no timestamps. */
-    @ColumnInfo(index = true) val startedAtEpochMillis: Long?,
+    val startedAtEpochMillis: Long?,
 
     /**
      * The last interaction: imported, recorded or opened. The list is ordered by it, most
@@ -35,13 +34,13 @@ data class TrackEntity(
      * Whether this track is drawn on the map. Persisted, not a UI-session flag, since which
      * tracks are overlaid is a curation decision. New tracks arrive visible.
      */
-    @ColumnInfo(index = true, defaultValue = "1") val visible: Boolean = true,
+    val visible: Boolean = true,
 
     /**
      * Which slot of the route palette this track is drawn in. Assigned once at import and
      * never recomputed, so a track's colour never changes under the user.
      */
-    @ColumnInfo(defaultValue = "0") val colorIndex: Int = 0,
+    val colorIndex: Int = 0,
 
     val distanceMeters: Double,
     val totalSeconds: Double,
