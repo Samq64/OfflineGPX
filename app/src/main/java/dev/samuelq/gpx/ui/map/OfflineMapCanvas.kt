@@ -37,6 +37,7 @@ import org.oscim.core.BoundingBox
 import org.oscim.core.MapPosition
 import org.oscim.core.MercatorProjection
 import org.oscim.layers.marker.ItemizedLayer
+import org.oscim.layers.marker.MarkerInterface
 import org.oscim.layers.marker.MarkerSymbol
 import org.oscim.map.Map
 
@@ -62,12 +63,16 @@ fun OfflineMapCanvas(
     focusedTrackId: Long?,
     /** Highlighted point within [focusedTrackId]'s route, as an index into its points. */
     selectedIndex: Int?,
+    /** [focusedTrackId]'s colour, for its selected point and its [trackWaypoints]. */
     markerColor: Color,
     /** Whether to mark [liveRoute]'s last point. */
     showPuck: Boolean,
+    /** [liveRoute]'s colour, for the puck and [liveWaypoints]. */
     puckColor: Color,
-    /** Already narrowed by the caller to the focused track's and the recording's. */
-    waypoints: List<Waypoint>,
+    /** [focusedTrackId]'s waypoints. */
+    trackWaypoints: List<Waypoint>,
+    /** [liveRoute]'s waypoints. */
+    liveWaypoints: List<Waypoint>,
     onSelect: (trackId: Long, index: Int) -> Unit,
     onSelectNothing: () -> Unit,
     onSelectWaypoint: (Waypoint) -> Unit,
@@ -108,7 +113,7 @@ fun OfflineMapCanvas(
 
     val currentRoutes by rememberUpdatedState(routes)
     val currentLiveRoute by rememberUpdatedState(liveRoute)
-    val currentWaypoints by rememberUpdatedState(waypoints)
+    val currentWaypoints by rememberUpdatedState(trackWaypoints + liveWaypoints)
     val select by rememberUpdatedState(onSelect)
     val selectNothing by rememberUpdatedState(onSelectNothing)
     val selectWaypoint by rememberUpdatedState(onSelectWaypoint)
@@ -139,9 +144,14 @@ fun OfflineMapCanvas(
 
     val routeLayer = remember(map) { LineLayer(map) }
     val traceLayer = remember(map) { LineLayer(map) }
-    val markerLayer = remember(map) {
-        ItemizedLayer(map, MarkerSymbol(AndroidBitmap(1, 1, 0), MarkerSymbol.HotspotPlace.CENTER))
-    }
+    // Bottom first; separate layers since VTM z-sorts a layer's markers by screen y. The
+    // selected dot sits under the pins, unless a tapped pin put it there: then it's over the
+    // rest, under only that pin. The puck is always over pins, or a waypoint dropped where
+    // the user stands would hide them.
+    val belowPinsLayer = remember(map) { markerLayer(map) }
+    val pinLayer = remember(map) { markerLayer(map) }
+    val abovePinsLayer = remember(map) { markerLayer(map) }
+    val onTopLayer = remember(map) { markerLayer(map) }
 
     DisposableEffect(map) {
         val layers = map.layers()
@@ -149,7 +159,8 @@ fun OfflineMapCanvas(
         // Taps are offered top layer first.
         layers.add(routeLayer.layer, LayerGroup.Routes.ordinal)
         layers.add(traceLayer.layer, LayerGroup.Trace.ordinal)
-        layers.add(markerLayer, LayerGroup.Markers.ordinal)
+        listOf(belowPinsLayer, pinLayer, abovePinsLayer, onTopLayer)
+            .forEach { layers.add(it, LayerGroup.Markers.ordinal) }
         layers.add(
             TapLayer(map) { x, y ->
                 // Waypoints first: a pin sits on its own track's line and is the more specific hit.
@@ -218,21 +229,24 @@ fun OfflineMapCanvas(
     }
 
     // Per colour, not per selection: a new bitmap per scrub frame is a texture upload per frame.
-    val symbols = remember(markerColor, puckColor, density) {
-        MarkerSymbols(markerColor, puckColor, density)
+    val symbols = remember(markerColor, puckColor, landColor, density) {
+        MarkerSymbols(markerColor, puckColor, landColor, density)
     }
 
     LaunchedEffect(
-        markerLayer, symbols, routes, liveRoute, showPuck, focusedTrackId, selectedIndex, waypoints,
-        followedWaypoint,
+        belowPinsLayer, pinLayer, abovePinsLayer, onTopLayer, symbols, routes, liveRoute, showPuck, focusedTrackId, selectedIndex,
+        trackWaypoints, liveWaypoints, followedWaypoint,
     ) {
         val puckAt = liveRoute?.takeIf { showPuck }?.points?.lastOrNull()
         val markerAt = routes.firstOrNull { it.trackId == focusedTrackId }
             ?.points?.getOrNull(selectedIndex ?: -1)
 
-        markerLayer.removeAllItems(false)
-        markerLayer.addItems(symbols.items(waypoints, followedWaypoint, puckAt, markerAt))
-        markerLayer.update()
+        val selected = symbols.selectedDot(markerAt)
+        val pinTapped = followedWaypoint != null
+        belowPinsLayer.show(if (pinTapped) emptyList() else selected)
+        pinLayer.show(symbols.pins(trackWaypoints, liveWaypoints, followedWaypoint))
+        abovePinsLayer.show(symbols.puckDot(puckAt) + if (pinTapped) selected else emptyList())
+        onTopLayer.show(symbols.onTopPin(followedWaypoint, liveWaypoints))
         map.render()
     }
 
@@ -379,3 +393,16 @@ private const val FOLLOW_MARGIN_DP = 36f
 
 /** Used when no map is shown. */
 private const val DEFAULT_MAX_ZOOM = 18
+
+private fun markerLayer(map: Map) =
+    ItemizedLayer(map, MarkerSymbol(AndroidBitmap(1, 1, 0), MarkerSymbol.HotspotPlace.CENTER))
+
+/**
+ * Replaces the layer's markers. Via addItems even when empty: removeAllItems(false) skips the
+ * repopulate, so a layer emptied that way kept drawing its last markers.
+ */
+private fun ItemizedLayer.show(items: List<MarkerInterface>) {
+    removeAllItems(false)
+    addItems(items)
+    update()
+}

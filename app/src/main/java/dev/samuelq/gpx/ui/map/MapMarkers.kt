@@ -16,10 +16,14 @@ import org.oscim.layers.marker.MarkerSymbol
 import org.oscim.layers.vector.geometries.Style
 
 /** Marker bitmaps, built once per colour. */
-internal class MarkerSymbols(marker: Color, puck: Color, density: Density) {
+/** [hole] is the map's land colour, filling pin centres. */
+internal class MarkerSymbols(marker: Color, puck: Color, hole: Color, density: Density) {
     val marker: MarkerSymbol
     val puck: MarkerSymbol
-    val waypoint: MarkerSymbol
+
+    /** In their owner's colour, like a list's bookmarks: the focused track's, or the recording's. */
+    val trackWaypoint: MarkerSymbol
+    val liveWaypoint: MarkerSymbol
 
     init {
         with(density) {
@@ -33,10 +37,11 @@ internal class MarkerSymbols(marker: Color, puck: Color, density: Density) {
                 halo = puck.copy(alpha = PUCK_HALO_ALPHA), haloRadius = PUCK_HALO_RADIUS_DP.dp.toPx(),
             )
             // Hotspot at the tip, so the pin points at the position exactly.
-            this@MarkerSymbols.waypoint = pin(
-                PIN_RADIUS_DP.dp.toPx(), PIN_TIP_LENGTH_DP.dp.toPx(), PIN_RING_WIDTH_DP.dp.toPx(),
-                fill = WAYPOINT_GREY, ring = MARKER_RING,
-            )
+            val pinRadius = PIN_RADIUS_DP.dp.toPx()
+            val tipLength = PIN_TIP_LENGTH_DP.dp.toPx()
+            val pinRing = PIN_RING_WIDTH_DP.dp.toPx()
+            trackWaypoint = pin(pinRadius, tipLength, pinRing, fill = marker, ring = MARKER_RING, hole = hole)
+            liveWaypoint = pin(pinRadius, tipLength, pinRing, fill = puck, ring = MARKER_RING, hole = hole)
         }
     }
 
@@ -68,7 +73,14 @@ internal class MarkerSymbols(marker: Color, puck: Color, density: Density) {
     }
 
     /** A teardrop pin: a circle with exact tangent lines to a tip [tipLength] below its centre. */
-    private fun pin(radius: Float, tipLength: Float, ringWidth: Float, fill: Color, ring: Color): MarkerSymbol {
+    private fun pin(
+        radius: Float,
+        tipLength: Float,
+        ringWidth: Float,
+        fill: Color,
+        ring: Color,
+        hole: Color,
+    ): MarkerSymbol {
         // Half margin below, with a round join: a mitred sharp tip would spike past the ring.
         val topPad = ringWidth
         val bottomPad = ringWidth / 2
@@ -89,9 +101,10 @@ internal class MarkerSymbols(marker: Color, puck: Color, density: Density) {
         paint.strokeWidth = ringWidth
         paint.color = ring.toArgb()
         canvas.drawPath(path, paint)
-        // Punched through, so the map shows in it in either theme.
+        // Land-coloured, not see-through: that showed the pin's own line, the fill's own tone.
+        // Not white either, which glared in dark mode.
         paint.style = Paint.Style.FILL
-        paint.xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.CLEAR)
+        paint.color = hole.toArgb()
         canvas.drawCircle(cx, cy, radius * PIN_HOLE_RATIO, paint)
         return MarkerSymbol(AndroidBitmap(bitmap), MarkerSymbol.HotspotPlace.BOTTOM_CENTER, false)
     }
@@ -120,17 +133,23 @@ private fun teardropPath(cx: Float, cy: Float, radius: Float, tipY: Float): andr
 private fun marker(at: TrackPoint, symbol: MarkerSymbol) =
     MarkerItem("", "", GeoPoint(at.latitude, at.longitude)).apply { marker = symbol }
 
-/** Bottom first: waypoints ([onTop] last among them), then the puck, then [selected]. */
-internal fun MarkerSymbols.items(
-    waypoints: List<Waypoint>,
+/** Every pin but [onTop], which is drawn above the rest. */
+internal fun MarkerSymbols.pins(
+    trackWaypoints: List<Waypoint>,
+    liveWaypoints: List<Waypoint>,
     onTop: Waypoint?,
-    puck: TrackPoint?,
-    selected: TrackPoint?,
-): List<MarkerInterface> = buildList {
-    waypoints.sortedBy { it == onTop }.forEach { add(marker(it.point, waypoint)) }
-    if (puck != null) add(marker(puck, this@items.puck))
-    if (selected != null) add(marker(selected, marker))
-}
+): List<MarkerInterface> =
+    trackWaypoints.filter { it != onTop }.map { marker(it.point, trackWaypoint) } +
+        liveWaypoints.filter { it != onTop }.map { marker(it.point, liveWaypoint) }
+
+internal fun MarkerSymbols.puckDot(at: TrackPoint?): List<MarkerInterface> =
+    listOfNotNull(at?.let { marker(it, puck) })
+
+internal fun MarkerSymbols.selectedDot(at: TrackPoint?): List<MarkerInterface> =
+    listOfNotNull(at?.let { marker(it, marker) })
+
+internal fun MarkerSymbols.onTopPin(onTop: Waypoint?, liveWaypoints: List<Waypoint>): List<MarkerInterface> =
+    listOfNotNull(onTop?.let { marker(it.point, if (it in liveWaypoints) liveWaypoint else trackWaypoint) })
 
 private const val MARKER_RING_WIDTH_DP = 1.5f
 
@@ -143,7 +162,7 @@ private const val PIN_RADIUS_DP = 14f
 
 internal const val PIN_TIP_LENGTH_DP = 24.75f
 
-// Thicker than the dots': it alone lifts the dark pin off dark-mode land.
+// Thicker than the dots': it separates the pin from its own line, which shares its colour.
 private const val PIN_RING_WIDTH_DP = 2.5f
 
 private const val PIN_HOLE_RATIO = 0.4f
@@ -153,9 +172,6 @@ internal val WaypointPinHeadRadius = (PIN_RADIUS_DP + PIN_RING_WIDTH_DP).dp
 
 /** White in both themes: a surface-coloured ring vanished against dark-mode land. */
 private val MARKER_RING = Color.White
-
-// Grey so a pin never reads as one track's. Dark in both themes: a light one glared at night.
-private val WAYPOINT_GREY = Color(0xFF424242)
 
 private const val PUCK_HALO_RADIUS_DP = 14f
 

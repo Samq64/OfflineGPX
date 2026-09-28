@@ -252,9 +252,6 @@ fun MapScreen(
         (drawable + listOfNotNull(unlisted)).map { it.toOverlay(palette.slot(it.colorIndex)) }
     }
 
-    // Only the recording's and the focused track's waypoints.
-    val mapWaypoints = ((recording as? RecordingState.Active)?.waypoints ?: emptyList()) +
-        (focusedTrack?.track?.waypoints ?: emptyList())
 
     val liveOverlay = remember(trace, liveColor) {
         if (trace.points.isEmpty()) {
@@ -442,7 +439,9 @@ fun MapScreen(
                     ?: MaterialTheme.colorScheme.primary,
                 showPuck = recording is RecordingState.Active,
                 puckColor = liveColor,
-                waypoints = mapWaypoints,
+                // Only the focused track's and the recording's.
+                trackWaypoints = focusedTrack?.track?.waypoints.orEmpty(),
+                liveWaypoints = (recording as? RecordingState.Active)?.waypoints.orEmpty(),
                 onSelect = { trackId, index ->
                     // An open note takes the first tap, so closing it never moves the marker.
                     if (tappedWaypoint != null) tappedWaypoint = null
