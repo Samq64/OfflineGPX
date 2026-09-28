@@ -67,10 +67,11 @@ class MapExtentTest {
                 basemaps = listOf(basemap(south = -6.0, west = -2.0, north = 3.0, east = 6.0)),
             )
         )
-        assertEquals(-6.0, extent.minLatitude)
-        assertEquals(7.5, extent.maxLatitude)
-        assertEquals(-2.0, extent.minLongitude)
-        assertEquals(6.0, extent.maxLongitude)
+        // Tracks get 5% of their span each side; the map's edges stay where they are.
+        assertEquals(-6.0, extent.minLatitude, 1e-6)
+        assertEquals(7.525, extent.maxLatitude, 1e-6)
+        assertEquals(-2.0, extent.minLongitude, 1e-6)
+        assertEquals(6.0, extent.maxLongitude, 1e-6)
     }
 
     @Test
@@ -78,8 +79,8 @@ class MapExtentTest {
         val extent = assertNotNull(
             extentOf(routes = emptyList(), liveRoute = route(1.0 to 1.0, 2.0 to 2.0), basemaps = emptyList())
         )
-        assertEquals(1.0, extent.minLatitude)
-        assertEquals(2.0, extent.maxLatitude)
+        assertEquals(0.95, extent.minLatitude, 1e-6)
+        assertEquals(2.05, extent.maxLatitude, 1e-6)
     }
 
     @Test

@@ -54,8 +54,9 @@ internal fun Map.screenPosition(point: TrackPoint, position: MapPosition = mapPo
 }
 
 /**
- * Everything worth looking at, as one box: every route's extent and every shown map's.
- * Null when there's neither - a fresh install with nothing to frame.
+ * Everything worth looking at, as one box: every route's extent, with a margin so a line
+ * doesn't run along the screen edge, and every shown map's, flush - past a map's edge is
+ * nothing. Null when there's neither - a fresh install with nothing to frame.
  */
 internal fun extentOf(
     routes: List<RouteOverlay>,
@@ -77,7 +78,9 @@ internal fun extentOf(
     // position of every ride on the map each time the one being recorded grows.
     for (route in routes + listOfNotNull(liveRoute)) {
         val b = route.bounds ?: continue
-        include(b.southLatitude, b.westLongitude, b.northLatitude, b.eastLongitude)
+        val latPad = (b.northLatitude - b.southLatitude) * TRACK_MARGIN
+        val lonPad = (b.eastLongitude - b.westLongitude) * TRACK_MARGIN
+        include(b.southLatitude - latPad, b.westLongitude - lonPad, b.northLatitude + latPad, b.eastLongitude + lonPad)
     }
     for (map in basemaps) {
         val h = map.header
@@ -111,6 +114,9 @@ internal fun MapPosition.visibleBox(size: IntSize): BoundingBox {
         MercatorProjection.toLongitude(x + halfWidth),
     )
 }
+
+/** A track's margin on each side, as a fraction of its own span. */
+private const val TRACK_MARGIN = 0.05
 
 /**
  * [this] expanded outward by [fraction] of its own span on every side, for a pan clamp
