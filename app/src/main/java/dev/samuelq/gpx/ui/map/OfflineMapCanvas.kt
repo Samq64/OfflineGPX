@@ -1,5 +1,6 @@
 package dev.samuelq.gpx.ui.map
 
+import android.view.ViewConfiguration
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -100,6 +101,7 @@ fun OfflineMapCanvas(
     onCameraChange: (CameraSnapshot) -> Unit,
 ) {
     val density = LocalDensity.current
+    val context = LocalContext.current
     val layoutDirection = LocalLayoutDirection.current
 
     val mapView = rememberMapViewWithLifecycle()
@@ -156,30 +158,27 @@ fun OfflineMapCanvas(
     DisposableEffect(map) {
         val layers = map.layers()
         LayerGroup.entries.forEach { layers.addGroup(it.ordinal) }
-        // Taps are offered top layer first.
         layers.add(routeLayer.layer, LayerGroup.Routes.ordinal)
         layers.add(traceLayer.layer, LayerGroup.Trace.ordinal)
         listOf(belowPinsLayer, pinLayer, abovePinsLayer, onTopLayer)
             .forEach { layers.add(it, LayerGroup.Markers.ordinal) }
-        layers.add(
-            TapLayer(map) { x, y ->
-                // Waypoints first: a pin sits on its own track's line and is the more specific hit.
-                val waypointHit = pickWaypoint(
-                    x, y, map, currentWaypoints, pinHeadRadius, pinTipLength, onTop = currentFollowedWaypoint,
-                )
-                if (waypointHit != null) {
-                    selectWaypoint(waypointHit)
-                } else {
-                    val hit = pick(x, y, map, currentRoutes, currentLiveRoute, tapReach)
-                    if (hit == null) selectNothing() else select(hit.first, hit.second)
-                }
-            },
-            LayerGroup.Tap.ordinal,
-        )
+        val taps = TapDetector(ViewConfiguration.get(context)) { x, y ->
+            // Waypoints first: a pin sits on its own track's line and is the more specific hit.
+            val waypointHit = pickWaypoint(
+                x, y, map, currentWaypoints, pinHeadRadius, pinTipLength, onTop = currentFollowedWaypoint,
+            )
+            if (waypointHit != null) {
+                selectWaypoint(waypointHit)
+            } else {
+                val hit = pick(x, y, map, currentRoutes, currentLiveRoute, tapReach)
+                if (hit == null) selectNothing() else select(hit.first, hit.second)
+            }
+        }
+        map.input.bind(taps)
         // North-up and flat, so a route keeps a recognisable shape.
         map.eventLayer.enableRotation(false)
         map.eventLayer.enableTilt(false)
-        onDispose { }
+        onDispose { map.input.unbind(taps) }
     }
 
     // Before layout, so a newly followed pin (maybe from a scrub, with no camera move) is placed.

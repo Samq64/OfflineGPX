@@ -7,29 +7,73 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import org.oscim.core.Box
 import org.oscim.core.MapPosition
-import org.oscim.event.Gesture
-import org.oscim.event.GestureListener
+import android.view.ViewConfiguration
+import org.oscim.event.Event
 import org.oscim.event.MotionEvent
-import org.oscim.layers.Layer
 import org.oscim.layers.vector.VectorLayer
 import org.oscim.layers.vector.geometries.LineDrawable
 import org.oscim.layers.vector.geometries.Style
 import org.oscim.map.Map
+import kotlin.math.hypot
 
 /**
  * Stacking order, bottom first; VTM keeps each group together however late it's added.
  * Labels sit over routes (haloed) and so over the mask too, which is why [ClippedMapSource]
  * drops data past a file's edge before a name can be placed there.
  */
-internal enum class LayerGroup { Land, Tiles, Mask, Outline, Routes, Trace, Labels, Markers, Tap }
+internal enum class LayerGroup { Land, Tiles, Mask, Outline, Routes, Trace, Labels, Markers }
 
-/** A single tap anywhere on the map, in screen pixels. Double taps still zoom. */
-internal class TapLayer(map: Map, private val onTap: (x: Float, y: Float) -> Unit) :
-    Layer(map), GestureListener {
-    override fun onGesture(g: Gesture, e: MotionEvent): Boolean {
-        if (g !is Gesture.Tap) return false
-        onTap(e.x, e.y)
-        return true
+/**
+ * A single tap anywhere on the map, in screen pixels, reported on lift. Not VTM's `TAP`,
+ * which comes from onSingleTapConfirmed and so waits out the double-tap timeout on every
+ * tap. The second tap of a double tap is swallowed: VTM zooms on it, and a second
+ * selection would undo the first.
+ */
+internal class TapDetector(
+    config: ViewConfiguration,
+    private val onTap: (x: Float, y: Float) -> Unit,
+) : Map.InputListener {
+    private val slop = config.scaledTouchSlop.toFloat()
+    private val doubleTapSlop = config.scaledDoubleTapSlop.toFloat()
+
+    private var downX = 0f
+    private var downY = 0f
+    private var downAt = 0L
+    private var candidate = false
+    private var lastTapX = 0f
+    private var lastTapY = 0f
+    private var lastTapAt = Long.MIN_VALUE / 2
+
+    // VTM passes a null event.
+    override fun onInputEvent(e: Event?, motion: MotionEvent) {
+        when (motion.action and MotionEvent.ACTION_MASK) {
+            MotionEvent.ACTION_DOWN -> {
+                downX = motion.x
+                downY = motion.y
+                downAt = motion.time
+                candidate = true
+            }
+
+            MotionEvent.ACTION_MOVE ->
+                if (hypot(motion.x - downX, motion.y - downY) > slop) candidate = false
+
+            MotionEvent.ACTION_POINTER_DOWN, MotionEvent.ACTION_CANCEL -> candidate = false
+
+            MotionEvent.ACTION_UP -> {
+                if (!candidate || motion.time - downAt > ViewConfiguration.getLongPressTimeout()) return
+                candidate = false
+                val second = motion.time - lastTapAt <= ViewConfiguration.getDoubleTapTimeout() &&
+                    hypot(downX - lastTapX, downY - lastTapY) <= doubleTapSlop
+                if (second) {
+                    lastTapAt = Long.MIN_VALUE / 2
+                    return
+                }
+                lastTapX = downX
+                lastTapY = downY
+                lastTapAt = motion.time
+                onTap(downX, downY)
+            }
+        }
     }
 }
 
