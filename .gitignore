@@ -1,0 +1,11 @@
+# Allow-list: only the tool's own files. This branch gets checked out over the app's working
+# tree, whose leftovers (keystores, local.properties, build output, app/) must never land here.
+/*
+!/.gitignore
+!/README.md
+!/server.mjs
+!/bin/
+!/lib/
+!/public/
+!/docs/
+node_modules/
