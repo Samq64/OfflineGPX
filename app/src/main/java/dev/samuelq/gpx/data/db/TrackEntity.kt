@@ -9,8 +9,8 @@ import androidx.room.PrimaryKey
  * One row per track, over both sources, because the library and the stats screens want
  * them in one query.
  *
- * Holds no geometry - see the README. [location] is an app-private GPX file path, imported or
- * recorded. Everything else is the summary a list row shows, denormalised so a list row never reparses a file.
+ * Holds no geometry - see the README. [location] is the GPX file's path under filesDir,
+ * imported or recorded. Everything else is the summary a list row shows, denormalised so a list row never reparses a file.
  */
 @Entity(
     tableName = "tracks",

@@ -7,10 +7,12 @@ import androidx.room.DeleteColumn
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.AutoMigrationSpec
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [TrackEntity::class],
-    version = 2,
+    version = 3,
     exportSchema = true,
     autoMigrations = [AutoMigration(from = 1, to = 2, spec = GpxDatabase.DropUnreadColumns::class)],
 )
@@ -26,9 +28,20 @@ abstract class GpxDatabase : RoomDatabase() {
     @DeleteColumn(tableName = "tracks", columnName = "pointCount")
     class DropUnreadColumns : AutoMigrationSpec
 
+    /** Absolute track paths become relative to filesDir. */
+    private object RelativeLocations : Migration(2, 3) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "UPDATE tracks SET location = substr(location, instr(location, '/files/') + 7) " +
+                    "WHERE location LIKE '/%/files/%'"
+            )
+        }
+    }
+
     companion object {
         fun create(context: Context): GpxDatabase =
             Room.databaseBuilder(context.applicationContext, GpxDatabase::class.java, "gpx.db")
+                .addMigrations(RelativeLocations)
                 .build()
     }
 }

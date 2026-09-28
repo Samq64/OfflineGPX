@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.InputStream
 import java.io.FileNotFoundException
 import java.io.IOException
 import java.time.Instant
@@ -89,13 +90,13 @@ class GpxTrackRepository(
                 if (!appContext.contentResolver.copyInto(uri, destination)) {
                     throw TrackLoadException.Unreadable("No provider could open $uri")
                 }
-                read(destination.absolutePath, displayName, LoadedTrack.TRANSIENT_ID)
+                read(destination.inputStream(), displayName, LoadedTrack.TRANSIENT_ID)
             }.onFailure { destination.delete() }.getOrThrow()
 
             val entity = newEntity(destination, displayName, loaded.profile.stats)
             val id = dao.upsert(entity)
 
-            cached = destination.absolutePath to LoadedTrack(
+            cached = entity.location to LoadedTrack(
                 id = id,
                 displayName = displayName,
                 track = loaded.track,
@@ -117,7 +118,7 @@ class GpxTrackRepository(
                 }
             }
 
-            val loaded = read(entity.location, entity.displayName, id, entity.colorIndex)
+            val loaded = read(fileOf(entity).inputStream(), entity.displayName, id, entity.colorIndex)
             dao.touch(id, System.currentTimeMillis())
             cached = entity.location to loaded
             loaded
@@ -194,7 +195,7 @@ class GpxTrackRepository(
 
         val written = try {
             appContext.contentResolver.openOutputStream(target)?.use { sink ->
-                openStream(entity.location).use { it.copyTo(sink) }
+                fileOf(entity).inputStream().use { it.copyTo(sink) }
             } != null
         } catch (e: Exception) {
             Log.d(TAG, "Could not export ${entity.displayName}", e)
@@ -212,7 +213,10 @@ class GpxTrackRepository(
             cached?.let { (cachedLocation, track) ->
                 if (cachedLocation == location) return@runCatching track
             }
-            val loaded = read(location, displayNameOf(Uri.parse(location)), LoadedTrack.TRANSIENT_ID)
+            val uri = Uri.parse(location)
+            val stream = appContext.contentResolver.openInputStream(uri)
+                ?: throw TrackLoadException.Unreadable("No provider could open $location")
+            val loaded = read(stream, displayNameOf(uri), LoadedTrack.TRANSIENT_ID)
             cached = location to loaded
             loaded
         }.recoverFailure()
@@ -221,7 +225,7 @@ class GpxTrackRepository(
     override suspend fun geometry(id: Long): Result<LoadedTrack> = withContext(io) {
         runCatching {
             val entity = entity(id)
-            read(entity.location, entity.displayName, id, entity.colorIndex)
+            read(fileOf(entity).inputStream(), entity.displayName, id, entity.colorIndex)
         }.recoverFailure()
     }
 
@@ -237,7 +241,7 @@ class GpxTrackRepository(
             // Written into the file too: export is a byte copy, so a rename that never
             // touched it wouldn't survive one. Spliced rather than reparsed and rewritten
             // - see [GpxNameRewriter]. Via a temp file, so a crash never truncates it.
-            val file = File(entity.location)
+            val file = fileOf(entity)
             val temp = File(file.parentFile, "${file.name}.tmp")
             try {
                 if (GpxNameRewriter.rewrite(file, temp, trimmed) && !temp.renameTo(file)) {
@@ -280,7 +284,7 @@ class GpxTrackRepository(
         stats: TrackStats,
     ) = TrackEntity(
         colorIndex = leastUsedSlot(dao.colorUsage(), TrackEntity.PALETTE_SIZE),
-        location = file.absolutePath,
+        location = TrackFiles.location(appContext, file),
         displayName = displayName,
         trackName = stats.name,
         startedAtEpochMillis = stats.startedAt?.toEpochMilli(),
@@ -289,17 +293,14 @@ class GpxTrackRepository(
         totalSeconds = stats.totalDurationSeconds,
     )
 
-    /**
-     * Reads and analyses whatever [location] points at: an app-private path, or a
-     * transient `content://` URI for [openTransient].
-     */
+    /** Reads and analyses [stream], closing it. */
     private fun read(
-        location: String,
+        stream: InputStream,
         displayName: String,
         id: Long,
         colorIndex: Int = 0,
     ): LoadedTrack {
-        val track: Track = openStream(location).use(parser::parse)
+        val track: Track = stream.use(parser::parse)
         if (track.isEmpty) throw TrackLoadException.Empty("No track points in $displayName")
 
         val profile: TrackProfile = TrackAnalyzer.analyze(track)
@@ -312,17 +313,11 @@ class GpxTrackRepository(
         )
     }
 
-    private fun openStream(location: String) =
-        if (location.startsWith("/")) {
-            File(location).inputStream()
-        } else {
-            appContext.contentResolver.openInputStream(Uri.parse(location))
-                ?: throw TrackLoadException.Unreadable("No provider could open $location")
-        }
+    private fun fileOf(entity: TrackEntity) = TrackFiles.file(appContext, entity.location)
 
     /** Both sources are this app's own file now, so deleting the row deletes it. */
     private fun deleteFile(entity: TrackEntity) {
-        runCatching { File(entity.location).delete() }
+        runCatching { fileOf(entity).delete() }
     }
 
     private fun displayNameOf(uri: Uri): String = appContext.contentResolver.displayName(uri)

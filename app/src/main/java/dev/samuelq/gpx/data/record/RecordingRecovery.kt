@@ -5,7 +5,6 @@ import android.util.Log
 import dev.samuelq.gpx.core.analysis.TrackAnalyzer
 import dev.samuelq.gpx.core.analysis.TrackProfile
 import dev.samuelq.gpx.core.model.Track
-import dev.samuelq.gpx.data.track.TrackFiles
 import dev.samuelq.gpx.data.track.TrackRepository
 import dev.samuelq.gpx.data.track.defaultTrackName
 import kotlinx.coroutines.Dispatchers
@@ -35,7 +34,8 @@ class RecordingRecovery(
 ) {
     private val io = Dispatchers.IO
     private val appContext = context.applicationContext
-    private val dir: File get() = TrackFiles.recordingsDir(appContext)
+    // no_backup: a ride in progress on the old phone isn't a crash on the new one.
+    private val dir: File get() = File(appContext.noBackupFilesDir, "recording").apply { mkdirs() }
 
     /** The in-progress log. Fixed name: there is only ever one recording. */
     val liveLog: File get() = File(dir, LIVE_LOG)

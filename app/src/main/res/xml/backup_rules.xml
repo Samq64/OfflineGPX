@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 10-11: device transfer only, as in data_extraction_rules.xml. -->
+<full-backup-content>
+    <include domain="file" path="imports" requireFlags="deviceToDeviceTransfer" />
+    <include domain="file" path="recordings" requireFlags="deviceToDeviceTransfer" />
+    <include domain="file" path="maps" requireFlags="deviceToDeviceTransfer" />
+    <include domain="database" path="." requireFlags="deviceToDeviceTransfer" />
+    <include domain="sharedpref" path="settings.xml" requireFlags="deviceToDeviceTransfer" />
+</full-backup-content>

@@ -1,10 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Backup is off (android:allowBackup="false"), so nothing here is exercised today. It
-  exists to state the intent: the tracks database holds SAF URIs that are only valid on
-  the device that granted them, so it must never be copied off the device. Once recording
-  lands the `file` domain holds the user's own recordings, which is a stronger reason
-  again.
+  Android 12+. A new phone gets the library, maps and settings; nothing goes to the cloud.
+  backup_rules.xml is the same for Android 10-11.
 -->
 <data-extraction-rules>
     <cloud-backup>
@@ -14,9 +11,10 @@
         <exclude domain="sharedpref" />
     </cloud-backup>
     <device-transfer>
-        <exclude domain="root" />
-        <exclude domain="file" />
-        <exclude domain="database" />
-        <exclude domain="sharedpref" />
+        <include domain="file" path="imports" />
+        <include domain="file" path="recordings" />
+        <include domain="file" path="maps" />
+        <include domain="database" path="." />
+        <include domain="sharedpref" path="settings.xml" />
     </device-transfer>
 </data-extraction-rules>

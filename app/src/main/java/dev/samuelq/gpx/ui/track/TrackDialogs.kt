@@ -27,7 +27,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.core.content.FileProvider
 import dev.samuelq.gpx.R
 import dev.samuelq.gpx.data.gpx.GPX_MIME_TYPE
-import java.io.File
+import dev.samuelq.gpx.data.track.TrackFiles
 
 /**
  * Names a track, wherever the naming happens. One dialog for library rename and the
@@ -137,7 +137,7 @@ fun String.ensureGpxSuffix(): String =
  */
 fun shareTrackIntent(context: Context, location: String, trackName: String?, displayName: String): Intent {
     val uri = FileProvider.getUriForFile(
-        context, "${context.packageName}.fileprovider", File(location),
+        context, "${context.packageName}.fileprovider", TrackFiles.file(context, location),
     )
     val send = Intent(Intent.ACTION_SEND).apply {
         type = GPX_MIME_TYPE
