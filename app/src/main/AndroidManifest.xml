@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
+    xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!--
       Files - tracks and offline map files alike - are picked through SAF, then copied
@@ -25,22 +24,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <!--
-      Network access is denied structurally, not by vigilance: the manifest merger folds in
-      every dependency's permissions, so a library can add INTERNET without anyone writing
-      it. tools:node="remove" strips it back out.
-
-      Nothing declares these today - VTM ships as plain jars with no manifest - so
-      these removals are standing guards rather than active repairs. They stay because the
-      cost is three lines and the failure they prevent is silent and permanent.
-
-      Nothing here relies on anyone remembering to check: CheckNoNetworkPermissions in
-      app/build.gradle.kts transforms the merged manifest and fails the build if any of the
-      three survives into it.
-    -->
-    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" tools:node="remove" />
-    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" tools:node="remove" />
+    <!-- No network permission: CheckNoNetworkPermissions in app/build.gradle.kts fails the
+         build if a dependency merges one in. -->
 
     <!-- GPS is required for the recorder, but the viewer works on any device. -->
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />
@@ -53,7 +38,6 @@
         android:enableOnBackInvokedCallback="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
-        android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.GpxViewer">
 
@@ -61,8 +45,6 @@
             android:name=".MainActivity"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode|density|fontScale|smallestScreenSize"
             android:exported="true"
-            android:label="@string/app_name"
-            android:theme="@style/Theme.GpxViewer"
             android:windowSoftInputMode="adjustResize">
 
             <intent-filter>
@@ -75,7 +57,6 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:scheme="content" />
-                <data android:scheme="file" />
                 <data android:mimeType="application/gpx+xml" />
                 <data android:mimeType="application/xml" />
                 <data android:mimeType="text/xml" />
@@ -91,7 +72,6 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:scheme="content" />
-                <data android:scheme="file" />
                 <data android:host="*" />
                 <data android:mimeType="*/*" />
                 <data android:pathPattern=".*\\.gpx" />

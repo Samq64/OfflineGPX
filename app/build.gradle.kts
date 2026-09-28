@@ -41,9 +41,8 @@ abstract class CheckNoNetworkPermissions : DefaultTask() {
                     declared.forEach { appendLine("    $it") }
                     appendLine()
                     appendLine("This app is offline by construction. A dependency most likely")
-                    appendLine("declared one of these and app/src/main/AndroidManifest.xml has no")
-                    appendLine("matching tools:node=\"remove\" for it.")
-                    appendLine("Either add the removal, or drop the dependency.")
+                    appendLine("declared one of these. Drop the dependency, or strip the")
+                    appendLine("permission with tools:node=\"remove\" in AndroidManifest.xml.")
                 }
             )
         }
@@ -107,14 +106,6 @@ android {
         includeInBundle = false
     }
 
-    testOptions {
-        unitTests {
-            // android.jar is stubbed for unit tests, so any framework call throws
-            // "not mocked" by default. The tests here are pure Kotlin plus kxml2, but
-            // this keeps an incidental android.util.Log call from failing a green test.
-            isReturnDefaultValues = true
-        }
-    }
 }
 
 androidComponents {
@@ -139,27 +130,28 @@ ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
 }
 
+// vtm-android's SVG symbol decoder. The generated render theme has no SVG symbols.
+configurations.configureEach {
+    exclude(group = "com.caverock", module = "androidsvg")
+}
+
 dependencies {
-    implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.core)
     implementation(libs.androidx.activity.compose)
-    implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
 
     implementation(libs.androidx.room.runtime)
-    implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
 
     implementation(libs.androidx.navigation.compose)
-    implementation(libs.kotlinx.serialization.json)
+    implementation(libs.kotlinx.serialization.core)
 
     // Renders the basemap from a .map file the user supplied. Ships as plain jars, so it
     // declares no permissions of its own and has no manifest to merge.
     implementation(libs.vtm)
     implementation(libs.vtm.android)
     implementation(libs.vtm.jts)
-    implementation(libs.jts.core)
-    implementation(libs.androidsvg)
     // The tessellator, one jar per ABI; AGP packages the .so inside each.
     listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64").forEach { abi ->
         runtimeOnly(variantOf(libs.vtm.android) { classifier("natives-$abi") })
@@ -168,11 +160,8 @@ dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
-    implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.core)
-
-    debugImplementation(libs.androidx.compose.ui.tooling)
 
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.kxml2)
