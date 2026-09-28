@@ -8,7 +8,6 @@ import android.location.LocationManager
 import android.os.Bundle
 import android.os.Looper
 import androidx.core.content.getSystemService
-import dev.samuelq.gpx.core.analysis.Fix
 import dev.samuelq.gpx.core.model.TrackPoint
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -38,13 +37,13 @@ class LocationSource(context: Context) {
      *   first, so a throw here is a bug rather than a user decision.
      */
     @SuppressLint("MissingPermission")
-    fun fixes(onUnavailable: () -> Unit): Flow<Fix> = callbackFlow {
+    fun fixes(onUnavailable: () -> Unit): Flow<TrackPoint> = callbackFlow {
         val locationManager = manager
             ?: throw IllegalStateException("No LocationManager on this device")
 
         val listener = object : LocationListener {
             override fun onLocationChanged(location: Location) {
-                trySend(location.toFix())
+                trySend(location.toTrackPoint())
             }
 
             // Required on API < 30 and harmless above it; without them the platform
@@ -75,15 +74,13 @@ class LocationSource(context: Context) {
         const val INTERVAL_MILLIS = 1000L
 
         /** Everything is passed on, believable or not - filtering is [FixFilter]'s job. */
-        fun Location.toFix() = Fix(
-            point = TrackPoint(
-                latitude = latitude,
-                longitude = longitude,
-                // hasAltitude() is false indoors and on some fixes; a null reads as "not
-                // recorded", which the elevation chart already handles.
-                elevation = if (hasAltitude()) altitude else null,
-                time = Instant.ofEpochMilli(time.takeIf { it > 0 } ?: System.currentTimeMillis()),
-            ),
+        fun Location.toTrackPoint() = TrackPoint(
+            latitude = latitude,
+            longitude = longitude,
+            // hasAltitude() is false indoors and on some fixes; a null reads as "not
+            // recorded", which the elevation chart already handles.
+            elevation = if (hasAltitude()) altitude else null,
+            time = Instant.ofEpochMilli(time.takeIf { it > 0 } ?: System.currentTimeMillis()),
             accuracyMeters = if (hasAccuracy()) accuracy.toDouble() else null,
         )
     }

@@ -7,7 +7,7 @@ package dev.samuelq.gpx.core.analysis
  * Fed on *every* reading, including ones the filter threw away - that's what lets it decay
  * to zero when you stop, rather than freezing at the last committed point's speed.
  */
-class SpeedWindow(private val windowSeconds: Double = TrackAnalyzer.SPEED_WINDOW_SECONDS) {
+class SpeedWindow {
 
     private val times = ArrayDeque<Double>()
     private val distances = ArrayDeque<Double>()
@@ -23,7 +23,7 @@ class SpeedWindow(private val windowSeconds: Double = TrackAnalyzer.SPEED_WINDOW
 
         // Keep the oldest sample that still spans the window, so the span never shrinks
         // below it while samples are arriving.
-        while (times.size > 2 && seconds - times[1] >= windowSeconds) {
+        while (times.size > 2 && seconds - times[1] >= TrackAnalyzer.SPEED_WINDOW_SECONDS) {
             times.removeFirst()
             distances.removeFirst()
         }

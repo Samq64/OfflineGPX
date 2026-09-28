@@ -8,7 +8,7 @@ import android.util.Log
 import androidx.annotation.StringRes
 import dev.samuelq.gpx.GpxApplication
 import dev.samuelq.gpx.R
-import dev.samuelq.gpx.core.analysis.Fix
+import dev.samuelq.gpx.core.model.TrackPoint
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -174,9 +174,8 @@ class RecordingService : Service() {
         controller.emit(RecordingEvent.Failed(R.string.record_location_lost))
     }
 
-    private fun onFix(fix: Fix) {
+    private fun onFix(fix: TrackPoint) {
         val session = session ?: return
-        if (session.paused) return
         session.onFix(fix)?.let { point ->
             wal?.append(point)
             if (session.traceDue) publishTrace(session)
@@ -254,7 +253,7 @@ class RecordingService : Service() {
                 return
             }
             log.close()
-            val track = RecordingWal.recover(log.file, name = null)
+            val track = RecordingWal.recover(log.file)
             // Nothing in the log, or fixes that never went anywhere - either way not the
             // user's decision, so neither is called "discarded".
             if (track == null || !RecordingRecovery.isSaveable(session.distanceMeters)) {

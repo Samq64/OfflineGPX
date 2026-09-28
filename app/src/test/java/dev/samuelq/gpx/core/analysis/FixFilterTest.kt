@@ -13,12 +13,10 @@ class FixFilterTest {
     private val origin = Instant.parse("2026-09-18T09:00:00Z")
 
     /** Metres north of the origin, as a fix at [second] with [accuracy] metres of error. */
-    private fun fix(second: Long, metersNorth: Double, accuracy: Double? = 5.0) = Fix(
-        point = TrackPoint(
-            latitude = 51.5 + metersNorth / 111_320.0,
-            longitude = -0.1,
-            time = origin.plusSeconds(second),
-        ),
+    private fun fix(second: Long, metersNorth: Double, accuracy: Double? = 5.0) = TrackPoint(
+        latitude = 51.5 + metersNorth / 111_320.0,
+        longitude = -0.1,
+        time = origin.plusSeconds(second),
         accuracyMeters = accuracy,
     )
 

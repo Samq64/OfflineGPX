@@ -1,6 +1,5 @@
 package dev.samuelq.gpx.data.record
 
-import dev.samuelq.gpx.core.analysis.Fix
 import dev.samuelq.gpx.core.model.TrackPoint
 import java.time.Instant
 import kotlin.test.Test
@@ -23,12 +22,10 @@ class RecordingSessionTest {
     )
 
     /** Metres north of the origin, as a fix at [second]. */
-    private fun fix(second: Long, metersNorth: Double, accuracy: Double = 5.0) = Fix(
-        point = TrackPoint(
-            latitude = 51.5 + metersNorth / 111_320.0,
-            longitude = -0.1,
-            time = origin.plusSeconds(second),
-        ),
+    private fun fix(second: Long, metersNorth: Double, accuracy: Double = 5.0) = TrackPoint(
+        latitude = 51.5 + metersNorth / 111_320.0,
+        longitude = -0.1,
+        time = origin.plusSeconds(second),
         accuracyMeters = accuracy,
     )
 

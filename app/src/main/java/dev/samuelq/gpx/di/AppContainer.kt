@@ -9,7 +9,6 @@ import dev.samuelq.gpx.data.map.MapStore
 import dev.samuelq.gpx.data.record.RecordingController
 import dev.samuelq.gpx.data.record.RecordingRecovery
 import dev.samuelq.gpx.data.settings.SettingsRepository
-import dev.samuelq.gpx.data.track.GpxTrackRepository
 import dev.samuelq.gpx.data.track.TrackRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -17,13 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
-/**
- * Manual dependency wiring, for a graph of a handful of objects.
- *
- * Hilt becomes worth its code generation when this stops fitting on one screen - the
- * recording service reaches it through the Application rather than being injected, which
- * is the one place the lack of a container shows.
- */
+/** Manual dependency wiring: the graph is a handful of objects, too few for Hilt. */
 class AppContainer(context: Context) {
 
     private val appContext = context.applicationContext
@@ -33,9 +26,7 @@ class AppContainer(context: Context) {
 
     private val database by lazy { GpxDatabase.create(appContext) }
 
-    val trackRepository: TrackRepository by lazy {
-        GpxTrackRepository(context = appContext, dao = database.trackDao())
-    }
+    val trackRepository by lazy { TrackRepository(appContext, database.trackDao()) }
 
     /**
      * Shared by the recording service and the screens watching it. Held here because it

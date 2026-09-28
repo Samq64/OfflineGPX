@@ -1,6 +1,5 @@
 package dev.samuelq.gpx.data.record
 
-import dev.samuelq.gpx.core.analysis.Fix
 import dev.samuelq.gpx.core.analysis.FixFilter
 import dev.samuelq.gpx.core.analysis.SpeedWindow
 import dev.samuelq.gpx.core.analysis.haversineMeters
@@ -62,13 +61,12 @@ internal class RecordingSession(
      * One reading. Returns the point to log, or null when [FixFilter] rejects it or the
      * ride is paused.
      */
-    fun onFix(fix: Fix): TrackPoint? {
+    fun onFix(fix: TrackPoint): TrackPoint? {
         if (paused) return null
-        val at = fix.point.time ?: return null
+        val at = fix.time ?: return null
         lastAccuracyMeters = fix.accuracyMeters
 
-        // The filter judges bare position; the accuracy is stamped on afterwards, purely
-        // to write down for whatever reopens the file later.
+        // A still point is the anchor re-stamped, so it gets this fix's accuracy, not the anchor's.
         val point = filter.pointFor(fix)?.copy(accuracyMeters = fix.accuracyMeters)
         if (point != null) {
             if (startedAt == null) startedAt = clock()

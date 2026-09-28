@@ -74,6 +74,7 @@ fun GpxApp(
                     onFocusConsumed = { entry.savedStateHandle[FocusRequest.KEY] = null },
                     onOpenList = { navController.open(LibraryRoute) },
                     onOpenSettings = { navController.open(SettingsRoute) },
+                    recorder = container.recordingController,
                 )
             }
 

@@ -5,19 +5,6 @@ import java.time.Instant
 import kotlin.math.max
 
 /**
- * One raw reading from the positioning hardware, before anything decides to believe it.
- *
- * Distinct from [TrackPoint], which is what the recorder has decided to write down: this is
- * the reading that decision was made from, which for the "still" grace period in
- * [FixFilter.pointFor] is not the same as the point it ends up stamped onto.
- */
-data class Fix(
-    val point: TrackPoint,
-    /** Horizontal accuracy in metres at 68% confidence, or null if the source gave none. */
-    val accuracyMeters: Double?,
-)
-
-/**
  * Decides which fixes are a position and which are noise.
  *
  * Without this a phone on a table records a ride: a stationary GPS wanders inside its own
@@ -48,35 +35,35 @@ class FixFilter(
     }
 
     /**
-     * The point to record, or null if this reading establishes nothing worth writing. Not
-     * always *this* fix - see class doc.
+     * The point to record, or null if [fix] establishes nothing worth writing. Not always
+     * [fix] itself - see class doc.
      */
-    fun pointFor(fix: Fix): TrackPoint? {
+    fun pointFor(fix: TrackPoint): TrackPoint? {
         val accuracy = fix.accuracyMeters
 
         // Only the accuracy test needs a number; a source reporting none still gets the
         // displacement floor.
         if (accuracy != null && accuracy > maxAccuracyMeters) return null
 
-        val at = fix.point.time
+        val at = fix.time
         val previous = lastAccepted
         if (previous == null) {
-            lastAccepted = fix.point
+            lastAccepted = fix
             lastRecordedAt = at
-            return fix.point
+            return fix
         }
 
-        val meters = haversineMeters(previous, fix.point)
-        val seconds = secondsBetween(previous, fix.point)
+        val meters = haversineMeters(previous, fix)
+        val seconds = secondsBetween(previous, fix)
 
         // A jump nothing this app is for could have made. Usually a provider switching
         // between a real fix and a cell-tower estimate, which lands kilometres away.
         if (seconds > 0.0 && meters / seconds > MAX_PLAUSIBLE_SPEED_MPS) return null
 
         if (meters >= max(minDisplacementMeters, accuracy ?: 0.0)) {
-            lastAccepted = fix.point
+            lastAccepted = fix
             lastRecordedAt = at
-            return fix.point
+            return fix
         }
 
         // Stationary. The anchor doesn't move, so two small steps in the same direction

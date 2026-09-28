@@ -12,7 +12,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.core.content.ContextCompat
 import dev.samuelq.gpx.R
-import dev.samuelq.gpx.ui.record.RecordViewModel
+import dev.samuelq.gpx.data.record.RecordingController
 import kotlinx.coroutines.launch
 
 /**
@@ -20,7 +20,7 @@ import kotlinx.coroutines.launch
  * screen explaining itself first. [say] explains a refusal.
  */
 @Composable
-internal fun rememberStartRecording(recorder: RecordViewModel, say: (String) -> Unit): () -> Unit {
+internal fun rememberStartRecording(recorder: RecordingController, say: (String) -> Unit): () -> Unit {
     val context = LocalContext.current
     val locationOff = stringResource(R.string.record_location_off)
     val locationDenied = stringResource(R.string.record_location_denied)

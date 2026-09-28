@@ -86,7 +86,7 @@ class RecordingRecovery(
 
     /** One claimed log, or null - deleting it - when there is nothing worth saving. */
     private fun read(claimed: File): AbandonedRecording? {
-        val track = RecordingWal.recover(claimed, name = null)
+        val track = RecordingWal.recover(claimed)
         val profile = track?.let(TrackAnalyzer::analyze)
         if (track == null || profile == null || !isSaveable(profile.stats.distanceMeters)) {
             claimed.delete()

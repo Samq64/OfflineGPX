@@ -76,7 +76,7 @@ class MapViewModel(
 
     /**
      * The in-progress recording's geometry, drawn alongside saved tracks - its numbers
-     * belong to [dev.samuelq.gpx.ui.record.RecordViewModel], its shape to the map.
+     * belong to [RecordingController.state], its shape to the map.
      */
     val trace: StateFlow<LiveTrace> = controller.trace
 

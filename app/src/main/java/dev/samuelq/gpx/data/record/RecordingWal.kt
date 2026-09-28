@@ -95,7 +95,7 @@ class RecordingWal private constructor(
          * Tolerant on purpose: a line half-written when the power went is dropped rather
          * than failing the recovery of everything before it.
          */
-        fun recover(file: File, name: String?): Track? {
+        fun recover(file: File): Track? {
             if (!file.exists()) return null
 
             val segments = mutableListOf<TrackSegment>()
@@ -119,7 +119,7 @@ class RecordingWal private constructor(
 
             val usable = segments.filter { it.points.isNotEmpty() }
             if (usable.isEmpty()) return null
-            return Track(name = name, segments = usable, waypoints = waypoints)
+            return Track(name = null, segments = usable, waypoints = waypoints)
         }
 
         private fun parsePoint(line: String): TrackPoint? {

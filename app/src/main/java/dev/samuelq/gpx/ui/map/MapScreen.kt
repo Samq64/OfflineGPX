@@ -67,11 +67,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.samuelq.gpx.R
 import dev.samuelq.gpx.core.model.Waypoint
+import dev.samuelq.gpx.data.record.RecordingController
 import dev.samuelq.gpx.data.record.RecordingEvent
 import dev.samuelq.gpx.data.record.RecordingState
 import dev.samuelq.gpx.data.track.LoadedTrack
 import dev.samuelq.gpx.ui.record.DiscardRecordingDialog
-import dev.samuelq.gpx.ui.record.RecordViewModel
 import dev.samuelq.gpx.ui.record.RecoveredRecordingDialog
 import dev.samuelq.gpx.ui.theme.routePalette
 import dev.samuelq.gpx.ui.theme.slot
@@ -98,8 +98,8 @@ fun MapScreen(
     onFocusConsumed: () -> Unit,
     onOpenList: () -> Unit,
     onOpenSettings: () -> Unit,
+    recorder: RecordingController,
     viewModel: MapViewModel = viewModel(factory = MapViewModel.Factory),
-    recorder: RecordViewModel = viewModel(factory = RecordViewModel.Factory),
 ) {
     val context = LocalContext.current
     // Not `context.getString`: the context a long-lived collector captured is the one it

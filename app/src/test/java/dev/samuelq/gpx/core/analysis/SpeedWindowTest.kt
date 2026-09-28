@@ -21,7 +21,7 @@ class SpeedWindowTest {
 
     @Test
     fun `averages over the window rather than the last hop`() {
-        val window = SpeedWindow(windowSeconds = 10.0)
+        val window = SpeedWindow()
         // A steady 5 m/s with a single wild sample in the middle of it.
         repeat(11) { second ->
             val distance = second * 5.0 + if (second == 5) 30.0 else 0.0
@@ -37,7 +37,7 @@ class SpeedWindowTest {
      */
     @Test
     fun `decays to zero when distance stops growing`() {
-        val window = SpeedWindow(windowSeconds = 10.0)
+        val window = SpeedWindow()
         repeat(10) { window.add(it.toDouble(), it * 5.0) }
         assertTrue(assertNotNull(window.speedMps) > 4.0)
 
@@ -47,7 +47,7 @@ class SpeedWindowTest {
 
     @Test
     fun `keeps at least the window's worth of samples`() {
-        val window = SpeedWindow(windowSeconds = 10.0)
+        val window = SpeedWindow()
         repeat(100) { window.add(it.toDouble(), it * 2.0) }
         // Steady 2 m/s throughout, so however it trims, the answer is 2.
         assertEquals(2.0, assertNotNull(window.speedMps), 0.001)
