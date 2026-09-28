@@ -1,5 +1,6 @@
 package dev.samuelq.gpx.ui.track
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -242,85 +243,81 @@ fun TrackSheet(
                 Spacer(Modifier.height(16.dp))
             }
 
-            ChartSection(
-                title = stringResource(R.string.chart_speed),
-                modifier = Modifier.padding(horizontal = SheetPadding),
+            // The two charts differ only in what they plot.
+            @Composable
+            fun Profile(
+                @StringRes title: Int,
+                @StringRes empty: Int,
+                available: Boolean,
+                y: FloatArray,
+                color: Color,
+                perUnit: Float,
+                fromZero: Boolean,
+                axisFor: (step: Float) -> (Float) -> String,
+                formatValue: (Float) -> String,
             ) {
-                if (!profile.hasTime) {
-                    Unavailable(stringResource(R.string.chart_speed_empty))
-                } else {
-                    val series = remember(profile, useTimeAxis, chartColors) {
+                ChartSection(
+                    title = stringResource(title),
+                    modifier = Modifier.padding(horizontal = SheetPadding),
+                ) {
+                    if (!available) {
+                        Unavailable(stringResource(empty))
+                        return@ChartSection
+                    }
+                    val series = remember(profile, useTimeAxis, color) {
                         ChartSeries(
                             x = xValues,
-                            y = profile.speedMps,
+                            y = y,
                             segmentStartIndices = profile.segmentStartIndices,
-                            color = chartColors.speed,
+                            color = color,
                         )
                     }
-                    val yScale = remember(series, formatters) {
-                        series.yScale(formatters.speedPerMps, fromZero = true)
-                    }
+                    val yScale = remember(series, perUnit) { series.yScale(perUnit, fromZero) }
                     ProfileChart(
                         series = series,
                         xScale = xScale,
                         yScale = yScale,
                         formatX = formatX,
-                        formatY = remember(formatters, yScale) {
-                            formatters.speedAxisFor(yScale.step)
-                        },
+                        formatY = remember(formatters, yScale) { axisFor(yScale.step) },
                         selectedIndex = selectedIndex,
                         onSelectedIndexChange = onSelectedIndexChange,
                         onZoom = onZoom,
                         axisGroup = axisGroup,
-                        contentDescription = stringResource(R.string.chart_speed),
+                        contentDescription = stringResource(title),
                         breakLabel = breakLabel,
-                        formatValue = speedValue,
+                        formatValue = formatValue,
                         formatPosition = positionValue,
                     )
                 }
             }
+
+            Profile(
+                title = R.string.chart_speed,
+                empty = R.string.chart_speed_empty,
+                available = profile.hasTime,
+                y = profile.speedMps,
+                color = chartColors.speed,
+                perUnit = formatters.speedPerMps,
+                fromZero = true,
+                axisFor = formatters::speedAxisFor,
+                formatValue = speedValue,
+            )
 
             Spacer(Modifier.height(12.dp))
 
-            ChartSection(
-                title = stringResource(R.string.chart_elevation),
-                modifier = Modifier.padding(horizontal = SheetPadding),
-            ) {
-                if (!profile.hasElevation) {
-                    Unavailable(stringResource(R.string.chart_elevation_empty))
-                } else {
-                    val series = remember(profile, useTimeAxis, chartColors) {
-                        ChartSeries(
-                            x = xValues,
-                            y = profile.elevationMeters,
-                            segmentStartIndices = profile.segmentStartIndices,
-                            color = chartColors.elevation,
-                        )
-                    }
-                    val yScale = remember(series, formatters) {
-                        series.yScale(formatters.elevationPerMeter)
-                    }
-                    ProfileChart(
-                        series = series,
-                        xScale = xScale,
-                        yScale = yScale,
-                        formatX = formatX,
-                        // A flat towpath gets half-metre gridlines, which whole metres
-                        // cannot label without repeating themselves.
-                        formatY = remember(formatters, yScale) {
-                            formatters.elevationAxisFor(yScale.step)
-                        },
-                        selectedIndex = selectedIndex,
-                        onSelectedIndexChange = onSelectedIndexChange,
-                        onZoom = onZoom,
-                        axisGroup = axisGroup,
-                        contentDescription = stringResource(R.string.chart_elevation),
-                        breakLabel = breakLabel,
-                        formatValue = elevationValue,
-                        formatPosition = positionValue,
-                    )
-                }
-            }
+            // A flat towpath gets half-metre gridlines, which whole metres can't label
+            // without repeating themselves - hence the step-aware axis.
+            Profile(
+                title = R.string.chart_elevation,
+                empty = R.string.chart_elevation_empty,
+                available = profile.hasElevation,
+                y = profile.elevationMeters,
+                color = chartColors.elevation,
+                perUnit = formatters.elevationPerMeter,
+                fromZero = false,
+                axisFor = formatters::elevationAxisFor,
+                formatValue = elevationValue,
+            )
 
             Spacer(Modifier.height(32.dp))
         }
@@ -356,64 +353,11 @@ private fun SheetTitle(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
-        actions?.let { TrackMenu(it) }
+        actions?.let { TrackMenu(it.onRename, it.onShare, it.onHide, it.onDelete) }
         onClose?.let {
             IconButton(onClick = it) {
                 Icon(Icons.Default.Close, stringResource(R.string.track_close))
             }
-        }
-    }
-}
-
-/**
- * Rename, export, hide, delete - the whole of managing a track, behind one glyph. Also
- * here, not just in the library, since these are decisions made while looking at the ride.
- */
-@Composable
-private fun TrackMenu(actions: TrackActions) {
-    var open by remember { mutableStateOf(false) }
-
-    Box {
-        IconButton(onClick = { open = true }) {
-            Icon(Icons.Default.MoreVert, stringResource(R.string.track_manage))
-        }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.library_rename)) },
-                onClick = {
-                    open = false
-                    actions.onRename()
-                },
-            )
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.library_share)) },
-                onClick = {
-                    open = false
-                    actions.onShare()
-                },
-            )
-            // Takes the line off the map and the sheet with it, which is the only reading
-            // of "hide" that leaves the screen in a state that makes sense.
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.track_hide)) },
-                onClick = {
-                    open = false
-                    actions.onHide()
-                },
-            )
-            HorizontalDivider()
-            DropdownMenuItem(
-                text = {
-                    Text(
-                        text = stringResource(R.string.library_delete),
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                },
-                onClick = {
-                    open = false
-                    actions.onDelete()
-                },
-            )
         }
     }
 }

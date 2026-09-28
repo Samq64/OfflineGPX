@@ -113,7 +113,7 @@ private fun scaleLabel(meters: Double, units: UnitSystem): String = when {
  * The largest round distance that still fits: 1, 2 and 5 at every power, as every map
  * scale has used forever.
  */
-internal fun roundDistance(maxMeters: Double, units: UnitSystem): Double {
+private fun roundDistance(maxMeters: Double, units: UnitSystem): Double {
     if (maxMeters <= 0.0) return 0.0
 
     // Imperial is chosen in feet below a mile and in miles above it, because a scale bar
@@ -135,14 +135,8 @@ internal fun roundDistance(maxMeters: Double, units: UnitSystem): Double {
     return snapped * power * unit
 }
 
-/** The scale bar, tucked into its own corner over the map. */
-@Composable
-fun MapChrome(metersPerPixel: State<Double>, modifier: Modifier = Modifier) {
-    ScaleBar(metersPerPixel, modifier = modifier.padding(start = 12.dp))
-}
-
 /** Wide enough to be worth reading, narrow enough to leave the map alone. */
-internal val MaxBarWidth = 96.dp
+private val MaxBarWidth = 96.dp
 private val BarHeight = 6.dp
 
 private const val METERS_PER_MILE = Formatters.METERS_PER_MILE

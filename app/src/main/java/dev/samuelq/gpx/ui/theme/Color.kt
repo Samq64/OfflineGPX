@@ -132,7 +132,6 @@ data class ChartColors(
     val grid: Color,
     val axis: Color,
     val label: Color,
-    val surface: Color,
 ) {
     companion object {
         val Light = ChartColors(
@@ -141,7 +140,6 @@ data class ChartColors(
             grid = Hairline,
             axis = Baseline,
             label = Muted,
-            surface = SurfaceLight,
         )
 
         val Dark = ChartColors(
@@ -150,7 +148,6 @@ data class ChartColors(
             grid = HairlineDark,
             axis = BaselineDark,
             label = Muted,
-            surface = SurfaceDark,
         )
     }
 }

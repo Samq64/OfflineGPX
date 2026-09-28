@@ -90,26 +90,26 @@ fun ProfileChart(
     selectedIndex: Int?,
     onSelectedIndexChange: (Int?) -> Unit,
     contentDescription: String,
-    modifier: Modifier = Modifier,
     /**
      * Names a gap in the data, given its width in x units, or null to leave it unnamed. An
      * unexplained hole otherwise reads as a rendering fault rather than a fact about the ride.
      */
-    breakLabel: ((Float) -> String)? = null,
+    breakLabel: ((Float) -> String)?,
     /**
      * The scrubbed value *with* its unit, for the tooltip. Distinct from [formatY], which
      * labels bare axis ticks read in a column, not on their own.
      */
-    formatValue: ((Float) -> String)? = null,
+    formatValue: (Float) -> String,
     /** The scrubbed position with its unit, shown in the same tooltip ahead of the value. */
-    formatPosition: ((Float) -> String)? = null,
+    formatPosition: (Float) -> String,
     /**
      * A two-finger pinch or pan, as (anchor, zoom, pan) - anchor and pan as fractions of
-     * the plot's width, for [zoomView]. Null to leave the chart unzoomable.
+     * the plot's width, for [zoomView].
      */
-    onZoom: ((Float, Float, Float) -> Unit)? = null,
+    onZoom: (Float, Float, Float) -> Unit,
     /** Shared by charts stacked on one x domain, so their plots line up column for column. */
-    axisGroup: ChartAxisGroup? = null,
+    axisGroup: ChartAxisGroup,
+    modifier: Modifier = Modifier,
 ) {
     val chartColors = LocalChartColors.current
     val density = LocalDensity.current
@@ -142,10 +142,8 @@ fun ProfileChart(
     }
 
     val ownGutter = render.yTicks.maxOfOrNull { it.size.width }?.toFloat() ?: 0f
-    if (axisGroup != null) {
-        SideEffect { if (ownGutter > axisGroup.gutterPx) axisGroup.gutterPx = ownGutter }
-    }
-    val gutter = maxOf(ownGutter, axisGroup?.gutterPx ?: 0f)
+    SideEffect { if (ownGutter > axisGroup.gutterPx) axisGroup.gutterPx = ownGutter }
+    val gutter = maxOf(ownGutter, axisGroup.gutterPx)
     // Keyed on what it's measured from, not on [render]: a pinch makes a new render every
     // frame, and a new geometry would restart the gesture reading it.
     val geometry = remember(gutter, density) {
@@ -256,9 +254,11 @@ private fun ScrubberLayer(
     chartColors: ChartColors,
     selectedIndex: Int?,
     onSelectedIndexChange: (Int?) -> Unit,
-    onZoom: ((Float, Float, Float) -> Unit)?,
+    onZoom: (Float, Float, Float) -> Unit,
 ) {
     val series = render.series
+    // What the charts sit on, so the ring reads as a gap in the line.
+    val ringColor = MaterialTheme.colorScheme.surfaceContainer
     // Read through state, not keyed on: a pinch changes the scale every frame, and
     // restarting the gesture each time would drop it after the first.
     val currentRender by rememberUpdatedState(render)
@@ -280,15 +280,14 @@ private fun ScrubberLayer(
                         val event = awaitPointerEvent()
                         val pressed = event.changes.filter { it.pressed }
                         if (pressed.isEmpty()) break
-                        val zoom = currentOnZoom
-                        if (pressed.size >= 2 && zoom != null) {
+                        if (pressed.size >= 2) {
                             zooming = true
                             val plot = geometry.plotRect(size.toSize())
                             val scale = event.calculateZoom()
                             val pan = event.calculatePan().x
                             if (scale != 1f || pan != 0f) {
                                 val anchor = (event.calculateCentroid().x - plot.left) / plot.width
-                                zoom(anchor, scale, pan / plot.width)
+                                currentOnZoom(anchor, scale, pan / plot.width)
                             }
                             event.changes.forEach { it.consume() }
                         } else if (!zooming) {
@@ -334,7 +333,7 @@ private fun ScrubberLayer(
 
         val y = plot.yFor(value, render.yScale)
         // Surface ring first, so the dot stays legible where it sits on the line.
-        drawCircle(chartColors.surface, MarkerRadius.toPx() + SurfaceRing.toPx(), Offset(x, y))
+        drawCircle(ringColor, MarkerRadius.toPx() + SurfaceRing.toPx(), Offset(x, y))
         drawCircle(series.color, MarkerRadius.toPx(), Offset(x, y))
     }
 }
@@ -352,15 +351,14 @@ private fun ChartTooltip(
     selectedIndex: Int?,
     style: TextStyle,
     labelColor: Color,
-    formatValue: ((Float) -> String)?,
-    formatPosition: ((Float) -> String)?,
+    formatValue: (Float) -> String,
+    formatPosition: (Float) -> String,
 ) {
     val series = render.series
     val index = selectedIndex ?: return
     if (index !in 0 until series.size) return
     val value = series.y[index]
     if (value.isNaN()) return
-    val format = formatValue ?: return
     if (boxSize.width <= 0 || boxSize.height <= 0) return
 
     val density = LocalDensity.current
@@ -382,13 +380,11 @@ private fun ChartTooltip(
         ) {
             Text(
                 text = buildAnnotatedString {
-                    formatPosition?.let { position ->
-                        withStyle(SpanStyle(color = labelColor)) {
-                            append(position(series.x[index]))
-                        }
-                        append('\n')
+                    withStyle(SpanStyle(color = labelColor)) {
+                        append(formatPosition(series.x[index]))
                     }
-                    append(format(value))
+                    append('\n')
+                    append(formatValue(value))
                 },
                 style = style,
             )

@@ -75,8 +75,8 @@ fun OfflineMapCanvas(
     /** Highlighted point within [focusedTrackId]'s route, as an index into its points. */
     selectedIndex: Int?,
     markerColor: Color,
-    /** The track whose last point is where the recorder is standing, or null. */
-    puckTrackId: Long?,
+    /** Whether to mark where the recorder is standing: [liveRoute]'s last point. */
+    showPuck: Boolean,
     puckColor: Color,
     /**
      * Drawn on whichever track they belong to - the caller has already narrowed this to
@@ -264,14 +264,10 @@ fun OfflineMapCanvas(
     }
 
     LaunchedEffect(
-        markerLayer, symbols, routes, liveRoute, puckTrackId, focusedTrackId, selectedIndex, waypoints,
+        markerLayer, symbols, routes, liveRoute, showPuck, focusedTrackId, selectedIndex, waypoints,
         followedWaypoint,
     ) {
-        // The recording is the usual answer for the puck and isn't in `routes`, so it is
-        // asked first.
-        val puckAt = (liveRoute?.takeIf { it.trackId == puckTrackId }
-            ?: routes.firstOrNull { it.trackId == puckTrackId })
-            ?.points?.lastOrNull()
+        val puckAt = liveRoute?.takeIf { showPuck }?.points?.lastOrNull()
         val markerAt = routes.firstOrNull { it.trackId == focusedTrackId }
             ?.points?.getOrNull(selectedIndex ?: -1)
 
@@ -316,8 +312,9 @@ fun OfflineMapCanvas(
     // on the scale.
     val cover = with(density) {
         val panel = panelWidth.roundToPx()
-        Cover(
+        Insets(
             left = if (layoutDirection == LayoutDirection.Ltr) panel else 0,
+            top = 0,
             right = if (layoutDirection == LayoutDirection.Rtl) panel else 0,
             bottom = sheetHeight.roundToPx(),
         )
@@ -373,7 +370,7 @@ fun OfflineMapCanvas(
         val size = viewSize ?: return@LaunchedEffect
         val usable = size.usable(insets) ?: return@LaunchedEffect
 
-        map.moveTo(fit(target, size, usable, insets, map.viewport().maxScale), currentClamp(), currentCover)
+        map.moveTo(fit(target, usable, insets, map.viewport().maxScale), currentClamp(), currentCover)
         hasFramed = true
     }
 
@@ -385,7 +382,7 @@ fun OfflineMapCanvas(
         val usable = size.usable(frameInsets) ?: return@LaunchedEffect
         // Null for a single point, which is left where the camera already is.
         extentOf(listOf(route), null, emptyList())?.let { target ->
-            val position = fit(target, size, usable, frameInsets, map.viewport().maxScale)
+            val position = fit(target, usable, frameInsets, map.viewport().maxScale)
             val view = position.visibleBox(size)
             framedView = view
             map.moveTo(position, currentClamp(), currentCover)

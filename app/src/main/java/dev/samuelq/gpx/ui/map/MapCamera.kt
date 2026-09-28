@@ -31,7 +31,7 @@ internal inline fun <T> Viewport.withFullZoomRange(block: () -> T): T {
 }
 
 /** Pixels kept clear on each edge, for whatever is floating over the map. */
-internal class Insets(val left: Int, val top: Int, val right: Int, val bottom: Int)
+internal data class Insets(val left: Int, val top: Int, val right: Int, val bottom: Int)
 
 internal fun PaddingValues.toInsets(density: Density, layoutDirection: LayoutDirection) = with(density) {
     Insets(
@@ -139,7 +139,7 @@ internal fun IntSize?.usable(insets: Insets): IntSize? {
  * [target] fitted into the uncovered part of the view, centred there rather than on the
  * screen - otherwise the sheet covers the bottom of whatever was just framed.
  */
-internal fun fit(target: BoundingBox, size: IntSize, usable: IntSize, insets: Insets, maxScale: Double): MapPosition {
+internal fun fit(target: BoundingBox, usable: IntSize, insets: Insets, maxScale: Double): MapPosition {
     val position = MapPosition().apply { setByBoundingBox(target, usable.width, usable.height) }
     // Capped here rather than by VTM, so the offset below is worked out at the scale it lands at.
     position.setScale(minOf(position.scale, maxScale))
@@ -152,9 +152,6 @@ internal fun fit(target: BoundingBox, size: IntSize, usable: IntSize, insets: In
     return position
 }
 
-/** Pixels a sheet or panel hides along each edge. */
-internal data class Cover(val left: Int, val right: Int, val bottom: Int)
-
 /**
  * Moves the camera the least it can so no edge of [extent] comes inside the screen's - or
  * inside whatever [cover] hides - holding it centred on any axis where it fits.
@@ -162,7 +159,7 @@ internal data class Cover(val left: Int, val right: Int, val bottom: Int)
  * The range is also handed to VTM as its map limit, so a drag stops cleanly against it; a
  * pinch changes the scale that range was worked out for, which the correction here catches.
  */
-internal fun Map.keepInView(extent: BoundingBox, cover: Cover) {
+internal fun Map.keepInView(extent: BoundingBox, cover: Insets) {
     if (width <= 0 || height <= 0) return
     val position = mapPosition
     if (constrain(position, extent, cover)) setMapPosition(position)
@@ -173,13 +170,13 @@ internal fun Map.keepInView(extent: BoundingBox, cover: Cover) {
  * worked out at [target]'s own scale first: VTM clamps every move to the current limit,
  * and one left over from a whole-world view pins any framing to the extent's centre.
  */
-internal fun Map.moveTo(target: MapPosition, extent: BoundingBox?, cover: Cover) {
+internal fun Map.moveTo(target: MapPosition, extent: BoundingBox?, cover: Insets) {
     if (extent != null && width > 0 && height > 0) constrain(target, extent, cover)
     setMapPosition(target)
 }
 
 /** Sets VTM's limit for [position]'s scale and pulls [position] inside it. True if it moved. */
-private fun Map.constrain(position: MapPosition, extent: BoundingBox, cover: Cover): Boolean {
+private fun Map.constrain(position: MapPosition, extent: BoundingBox, cover: Insets): Boolean {
     val mapSize = Tile.SIZE * position.scale
 
     val (minX, maxX) = centreRange(

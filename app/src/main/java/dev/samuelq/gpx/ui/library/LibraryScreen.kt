@@ -78,6 +78,7 @@ import dev.samuelq.gpx.ui.format.LocalFormatters
 import dev.samuelq.gpx.ui.theme.routePalette
 import dev.samuelq.gpx.ui.theme.slot
 import dev.samuelq.gpx.ui.track.DeleteTrackDialog
+import dev.samuelq.gpx.ui.track.TrackMenu
 import dev.samuelq.gpx.ui.track.TrackNameDialog
 import dev.samuelq.gpx.ui.track.editableTrackName
 import dev.samuelq.gpx.ui.track.exportFileName
@@ -373,7 +374,6 @@ private fun TrackRow(
     onRename: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    var menuOpen by remember { mutableStateOf(false) }
     val formatters = LocalFormatters.current
 
     // Built once per row, not once per composition - a localized `DateTimeFormatter`'s
@@ -435,45 +435,7 @@ private fun TrackRow(
                         checked = track.visible,
                         onCheckedChange = { onToggleVisible() },
                     )
-                    Box {
-                        IconButton(onClick = { menuOpen = true }) {
-                            Icon(Icons.Default.MoreVert, stringResource(R.string.library_more))
-                        }
-                        // Only composed once wanted - unconditionally, it's a transition
-                        // object and a popup's worth of setup per row.
-                        if (menuOpen) DropdownMenu(
-                            expanded = true,
-                            onDismissRequest = { menuOpen = false },
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.library_rename)) },
-                                onClick = {
-                                    menuOpen = false
-                                    onRename()
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.library_share)) },
-                                onClick = {
-                                    menuOpen = false
-                                    onShare()
-                                },
-                            )
-                            HorizontalDivider()
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        text = stringResource(R.string.library_delete),
-                                        color = MaterialTheme.colorScheme.error,
-                                    )
-                                },
-                                onClick = {
-                                    menuOpen = false
-                                    onDelete()
-                                },
-                            )
-                        }
-                    }
+                    TrackMenu(onRename, onShare, onHide = null, onDelete)
                 }
             }
         },

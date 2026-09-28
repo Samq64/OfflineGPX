@@ -3,6 +3,7 @@ package dev.samuelq.gpx.ui.map
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.StringRes
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -120,13 +121,10 @@ fun MapScreen(
 
     val snackbarHostState = remember { SnackbarHostState() }
     var confirmDiscard by remember { mutableStateOf(false) }
-    // The recording waiting to be named, if the user has just finished one. Held as an id
-    // rather than a flag: the prompt cannot open until the track it names has been read
-    // back, and by then any number of other things could have taken the sheet.
-    var namingId by remember { mutableStateOf<Long?>(null) }
-    // The same prompt reached on purpose from the sheet's menu, which differs from the one
-    // above in its title and in nothing else.
-    var renamingId by remember { mutableStateOf<Long?>(null) }
+    // The track waiting to be named: just recorded, or renamed from the sheet's menu. By
+    // id: the prompt can't open until the track has been read back, and by then anything
+    // could have taken the sheet.
+    var naming by remember { mutableStateOf<Naming?>(null) }
     var deletingId by remember { mutableStateOf<Long?>(null) }
     // Metres to a screen pixel, republished by the map every frame of a pan or pinch. Held
     // as a state object and never read here - reading it in this scope would recompose the
@@ -209,7 +207,7 @@ fun MapScreen(
                 // the hour and the pace, which is a placeholder and reads like one. Later
                 // means never: the rename is three taps down a menu on another screen.
                 is RecordingEvent.Saved -> {
-                    namingId = event.id
+                    naming = Naming(event.id, R.string.record_name_title)
                     viewModel.focus(TrackRef.Saved(event.id))
                 }
                 RecordingEvent.Discarded -> say(discarded)
@@ -244,11 +242,8 @@ fun MapScreen(
         if (hasFocus && !sidePanel) sheetState.partialExpand()
         else if (sheetState.currentValue != SheetValue.Hidden) sheetState.hide()
         // Letting go of the track lets go of the offer to name it, so a stale prompt can't
-        // ambush the next time that track is opened - whichever one of the two opened it.
-        if (!hasFocus) {
-            namingId = null
-            renamingId = null
-        }
+        // ambush the next time that track is opened.
+        if (!hasFocus) naming = null
     }
 
     // Swiped away by hand: the selection follows the sheet rather than lingering as
@@ -389,7 +384,7 @@ fun MapScreen(
     val actions = focusedTrack?.let { state.entity(it.id) }?.let { entity ->
         remember(entity.id, entity.displayName, entity.location) {
             TrackActions(
-                onRename = { renamingId = entity.id },
+                onRename = { naming = Naming(entity.id, R.string.library_rename) },
                 onShare = {
                     context.startActivity(
                         shareTrackIntent(context, entity.location, entity.trackName, entity.displayName)
@@ -495,7 +490,7 @@ fun MapScreen(
                 markerColor = focusedTrack
                     ?.let { palette.slot(it.colorIndex) }
                     ?: MaterialTheme.colorScheme.primary,
-                puckTrackId = LIVE_TRACK_ID.takeIf { recording is RecordingState.Active },
+                showPuck = recording is RecordingState.Active,
                 puckColor = liveColor,
                 // Only the live recording's own and the track whose sheet is open - a
                 // waypoint is a note on one ride, not a landmark the map always shows.
@@ -596,12 +591,12 @@ fun MapScreen(
             }
 
             if (hasContent) {
-                MapChrome(
+                ScaleBar(
                     // The state, not its value - the bar re-reads it as the camera moves.
                     metersPerPixel = metersPerPixel,
                     modifier = Modifier
                         .align(Alignment.BottomStart)
-                        .padding(start = panelCover, bottom = sheetInset + 4.dp),
+                        .padding(start = panelCover + 12.dp, bottom = sheetInset + 4.dp),
                 )
             }
 
@@ -640,23 +635,18 @@ fun MapScreen(
         }
     }
 
-    // Only once the track has been read back, which is what knows the name to offer. The
-    // post-recording prompt and the menu's rename share this dialog; only the title differs.
-    focusedTrack?.takeIf { it.id == namingId || it.id == renamingId }?.let { track ->
-        val justRecorded = track.id == namingId
+    // Only once the track has been read back, which is what knows the name to offer.
+    val named = naming
+    focusedTrack?.takeIf { named != null && it.id == named.id }?.let { track ->
         TrackNameDialog(
-            titleRes = if (justRecorded) R.string.record_name_title else R.string.library_rename,
+            titleRes = named!!.titleRes,
             initialName = editableTrackName(track.track.name, track.displayName),
             // Dismissing keeps the name that is already there, which is why it is in the
             // field rather than behind it as a hint: what you are leaving is what you see.
-            onDismiss = {
-                namingId = null
-                renamingId = null
-            },
+            onDismiss = { naming = null },
             onConfirm = { name ->
                 viewModel.rename(track.id, name)
-                namingId = null
-                renamingId = null
+                naming = null
             },
         )
     }
@@ -700,6 +690,8 @@ fun MapScreen(
  * saved - so taps on it resolve to nothing rather than to some other track.
  */
 private const val LIVE_TRACK_ID = Long.MIN_VALUE
+
+private class Naming(val id: Long, @StringRes val titleRes: Int)
 
 /** Breathing room between the routes and whatever is at the edge of the canvas. */
 private val MapEdgePadding = 24.dp

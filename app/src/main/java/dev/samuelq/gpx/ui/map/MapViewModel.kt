@@ -227,25 +227,10 @@ class MapViewModel(
         _abandoned.value = recovery.abandoned().firstOrNull { it.file !in skipped }
     }
 
-    /**
-     * Renames a track and puts the new name on the sheet. Both caches are updated, not
-     * just the sheet - stale geometry would make the rename silently undo itself next open.
-     */
+    /** Renames a track. The row's update brings the new name to the sheet via [resyncNames]. */
     fun rename(id: Long, name: String) {
         viewModelScope.launch {
-            val trimmed = name.trim().takeIf(String::isNotEmpty)
-            repository.rename(id, name).onFailure {
-                _messages.trySend(MapMessage.RenameFailed)
-            }.onSuccess {
-                val focused = _focused.value
-                if (focused is FocusedTrack.Ready && focused.track.id == id) {
-                    _focused.value = FocusedTrack.Ready(focused.track.renamed(trimmed))
-                }
-                _state.update { current ->
-                    val cached = current.geometry[id] ?: return@update current
-                    current.copy(geometry = current.geometry + (id to cached.renamed(trimmed)))
-                }
-            }
+            repository.rename(id, name).onFailure { _messages.trySend(MapMessage.RenameFailed) }
         }
     }
 
