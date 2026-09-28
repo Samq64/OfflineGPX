@@ -3,12 +3,8 @@ package dev.samuelq.gpx.core.analysis
 import dev.samuelq.gpx.core.model.TrackPoint
 import java.time.Instant
 
-/**
- * Whole-track summary. Every field is SI; formatting for display happens in the UI layer
- * so that adding an imperial toggle later touches one file and not this one.
- */
+/** Whole-track summary, in SI units; the UI formats. */
 data class TrackStats(
-    val name: String?,
     val startedAt: Instant?,
     val pointCount: Int,
     val distanceMeters: Double,
@@ -46,8 +42,6 @@ class TrackProfile(
     val hasElevation: Boolean,
     val stats: TrackStats,
 ) {
-    val size: Int get() = points.size
-
     /**
      * The one index [point] belongs to, or -1 on an empty track. Nearest in time when both
      * have it, so a round trip past the same spot still picks the right leg; nearest in

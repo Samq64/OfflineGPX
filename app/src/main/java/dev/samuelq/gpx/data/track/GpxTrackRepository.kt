@@ -93,7 +93,7 @@ class GpxTrackRepository(
                 read(destination.inputStream(), displayName, LoadedTrack.TRANSIENT_ID)
             }.onFailure { destination.delete() }.getOrThrow()
 
-            val entity = newEntity(destination, displayName, loaded.profile.stats)
+            val entity = newEntity(destination, displayName, loaded.track.name, loaded.profile.stats)
             val id = dao.upsert(entity)
 
             cached = entity.location to LoadedTrack(
@@ -152,8 +152,8 @@ class GpxTrackRepository(
                 }
                 file.outputStream().use { writer.write(named, it) }
 
-                val stats = profile.stats.copy(name = named.name, startedAt = startedAt)
-                dao.upsert(newEntity(file, file.name, stats))
+                val stats = profile.stats.copy(startedAt = startedAt)
+                dao.upsert(newEntity(file, file.name, named.name, stats))
             }.recoverFailure()
         }
 
@@ -281,12 +281,13 @@ class GpxTrackRepository(
     private suspend fun newEntity(
         file: File,
         displayName: String,
+        trackName: String?,
         stats: TrackStats,
     ) = TrackEntity(
         colorIndex = leastUsedSlot(dao.colorUsage(), TrackEntity.PALETTE_SIZE),
         location = TrackFiles.location(appContext, file),
         displayName = displayName,
-        trackName = stats.name,
+        trackName = trackName,
         startedAtEpochMillis = stats.startedAt?.toEpochMilli(),
         lastOpenedAtEpochMillis = System.currentTimeMillis(),
         distanceMeters = stats.distanceMeters,

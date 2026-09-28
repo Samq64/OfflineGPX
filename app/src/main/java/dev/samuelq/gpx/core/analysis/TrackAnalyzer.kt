@@ -152,7 +152,6 @@ object TrackAnalyzer {
         val averageBasis = if (movingSeconds > 0.0) movingSeconds else totalDuration
 
         val stats = TrackStats(
-            name = track.name,
             startedAt = startedAt,
             pointCount = size,
             distanceMeters = totalDistance,

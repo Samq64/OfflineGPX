@@ -170,22 +170,18 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
 
         var elevation: Double? = null
         var time: Instant? = null
-        var accuracy: Double? = null
 
         forEachChild(parser) {
             when (parser.name) {
                 TAG_ELE -> elevation = readText(parser).trim().toDoubleOrNull()
                 TAG_TIME -> time = parseGpxTime(readText(parser))
-                // Not a true dilution-of-precision figure - see TrackPoint.accuracyMeters -
-                // but the closest slot GPX has, and the one this app's own writer uses.
-                TAG_HDOP -> accuracy = readText(parser).trim().toDoubleOrNull()
                 else -> skip(parser)
             }
         }
 
         if (latitude == null || longitude == null) return null
         if (!isValidCoordinate(latitude, longitude)) return null
-        return TrackPoint(latitude, longitude, elevation, time, accuracy)
+        return TrackPoint(latitude, longitude, elevation, time)
     }
 
     /**
@@ -259,7 +255,6 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
         private const val TAG_DESC = "desc"
         private const val TAG_ELE = "ele"
         private const val TAG_TIME = "time"
-        private const val TAG_HDOP = "hdop"
         private const val ATTR_LAT = "lat"
         private const val ATTR_LON = "lon"
 
