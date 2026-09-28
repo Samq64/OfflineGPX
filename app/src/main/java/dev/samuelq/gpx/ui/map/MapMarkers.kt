@@ -170,9 +170,6 @@ private const val PIN_HOLE_RATIO = 0.4f
 /** The pin's head, ring included. */
 internal val WaypointPinHeadRadius = (PIN_RADIUS_DP + MARKER_RING_WIDTH_DP).dp
 
-/** How far above the tip the head begins - a tooltip at the tip stays below this. */
-val WaypointPinHeadClearance = (PIN_TIP_LENGTH_DP - PIN_RADIUS_DP).dp
-
 /** White in both themes: a surface-coloured ring vanished against dark-mode land. */
 private val MARKER_RING = Color.White
 

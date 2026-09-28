@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
@@ -53,7 +55,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.toSize
-import dev.samuelq.gpx.ui.ArrowTooltip
+import dev.samuelq.gpx.ui.PointTooltip
 import dev.samuelq.gpx.ui.format.tabularFigures
 import dev.samuelq.gpx.ui.theme.ChartColors
 import dev.samuelq.gpx.ui.theme.LocalChartColors
@@ -183,8 +185,7 @@ fun ProfileChart(
             geometry = geometry,
             boxSize = boxSize,
             selectedIndex = selectedIndex,
-            style = labelStyle.copy(color = MaterialTheme.colorScheme.onSurface),
-            labelColor = chartColors.label,
+            style = MaterialTheme.typography.labelSmall.tabularFigures(),
             formatValue = formatValue,
             formatPosition = formatPosition,
         )
@@ -338,11 +339,7 @@ private fun ScrubberLayer(
     }
 }
 
-/**
- * Where you are and what is there, anchored to the scrubbed dot - the same [ArrowTooltip]
- * a tapped waypoint on the map uses, clamped to the plot rect rather than the whole chart
- * so it never covers the y-axis labels in the gutter beside it.
- */
+/** Where you are and what is there, beside the scrubbed dot and free to leave the chart. */
 @Composable
 private fun ChartTooltip(
     render: ChartRender,
@@ -350,7 +347,6 @@ private fun ChartTooltip(
     boxSize: IntSize,
     selectedIndex: Int?,
     style: TextStyle,
-    labelColor: Color,
     formatValue: (Float) -> String,
     formatPosition: (Float) -> String,
 ) {
@@ -361,34 +357,27 @@ private fun ChartTooltip(
     if (value.isNaN()) return
     if (boxSize.width <= 0 || boxSize.height <= 0) return
 
-    val density = LocalDensity.current
     val plot = remember(geometry, boxSize) { geometry.plotRect(boxSize.toSize()) }
+    val x = plot.xFor(series.x[index], render.xScale)
+    if (x < plot.left - 1f || x > plot.right + 1f) return
+    val y = plot.yFor(value, render.yScale)
 
-    Box(
-        Modifier
-            .offset { IntOffset(plot.left.roundToInt(), plot.top.roundToInt()) }
-            .size(with(density) { plot.width.toDp() }, with(density) { plot.height.toDp() }),
+    val density = LocalDensity.current
+    val half = with(density) { (MarkerRadius + SurfaceRing).toPx() }
+    PointTooltip(
+        anchorAt = { IntOffset((x - half).roundToInt(), (y - half).roundToInt()) },
+        anchorSize = DpSize((MarkerRadius + SurfaceRing) * 2, (MarkerRadius + SurfaceRing) * 2),
     ) {
-        val x = plot.xFor(series.x[index], render.xScale) - plot.left
-        val y = plot.yFor(value, render.yScale) - plot.top
-        if (x < -1f || x > plot.width + 1f) return@Box
-
-        ArrowTooltip(
-            anchor = { Offset(x, y) },
-            gap = MarkerRadius + SurfaceRing + 2.dp,
-            modifier = Modifier.matchParentSize(),
-        ) {
-            Text(
-                text = buildAnnotatedString {
-                    withStyle(SpanStyle(color = labelColor)) {
-                        append(formatPosition(series.x[index]))
-                    }
-                    append('\n')
-                    append(formatValue(value))
-                },
-                style = style,
-            )
-        }
+        Text(
+            text = buildAnnotatedString {
+                withStyle(SpanStyle(color = LocalContentColor.current.copy(alpha = 0.7f))) {
+                    append(formatPosition(series.x[index]))
+                }
+                append('\n')
+                append(formatValue(value))
+            },
+            style = style,
+        )
     }
 }
 

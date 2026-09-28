@@ -547,7 +547,7 @@ fun MapScreen(
             )
 
             tappedWaypoint?.let { tapped ->
-                WaypointTooltip(tapped, anchor = { tappedWaypointAt.value }, modifier = Modifier.fillMaxSize())
+                WaypointTooltip(tapped, tipAt = { tappedWaypointAt.value })
             }
 
             // Only the true first-run case, not "every track happens to be hidden" - that's
