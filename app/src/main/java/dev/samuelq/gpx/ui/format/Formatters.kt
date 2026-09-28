@@ -144,7 +144,7 @@ class Formatters(val units: UnitSystem) {
         if (metric) meters else meters * FEET_PER_METER
 
     companion object {
-        /** The fallback, and what every preview and test gets unless it says otherwise. */
+        /** The fallback when nothing provides [LocalFormatters]. */
         val Metric = Formatters(UnitSystem.METRIC)
 
         const val EMPTY = "—"

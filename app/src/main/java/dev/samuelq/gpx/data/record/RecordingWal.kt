@@ -27,8 +27,8 @@ import java.util.Base64
  *
  * The waypoint line is its own kind rather than a fix with an extra field: a free-text
  * description can hold a comma or a newline, either of which would otherwise be read back
- * as more fields or more lines. Base64 sidesteps escaping it for what is, in the end, a
- * write-only log nobody but this class ever reads.
+ * as more fields or more lines. Base64 sidesteps escaping it, since only this class reads
+ * the log back.
  */
 class RecordingWal private constructor(
     val file: File,

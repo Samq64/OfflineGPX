@@ -6,20 +6,20 @@ profile**, all on one shared, synchronised scrubber.
 
 ## Build and sign
 
-Needs JDK 17 and the Android SDK (`sdk.dir` in `local.properties`, or `ANDROID_HOME`).
+Needs the Android SDK (`sdk.dir` in `local.properties`, or `ANDROID_HOME`). Gradle fetches
+the JDK it runs on (`gradle/gradle-daemon-jvm.properties`).
 
 ```sh
 ./gradlew :app:assembleDebug     # app/build/outputs/apk/debug/app-debug.apk, debug-signed
 ./gradlew :app:assembleRelease   # app/build/outputs/apk/release/app-release-unsigned.apk
 ```
 
-The release build has no signing config. For now, sign it with Android Studio's debug key
-(password `android`):
+The release build has no signing config; sign it with your own keystore, kept out of the
+repo (`*.jks` is ignored):
 
 ```sh
-"$ANDROID_HOME"/build-tools/<version>/apksigner sign --ks ~/.android/debug.keystore \
-    --ks-pass pass:android --out app-release.apk \
-    app/build/outputs/apk/release/app-release-unsigned.apk
+"$ANDROID_HOME"/build-tools/<version>/apksigner sign --ks release.jks \
+    --out app-release.apk app/build/outputs/apk/release/app-release-unsigned.apk
 ```
 
 ## The permission budget
@@ -29,7 +29,7 @@ still being a real tool for cycling and hiking.
 
 | Permission | Status | Why |
 |---|---|---|
-| `INTERNET`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE` | **never** | stripped from the merged manifest — basemaps come from files the user supplies, not from this app fetching anything |
+| `INTERNET`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE` | **never** | the build fails if one reaches the merged manifest — basemaps come from files the user supplies, not from this app fetching anything |
 | storage | never | tracks and offline maps alike are copied from a one-shot SAF pick into app-private storage; no persisted grant, no storage permission |
 | camera, microphone, Bluetooth, contacts | never | no feature needs them |
 | `ACCESS_FINE_LOCATION`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_LOCATION` | **declared** | the irreducible cost of being a tracker; asked for on the tap that starts a recording, never at launch |
@@ -38,10 +38,10 @@ still being a real tool for cycling and hiking.
 
 `INTERNET` can't be requested lazily — once declared it's permanent — so it's kept out
 structurally rather than by vigilance. The manifest merger folds in every dependency's
-permissions, so `AndroidManifest.xml` strips them back out with `tools:node="remove"`, and
-`CheckNoNetworkPermissions` in `app/build.gradle.kts` fails the build if any survive into
-the merged manifest — wired as a manifest transform, so it can't be skipped by any build
-that produces an APK. Verify what shipped:
+permissions, so `CheckNoNetworkPermissions` in `app/build.gradle.kts` fails the build if one
+appears in the merged manifest — wired as a manifest transform, so it can't be skipped by
+any build that produces an APK. Deliberately not a silent `tools:node="remove"`: a new
+dependency asking for the network should force a decision. Verify what shipped:
 
 ```sh
 ./gradlew :app:processReleaseMainManifest
@@ -50,36 +50,31 @@ grep uses-permission app/build/intermediates/merged_manifest/release/AndroidMani
 
 A permission added here must map to a feature a user can name.
 
+Nothing is backed up to the cloud. A device-to-device transfer carries the library, the
+imported maps and settings to a new phone; an in-progress recording's log stays behind.
+
 ## Stack
 
-| | |
-|---|---|
-| Language | Kotlin 2.4.20 |
-| UI | Jetpack Compose, Material 3 (Compose BOM 2026.08.00) |
-| Build | AGP 9.4.0 on Gradle 9.7.1, JDK 17 |
-| minSdk / targetSdk | 29 (Android 10) / 37 (Android 17) |
+Kotlin and Jetpack Compose with Material 3; minSdk 29 (Android 10), targetSdk 37. Versions
+live in `gradle/libs.versions.toml`.
 
-Dependencies: AndroidX, Compose, Room, navigation-compose, kotlinx.serialization,
-VTM (mapsforge's OpenGL renderer). The original no-dependency minimalism isn't the governing constraint any more —
-the permission budget is. A dependency earns its place by beating the hand-rolled code it
-replaces; what disqualifies one is pulling `INTERNET` into the merged manifest, or wanting a
-permission for a feature nobody asked for. VTM ships as plain jars with no manifest, so it
-declares nothing, and its one native library is a ~45 KB tessellator: the whole release APK
-is **3.7 MB against MapLibre's 52.8 MB**, which was 48 MB of `libmaplibre.so` across four
-ABIs. VTM releases after 0.25.0 are published to JitPack only; `settings.gradle.kts` lets
-JitPack serve that one group and nothing else.
+Dependencies: AndroidX, Compose, Room, navigation-compose (with kotlinx.serialization for
+its routes), and VTM, mapsforge's OpenGL renderer. The permission budget is the governing
+constraint: a dependency earns its place by beating the hand-rolled code it replaces, and
+is disqualified by pulling `INTERNET` into the merged manifest. VTM ships as plain jars with
+no manifest, its one native library is a ~45 KB tessellator, and its SVG decoder is
+excluded since the render theme draws no symbols: the release APK is **3.6 MB**. VTM
+releases after 0.25.0 are on JitPack only; `settings.gradle.kts` lets JitPack serve that one
+group and nothing else.
 
-Basemaps are mapsforge `.map` files. The format stores three base zooms (5/10/14) and
-renders the rest by scaling, where PMTiles stored a tile at every zoom — which is why the
-same ground is **about 2.5× smaller** here (12 × 12 km of eastern Ontario: 2.47 MB as
-`.pmtiles` to z15, 0.98 MB as `.map`). `tools/mapcut` cuts an area out of
-`download.mapsforge.org` by byte-copying tile blocks over HTTP range requests.
+Basemaps are mapsforge `.map` files, which store three base zooms (5/10/14) and render the
+rest by scaling. `tools/mapcut` cuts an area out of `download.mapsforge.org` by byte-copying
+tile blocks over HTTP range requests.
 
 Still hand-rolled: the charts (no library gives a shared-domain scrubber or an
 extreme-preserving per-column reduction), `GpxParser`/`GpxWriter` (streaming and tolerant,
-where a full-object-model library would not be), and `AppContainer` (manual DI for a graph
-of three objects — Hilt earns its keep once the recording service can be injected instead
-of reaching the graph through `Application`, which it does today).
+where a full-object-model library would not be), and `AppContainer` (manual DI; the graph
+is a handful of objects).
 
 ## Architecture
 
@@ -92,15 +87,17 @@ data/
   db/            Room: one `tracks` row per track, summary only, no geometry.
   map/           MapStore + MapFileHeader: offline basemap files.
   record/        LocationSource, RecordingWal, RecordingService, RecordingController.
-  settings/      SettingsRepository: units and the three recording thresholds.
-  track/         TrackRepository (interface) + GpxTrackRepository (Room + app-private files).
+  settings/      SettingsRepository: units, recording thresholds, shown maps.
+  track/         TrackRepository: Room rows plus the app-private GPX files they index.
 ui/
   chart/         ChartMath, ProfileChart - the Canvas charts.
-  map/           MapScreen, OfflineMapCanvas (VTM), MapChrome (scale bar), MapRenderTheme.
-  track/         TrackSheet + TrackDialogs + TrackSummary - the sheet a tapped route opens in.
+  map/           MapScreen, OfflineMapCanvas (VTM) and its camera, layers and theme.
+  track/         TrackSheet, TrackMenu, TrackDialogs, TrackSummary - a tapped route's sheet.
   library/       Manage: import, export, rename, show/hide, batch delete.
-  record/        RecordViewModel + RecordingBar, shown by the map. No screen of its own.
-  settings/      Units, accuracy limit, minimum movement, update interval, offline maps.
+  record/        RecordingBar, shown by the map. No screen of its own.
+  settings/      Units, accuracy limit, minimum movement, offline maps.
+  format/        Formatters: units, axes and times.
+  theme/         Material scheme, route palette, recording and chart colours.
   nav/           @Serializable routes for navigation-compose. Three: map, library, settings.
 di/              AppContainer: manual wiring.
 ```
@@ -135,10 +132,10 @@ recording isn't valid GPX, so the recorder appends to a write-ahead file, one li
 and converts to GPX on stop; a crash or a flat battery mid-ride leaves a complete WAL that
 recovers at next launch instead of truncated XML.
 
-An import used to be read where the user left it, behind a persisted SAF grant. It's copied
-in at import time instead, so a recording and an import are the same kind of thing to the
-rest of the app — deleting the row deletes the file, renaming rewrites the file, and export
-is a byte copy either way.
+An import is copied in rather than read where the user left it, so a recording and an
+import are the same kind of thing to the rest of the app — deleting the row deletes the
+file, renaming rewrites the file, and export is a byte copy either way. Rows store paths
+relative to the files directory, so a device transfer that restores elsewhere still works.
 
 ### Recording
 
@@ -162,9 +159,8 @@ number of seconds, because "unusually long" means something different for a 1 Hz
 than for a route with one point per kilometre. A gap is drawn as a labelled wash across the
 chart, not interpolated through.
 
-Pause stops the receiver rather than discarding fixes at 1 Hz, which is what it used to do
-— that cost battery and the data both for no reason once auto-detected stops made an
-explicit pause redundant for splitting the chart. A recording under ten metres isn't saved;
+Pause stops the receiver rather than discarding fixes, which would cost battery for
+nothing. A recording under ten metres isn't saved;
 crash recovery applies the same floor, so a leftover WAL can't resurrect what pressing Stop
 would have thrown away.
 
@@ -191,9 +187,8 @@ credit.
 The render theme is generated at runtime rather than shipped as an asset, so it can take its
 colours from the theme the user is in. It is written in the mapsforge theme dialect, which
 VTM reads as well as its own: rules filter on raw OSM tags, and a width that varies with
-zoom is written out as one nested rule per zoom level, interpolated between stops. Zooms
-count 256 px tiles, one more than MapLibre's for the same view, and VTM widens lines by 1.4
-per zoom above z12 on its own; the theme divides that back out. Label collisions are
+zoom is written out as one nested rule per zoom level, interpolated between stops. VTM widens lines by 1.4 per zoom above z12 on its own; the
+theme divides that back out. Label collisions are
 settled by explicit `priority`, trail names highest.
 
 A file's low zooms are whole tiles tens of kilometres wide, so it carries lakes, roads and
@@ -202,7 +197,10 @@ box as it's decoded, so no name is placed out there, and a mask in the backgroun
 covers what still overhangs the edge.
 
 The camera is the map view's: pinch, fling, and a pan clamp to the fit of every track and
-shown map, kept north-up with rotation and tilt turned off. A scale bar reads the camera's live scale and is drawn over it. The map's own
+shown map, kept north-up with rotation and tilt turned off. A track opened from the list is
+framed above the sheet, and the clamp admits that view even for a track at the edge of the
+collection; a tap on the map never moves the camera. A scale bar reads the camera's live
+scale and is drawn over it. The map's own
 composition doesn't survive navigating away to the library or settings and back -
 Compose Navigation only keeps the current destination composed - so the camera's last
 position is remembered in the ViewModel (which does survive) and restored directly on
@@ -213,13 +211,11 @@ The basemap style is deliberately plain: earth, one green for anything vegetated
 and surface rail with their names. Urban tint and finer landuse distinctions are left out —
 this is a place to read a route against, not a general-purpose map.
 
-Sidewalks and crossings used to be filtered out — pavement this app already draws as the
-road beside it, not a trail of their own. They can't be now: the PMTiles schema carried a
-`kind_detail` that told them apart, and the tag configuration the published `.map` files are
-written with does not record `footway=sidewalk` at all, so a sidewalk reaches the renderer
-as an ordinary `highway=footway`. In a town this draws a second dashed line beside every
-street, which is the one thing about the basemap that is plainly worse than it was. Fixing
-it needs source files written with a custom tag configuration.
+Sidewalks aren't filtered out, though they're pavement this app already draws as the road
+beside them: the tag configuration the published `.map` files are written with doesn't
+record `footway=sidewalk`, so a sidewalk reaches the renderer as an ordinary
+`highway=footway`. In a town this draws a second dashed line beside every street. Fixing it
+needs source files written with a custom tag configuration.
 
 ## Design decisions worth knowing
 
@@ -231,9 +227,10 @@ it needs source files written with a custom tag configuration.
   distance doesn't accumulate across it, the speed window doesn't span it, and neither the
   chart nor the route draws through it.
 - **Average speed is over moving time**, matching what watches report.
-- **The two chart colours are fixed**, validated for lightness, chroma and CVD separation;
-  a wallpaper-derived palette carries no such guarantee, so chrome follows Material You and
-  data does not.
+- **Data colours are fixed; chrome follows Material You.** The chart colours and the six
+  route colours are checked for contrast against the map and for separation under
+  simulated colour blindness, and the recording has its own red. A wallpaper-derived
+  palette carries no such guarantee.
 - **Long tracks are reduced per pixel column, keeping the extremes.** Every-nth subsampling
   would delete the peaks, which on a speed chart are the point of looking.
 - **A tap has a reach of 40 dp and measures to the drawn line, not to route vertices** —
@@ -249,8 +246,9 @@ it needs source files written with a custom tag configuration.
 
 ## Tests
 
-`./gradlew test` — JVM unit tests over the parser, the analyzer, the fix filter, the speed
-window and the formatters. No device needed. `GpxParser` takes its `XmlPullParser` as a
+`./gradlew test` — JVM unit tests over GPX parsing and renaming, the analyzer, the fix
+filter, speed window and recording session, the `.map` header, the render theme, map
+extents, chart maths, formatters and palette slots. No device needed. `GpxParser` takes its `XmlPullParser` as a
 constructor parameter so it can be tested with kxml2 on a plain JVM; `android.jar`'s xmlpull
 classes are stubs in unit tests.
 

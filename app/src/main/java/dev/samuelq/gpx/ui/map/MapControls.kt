@@ -57,10 +57,6 @@ internal fun WaypointTooltip(waypoint: Waypoint, tipAt: () -> Offset) {
 
 /**
  * The record button, or the live recording's bar once one is running.
- *
- * Still no reset button. A real map has a whole world to be lost in rather than a unit
- * square to pinch back out of - worth adding as a "frame everything" control, but currently
- * a missing feature, not a choice.
  */
 @Composable
 internal fun RecordControls(

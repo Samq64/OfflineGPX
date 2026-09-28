@@ -5,9 +5,8 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
 import dev.samuelq.gpx.data.db.TrackEntity
 
-// Static fallback scheme, used on Android 10/11 (no wallpaper extraction) and whenever
-// the user turns dynamic colour off. Built from the same validated ramp as the charts so
-// the two never look like they came from different apps.
+// Static scheme for Android 10/11, which have no wallpaper colours. Built from the charts'
+// ramp so the two never look like they came from different apps.
 
 private val Blue450 = Color(0xFF2A78D6)
 private val Blue400 = Color(0xFF3987E5)

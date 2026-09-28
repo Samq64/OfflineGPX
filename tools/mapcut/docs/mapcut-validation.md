@@ -1,7 +1,6 @@
 # Validation
 
-Measurements taken 22 September 2026, against `download.mapsforge.org/maps/v5/` and the
-Protomaps planet build `20260917.pmtiles`.
+Measurements taken 22 September 2026, against `download.mapsforge.org/maps/v5/`.
 
 ## The cut is content-identical to its source
 
@@ -30,32 +29,3 @@ read back directly; all 539 are identical.
 
 Overfetch is negligible because one output row's tiles are contiguous upstream, so a row
 costs one request regardless of how wide it is.
-
-## Format size comparison
-
-Same region, same day's OSM data, cut both ways. Iceland, chosen so one source covers both
-a small town and a large empty area.
-
-**Selfoss — 5 × 5 km, population ~9,500**
-
-| format | size |
-|---|---|
-| `.pmtiles` z0–15 | 1.23 MB |
-| `.pmtiles` z12–15 (the range the app can display) | 599 KB |
-| `.map` | 307 KB |
-
-**Icelandic highlands — 200 × 200 km, near-zero population**
-
-| format | size |
-|---|---|
-| `.pmtiles` z0–15 | 68.3 MB |
-| `.map` | 11.3 MB |
-
-`.map` is 4× smaller on the town and 6× smaller on the wilderness. Two structural reasons:
-PMTiles stores a tile at every zoom 0–15 while mapsforge stores three base zooms (5/10/14)
-and renders the rest by scaling; and PMTiles carries a fixed ~600 KB–1.2 MB of global
-low-zoom context, which is half of a small extract.
-
-Not a like-for-like content comparison: the Protomaps basemap carries multilingual
-`name:*` values and layers this app never styles, while the mapsforge writer ran with its
-default tag config and `simplification-factor=2.5`.

@@ -5,10 +5,9 @@ import java.io.File
 /**
  * Puts a new name into a GPX file's first `<trk>`, copying every other byte untouched.
  *
- * Reparsing and re-serialising through [GpxWriter] would be lossy: [GpxParser] models
- * lat/lon/ele/time and nothing else, so a round trip discards `<extensions>` (heart rate,
- * cadence, power), waypoints, and every `<trk>` after the first. On an imported file that
- * is the user's own data.
+ * Reparsing and re-serialising through [GpxWriter] would be lossy: [GpxParser] drops
+ * `<extensions>` (heart rate, cadence, power) and every `<trk>` after the first, which on
+ * an imported file is the user's own data.
  *
  * Only the head is examined - a `<trk>`'s `<name>` precedes its first `<trkseg>` - so
  * nothing here scales with the length of the ride. [rewrite] reports failure and writes

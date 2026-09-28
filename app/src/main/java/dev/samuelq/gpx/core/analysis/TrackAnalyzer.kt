@@ -9,8 +9,7 @@ import kotlin.math.max
 /**
  * Turns raw [Track] geometry into the derived series the charts plot.
  *
- * Pure and synchronous - no Android types, no I/O - so it is directly unit-testable and
- * can be reused unchanged by a future live recorder.
+ * Pure and synchronous - no Android types, no I/O - so it is directly unit-testable.
  */
 object TrackAnalyzer {
 

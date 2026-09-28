@@ -1,7 +1,7 @@
 # mapcut
 
-A prototype extract service for mapsforge `.map` files — the `.map` counterpart to the
-PMTiles extract tool.
+A prototype extract service for mapsforge `.map` files: cut the area you want out of a
+published file, without downloading all of it.
 
 ```sh
 node server.mjs          # http://localhost:8787

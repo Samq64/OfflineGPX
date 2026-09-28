@@ -41,8 +41,8 @@ data class Settings(
 }
 
 /**
- * Settings, on disk. `SharedPreferences` rather than DataStore: this is three scalars read
- * once at startup, and DataStore would be a new dependency for no benefit at this size.
+ * Settings, on disk. `SharedPreferences` rather than DataStore: a handful of keys read once
+ * at startup, and DataStore would be a new dependency for no benefit at this size.
  */
 class SettingsRepository(context: Context) {
 

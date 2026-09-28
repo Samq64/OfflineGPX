@@ -224,7 +224,6 @@ fun MapScreen(
     // is what lets it go away entirely and give the map back.
     val sheetState = rememberStandardBottomSheetState(
         initialValue = SheetValue.Hidden,
-        // The point of the redesign: it can go away entirely and give the map back.
         skipHiddenState = false,
     )
     val scaffoldState = rememberBottomSheetScaffoldState(bottomSheetState = sheetState)

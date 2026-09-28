@@ -67,9 +67,8 @@ fun StatRow(
 private val RowHeight = 48.dp
 
 /**
- * The three readings that answer "what was this ride", and no fourth - max speed isn't
- * here since the speed chart already marks and labels its own peak. Moving time, since that
- * is what the average speed is measured over - the wall clock goes in [TrackDetails].
+ * The three readings that answer "what was this ride". Moving time, since that is what the
+ * average speed is measured over - the wall clock goes in [TrackDetails].
  */
 @Composable
 fun trackHeadline(stats: TrackStats, hasTime: Boolean): List<Stat> {

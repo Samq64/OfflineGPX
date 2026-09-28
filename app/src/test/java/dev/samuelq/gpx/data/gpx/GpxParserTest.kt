@@ -158,11 +158,7 @@ class GpxParserTest {
         assertNull(GpxParser.parseGpxTime(""))
     }
 
-    /**
-     * The spelling now decides which parser is used, rather than each being tried until one
-     * stops throwing. These are the shapes that decision has to tell apart - in particular
-     * a zone sign, which only ever appears after the `T`, against the date's own hyphens.
-     */
+    /** A zone sign only ever follows the `T`, so the date's own hyphens mustn't read as one. */
     @Test
     fun `picks a parser from the spelling rather than by trial and error`() {
         val expected = Instant.parse("2026-05-01T08:00:00Z")
