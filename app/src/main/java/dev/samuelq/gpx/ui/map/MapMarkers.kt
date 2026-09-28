@@ -16,7 +16,7 @@ import org.oscim.layers.marker.MarkerSymbol
 import org.oscim.layers.vector.geometries.Style
 
 /** Marker bitmaps, built once per colour. */
-internal class MarkerSymbols(marker: Color, puck: Color, darkTheme: Boolean, density: Density) {
+internal class MarkerSymbols(marker: Color, puck: Color, density: Density) {
     val marker: MarkerSymbol
     val puck: MarkerSymbol
     val waypoint: MarkerSymbol
@@ -34,9 +34,8 @@ internal class MarkerSymbols(marker: Color, puck: Color, darkTheme: Boolean, den
             )
             // Hotspot at the tip, so the pin points at the position exactly.
             this@MarkerSymbols.waypoint = pin(
-                PIN_RADIUS_DP.dp.toPx(), PIN_TIP_LENGTH_DP.dp.toPx(), ringWidth,
-                fill = if (darkTheme) WAYPOINT_LIGHT_GREY else WAYPOINT_DARK_GREY,
-                ring = if (darkTheme) WAYPOINT_DARK_GREY else MARKER_RING,
+                PIN_RADIUS_DP.dp.toPx(), PIN_TIP_LENGTH_DP.dp.toPx(), PIN_RING_WIDTH_DP.dp.toPx(),
+                fill = WAYPOINT_GREY, ring = MARKER_RING,
             )
         }
     }
@@ -142,20 +141,21 @@ private const val PUCK_RADIUS_DP = 8f
 // 40dp tall with the ring's top edge: big enough to tap, since taps only hit the icon.
 private const val PIN_RADIUS_DP = 14f
 
-internal const val PIN_TIP_LENGTH_DP = 25.25f
+internal const val PIN_TIP_LENGTH_DP = 24.75f
+
+// Thicker than the dots': it alone lifts the dark pin off dark-mode land.
+private const val PIN_RING_WIDTH_DP = 2.5f
 
 private const val PIN_HOLE_RATIO = 0.4f
 
 /** The pin's head, ring included. */
-internal val WaypointPinHeadRadius = (PIN_RADIUS_DP + MARKER_RING_WIDTH_DP).dp
+internal val WaypointPinHeadRadius = (PIN_RADIUS_DP + PIN_RING_WIDTH_DP).dp
 
 /** White in both themes: a surface-coloured ring vanished against dark-mode land. */
 private val MARKER_RING = Color.White
 
-// Greys so a pin never reads as one track's; inverted in dark mode, where a dark pin sank.
-private val WAYPOINT_DARK_GREY = Color(0xFF424242)
-
-private val WAYPOINT_LIGHT_GREY = Color(0xFFE0E0E0)
+// Grey so a pin never reads as one track's. Dark in both themes: a light one glared at night.
+private val WAYPOINT_GREY = Color(0xFF424242)
 
 private const val PUCK_HALO_RADIUS_DP = 14f
 

@@ -1,6 +1,5 @@
 package dev.samuelq.gpx.ui.map
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -219,9 +218,8 @@ fun OfflineMapCanvas(
     }
 
     // Per colour, not per selection: a new bitmap per scrub frame is a texture upload per frame.
-    val darkTheme = isSystemInDarkTheme()
-    val symbols = remember(markerColor, puckColor, darkTheme, density) {
-        MarkerSymbols(markerColor, puckColor, darkTheme, density)
+    val symbols = remember(markerColor, puckColor, density) {
+        MarkerSymbols(markerColor, puckColor, density)
     }
 
     LaunchedEffect(
