@@ -42,6 +42,14 @@ class ChartMathTest {
     }
 
     @Test
+    fun `a from-zero scale starts at zero even when flat`() {
+        val series = ChartSeries(floatArrayOf(0f, 1f), floatArrayOf(0f, 0f), intArrayOf(0), Color.Red)
+        val scale = series.yScale(3.6f, fromZero = true)
+        assertEquals(0f, scale.min)
+        assert(scale.ticks.all { it >= 0f }) { scale.ticks.toList().toString() }
+    }
+
+    @Test
     fun `a y scale always has five ticks`() {
         for ((lo, hi) in listOf(0f to 1f, 0f to 10f, 3f to 97f, 101.5f to 102.3f, -40f to 2500f, 19f to 21f)) {
             val series = ChartSeries(floatArrayOf(0f, 1f), floatArrayOf(lo, hi), intArrayOf(0), Color.Red)

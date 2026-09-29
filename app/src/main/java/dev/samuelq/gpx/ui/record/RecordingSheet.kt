@@ -27,7 +27,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -48,122 +47,144 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.samuelq.gpx.R
+import dev.samuelq.gpx.core.analysis.TrackProfile
 import dev.samuelq.gpx.data.record.RecordingState
 import dev.samuelq.gpx.ui.format.Formatters
 import dev.samuelq.gpx.ui.format.LocalFormatters
 import dev.samuelq.gpx.ui.track.Stat
 import dev.samuelq.gpx.ui.theme.recordingColor
+import dev.samuelq.gpx.ui.track.ProfileSheet
+import dev.samuelq.gpx.ui.track.SheetPadding
 import dev.samuelq.gpx.ui.track.StatRow
 
-/** Live recording controls, kept small so the map stays visible. */
-@OptIn(ExperimentalLayoutApi::class)
+/** The live recording in the sheet: status, numbers and controls in the peek, charts below. */
 @Composable
-fun RecordingBar(
+fun RecordingSheet(
     state: RecordingState.Active,
+    /** Null until the recording has moved; the sheet shows empty charts meanwhile. */
+    profile: TrackProfile?,
+    maxHeight: Dp,
+    selectedIndex: Int?,
+    onSelectedIndexChange: (Int?) -> Unit,
+    useTimeAxis: Boolean,
+    onAxisChange: (Boolean) -> Unit,
+    onPeekHeightChange: (Dp) -> Unit,
     onPause: () -> Unit,
     onResume: () -> Unit,
     onStop: () -> Unit,
     /** [description] may be blank. */
     onAddWaypoint: (description: String) -> Unit,
-    modifier: Modifier = Modifier,
-    /** Padded inside the surface so its background reaches the bottom edge. */
-    bottomInset: Dp = 0.dp,
+) {
+    ProfileSheet(
+        profile = profile,
+        // One recording per sheet: a zoom survives the profile growing.
+        viewKey = Unit,
+        maxHeight = maxHeight,
+        // The map's line can run ahead of a stale profile.
+        selectedIndex = selectedIndex?.takeIf { it < (profile?.points?.size ?: 0) },
+        onSelectedIndexChange = onSelectedIndexChange,
+        useTimeAxis = useTimeAxis,
+        onAxisChange = onAxisChange,
+        onPeekHeightChange = onPeekHeightChange,
+        pointCount = state.pointCount,
+    ) {
+        RecordingHeader(state, onPause, onResume, onStop, onAddWaypoint)
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun RecordingHeader(
+    state: RecordingState.Active,
+    onPause: () -> Unit,
+    onResume: () -> Unit,
+    onStop: () -> Unit,
+    onAddWaypoint: (description: String) -> Unit,
 ) {
     val formatters = LocalFormatters.current
     var addingWaypoint by remember { mutableStateOf(false) }
 
-    Surface(
-        modifier = modifier,
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        tonalElevation = 3.dp,
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = SheetPadding, end = SheetPadding, top = 4.dp, bottom = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = bottomInset)
-                .padding(horizontal = 20.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            // Tells a cold start (settles soon) from being indoors (never will).
-            val poorSignal = state.accuracyMeters?.takeIf { it > state.accuracyLimitMeters }
+        // Tells a cold start (settles soon) from being indoors (never will).
+        val poorSignal = state.accuracyMeters?.takeIf { it > state.accuracyLimitMeters }
 
-            val status = when {
-                state.paused -> stringResource(R.string.record_notification_paused)
-                state.lastPoint != null -> pluralStringResource(
-                    R.plurals.record_points_logged,
-                    state.pointCount,
-                    Formatters.count(state.pointCount),
-                )
+        val status = when {
+            state.paused -> stringResource(R.string.record_notification_paused)
+            state.lastPoint != null -> stringResource(R.string.record_notification_active)
 
-                poorSignal != null -> stringResource(
-                    R.string.record_weak_signal,
-                    formatters.meters(poorSignal),
-                )
-
-                else -> stringResource(R.string.record_waiting_for_fix)
-            }
-            val waypointCount = if (state.waypoints.isNotEmpty()) {
-                pluralStringResource(
-                    R.plurals.record_waypoints_logged,
-                    state.waypoints.size,
-                    state.waypoints.size,
-                )
-            } else {
-                null
-            }
-
-            // A header, like the sheet's title: what's happening, then the numbers, then controls.
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                RecordingDot(paused = state.paused)
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = listOfNotNull(status, waypointCount).joinToString("  ·  "),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = if (poorSignal != null && state.lastPoint == null) {
-                        MaterialTheme.colorScheme.error
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                )
-            }
-
-            val speedLabel = stringResource(R.string.chart_speed)
-            StatRow(
-                recordingStats(state.distanceMeters, state.totalSeconds) + Stat(
-                    speedLabel,
-                    // Blank, not zero, until the first fix.
-                    state.currentSpeedMps?.let(formatters::speed) ?: Formatters.EMPTY,
-                ),
+            poorSignal != null -> stringResource(
+                R.string.record_weak_signal,
+                formatters.meters(poorSignal),
             )
 
-            // Weighted outlined < tonal < filled. Wraps, not clips, at large font scales.
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                // Apart from pause and stop: it marks the ride rather than controlling it.
-                // Disabled, not hidden, before the first fix so the layout doesn't shift.
-                OutlinedButton(onClick = { addingWaypoint = true }, enabled = state.lastPoint != null) {
-                    Text(stringResource(R.string.record_add_waypoint))
-                }
+            else -> stringResource(R.string.record_waiting_for_fix)
+        }
+        val waypointCount = if (state.waypoints.isNotEmpty()) {
+            pluralStringResource(
+                R.plurals.record_waypoints_logged,
+                state.waypoints.size,
+                state.waypoints.size,
+            )
+        } else {
+            null
+        }
 
-                Spacer(Modifier.weight(1f))
+        // Like a track's title: what's happening, then the numbers, then controls.
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            RecordingDot(paused = state.paused)
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = listOfNotNull(status, waypointCount).joinToString("  ·  "),
+                style = MaterialTheme.typography.labelLarge,
+                color = if (poorSignal != null && state.lastPoint == null) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
+        }
 
-                // Icon only, so flipping between the two can't change its width.
-                FilledTonalIconButton(onClick = if (state.paused) onResume else onPause) {
-                    if (state.paused) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = stringResource(R.string.record_resume))
-                    } else {
-                        Icon(
-                            painterResource(R.drawable.ic_pause),
-                            contentDescription = stringResource(R.string.record_pause),
-                        )
-                    }
-                }
+        val speedLabel = stringResource(R.string.chart_speed)
+        StatRow(
+            recordingStats(state.distanceMeters, state.totalSeconds) + Stat(
+                speedLabel,
+                // Blank, not zero, until the first fix.
+                state.currentSpeedMps?.let(formatters::speed) ?: Formatters.EMPTY,
+            ),
+        )
 
-                Button(onClick = onStop) { Text(stringResource(R.string.record_stop)) }
+        // Weighted outlined < tonal < filled. Wraps, not clips, at large font scales.
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            // Apart from pause and stop: it marks the ride rather than controlling it.
+            // Disabled, not hidden, before the first fix so the layout doesn't shift.
+            OutlinedButton(onClick = { addingWaypoint = true }, enabled = state.lastPoint != null) {
+                Text(stringResource(R.string.record_add_waypoint))
             }
+
+            Spacer(Modifier.weight(1f))
+
+            // Icon only, so flipping between the two can't change its width.
+            FilledTonalIconButton(onClick = if (state.paused) onResume else onPause) {
+                if (state.paused) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = stringResource(R.string.record_resume))
+                } else {
+                    Icon(
+                        painterResource(R.drawable.ic_pause),
+                        contentDescription = stringResource(R.string.record_pause),
+                    )
+                }
+            }
+
+            Button(onClick = onStop) { Text(stringResource(R.string.record_stop)) }
         }
     }
 
@@ -179,7 +200,7 @@ fun RecordingBar(
     }
 }
 
-/** Distance and elapsed time, shared by the bar and the save dialogs. */
+/** Distance and elapsed time, shared by the sheet and the save dialogs. */
 @Composable
 internal fun recordingStats(distanceMeters: Double, elapsedSeconds: Double): List<Stat> = listOf(
     Stat(stringResource(R.string.axis_distance), LocalFormatters.current.distance(distanceMeters)),

@@ -61,6 +61,7 @@ fun OfflineMapCanvas(
     tracksLoading: Boolean,
     /** The recording, apart from [routes] so its growth rebuilds only its own geometry. */
     liveRoute: RouteOverlay?,
+    /** In [routes], or [liveRoute]. */
     focusedTrackId: Long?,
     /** Highlighted point within [focusedTrackId]'s route, as an index into its points. */
     selectedIndex: Int?,
@@ -236,15 +237,14 @@ fun OfflineMapCanvas(
         belowPinsLayer, pinLayer, abovePinsLayer, onTopLayer, symbols, routes, liveRoute, showPuck, focusedTrackId, selectedIndex,
         trackWaypoints, liveWaypoints, followedWaypoint,
     ) {
-        val puckAt = liveRoute?.takeIf { showPuck }?.points?.lastOrNull()
-        val markerAt = routes.firstOrNull { it.trackId == focusedTrackId }
-            ?.points?.getOrNull(selectedIndex ?: -1)
+        val puckRoute = liveRoute?.takeIf { showPuck }
+        val markerAt = routeFor(focusedTrackId, routes, liveRoute)?.points?.getOrNull(selectedIndex ?: -1)
 
         val selected = symbols.selectedDot(markerAt)
         val pinTapped = followedWaypoint != null
         belowPinsLayer.show(if (pinTapped) emptyList() else selected)
         pinLayer.show(symbols.pins(trackWaypoints, liveWaypoints, followedWaypoint))
-        abovePinsLayer.show(symbols.puckDot(puckAt) + if (pinTapped) selected else emptyList())
+        abovePinsLayer.show(symbols.puck(puckRoute?.points?.lastOrNull(), puckRoute?.headingDegrees()) + if (pinTapped) selected else emptyList())
         onTopLayer.show(symbols.onTopPin(followedWaypoint, liveWaypoints))
         map.render()
     }
@@ -354,11 +354,14 @@ fun OfflineMapCanvas(
 
     // Nudge the least distance rather than re-centring, so scrubbing doesn't pan the map constantly.
     LaunchedEffect(map, focusedTrackId, selectedIndex, insets) {
-        val at = currentRoutes.firstOrNull { it.trackId == focusedTrackId }
+        val at = routeFor(focusedTrackId, currentRoutes, currentLiveRoute)
             ?.points?.getOrNull(selectedIndex ?: -1) ?: return@LaunchedEffect
         map.nudgeIntoView(at, insets, followMargin)
     }
 }
+
+private fun routeFor(trackId: Long?, routes: List<RouteOverlay>, liveRoute: RouteOverlay?) =
+    liveRoute?.takeIf { it.trackId == trackId } ?: routes.firstOrNull { it.trackId == trackId }
 
 /** A [MapView] tied to the lifecycle; it owns a GL thread and surface that would otherwise leak. */
 @Composable

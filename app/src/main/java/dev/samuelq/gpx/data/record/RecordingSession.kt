@@ -43,16 +43,25 @@ internal class RecordingSession(
     private var traceStartsSegment = true
     private var tracePublishedAt = 0
 
-    /** Pauses included, matching the saved track's `totalDurationSeconds`. */
-    val totalSeconds: Double
-        get() = startedAt?.let { (clock() - it) / 1000.0 } ?: 0.0
+    /** On [clock]; elapsed stands still from either, as the log ends there. */
+    private var pausedAt: Long? = null
+    private var heldAt: Long? = null
 
+    /** Stop was asked for; fixes wait on the answer. */
+    val held: Boolean get() = heldAt != null
+
+    /** Earlier pauses included, matching the saved track's `totalDurationSeconds`. */
+    val totalSeconds: Double
+        get() = startedAt?.let { ((listOfNotNull(pausedAt, heldAt).minOrNull() ?: clock()) - it) / 1000.0 } ?: 0.0
+
+    /** Also on the first point, so the map shows a position as soon as there is one. */
     val traceDue: Boolean
-        get() = tracePoints.size - tracePublishedAt >= TRACE_PUBLISH_EVERY
+        get() = tracePoints.size - tracePublishedAt >= TRACE_PUBLISH_EVERY ||
+            (tracePublishedAt == 0 && tracePoints.isNotEmpty())
 
     /** Returns the point to log, or null if rejected or paused. */
     fun onFix(fix: TrackPoint): TrackPoint? {
-        if (paused) return null
+        if (paused || held) return null
         val at = fix.time ?: return null
         lastAccuracyMeters = fix.accuracyMeters
 
@@ -62,14 +71,7 @@ internal class RecordingSession(
             if (startedAt == null) startedAt = clock()
             distanceFrom?.let { distanceMeters += haversineMeters(it, point) }
             distanceFrom = point
-            lastPoint = point
-            pointCount++
-
-            if (traceStartsSegment) {
-                traceSegmentStarts += tracePoints.size
-                traceStartsSegment = false
-            }
-            tracePoints += point
+            logged(point)
         }
 
         speedWindow.add(at.toEpochMilli() / 1000.0, distanceMeters)
@@ -77,22 +79,59 @@ internal class RecordingSession(
         return point
     }
 
-    /** Starts a gap so resuming elsewhere doesn't count as travel. False if already paused. */
-    fun pause(): Boolean {
-        if (paused) return false
+    private fun logged(point: TrackPoint) {
+        lastPoint = point
+        pointCount++
+        if (traceStartsSegment) {
+            traceSegmentStarts += tracePoints.size
+            traceStartsSegment = false
+        }
+        tracePoints += point
+    }
+
+    /**
+     * The last point again at [at], so the log ends when the ride stood still rather than
+     * at the last fix to move. Null if paused or there is nothing to repeat.
+     */
+    private fun closeAt(at: Instant): TrackPoint? {
+        if (paused || held) return null
+        val last = lastPoint?.takeIf { it.time?.isBefore(at) == true } ?: return null
+        return last.copy(time = at).also(::logged)
+    }
+
+    /** Waits for Stop's answer; returns the point that ends the log at [at], if any. */
+    fun hold(at: Instant): TrackPoint? {
+        val closing = closeAt(at)
+        if (heldAt == null) heldAt = clock()
+        return closing
+    }
+
+    /** Stop was cancelled. */
+    fun release() {
+        heldAt = null
+    }
+
+    /**
+     * Starts a gap so resuming elsewhere doesn't count as travel. Returns the point that
+     * ends the segment at [at], if any. Callers check [paused] first.
+     */
+    fun pause(at: Instant): TrackPoint? {
+        val closing = closeAt(at)
         paused = true
+        pausedAt = clock()
         traceStartsSegment = true
         distanceFrom = null
         currentSpeedMps = null
         filter.reset()
         speedWindow.reset()
-        return true
+        return closing
     }
 
     /** False if not paused. */
     fun resume(): Boolean {
         if (!paused) return false
         paused = false
+        pausedAt = null
         return true
     }
 

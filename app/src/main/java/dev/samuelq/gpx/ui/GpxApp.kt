@@ -17,6 +17,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import dev.samuelq.gpx.GpxApplication
+import dev.samuelq.gpx.data.record.RecordingController
 import dev.samuelq.gpx.data.record.RecordingState
 import dev.samuelq.gpx.ui.format.Formatters
 import dev.samuelq.gpx.ui.format.LocalFormatters
@@ -88,17 +89,23 @@ fun GpxApp(
         }
 
         // Here, not on the map, so the notification's Stop is answered over any screen.
-        val recorder = container.recordingController
-        val recording by recorder.state.collectAsStateWithLifecycle()
-        val stopRequested by recorder.stopRequested.collectAsStateWithLifecycle()
-        (recording as? RecordingState.Active)?.takeIf { stopRequested }?.let { active ->
-            StopRecordingDialog(
-                state = active,
-                onSave = recorder::stop,
-                onDiscard = recorder::discard,
-                onDismiss = recorder::cancelStop,
-            )
-        }
+        StopRecordingPrompt(container.recordingController)
+    }
+}
+
+/** Its own scope: the recording's state changes every second and would redo the whole app. */
+@Composable
+private fun StopRecordingPrompt(recorder: RecordingController) {
+    val stopRequested by recorder.stopRequested.collectAsStateWithLifecycle()
+    if (!stopRequested) return
+    val recording by recorder.state.collectAsStateWithLifecycle()
+    (recording as? RecordingState.Active)?.let { active ->
+        StopRecordingDialog(
+            state = active,
+            onSave = recorder::stop,
+            onDiscard = recorder::discard,
+            onDismiss = recorder::cancelStop,
+        )
     }
 }
 

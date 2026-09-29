@@ -98,10 +98,6 @@
     <string name="record_discard">Discard</string>
     <string name="record_waiting_for_fix">Waiting for a GPS fix…</string>
     <string name="record_weak_signal">Signal too weak to record — accurate to ±%1$s. Try outdoors.</string>
-    <plurals name="record_points_logged">
-        <item quantity="one">%s point logged</item>
-        <item quantity="other">%s points logged</item>
-    </plurals>
     <string name="record_add_waypoint">Add waypoint</string>
     <string name="record_waypoint_title">Waypoint %1$d</string>
     <string name="record_waypoint_label">Note (optional)</string>
@@ -112,6 +108,7 @@
     <string name="record_save_failed">Couldn\'t save that recording. It\'s still on the device.</string>
     <string name="record_discarded">Recording discarded.</string>
     <string name="record_stop_title">Stop recording</string>
+    <string name="record_stop_to_open">Stop recording to open a track.</string>
     <string name="record_recovered_title">Unsaved recording</string>
     <string name="record_recovered_body">Started %1$s. The app closed before it was saved.</string>
 
@@ -153,6 +150,7 @@
     <string name="chart_elevation">Elevation</string>
     <!-- Not "Paused": a break is equally signal loss or an analyser cut, and naming one
          asserts a cause the app took care not to infer. -->
+    <string name="chart_waiting">No movement yet</string>
     <string name="chart_gap">Gap %1$s</string>
     <string name="chart_speed_empty">This track has no timestamps, so speed can\'t be computed.</string>
     <string name="chart_elevation_empty">This track has no elevation data.</string>
@@ -165,5 +163,9 @@
     <string name="stat_avg_speed">Average speed</string>
     <string name="stat_ascent">Ascent</string>
     <string name="stat_descent">Descent</string>
-    <string name="stat_points">Points</string>
+    <!-- A label under the count, which is shown apart. -->
+    <plurals name="stat_points">
+        <item quantity="one">Point</item>
+        <item quantity="other">Points</item>
+    </plurals>
 </resources>

@@ -5,6 +5,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import dev.samuelq.gpx.core.analysis.TrackAnalyzer
+import dev.samuelq.gpx.core.analysis.TrackProfile
+import dev.samuelq.gpx.core.model.Track
+import dev.samuelq.gpx.core.model.TrackSegment
 import dev.samuelq.gpx.data.db.TrackEntity
 import dev.samuelq.gpx.data.map.MapStore
 import dev.samuelq.gpx.data.map.OfflineMap
@@ -19,6 +23,7 @@ import dev.samuelq.gpx.di.appContainer
 import dev.samuelq.gpx.ui.track.FocusedTrack
 import dev.samuelq.gpx.ui.track.TrackRef
 import dev.samuelq.gpx.ui.track.toTrackMessageRes
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -29,6 +34,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.runningFold
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -77,6 +85,29 @@ class MapViewModel(
     val state: StateFlow<MapUiState> = _state.asStateFlow()
 
     val trace: StateFlow<LiveTrace> = controller.trace
+
+    private val liveChartsShown = MutableStateFlow(false)
+
+    fun showLiveCharts(shown: Boolean) {
+        liveChartsShown.value = shown
+    }
+
+    /**
+     * The recording analysed like a saved track, redone only while its charts are shown.
+     * Kept, stale, while they aren't, so the collapsed sheet still has them to open onto.
+     * Null until it has moved: standing still has no distance axis to chart along.
+     */
+    val live: StateFlow<TrackProfile?> = combine(controller.trace, liveChartsShown, ::Pair)
+        .runningFold(null as TrackProfile?) { last, (trace, shown) ->
+            when {
+                trace.points.size < 2 -> null
+                shown || last == null ->
+                    TrackAnalyzer.analyze(trace.toTrack()).takeIf { it.stats.distanceMeters > 0.0 }
+                else -> last
+            }
+        }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     private val _focused = MutableStateFlow<FocusedTrack>(FocusedTrack.None)
     val focused: StateFlow<FocusedTrack> = _focused.asStateFlow()
@@ -291,6 +322,12 @@ class MapViewModel(
     fun undoDelete(id: Long) = repository.undoDelete(listOf(id))
 
     fun commitDelete(id: Long) = repository.commitDelete(listOf(id))
+
+    private fun LiveTrace.toTrack(): Track {
+        val ends = segmentStartIndices.drop(1) + points.size
+        val segments = segmentStartIndices.zip(ends) { from, to -> TrackSegment(points.subList(from, to)) }
+        return Track(name = null, segments = segments.ifEmpty { listOf(TrackSegment(points)) })
+    }
 
     companion object {
         val Factory = viewModelFactory {

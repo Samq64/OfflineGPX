@@ -68,6 +68,8 @@ class RecordingService : Service() {
                     ACTION_START -> start()
                     ACTION_PAUSE -> pause()
                     ACTION_RESUME -> resume()
+                    ACTION_HOLD -> hold()
+                    ACTION_RELEASE -> release()
                     ACTION_STOP -> stop(save = true, name = intent.getStringExtra(EXTRA_NAME).orEmpty())
                     ACTION_DISCARD -> stop(save = false, name = intent.getStringExtra(EXTRA_NAME).orEmpty())
                     ACTION_WAYPOINT -> addWaypoint(intent.getStringExtra(EXTRA_DESCRIPTION) ?: "")
@@ -154,10 +156,25 @@ class RecordingService : Service() {
         val session = session ?: return
         session.onFix(fix)?.let { point ->
             wal?.append(point)
-            if (session.traceDue) publishTrace(session)
+            if (session.traceDue) {
+                publishTrace(session)
+                // With the line, so the first fix flips the status as the puck appears.
+                publish()
+            }
         }
+        // Otherwise the ticker publishes: fixes come about as often, but out of step with it.
+    }
+
+    /** While Stop's dialog is up, so the ride ends when Stop was tapped, not answered. */
+    private fun hold() {
+        val session = session ?: return
+        session.hold(Instant.now())?.let { wal?.append(it) }
         publish()
-        notifications.update(notificationContent(), force = false)
+    }
+
+    private fun release() {
+        session?.release()
+        publish()
     }
 
     private fun addWaypoint(description: String) {
@@ -166,6 +183,7 @@ class RecordingService : Service() {
         publish()
     }
 
+    /** The one regular publish: elapsed time and each fix's numbers alike. */
     private fun startTicker() {
         ticker = scope.launch {
             while (true) {
@@ -179,7 +197,8 @@ class RecordingService : Service() {
     /** Stops sampling to save battery and writes a real `<trkseg>` boundary. */
     private suspend fun pause() {
         val session = session ?: return
-        if (!session.pause()) return
+        if (session.paused) return
+        session.pause(Instant.now())?.let { wal?.append(it) }
 
         collection?.cancelAndJoin()
         collection = null
@@ -276,6 +295,8 @@ class RecordingService : Service() {
         internal const val ACTION_START = "dev.samuelq.gpx.RECORD_START"
         internal const val ACTION_PAUSE = "dev.samuelq.gpx.RECORD_PAUSE"
         internal const val ACTION_RESUME = "dev.samuelq.gpx.RECORD_RESUME"
+        internal const val ACTION_HOLD = "dev.samuelq.gpx.RECORD_HOLD"
+        internal const val ACTION_RELEASE = "dev.samuelq.gpx.RECORD_RELEASE"
         internal const val ACTION_STOP = "dev.samuelq.gpx.RECORD_STOP"
         internal const val ACTION_DISCARD = "dev.samuelq.gpx.RECORD_DISCARD"
         internal const val ACTION_WAYPOINT = "dev.samuelq.gpx.RECORD_WAYPOINT"

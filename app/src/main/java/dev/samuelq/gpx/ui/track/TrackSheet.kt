@@ -52,9 +52,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.samuelq.gpx.R
+import dev.samuelq.gpx.core.analysis.TrackProfile
 import dev.samuelq.gpx.data.track.LoadedTrack
 import dev.samuelq.gpx.ui.chart.ChartAxisGroup
 import dev.samuelq.gpx.ui.chart.ChartSeries
+import dev.samuelq.gpx.ui.chart.EmptyChart
 import dev.samuelq.gpx.ui.chart.ProfileChart
 import dev.samuelq.gpx.ui.chart.axisScale
 import dev.samuelq.gpx.ui.chart.timeAxisScale
@@ -64,7 +66,7 @@ import dev.samuelq.gpx.ui.format.Formatters
 import dev.samuelq.gpx.ui.format.LocalFormatters
 import dev.samuelq.gpx.ui.theme.LocalChartColors
 
-private val SheetPadding = 20.dp
+internal val SheetPadding = 20.dp
 
 /** Peek height before a track loads, and the minimum after. */
 val TrackSheetPeekHeight = 128.dp
@@ -94,19 +96,132 @@ fun TrackSheet(
     /** Close button, for the landscape panel. */
     onClose: (() -> Unit)? = null,
 ) {
-    val density = LocalDensity.current
     val profile = loaded.profile
-    val stats = profile.stats
+    ProfileSheet(
+        profile = profile,
+        viewKey = profile,
+        maxHeight = maxHeight,
+        selectedIndex = selectedIndex,
+        onSelectedIndexChange = onSelectedIndexChange,
+        useTimeAxis = useTimeAxis,
+        onAxisChange = onAxisChange,
+        onPeekHeightChange = onPeekHeightChange,
+        // The file's own <desc>; the app never writes one.
+        description = loaded.track.description,
+    ) {
+        SheetTitle(
+            name = trackTitle(loaded.track.name, loaded.displayName),
+            routeColor = routeColor,
+            actions = actions,
+            onClose = onClose,
+            modifier = Modifier.padding(start = SheetPadding, end = 4.dp),
+        )
+
+        StatRow(
+            stats = trackHeadline(profile.stats, profile.hasTime),
+            modifier = Modifier.padding(start = SheetPadding, end = 8.dp),
+        )
+
+        profile.stats.startedAt?.let {
+            Text(
+                text = Formatters.dateTime(it),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = SheetPadding, vertical = 8.dp),
+            )
+        }
+    }
+}
+
+/**
+ * [header] in the peek, then details and charts of [profile] below it; null shows empty
+ * charts. A zoom lasts while [viewKey] does, and an unzoomed chart follows a growing profile.
+ */
+@Composable
+fun ProfileSheet(
+    profile: TrackProfile?,
+    viewKey: Any,
+    maxHeight: Dp,
+    selectedIndex: Int?,
+    onSelectedIndexChange: (Int?) -> Unit,
+    useTimeAxis: Boolean,
+    onAxisChange: (Boolean) -> Unit,
+    onPeekHeightChange: (Dp) -> Unit,
+    description: String? = null,
+    /** Overrides the profile's, for a recording's count that moves with every fix. */
+    pointCount: Int? = null,
+    header: @Composable () -> Unit,
+) {
+    val density = LocalDensity.current
+
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(max = maxHeight)
+            // Taps not consumed by charts or buttons clear the selection.
+            .pointerInput(Unit) {
+                detectTapGestures { onSelectedIndexChange(null) }
+            }
+    ) {
+        // Measured, since a larger font would push the date under the gesture bar.
+        Column(Modifier.onSizeChanged { onPeekHeightChange(with(density) { it.height.toDp() }) }) {
+            header()
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                // fill = false keeps a short sheet short.
+                .weight(1f, fill = false)
+                .verticalScroll(rememberScrollState())
+                .navigationBarsPadding(),
+        ) {
+            // Just above the gesture bar at peek: a second hint, beside the handle, that there's more.
+            HorizontalDivider(Modifier.padding(horizontal = SheetPadding, vertical = 8.dp))
+            if (profile != null) {
+                ProfileDetails(
+                    profile = profile,
+                    viewKey = viewKey,
+                    selectedIndex = selectedIndex,
+                    onSelectedIndexChange = onSelectedIndexChange,
+                    useTimeAxis = useTimeAxis && profile.hasTime,
+                    onAxisChange = onAxisChange,
+                    description = description,
+                    pointCount = pointCount,
+                )
+            } else {
+                EmptyProfile(pointCount, useTimeAxis)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfileDetails(
+    profile: TrackProfile,
+    viewKey: Any,
+    selectedIndex: Int?,
+    onSelectedIndexChange: (Int?) -> Unit,
+    useTimeAxis: Boolean,
+    onAxisChange: (Boolean) -> Unit,
+    description: String?,
+    pointCount: Int?,
+) {
     val chartColors = LocalChartColors.current
     val formatters = LocalFormatters.current
 
     val xValues = if (useTimeAxis) profile.elapsedSeconds else profile.distanceMeters
     val xDomain = (xValues.firstOrNull() ?: 0f)..(xValues.lastOrNull() ?: 1f)
-    var xView by remember(profile, useTimeAxis) { mutableStateOf(xDomain) }
+    // Null is the whole domain, which a live profile widens.
+    var zoomed by remember(viewKey, useTimeAxis) { mutableStateOf<ClosedFloatingPointRange<Float>?>(null) }
+    val xView = zoomed ?: xDomain
     // Reset per track and units, since the gutter only ever grows.
-    val axisGroup = remember(profile, formatters) { ChartAxisGroup() }
+    val axisGroup = remember(viewKey, formatters) { ChartAxisGroup() }
     val onZoom: (Float, Float, Float) -> Unit = remember(profile, useTimeAxis) {
-        { anchor, zoom, pan -> xView = zoomView(xView, xDomain, anchor, zoom, pan) }
+        { anchor, zoom, pan ->
+            val view = zoomView(zoomed ?: xDomain, xDomain, anchor, zoom, pan)
+            zoomed = view.takeIf { it.endInclusive - it.start < xDomain.endInclusive - xDomain.start }
+        }
     }
     // Shared by both charts so the scrubber lines up.
     val xScale = remember(xView, useTimeAxis, formatters) {
@@ -144,155 +259,110 @@ fun TrackSheet(
         if (!useTimeAxis) null else { seconds -> gapFormat.format(Formatters.durationAxis(seconds)) }
     }
 
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .heightIn(max = maxHeight)
-            // Taps not consumed by charts or buttons clear the selection.
-            .pointerInput(Unit) {
-                detectTapGestures { onSelectedIndexChange(null) }
-            }
+    description?.takeIf(String::isNotBlank)?.let {
+        Text(
+            text = it,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(horizontal = SheetPadding, vertical = 4.dp),
+        )
+    }
+
+    Column(Modifier.padding(horizontal = SheetPadding, vertical = 4.dp)) {
+        TrackDetails(
+            stats = profile.stats,
+            hasTime = profile.hasTime,
+            hasElevation = profile.hasElevation,
+            // Only a recording overrides the count.
+            complete = pointCount != null,
+            pointCount = pointCount,
+        )
+    }
+
+    Spacer(Modifier.height(20.dp))
+
+    if (profile.hasTime) {
+        AxisSelector(
+            useTimeAxis = useTimeAxis,
+            onChange = onAxisChange,
+            modifier = Modifier.padding(horizontal = SheetPadding),
+        )
+        Spacer(Modifier.height(16.dp))
+    }
+
+    @Composable
+    fun Profile(
+        @StringRes title: Int,
+        @StringRes empty: Int,
+        available: Boolean,
+        y: FloatArray,
+        color: Color,
+        perUnit: Float,
+        fromZero: Boolean,
+        axisFor: (step: Float) -> (Float) -> String,
+        formatValue: (Float) -> String,
     ) {
-
-        // Measured, since a larger font would push the date under the gesture bar.
-        Column(Modifier.onSizeChanged { onPeekHeightChange(with(density) { it.height.toDp() }) }) {
-            SheetTitle(
-                name = trackTitle(loaded.track.name, loaded.displayName),
-                routeColor = routeColor,
-                actions = actions,
-                onClose = onClose,
-                modifier = Modifier.padding(start = SheetPadding, end = 4.dp),
-            )
-
-            StatRow(
-                stats = trackHeadline(stats, profile.hasTime),
-                modifier = Modifier.padding(start = SheetPadding, end = 8.dp),
-            )
-
-            stats.startedAt?.let {
-                Text(
-                    text = Formatters.dateTime(it),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = SheetPadding, vertical = 8.dp),
-                )
-            }
-        }
-
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                // fill = false keeps a short sheet short.
-                .weight(1f, fill = false)
-                .verticalScroll(rememberScrollState())
-                .navigationBarsPadding(),
+        ChartSection(
+            title = stringResource(title),
+            modifier = Modifier.padding(horizontal = SheetPadding),
         ) {
-            HorizontalDivider(Modifier.padding(horizontal = SheetPadding, vertical = 8.dp))
-
-            // The file's own <desc>; the app never writes one.
-            loaded.track.description?.takeIf(String::isNotBlank)?.let {
-                Text(
-                    text = it,
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(horizontal = SheetPadding, vertical = 4.dp),
+            if (!available) {
+                Unavailable(stringResource(empty))
+                return@ChartSection
+            }
+            val series = remember(profile, useTimeAxis, color) {
+                ChartSeries(
+                    x = xValues,
+                    y = y,
+                    segmentStartIndices = profile.segmentStartIndices,
+                    color = color,
                 )
             }
-
-            Column(Modifier.padding(horizontal = SheetPadding, vertical = 4.dp)) {
-                TrackDetails(
-                    stats = stats,
-                    hasTime = profile.hasTime,
-                    hasElevation = profile.hasElevation,
-                )
-            }
-
-            Spacer(Modifier.height(20.dp))
-
-            if (profile.hasTime) {
-                AxisSelector(
-                    useTimeAxis = useTimeAxis,
-                    onChange = onAxisChange,
-                    modifier = Modifier.padding(horizontal = SheetPadding),
-                )
-                Spacer(Modifier.height(16.dp))
-            }
-
-            @Composable
-            fun Profile(
-                @StringRes title: Int,
-                @StringRes empty: Int,
-                available: Boolean,
-                y: FloatArray,
-                color: Color,
-                perUnit: Float,
-                fromZero: Boolean,
-                axisFor: (step: Float) -> (Float) -> String,
-                formatValue: (Float) -> String,
-            ) {
-                ChartSection(
-                    title = stringResource(title),
-                    modifier = Modifier.padding(horizontal = SheetPadding),
-                ) {
-                    if (!available) {
-                        Unavailable(stringResource(empty))
-                        return@ChartSection
-                    }
-                    val series = remember(profile, useTimeAxis, color) {
-                        ChartSeries(
-                            x = xValues,
-                            y = y,
-                            segmentStartIndices = profile.segmentStartIndices,
-                            color = color,
-                        )
-                    }
-                    val yScale = remember(series, perUnit) { series.yScale(perUnit, fromZero) }
-                    ProfileChart(
-                        series = series,
-                        xScale = xScale,
-                        yScale = yScale,
-                        formatX = formatX,
-                        formatY = remember(formatters, yScale) { axisFor(yScale.step) },
-                        selectedIndex = selectedIndex,
-                        onSelectedIndexChange = onSelectedIndexChange,
-                        onZoom = onZoom,
-                        axisGroup = axisGroup,
-                        contentDescription = stringResource(title),
-                        breakLabel = breakLabel,
-                        formatValue = formatValue,
-                        formatPosition = positionValue,
-                    )
-                }
-            }
-
-            Profile(
-                title = R.string.chart_speed,
-                empty = R.string.chart_speed_empty,
-                available = profile.hasTime,
-                y = profile.speedMps,
-                color = chartColors.speed,
-                perUnit = formatters.speedPerMps,
-                fromZero = true,
-                axisFor = formatters::speedAxisFor,
-                formatValue = speedValue,
+            val yScale = remember(series, perUnit) { series.yScale(perUnit, fromZero) }
+            ProfileChart(
+                series = series,
+                xScale = xScale,
+                yScale = yScale,
+                formatX = formatX,
+                formatY = remember(formatters, yScale) { axisFor(yScale.step) },
+                selectedIndex = selectedIndex,
+                onSelectedIndexChange = onSelectedIndexChange,
+                onZoom = onZoom,
+                axisGroup = axisGroup,
+                contentDescription = stringResource(title),
+                breakLabel = breakLabel,
+                formatValue = formatValue,
+                formatPosition = positionValue,
             )
-
-            Spacer(Modifier.height(12.dp))
-
-            Profile(
-                title = R.string.chart_elevation,
-                empty = R.string.chart_elevation_empty,
-                available = profile.hasElevation,
-                y = profile.elevationMeters,
-                color = chartColors.elevation,
-                perUnit = formatters.elevationPerMeter,
-                fromZero = false,
-                axisFor = formatters::elevationAxisFor,
-                formatValue = elevationValue,
-            )
-
-            Spacer(Modifier.height(32.dp))
         }
     }
+
+    Profile(
+        title = R.string.chart_speed,
+        empty = R.string.chart_speed_empty,
+        available = profile.hasTime,
+        y = profile.speedMps,
+        color = chartColors.speed,
+        perUnit = formatters.speedPerMps,
+        fromZero = true,
+        axisFor = formatters::speedAxisFor,
+        formatValue = speedValue,
+    )
+
+    Spacer(Modifier.height(12.dp))
+
+    Profile(
+        title = R.string.chart_elevation,
+        empty = R.string.chart_elevation_empty,
+        available = profile.hasElevation,
+        y = profile.elevationMeters,
+        color = chartColors.elevation,
+        perUnit = formatters.elevationPerMeter,
+        fromZero = false,
+        axisFor = formatters::elevationAxisFor,
+        formatValue = elevationValue,
+    )
+
+    Spacer(Modifier.height(32.dp))
 }
 
 /** Name beside the route swatch, tying the sheet to one of several overlaid routes. */
@@ -378,11 +448,13 @@ private fun AxisSelector(
     useTimeAxis: Boolean,
     onChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
 ) {
     SingleChoiceSegmentedButtonRow(modifier.fillMaxWidth()) {
         SegmentedButton(
             selected = !useTimeAxis,
             onClick = { onChange(false) },
+            enabled = enabled,
             shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
             modifier = Modifier.weight(1f),
         ) { Text(stringResource(R.string.axis_distance)) }
@@ -390,6 +462,7 @@ private fun AxisSelector(
         SegmentedButton(
             selected = useTimeAxis,
             onClick = { onChange(true) },
+            enabled = enabled,
             shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
             modifier = Modifier.weight(1f),
         ) { Text(stringResource(R.string.axis_time)) }
@@ -407,6 +480,39 @@ private fun ChartSection(
         Spacer(Modifier.height(4.dp))
         content()
     }
+}
+
+/** Details and chart outlines awaiting data, so a new recording's sheet still opens onto something. */
+@Composable
+private fun EmptyProfile(pointCount: Int?, useTimeAxis: Boolean) {
+    TrackDetails(
+        stats = null,
+        hasTime = false,
+        hasElevation = false,
+        complete = true,
+        pointCount = pointCount,
+        modifier = Modifier.padding(horizontal = SheetPadding, vertical = 4.dp),
+    )
+    Spacer(Modifier.height(20.dp))
+    // Disabled, not hidden, so nothing shifts once the charts fill in.
+    AxisSelector(
+        useTimeAxis = useTimeAxis,
+        onChange = {},
+        enabled = false,
+        modifier = Modifier.padding(horizontal = SheetPadding),
+    )
+    Spacer(Modifier.height(16.dp))
+    val message = stringResource(R.string.chart_waiting)
+    for (title in listOf(R.string.chart_speed, R.string.chart_elevation)) {
+        ChartSection(
+            title = stringResource(title),
+            modifier = Modifier.padding(horizontal = SheetPadding),
+        ) {
+            EmptyChart(message)
+        }
+        Spacer(Modifier.height(12.dp))
+    }
+    Spacer(Modifier.height(20.dp))
 }
 
 @Composable

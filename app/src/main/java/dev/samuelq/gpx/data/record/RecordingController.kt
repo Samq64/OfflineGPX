@@ -92,14 +92,17 @@ class RecordingController(context: Context) {
     fun start() = send(RecordingService.ACTION_START)
     fun pause() = send(RecordingService.ACTION_PAUSE)
     fun resume() = send(RecordingService.ACTION_RESUME)
-    /** Asks first: nothing stops until [stop] or [discard]. */
+    /** Asks first, holding the ride where it is; nothing stops until [stop] or [discard]. */
     fun requestStop() {
-        if (_state.value is RecordingState.Active) _stopRequested.value = true
+        if (_state.value !is RecordingState.Active || _stopRequested.value) return
+        _stopRequested.value = true
+        send(RecordingService.ACTION_HOLD)
     }
 
     /** Keeps recording. */
     fun cancelStop() {
         _stopRequested.value = false
+        send(RecordingService.ACTION_RELEASE)
     }
 
     /** A blank [name] uses the default. */

@@ -67,8 +67,8 @@ class RecordingSessionTest {
         val session = session()
         session.onFix(fix(0, 0.0))
         session.onFix(fix(1, 10.0))
-        assertTrue(session.pause())
-        assertFalse(session.pause())
+        session.pause(origin.plusSeconds(1))
+        assertTrue(session.paused)
         assertNull(session.onFix(fix(2, 20.0)), "paused fixes are dropped")
 
         assertTrue(session.resume())
@@ -82,11 +82,15 @@ class RecordingSessionTest {
     }
 
     @Test
-    fun `the trace is due every few points`() {
+    fun `the trace is due on the first point, then every few points`() {
         val session = session()
-        repeat(4) { session.onFix(fix(it.toLong(), it * 10.0)) }
         assertFalse(session.traceDue)
-        session.onFix(fix(4, 40.0))
+        session.onFix(fix(0, 0.0))
+        assertTrue(session.traceDue)
+        session.trace()
+        repeat(4) { session.onFix(fix(it + 1L, (it + 1) * 10.0)) }
+        assertFalse(session.traceDue)
+        session.onFix(fix(5, 50.0))
         assertTrue(session.traceDue)
         session.trace()
         assertFalse(session.traceDue)
@@ -111,9 +115,48 @@ class RecordingSessionTest {
         val session = session()
         session.onFix(fix(0, 0.0))
         session.onFix(fix(1, 10.0))
-        session.pause()
+        session.pause(origin.plusSeconds(1))
 
         val waypoint = assertNotNull(session.addWaypoint("lunch", origin.plusSeconds(90)))
         assertEquals(session.state().lastPoint?.latitude, waypoint.point.latitude)
+    }
+
+    @Test
+    fun `a pause ends the segment and elapsed time at the moment it was tapped`() {
+        val session = session()
+        now = 0
+        session.onFix(fix(0, 0.0))
+        now = 30_000
+        val closing = assertNotNull(session.pause(origin.plusSeconds(30)))
+        assertEquals(origin.plusSeconds(30), closing.time)
+        assertEquals(0.0, closing.latitude - fix(0, 0.0).latitude)
+        now = 90_000
+        assertEquals(30.0, session.totalSeconds)
+        assertEquals(2, session.trace().points.size)
+    }
+
+    @Test
+    fun `stopping holds fixes and elapsed time until it is answered`() {
+        val session = session()
+        now = 0
+        session.onFix(fix(0, 0.0))
+        now = 20_000
+        assertEquals(origin.plusSeconds(20), session.hold(origin.plusSeconds(20))?.time)
+        assertNull(session.onFix(fix(25, 50.0)), "fixes wait on the answer")
+        now = 60_000
+        assertEquals(20.0, session.totalSeconds)
+
+        session.release()
+        now = 61_000
+        assertNotNull(session.onFix(fix(61, 50.0)))
+        assertEquals(61.0, session.totalSeconds)
+    }
+
+    @Test
+    fun `nothing closes the log while paused`() {
+        val session = session()
+        session.onFix(fix(0, 0.0))
+        session.pause(origin.plusSeconds(1))
+        assertNull(session.hold(origin.plusSeconds(10)))
     }
 }

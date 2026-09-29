@@ -82,17 +82,17 @@ internal fun FocusedTrackContent(
     }
 }
 
-/** The landscape side panel. Keeps the last track while sliding away rather than emptying first. */
+/** The landscape side panel. Keeps the last [subject] while sliding away rather than emptying first. */
 @Composable
-internal fun TrackSidePanel(
+internal fun <T : Any> SidePanel(
+    subject: T?,
     visible: Boolean,
-    focused: FocusedTrack,
     width: Dp,
     modifier: Modifier = Modifier,
-    content: @Composable (FocusedTrack) -> Unit,
+    content: @Composable (T) -> Unit,
 ) {
-    var shown by remember { mutableStateOf<FocusedTrack>(FocusedTrack.None) }
-    LaunchedEffect(focused) { if (focused != FocusedTrack.None) shown = focused }
+    var shown by remember { mutableStateOf<T?>(null) }
+    LaunchedEffect(subject) { if (subject != null) shown = subject }
     val fromStart = if (LocalLayoutDirection.current == LayoutDirection.Ltr) -1 else 1
     AnimatedVisibility(
         visible = visible,
@@ -110,7 +110,7 @@ internal fun TrackSidePanel(
                     .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Start))
                     .padding(top = 16.dp),
             ) {
-                content(if (focused != FocusedTrack.None) focused else shown)
+                (subject ?: shown)?.let { content(it) }
             }
         }
     }

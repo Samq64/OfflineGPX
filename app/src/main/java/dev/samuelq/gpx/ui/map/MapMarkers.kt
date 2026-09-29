@@ -6,6 +6,8 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.createBitmap
+import dev.samuelq.gpx.core.analysis.bearingDegrees
+import dev.samuelq.gpx.core.analysis.haversineMeters
 import dev.samuelq.gpx.core.model.TrackPoint
 import dev.samuelq.gpx.core.model.Waypoint
 import org.oscim.layers.marker.MarkerInterface
@@ -20,6 +22,9 @@ import org.oscim.layers.vector.geometries.Style
 internal class MarkerSymbols(marker: Color, puck: Color, hole: Color, density: Density) {
     val marker: MarkerSymbol
     val puck: MarkerSymbol
+
+    /** The puck once there is a direction: an arrow, so it can't be mistaken for the scrub dot. */
+    private val heading: MarkerSymbol
 
     /** In their owner's colour, like a list's bookmarks: the focused track's, or the recording's. */
     val trackWaypoint: MarkerSymbol
@@ -36,6 +41,7 @@ internal class MarkerSymbols(marker: Color, puck: Color, hole: Color, density: D
                 PUCK_RADIUS_DP.dp.toPx(), ringWidth, fill = puck, ring = MARKER_RING,
                 halo = puck.copy(alpha = PUCK_HALO_ALPHA), haloRadius = PUCK_HALO_RADIUS_DP.dp.toPx(),
             )
+            heading = arrow(PUCK_ARROW_RADIUS_DP.dp.toPx(), ringWidth, fill = puck, ring = MARKER_RING)
             // Hotspot at the tip, so the pin points at the position exactly.
             val pinRadius = PIN_RADIUS_DP.dp.toPx()
             val tipLength = PIN_TIP_LENGTH_DP.dp.toPx()
@@ -70,6 +76,39 @@ internal class MarkerSymbols(marker: Color, puck: Color, hole: Color, density: D
         paint.color = ring.toArgb()
         canvas.drawCircle(centre, centre, radius, paint)
         return MarkerSymbol(AndroidBitmap(bitmap), MarkerSymbol.HotspotPlace.CENTER, false)
+    }
+
+    /** Pointing up, centred on the position; the map turns it to the heading. */
+    private fun arrow(radius: Float, ringWidth: Float, fill: Color, ring: Color): MarkerSymbol {
+        val size = kotlin.math.ceil((radius + ringWidth) * 2).toInt() + 2
+        val bitmap = createBitmap(size, size)
+        val canvas = android.graphics.Canvas(bitmap)
+        val c = size / 2f
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        val path = android.graphics.Path().apply {
+            moveTo(c, c - radius)
+            lineTo(c + radius * 0.8f, c + radius * 0.8f)
+            lineTo(c, c + radius * 0.35f)
+            lineTo(c - radius * 0.8f, c + radius * 0.8f)
+            close()
+        }
+        paint.color = fill.toArgb()
+        canvas.drawPath(path, paint)
+        paint.style = Paint.Style.STROKE
+        paint.strokeJoin = Paint.Join.ROUND
+        paint.strokeWidth = ringWidth
+        paint.color = ring.toArgb()
+        canvas.drawPath(path, paint)
+        return MarkerSymbol(AndroidBitmap(bitmap), MarkerSymbol.HotspotPlace.CENTER, false)
+    }
+
+    /** At [at]; an arrow turned to [bearing] when there is one, else the dot. */
+    fun puck(at: TrackPoint?, bearing: Double?): List<MarkerInterface> {
+        at ?: return emptyList()
+        if (bearing == null) return listOf(marker(at, puck))
+        // One puck, so the shared symbol can carry its rotation.
+        heading.rotation = bearing.toFloat()
+        return listOf(marker(at, heading))
     }
 
     /** A teardrop pin: a circle with exact tangent lines to a tip [tipLength] below its centre. */
@@ -142,8 +181,19 @@ internal fun MarkerSymbols.pins(
     trackWaypoints.filter { it != onTop }.map { marker(it.point, trackWaypoint) } +
         liveWaypoints.filter { it != onTop }.map { marker(it.point, liveWaypoint) }
 
-internal fun MarkerSymbols.puckDot(at: TrackPoint?): List<MarkerInterface> =
-    listOfNotNull(at?.let { marker(it, puck) })
+/** From the last point back to one far enough off to point from, within its segment. */
+internal fun RouteOverlay.headingDegrees(): Double? {
+    val last = points.lastOrNull() ?: return null
+    val from = segmentStartIndices.lastOrNull() ?: 0
+    for (index in points.lastIndex - 1 downTo from) {
+        val earlier = points[index]
+        if (haversineMeters(earlier, last) >= HEADING_MIN_METERS) return bearingDegrees(earlier, last)
+    }
+    return null
+}
+
+/** Past GPS jitter at a standstill. */
+private const val HEADING_MIN_METERS = 3.0
 
 internal fun MarkerSymbols.selectedDot(at: TrackPoint?): List<MarkerInterface> =
     listOfNotNull(at?.let { marker(it, marker) })
@@ -156,6 +206,9 @@ private const val MARKER_RING_WIDTH_DP = 1.5f
 private const val MARKER_RADIUS_DP = 7f
 
 private const val PUCK_RADIUS_DP = 8f
+
+/** Tip to centre: the arrow needs more than the dot's radius to read as one. */
+private const val PUCK_ARROW_RADIUS_DP = 11f
 
 // 40dp tall with the ring's top edge: big enough to tap, since taps only hit the icon.
 private const val PIN_RADIUS_DP = 14f

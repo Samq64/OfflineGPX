@@ -6,11 +6,13 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.unit.DpSize
@@ -26,6 +28,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
@@ -50,6 +53,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -468,6 +472,41 @@ private fun DrawScope.drawBreaks(render: ChartRender, plot: Rect, color: Color) 
         )
     }
 }
+
+/** A chart's footprint and bare grid with [message] over it, for a series with nothing to plot. */
+@Composable
+fun EmptyChart(message: String, modifier: Modifier = Modifier) {
+    val chartColors = LocalChartColors.current
+    Box(
+        modifier
+            .fillMaxWidth()
+            .height(PlotHeight + AxisBand)
+            .drawWithCache {
+                val width = GridWidth.toPx()
+                val plotHeight = PlotHeight.toPx()
+                onDrawBehind {
+                    for (i in 0..EmptyGridLines) {
+                        val y = plotHeight * i / EmptyGridLines
+                        drawLine(chartColors.grid, Offset(0f, y), Offset(size.width, y), width)
+                    }
+                }
+            },
+    ) {
+        Text(
+            text = message,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .align(Alignment.Center)
+                // Masks the grid behind it; the sheet's colour.
+                .background(MaterialTheme.colorScheme.surfaceContainer)
+                .padding(horizontal = 8.dp, vertical = 2.dp),
+        )
+    }
+}
+
+private const val EmptyGridLines = 4
 
 private fun DrawScope.drawGrid(yScale: Scale, plot: Rect, color: Color, width: Float) {
     for (tick in yScale.ticks) {

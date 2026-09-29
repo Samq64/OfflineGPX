@@ -110,7 +110,8 @@ fun ChartSeries.yScale(perUnit: Float = 1f, fromZero: Boolean = false): Scale {
     if (!min.isFinite() || !max.isFinite()) return evenTickScale(0f, 1f / perUnit)
     if (max <= min) {
         val pad = if (abs(max) > 0f) abs(max) * 0.1f else 1f / perUnit
-        min -= pad
+        // A zero floor stays put.
+        if (!fromZero) min -= pad
         max += pad
     }
     return evenTickScale(min, max)

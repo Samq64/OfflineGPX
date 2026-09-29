@@ -5,7 +5,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -71,6 +70,7 @@ import dev.samuelq.gpx.data.record.RecordingController
 import dev.samuelq.gpx.data.record.RecordingEvent
 import dev.samuelq.gpx.data.record.RecordingState
 import dev.samuelq.gpx.data.track.LoadedTrack
+import dev.samuelq.gpx.ui.record.RecordingSheet
 import dev.samuelq.gpx.ui.record.RecoveredRecordingDialog
 import dev.samuelq.gpx.ui.showUndo
 import dev.samuelq.gpx.ui.theme.recordingColor
@@ -103,8 +103,11 @@ fun MapScreen(
     val scope = rememberCoroutineScope()
     val state by viewModel.state.collectAsStateWithLifecycle()
     val trace by viewModel.trace.collectAsStateWithLifecycle()
+    val live by viewModel.live.collectAsStateWithLifecycle()
     val focused by viewModel.focused.collectAsStateWithLifecycle()
-    val recording by recorder.state.collectAsStateWithLifecycle()
+    // Not read here but where it's shown: it changes every second, and this screen is large.
+    val recording = recorder.state.collectAsStateWithLifecycle()
+    val isRecording by remember { derivedStateOf { recording.value is RecordingState.Active } }
     val basemaps by viewModel.basemaps.collectAsStateWithLifecycle()
 
     val palette = routePalette()
@@ -125,8 +128,14 @@ fun MapScreen(
     var preferTimeAxis by rememberSaveable { mutableStateOf(false) }
 
     val focusedTrack = (focused as? FocusedTrack.Ready)?.track
-    var selectedIndex by remember(focusedTrack?.id) { mutableStateOf<Int?>(null) }
-    var tappedWaypoint by remember(focusedTrack?.id) { mutableStateOf<Waypoint?>(null) }
+    // The recording takes the sheet over; other tracks wait until it stops.
+    val subject = when {
+        isRecording -> SheetSubject.Recording
+        focused != FocusedTrack.None -> SheetSubject.Track(focused)
+        else -> null
+    }
+    var selectedIndex by remember(focusedTrack?.id, isRecording) { mutableStateOf<Int?>(null) }
+    var tappedWaypoint by remember(focusedTrack?.id, isRecording) { mutableStateOf<Waypoint?>(null) }
     // Read only by the tooltip's layout, so panning doesn't recompose this screen.
     val tappedWaypointAt = remember { mutableStateOf(Offset.Zero) }
 
@@ -135,6 +144,7 @@ fun MapScreen(
     val hidden = stringResource(R.string.track_hidden)
     val importFailed = stringResource(R.string.library_import_failed)
     val saveFailed = stringResource(R.string.record_save_failed)
+    val stopToOpen = stringResource(R.string.record_stop_to_open)
 
     val undo = stringResource(R.string.action_undo)
     val deleted = pluralStringResource(R.plurals.library_deleted, 1, 1)
@@ -151,6 +161,9 @@ fun MapScreen(
     }
 
     val startRecording = rememberStartRecording(recorder, ::say)
+    val liveWaypoints by remember {
+        derivedStateOf { (recording.value as? RecordingState.Active)?.waypoints.orEmpty() }
+    }
 
 
     // Tracks opened from the list or an intent are framed once loaded; map taps never move the camera.
@@ -161,10 +174,18 @@ fun MapScreen(
 
     LaunchedEffect(pendingFocus) {
         pendingFocus?.let {
-            framing = it
-            viewModel.focus(it)
+            if (isRecording) {
+                say(stopToOpen)
+            } else {
+                framing = it
+                viewModel.focus(it)
+            }
             onFocusConsumed()
         }
+    }
+
+    LaunchedEffect(isRecording) {
+        if (isRecording) viewModel.focus(null)
     }
 
     LaunchedEffect(viewModel) {
@@ -201,22 +222,30 @@ fun MapScreen(
 
     // --- The sheet -----------------------------------------------------------------
 
-    // Not skipping Hidden, so the sheet can go away entirely.
+    val currentIsRecording by rememberUpdatedState(isRecording)
+    // Not skipping Hidden, so the sheet can go away entirely, except when it holds the
+    // recording's controls.
     val sheetState = rememberStandardBottomSheetState(
         initialValue = SheetValue.Hidden,
+        confirmValueChange = { it != SheetValue.Hidden || !currentIsRecording },
         skipHiddenState = false,
     )
     val scaffoldState = rememberBottomSheetScaffoldState(bottomSheetState = sheetState)
     val hasFocus = focused != FocusedTrack.None
+    val hasSheet = subject != null
+    // Kept while the sheet slides away, so it doesn't go blank first.
+    var lastSubject by remember { mutableStateOf<SheetSubject?>(null) }
+    LaunchedEffect(subject) { if (subject != null) lastSubject = subject }
+    val sheetSubject = subject ?: lastSubject.takeIf { sheetState.currentValue != SheetValue.Hidden }
 
     // Landscape uses a side panel; the sheet stays composed but hidden so rotation keeps the track.
     val windowSize = LocalWindowInfo.current.containerSize
     val sidePanel = windowSize.width > windowSize.height
     val currentSidePanel by rememberUpdatedState(sidePanel)
 
-    LaunchedEffect(hasFocus, sidePanel) {
+    LaunchedEffect(hasSheet, sidePanel) {
         // Guarded: hiding before layout asks for an anchor that doesn't exist.
-        if (hasFocus && !sidePanel) sheetState.partialExpand()
+        if (hasSheet && !sidePanel) sheetState.partialExpand()
         else if (sheetState.currentValue != SheetValue.Hidden) sheetState.hide()
         // So a stale name prompt can't reappear when the track is reopened.
         if (!hasFocus) renamingId = null
@@ -231,9 +260,10 @@ fun MapScreen(
         }
     }
 
-    // Back collapses an expanded sheet before closing it.
-    BackHandler(enabled = hasFocus) {
-        if (!sidePanel && sheetState.currentValue == SheetValue.Expanded) {
+    // Back collapses an expanded sheet before closing it. The recording's only collapses.
+    val sheetExpanded = !sidePanel && sheetState.currentValue == SheetValue.Expanded
+    BackHandler(enabled = hasFocus || sheetExpanded) {
+        if (sheetExpanded) {
             scope.launch { sheetState.partialExpand() }
         } else {
             viewModel.focus(null)
@@ -253,6 +283,7 @@ fun MapScreen(
     }
 
 
+    // Indexed like the analysis, so a chart index is a point on this line.
     val liveOverlay = remember(trace, liveColor) {
         if (trace.points.isEmpty()) {
             null
@@ -276,7 +307,7 @@ fun MapScreen(
     )
     // Animated, unlike sheetCover: the panel only moves on a tap, never a drag.
     val panelCover by animateDpAsState(
-        targetValue = if (sidePanel && hasFocus) panelWidth else 0.dp,
+        targetValue = if (sidePanel && hasSheet) panelWidth else 0.dp,
         label = "panelCover",
     )
     // One expanded height: the content scrolls inside it.
@@ -285,10 +316,16 @@ fun MapScreen(
     val navigationBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     // Measured off the loaded sheet; the fixed height stands in until there is one.
     var peekContentHeight by remember { mutableStateOf(0.dp) }
-    val peekHeight = if (focused is FocusedTrack.Ready && peekContentHeight > 0.dp) {
+    val peekMeasured = isRecording || focused is FocusedTrack.Ready
+    val peekHeight = if (peekMeasured && peekContentHeight > 0.dp) {
         maxOf(TrackSheetPeekHeight, DragHandleHeight + peekContentHeight + navigationBarInset)
     } else {
         TrackSheetPeekHeight
+    }
+    // A collapsed sheet otherwise stays at the placeholder peek it settled on. Not once the
+    // subject is gone: that would cancel the hide.
+    LaunchedEffect(peekHeight) {
+        if (hasSheet && sheetState.currentValue == SheetValue.PartiallyExpanded) sheetState.partialExpand()
     }
     // From the live offset: the settled value only updates after a drag, so dependents lagged.
     var scaffoldHeight by remember { mutableIntStateOf(0) }
@@ -298,6 +335,13 @@ fun MapScreen(
             with(density) { (scaffoldHeight - offset).coerceAtLeast(0f).toDp() }
         }
     }
+    // Only then is the recording re-analysed. The panel has no collapsed state.
+    val currentPeekHeight by rememberUpdatedState(peekHeight)
+    val sheetOpened by remember { derivedStateOf { sheetCover > currentPeekHeight + 1.dp } }
+    LaunchedEffect(isRecording, sidePanel, sheetOpened) {
+        viewModel.showLiveCharts(isRecording && (sidePanel || sheetOpened))
+    }
+
     // Controls ride the sheet up to its peek; an expanded sheet covers them.
     val sheetInset = sheetCover.coerceIn(navigationBarInset, maxOf(navigationBarInset, peekHeight))
     // Floating controls must be counted, or the fit puts part of a route behind them.
@@ -359,22 +403,41 @@ fun MapScreen(
     }
 
     // Shared by the sheet and the side panel.
-    val trackContent: @Composable (FocusedTrack, Dp, (() -> Unit)?, (Dp) -> Unit) -> Unit =
+    val sheetBody: @Composable (SheetSubject, Dp, (() -> Unit)?, (Dp) -> Unit) -> Unit =
         { current, maxHeight, onClose, onPeekHeightChange ->
-            FocusedTrackContent(
-                focused = current,
-                palette = palette,
-                maxHeight = maxHeight,
-                selectedIndex = selectedIndex,
-                onSelectedIndexChange = { selectedIndex = it },
-                preferTimeAxis = preferTimeAxis,
-                onAxisChange = { preferTimeAxis = it },
-                actions = actions,
-                onRetry = viewModel::retryFocus,
-                onDismiss = { viewModel.focus(null) },
-                onClose = onClose,
-                onPeekHeightChange = onPeekHeightChange,
-            )
+            when (current) {
+                is SheetSubject.Track -> FocusedTrackContent(
+                    focused = current.focused,
+                    palette = palette,
+                    maxHeight = maxHeight,
+                    selectedIndex = selectedIndex,
+                    onSelectedIndexChange = { selectedIndex = it },
+                    preferTimeAxis = preferTimeAxis,
+                    onAxisChange = { preferTimeAxis = it },
+                    actions = actions,
+                    onRetry = viewModel::retryFocus,
+                    onDismiss = { viewModel.focus(null) },
+                    onClose = onClose,
+                    onPeekHeightChange = onPeekHeightChange,
+                )
+                // Idle while the side panel slides away after a stop.
+                SheetSubject.Recording -> (recording.value as? RecordingState.Active)?.let { active ->
+                    RecordingSheet(
+                        state = active,
+                        profile = live,
+                        maxHeight = maxHeight,
+                        selectedIndex = selectedIndex,
+                        onSelectedIndexChange = { selectedIndex = it },
+                        useTimeAxis = preferTimeAxis,
+                        onAxisChange = { preferTimeAxis = it },
+                        onPeekHeightChange = onPeekHeightChange,
+                        onPause = recorder::pause,
+                        onResume = recorder::resume,
+                        onStop = recorder::requestStop,
+                        onAddWaypoint = recorder::addWaypoint,
+                    )
+                }
+            }
         }
 
     BottomSheetScaffold(
@@ -414,10 +477,10 @@ fun MapScreen(
         },
         sheetContent = {
             // Placeholder at peek height: shorter content leaves the scaffold nothing to anchor to.
-            if (sidePanel || focused == FocusedTrack.None) {
+            if (sidePanel || sheetSubject == null) {
                 Spacer(Modifier.fillMaxWidth().height(TrackSheetPeekHeight))
             } else {
-                trackContent(focused, sheetMaxHeight, null) { peekContentHeight = it }
+                sheetBody(sheetSubject, sheetMaxHeight, null) { peekContentHeight = it }
             }
         },
     ) { padding ->
@@ -432,37 +495,43 @@ fun MapScreen(
                 // So the cold-start frame waits for tracks instead of settling on the bare basemap.
                 tracksLoading = state.loading,
                 contentDescription = stringResource(R.string.map_description),
-                focusedTrackId = focusedTrack?.id,
+                focusedTrackId = if (isRecording) LIVE_TRACK_ID else focusedTrack?.id,
                 selectedIndex = selectedIndex,
-                markerColor = focusedTrack
-                    ?.let { palette.slot(it.colorIndex) }
-                    ?: MaterialTheme.colorScheme.primary,
-                showPuck = recording is RecordingState.Active,
+                markerColor = when {
+                    isRecording -> liveColor
+                    focusedTrack != null -> palette.slot(focusedTrack.colorIndex)
+                    else -> MaterialTheme.colorScheme.primary
+                },
+                showPuck = isRecording,
                 puckColor = liveColor,
                 // Only the focused track's and the recording's.
                 trackWaypoints = focusedTrack?.track?.waypoints.orEmpty(),
-                liveWaypoints = (recording as? RecordingState.Active)?.waypoints.orEmpty(),
+                liveWaypoints = liveWaypoints,
                 onSelect = { trackId, index ->
                     // An open note takes the first tap, so closing it never moves the marker.
                     if (tappedWaypoint != null) tappedWaypoint = null
                     else when (trackId) {
-                        // The recording has no row to open and no numbers to scrub.
-                        LIVE_TRACK_ID -> Unit
-                        focusedTrack?.id -> selectedIndex = index
-                        else -> viewModel.focus(TrackRef.Saved(trackId))
+                        LIVE_TRACK_ID, focusedTrack?.id -> selectedIndex = index
+                        // Not while recording, which holds the sheet.
+                        else -> if (!isRecording) viewModel.focus(TrackRef.Saved(trackId))
                     }
                 },
                 onSelectNothing = {
-                    if (tappedWaypoint != null) tappedWaypoint = null else viewModel.focus(null)
+                    when {
+                        tappedWaypoint != null -> tappedWaypoint = null
+                        isRecording -> selectedIndex = null
+                        else -> viewModel.focus(null)
+                    }
                 },
                 onSelectWaypoint = { waypoint ->
                     tappedWaypoint = waypoint
-                    // Only the focused track's waypoints have a chart position.
-                    focusedTrack
-                        ?.takeIf { waypoint in it.track.waypoints }
-                        ?.profile?.indexOf(waypoint.point)
-                        ?.takeIf { it >= 0 }
-                        ?.let { selectedIndex = it }
+                    // Only the charted route's waypoints have a chart position.
+                    val charted = if (isRecording) {
+                        live?.takeIf { waypoint in liveWaypoints }
+                    } else {
+                        focusedTrack?.takeIf { waypoint in it.track.waypoints }?.profile
+                    }
+                    charted?.indexOf(waypoint.point)?.takeIf { it >= 0 }?.let { selectedIndex = it }
                 },
                 followedWaypoint = tappedWaypoint,
                 onFollowedWaypointMove = { tappedWaypointAt.value = it },
@@ -528,34 +597,23 @@ fun MapScreen(
                 )
             }
 
-            // The bar pads the inset inside its own surface so the map can't show under it, and
-            // it's excluded from controlsHeight.
-            val barInset = if (recording is RecordingState.Active) sheetInset else 0.dp
-            Column(
+            Box(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .padding(start = panelCover, bottom = sheetInset - barInset)
-                    .onSizeChanged { controlsHeight = with(density) { it.height.toDp() } - barInset },
+                    .padding(start = panelCover, bottom = sheetInset)
+                    .onSizeChanged { controlsHeight = with(density) { it.height.toDp() } },
             ) {
-                RecordControls(
-                    recording = recording,
-                    onStart = startRecording,
-                    onPause = recorder::pause,
-                    onResume = recorder::resume,
-                    onStop = recorder::requestStop,
-                    onAddWaypoint = recorder::addWaypoint,
-                    bottomInset = barInset,
-                )
+                if (!isRecording) RecordButton(onStart = startRecording)
             }
 
-            TrackSidePanel(
-                visible = sidePanel && hasFocus,
-                focused = focused,
+            SidePanel(
+                subject = subject,
+                visible = sidePanel && hasSheet,
                 width = panelWidth,
                 modifier = Modifier.align(Alignment.TopStart),
             ) { shown ->
-                trackContent(shown, Dp.Unspecified, { viewModel.focus(null) }) {}
+                sheetBody(shown, Dp.Unspecified, { viewModel.focus(null) }) {}
             }
 
             // Here, not the scaffold's slot, which pins it to the bottom edge over the record
@@ -592,7 +650,14 @@ fun MapScreen(
     }
 }
 
-/** Live recording layer id; it has no library row, so taps on it resolve to nothing. */
+/** What the sheet or side panel is about. */
+private sealed interface SheetSubject {
+    data class Track(val focused: FocusedTrack) : SheetSubject
+
+    data object Recording : SheetSubject
+}
+
+/** Live recording layer id; it has no library row. */
 private const val LIVE_TRACK_ID = Long.MIN_VALUE
 
 private val MapEdgePadding = 24.dp

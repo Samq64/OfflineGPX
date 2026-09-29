@@ -17,16 +17,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import dev.samuelq.gpx.R
 import dev.samuelq.gpx.core.model.Waypoint
-import dev.samuelq.gpx.data.record.RecordingState
 import dev.samuelq.gpx.ui.PointTooltip
 import dev.samuelq.gpx.ui.format.Formatters
-import dev.samuelq.gpx.ui.record.RecordingBar
 import kotlin.math.roundToInt
 
 /** A tapped waypoint's time and note, beside its pin tip at [tipAt]. */
@@ -55,35 +52,17 @@ internal fun WaypointTooltip(waypoint: Waypoint, tipAt: () -> Offset) {
     }
 }
 
-/** The record button, or the live recording's bar. */
+/** Starts a recording; once running, it lives in the sheet. */
 @Composable
-internal fun RecordControls(
-    recording: RecordingState,
-    onStart: () -> Unit,
-    onPause: () -> Unit,
-    onResume: () -> Unit,
-    onStop: () -> Unit,
-    onAddWaypoint: (String) -> Unit,
-    bottomInset: Dp,
-) {
-    when (recording) {
-        RecordingState.Idle -> Box(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            contentAlignment = Alignment.CenterEnd,
-        ) {
-            ExtendedFloatingActionButton(
-                onClick = onStart,
-                icon = { Icon(Icons.Default.PlayArrow, contentDescription = null) },
-                text = { Text(stringResource(R.string.record_start)) },
-            )
-        }
-        is RecordingState.Active -> RecordingBar(
-            state = recording,
-            onPause = onPause,
-            onResume = onResume,
-            onStop = onStop,
-            onAddWaypoint = onAddWaypoint,
-            bottomInset = bottomInset,
+internal fun RecordButton(onStart: () -> Unit) {
+    Box(
+        modifier = Modifier.fillMaxWidth().padding(16.dp),
+        contentAlignment = Alignment.CenterEnd,
+    ) {
+        ExtendedFloatingActionButton(
+            onClick = onStart,
+            icon = { Icon(Icons.Default.PlayArrow, contentDescription = null) },
+            text = { Text(stringResource(R.string.record_start)) },
         )
     }
 }
