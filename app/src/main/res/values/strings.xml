@@ -42,6 +42,7 @@
     <string name="settings_section_about">About</string>
     <!-- %1$s is the version and commit, e.g. 0.1.0 (8c5759b). -->
     <string name="settings_about_version">Version %1$s. GPL-3.0.</string>
+    <string name="settings_about_libraries">Libraries</string>
 
     <string name="settings_section_maps">Offline maps</string>
     <string name="settings_maps_explanation">No internet access here, so maps come from a .map file you import. Without one, tracks are drawn on a plain background.</string>

@@ -7,7 +7,6 @@ import android.provider.Settings as AndroidSettings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,7 +16,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -54,6 +52,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -272,8 +276,13 @@ fun SettingsScreen(
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(horizontal = ScreenPadding, vertical = 8.dp),
             )
+            Text(
+                text = stringResource(R.string.settings_about_libraries),
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.padding(horizontal = ScreenPadding, vertical = 4.dp),
+            )
             LIBRARIES.forEach { library ->
-                LibraryRow(library, onClick = { openUrl(library.url) })
+                LibraryLine(library, onClick = { openUrl(library.url) })
             }
 
             Spacer(Modifier.height(24.dp))
@@ -381,28 +390,22 @@ private val LIBRARIES = listOf(
 private val VERSION = BuildConfig.VERSION_NAME +
     BuildConfig.GIT_HASH.takeIf { it.isNotEmpty() }?.let { " ($it)" }.orEmpty()
 
+/** The name links to the project; the licence follows in brackets. */
 @Composable
-private fun LibraryRow(library: Library, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .heightIn(min = 48.dp)
-            .padding(horizontal = ScreenPadding),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = library.name,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.primary,
-        )
-        Text(
-            text = library.licence,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
+private fun LibraryLine(library: Library, onClick: () -> Unit) {
+    val link = TextLinkStyles(
+        SpanStyle(color = MaterialTheme.colorScheme.primary, textDecoration = TextDecoration.Underline)
+    )
+    Text(
+        text = buildAnnotatedString {
+            withLink(LinkAnnotation.Clickable(library.name, link) { onClick() }) {
+                append(library.name)
+            }
+            append(" (${library.licence})")
+        },
+        style = MaterialTheme.typography.bodyMedium,
+        modifier = Modifier.padding(horizontal = ScreenPadding, vertical = 2.dp),
+    )
 }
 
 /** No download button: the app has no network permission, so it links to how instead. */
