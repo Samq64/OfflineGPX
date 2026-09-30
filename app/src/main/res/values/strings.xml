@@ -172,7 +172,8 @@
 
     <string name="stat_moving">Moving</string>
     <string name="stat_elapsed">Elapsed</string>
-    <string name="stat_avg_speed">Average speed</string>
+    <!-- Over moving time, not elapsed. -->
+    <string name="stat_avg_speed">Avg moving speed</string>
     <string name="stat_ascent">Ascent</string>
     <string name="stat_descent">Descent</string>
     <!-- A label under the count, which is shown apart. -->
