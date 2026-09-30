@@ -4,6 +4,9 @@ import java.io.File
 import java.io.IOException
 import java.io.RandomAccessFile
 
+/** One zoom interval's data, which starts with its tile index. */
+class SubFile(val baseZoom: Int, val minZoom: Int, val maxZoom: Int, val start: Long, val size: Long)
+
 /**
  * A mapsforge map file's header, read directly since mapsforge's `MapFile` opens and holds
  * the whole file. Big-endian; strings carry a VBE-U length, unlike the header's 2-byte counts.
@@ -16,10 +19,16 @@ class MapFileHeader(
     val maxLongitude: Double,
     val maxLatitude: Double,
     val attribution: String?,
-    /** The [baseZoom] sub-file, whose tile index starts it (non-debug files only). */
-    val subFileStart: Long = 0,
-    val subFileSize: Long = 0,
+    /** Non-debug files only, so each index is plain entries. */
+    val subFiles: List<SubFile> = emptyList(),
 ) {
+    /** The [baseZoom] one. */
+    val deepest: SubFile? get() = subFiles.maxByOrNull { it.baseZoom }
+
+    /** The one read for a tile at [zoom], clamped to the file's range as the reader does. */
+    fun subFileFor(zoom: Int): SubFile? =
+        subFiles.firstOrNull { zoom in it.minZoom..it.maxZoom }
+            ?: if (zoom < (subFiles.minOfOrNull { it.minZoom } ?: 0)) subFiles.minByOrNull { it.minZoom } else deepest
 
     companion object {
         private const val MAGIC = "mapsforge binary OSM"
@@ -89,31 +98,25 @@ class MapFileHeader(
 
                 val intervals = cursor.byte()
                 if (intervals <= 0) return null
-                var deepestBase = Int.MIN_VALUE
-                var subFileStart = 0L
-                var subFileSize = 0L
-                repeat(intervals) {
-                    val base = cursor.byte()
-                    cursor.skip(2) // min and max zoom
-                    val start = cursor.long()
-                    val size = cursor.long()
-                    if (base > deepestBase) {
-                        deepestBase = base
-                        subFileStart = start
-                        subFileSize = size
-                    }
+                val subFiles = List(intervals) {
+                    SubFile(
+                        baseZoom = cursor.byte(),
+                        minZoom = cursor.byte(),
+                        maxZoom = cursor.byte(),
+                        start = cursor.long(),
+                        size = cursor.long(),
+                    )
                 }
 
                 MapFileHeader(
-                    baseZoom = deepestBase,
+                    baseZoom = subFiles.maxOf { it.baseZoom },
                     minLongitude = minLongitude,
                     minLatitude = minLatitude,
                     maxLongitude = maxLongitude,
                     maxLatitude = maxLatitude,
                     // The comment carries the data credit; created-by is a fallback.
                     attribution = comment?.takeIf { it.isNotBlank() } ?: createdBy?.takeIf { it.isNotBlank() },
-                    subFileStart = subFileStart,
-                    subFileSize = subFileSize,
+                    subFiles = subFiles,
                 )
             } catch (_: IndexOutOfBoundsException) {
                 null

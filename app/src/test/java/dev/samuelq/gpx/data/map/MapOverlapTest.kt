@@ -29,8 +29,7 @@ class MapOverlapTest {
             maxLongitude = 180.0,
             maxLatitude = 85.0,
             attribution = null,
-            subFileStart = 0,
-            subFileSize = offset,
+            subFiles = listOf(SubFile(baseZoom, 0, baseZoom, start = 0, size = offset)),
         )
         return OfflineMap(file, header, offset)
     }

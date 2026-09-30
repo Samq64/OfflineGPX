@@ -1,6 +1,8 @@
 package dev.samuelq.gpx.ui.map
 
 import dev.samuelq.gpx.data.map.OfflineMap
+import dev.samuelq.gpx.data.map.SubFile
+import dev.samuelq.gpx.data.map.TileIndex
 import org.oscim.core.BoundingBox
 import org.oscim.core.MapElement
 import org.oscim.core.MercatorProjection
@@ -22,6 +24,10 @@ import org.oscim.utils.geom.TileClipper
 import java.io.ByteArrayInputStream
 import java.io.IOException
 import java.io.InputStream
+import kotlin.math.abs
+import kotlin.math.ceil
+import kotlin.math.floor
+import kotlin.math.pow
 
 /** The generated theme, as the stream VTM insists on. */
 internal class GeneratedRenderTheme(xml: String) : ThemeFile {
@@ -59,18 +65,15 @@ internal val OfflineMap.maxViewZoom: Int
  * far past the box, and names draw above the mask. Queries files directly because
  * [MultiMapFileTileSource] hands every file the same sink, losing which box an element is from.
  */
-internal class ClippedMapSource(maps: List<OfflineMap>) : MultiMapFileTileSource() {
-    private val files = maps.map { map ->
-        val h = map.header
-        val source = MapFileTileSource().apply { setMapFile(map.file.path) }
-        add(source)
-        source to BoundingBox(h.minLatitude, h.minLongitude, h.maxLatitude, h.maxLongitude)
+internal class ClippedMapSource(private val maps: List<OfflineMap>) : MultiMapFileTileSource() {
+    private val sources = maps.map { map ->
+        MapFileTileSource().apply { setMapFile(map.file.path) }.also { add(it) }
     }
 
     override fun getDataSource(): ITileDataSource {
-        val opened = files.mapNotNull { (source, box) ->
+        val opened = maps.zip(sources).mapNotNull { (map, source) ->
             try {
-                MapFile(source) to box
+                OpenedMap(MapFile(source), map)
             } catch (_: IOException) {
                 null
             }
@@ -79,18 +82,55 @@ internal class ClippedMapSource(maps: List<OfflineMap>) : MultiMapFileTileSource
     }
 }
 
-private class ClippedMapData(private val files: List<Pair<MapFile, BoundingBox>>) : ITileDataSource {
+/** One file as a loader thread reads it; each thread gets its own handles. */
+private class OpenedMap(val file: MapFile, val map: OfflineMap) {
+    val box = map.header.let { BoundingBox(it.minLatitude, it.minLongitude, it.maxLatitude, it.maxLongitude) }
+
+    private val indexes = HashMap<SubFile, TileIndex?>()
+
+    /**
+     * Whether the writer marked the tile under tile pixel [x], [y] all water. True when
+     * unknown, which keeps the sea as drawn.
+     */
+    fun isWater(tile: Tile, x: Float, y: Float): Boolean {
+        val subFile = map.header.subFileFor(tile.zoomLevel.toInt()) ?: return true
+        val index = indexes.getOrPut(subFile) {
+            try {
+                TileIndex(map.file, map.header, subFile)
+            } catch (_: IOException) {
+                null
+            }
+        } ?: return true
+        // Pixel to its tile at the sub-file's base zoom, which may be above or below this one.
+        val shift = subFile.baseZoom - tile.zoomLevel
+        val px = (tile.tileX * Tile.SIZE + x.toDouble()) / Tile.SIZE
+        val py = (tile.tileY * Tile.SIZE + y.toDouble()) / Tile.SIZE
+        val scale = 2.0.pow(shift)
+        return try {
+            index.isWater(floor(px * scale).toLong(), floor(py * scale).toLong())
+        } catch (_: IOException) {
+            true
+        }
+    }
+
+    fun dispose() {
+        file.dispose()
+        indexes.values.forEach { it?.close() }
+    }
+}
+
+private class ClippedMapData(private val files: List<OpenedMap>) : ITileDataSource {
     override fun query(tile: MapTile, sink: ITileDataSink) {
         val clipping = ClippingSink(sink)
         try {
-            val covering = files.withIndex().filter { (_, entry) -> entry.first.supportsTile(tile) }
+            val covering = files.withIndex().filter { (_, opened) -> opened.file.supportsTile(tile) }
             clipping.merging = covering.size > 1
-            covering.forEach { (i, entry) ->
-                val (file, box) = entry
+            covering.forEach { (i, opened) ->
                 clipping.level = i + 1
                 clipping.levels = files.size
-                clipping.startFile(tile, box)
-                file.query(tile, clipping)
+                clipping.startFile(tile, opened.box)
+                opened.file.query(tile, clipping)
+                clipping.finishFile { x, y -> opened.isWater(tile, x, y) }
             }
             sink.completed(QueryResult.SUCCESS)
         } catch (_: Exception) {
@@ -98,9 +138,9 @@ private class ClippedMapData(private val files: List<Pair<MapFile, BoundingBox>>
         }
     }
 
-    override fun dispose() = files.forEach { it.first.dispose() }
+    override fun dispose() = files.forEach { it.dispose() }
 
-    override fun cancel() = files.forEach { it.first.cancel() }
+    override fun cancel() = files.forEach { it.file.cancel() }
 }
 
 /** A rectangle in tile pixels. */
@@ -108,6 +148,16 @@ private class Rect(val left: Float, val top: Float, val right: Float, val bottom
     val coversTile get() = left <= 0f && top <= 0f && right >= Tile.SIZE && bottom >= Tile.SIZE
 
     fun contains(x: Float, y: Float) = x in left..right && y in top..bottom
+
+    /** Sharing more than an edge. */
+    fun overlaps(other: Rect) =
+        left < other.right && other.left < right && top < other.bottom && other.top < bottom
+
+    fun inset(by: Float) = Rect(left + by, top + by, right - by, bottom - by)
+
+    fun intersect(other: Rect): Rect? =
+        Rect(maxOf(left, other.left), maxOf(top, other.top), minOf(right, other.right), minOf(bottom, other.bottom))
+            .takeIf { it.left < it.right && it.top < it.bottom }
 
     /** What's left of this after [others], as cells of the grid their edges make. */
     fun minus(others: List<Rect>): List<Rect> {
@@ -129,6 +179,12 @@ private class Rect(val left: Float, val top: Float, val right: Float, val bottom
  * Passes on what lies inside one file's box, in tile pixels. Also keeps each file's
  * completion from reaching the real sink once per file.
  *
+ * A file's sea is held until it's read. Extracts lay a sea rectangle under each tile of their
+ * index and draw the coast as land over it, from land polygons cut on a 1° grid, and some
+ * lack a whole cell: roads then run through open water. So where a cell has features in the
+ * rectangle but no land, the sea there is cut out, unless the index calls the tile all
+ * water. Near-shore water has no features, so it stays.
+ *
  * Where boxes overlap, a feature an earlier file already gave, like a park on a shared
  * border, is passed on only outside the earlier files' boxes: two copies of an area cancel
  * out when filled.
@@ -149,6 +205,95 @@ private class ClippingSink(sink: ITileDataSink) : TileDataSink(sink) {
     private val earlierKeys = HashSet<Long>()
     private val keys = HashSet<Long>()
 
+    private class HeldSea(val element: MapElement, val bounds: Rect)
+
+    private val heldSea = ArrayList<HeldSea>()
+    private val land = ArrayList<Rect>()
+
+    /** The file's other features' bounds, four floats each. */
+    private var features = FloatArray(256)
+    private var featureCount = 0
+
+    /** Passes on the held sea that's real; [isWater] takes a point in tile pixels. */
+    fun finishFile(isWater: (x: Float, y: Float) -> Boolean) {
+        for (sea in heldSea) {
+            val b = sea.bounds
+            // Inset from the rectangle's edges, which a neighbour's features overhang.
+            val inner = b.inset((b.right - b.left) * FEATURE_INSET)
+            val overlap = gridOverlapPixels(b)
+            val missing = gridCells(b).filter { cell ->
+                land.none { it.overlaps(cell.inset(overlap)) } && hasFeatureIn(cell.intersect(inner))
+            }
+            when {
+                missing.isEmpty() -> passOn(sea.element)
+                isWater((b.left + b.right) / 2, (b.top + b.bottom) / 2) -> passOn(sea.element)
+                // The sea is its tile's rectangle, so the parts are rectangles too.
+                else -> b.minus(missing).forEach { passOn(sea.element.rectangle(it)) }
+            }
+        }
+        heldSea.clear()
+        land.clear()
+        featureCount = 0
+    }
+
+    /** How far a neighbouring cell's land reaches over a grid line near [rect], in pixels. */
+    private fun gridOverlapPixels(rect: Rect): Float {
+        val latitude = pixelToLatitude((rect.top + rect.bottom) / 2)
+        return abs(latitudeToPixel(latitude) - latitudeToPixel(latitude + GRID_OVERLAP_DEGREES))
+    }
+
+    /** [rect] cut on whole degrees, as the land polygons are. */
+    private fun gridCells(rect: Rect): List<Rect> {
+        val xs = gridLines(rect.left, rect.right, ::pixelToLongitude, ::longitudeToPixel)
+        val ys = gridLines(rect.top, rect.bottom, ::pixelToLatitude, ::latitudeToPixel)
+        val cells = ArrayList<Rect>((xs.size - 1) * (ys.size - 1))
+        for (i in 0 until xs.size - 1) for (j in 0 until ys.size - 1) {
+            cells += Rect(xs[i], ys[j], xs[i + 1], ys[j + 1])
+        }
+        return cells
+    }
+
+    private fun gridLines(from: Float, to: Float, toDegrees: (Float) -> Double, toPixel: (Double) -> Float): List<Float> {
+        val a = toDegrees(from)
+        val b = toDegrees(to)
+        val lines = (ceil(minOf(a, b)).toInt()..floor(maxOf(a, b)).toInt())
+            .map { toPixel(it.toDouble()) }
+            .filter { it > from && it < to }
+        return (listOf(from) + lines.sorted() + to)
+    }
+
+    private var tileX = 0.0
+    private var tileY = 0.0
+    private var worldPixels = 0.0
+
+    private fun pixelToLongitude(x: Float) = MercatorProjection.toLongitude((tileX + x) / worldPixels)
+    private fun pixelToLatitude(y: Float) = MercatorProjection.toLatitude((tileY + y) / worldPixels)
+    private fun longitudeToPixel(longitude: Double) =
+        (MercatorProjection.longitudeToX(longitude) * worldPixels - tileX).toFloat()
+    private fun latitudeToPixel(latitude: Double) =
+        (MercatorProjection.latitudeToY(latitude) * worldPixels - tileY).toFloat()
+
+    private fun hasFeatureIn(rect: Rect?): Boolean {
+        if (rect == null) return false
+        for (i in 0 until featureCount step 4) {
+            if (features[i] < rect.right && features[i + 2] > rect.left &&
+                features[i + 1] < rect.bottom && features[i + 3] > rect.top
+            ) {
+                return true
+            }
+        }
+        return false
+    }
+
+    private fun addFeature(element: MapElement) {
+        if (featureCount + 4 > features.size) features = features.copyOf(features.size * 2)
+        val b = element.bounds()
+        features[featureCount++] = b.left
+        features[featureCount++] = b.top
+        features[featureCount++] = b.right
+        features[featureCount++] = b.bottom
+    }
+
     fun startFile(tile: Tile, bounds: BoundingBox) {
         if (keys.isNotEmpty()) {
             earlierBoxes += box
@@ -156,6 +301,9 @@ private class ClippingSink(sink: ITileDataSink) : TileDataSink(sink) {
             keys.clear()
         }
         val scale = Tile.SIZE.toDouble() * (1 shl tile.zoomLevel.toInt())
+        worldPixels = scale
+        tileX = tile.tileX.toDouble() * Tile.SIZE
+        tileY = tile.tileY.toDouble() * Tile.SIZE
         box = Rect(
             left = (MercatorProjection.longitudeToX(bounds.minLongitude) * scale - tile.tileX * Tile.SIZE).toFloat(),
             top = (MercatorProjection.latitudeToY(bounds.maxLatitude) * scale - tile.tileY * Tile.SIZE).toFloat(),
@@ -166,6 +314,18 @@ private class ClippingSink(sink: ITileDataSink) : TileDataSink(sink) {
     }
 
     override fun process(element: MapElement) {
+        when (element.tags.getValue("natural")) {
+            "sea" -> {
+                heldSea += HeldSea(MapElement(element), element.bounds())
+                return
+            }
+            "nosea" -> land += element.bounds()
+            else -> if (element.pointNextPos >= 2) addFeature(element)
+        }
+        passOn(element)
+    }
+
+    private fun passOn(element: MapElement) {
         if (!merging) {
             passWithin(element, box)
             return
@@ -197,6 +357,35 @@ private class ClippingSink(sink: ITileDataSink) : TileDataSink(sink) {
     }
 }
 
+/**
+ * This element's tags and draw order on [rect]. Built rather than clipped from a copy:
+ * clipped copies drew above the land.
+ */
+private fun MapElement.rectangle(rect: Rect) = MapElement().also {
+    it.tags.set(tags.asArray())
+    it.setLayer(layer)
+    it.level = level
+    it.startPolygon()
+    it.addPoint(rect.left, rect.top)
+    it.addPoint(rect.right, rect.top)
+    it.addPoint(rect.right, rect.bottom)
+    it.addPoint(rect.left, rect.bottom)
+}
+
+private fun MapElement.bounds(): Rect {
+    var left = Float.MAX_VALUE
+    var top = Float.MAX_VALUE
+    var right = -Float.MAX_VALUE
+    var bottom = -Float.MAX_VALUE
+    for (i in 0 until pointNextPos step 2) {
+        left = minOf(left, points[i])
+        right = maxOf(right, points[i])
+        top = minOf(top, points[i + 1])
+        bottom = maxOf(bottom, points[i + 1])
+    }
+    return Rect(left, top, right, bottom)
+}
+
 /** Identity of an element as a file gives it, before clipping. */
 private fun MapElement.key(): Long {
     var h = FNV_OFFSET
@@ -216,6 +405,12 @@ private fun MapElement.key(): Long {
     }
     return h
 }
+
+/** Of a sea rectangle's width. */
+private const val FEATURE_INSET = 0.1f
+
+/** Land polygons are cut on the grid with a little overlap; measured at 0.0005°. */
+private const val GRID_OVERLAP_DEGREES = 0.002
 
 private const val FNV_OFFSET = -0x340d631b7bdddcdbL
 private const val FNV_PRIME = 0x100000001b3L
