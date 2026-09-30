@@ -7,7 +7,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -19,7 +18,7 @@ import androidx.navigation.compose.rememberNavController
 import dev.samuelq.gpx.GpxApplication
 import dev.samuelq.gpx.data.record.RecordingController
 import dev.samuelq.gpx.data.record.RecordingState
-import dev.samuelq.gpx.ui.format.Formatters
+import dev.samuelq.gpx.ui.format.rememberSystemFormatters
 import dev.samuelq.gpx.ui.format.LocalFormatters
 import dev.samuelq.gpx.ui.library.LibraryScreen
 import dev.samuelq.gpx.ui.map.MapScreen
@@ -41,7 +40,7 @@ fun GpxApp(
     val settings by container.settingsRepository.settings.collectAsStateWithLifecycle()
 
     // Remembered: the charts key their labels on this instance.
-    val formatters = remember(settings.units) { Formatters(settings.units) }
+    val formatters = rememberSystemFormatters(settings.units)
 
     LaunchedEffect(incomingTrack) {
         val uri = incomingTrack ?: return@LaunchedEffect

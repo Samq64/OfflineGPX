@@ -34,6 +34,7 @@ import dev.samuelq.gpx.data.record.RecordingRecovery
 import dev.samuelq.gpx.data.record.RecordingState
 import dev.samuelq.gpx.data.track.defaultTrackName
 import dev.samuelq.gpx.ui.format.Formatters
+import dev.samuelq.gpx.ui.format.LocalFormatters
 import dev.samuelq.gpx.ui.track.StatRow
 import java.time.Instant
 
@@ -84,7 +85,7 @@ fun RecoveredRecordingDialog(
             summary = {
                 Column {
                     StatRow(recordingStats(stats.distanceMeters, stats.totalDurationSeconds))
-                    val date = Formatters.dateTime(stats.startedAt)
+                    val date = LocalFormatters.current.dateTime(stats.startedAt)
                     val body = stringResource(R.string.record_recovered_body, date)
                     Text(
                         buildAnnotatedString {

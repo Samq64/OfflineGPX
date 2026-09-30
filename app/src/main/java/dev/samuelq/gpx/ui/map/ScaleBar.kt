@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import dev.samuelq.gpx.core.model.UnitSystem
 import dev.samuelq.gpx.ui.format.Formatters
 import dev.samuelq.gpx.ui.format.LocalFormatters
+import java.util.Locale
 import kotlin.math.floor
 import kotlin.math.log10
 import kotlin.math.pow
@@ -87,11 +88,14 @@ fun ScaleBar(
 private data class SnappedScale(val meters: Double, val width: Dp)
 
 /** Whole number and unit; the general formatter's decimal would imply false precision. */
-private fun scaleLabel(meters: Double, units: UnitSystem): String = when {
-    units == UnitSystem.METRIC && meters >= 1000 -> "${(meters / 1000).roundToInt()} km"
-    units == UnitSystem.METRIC -> "${meters.roundToInt()} m"
-    meters >= METERS_PER_MILE -> "${(meters / METERS_PER_MILE).roundToInt()} mi"
-    else -> "${(meters / METERS_PER_FOOT).roundToInt()} ft"
+private fun scaleLabel(meters: Double, units: UnitSystem, locale: Locale = Locale.getDefault()): String {
+    val (value, unit) = when {
+        units == UnitSystem.METRIC && meters >= 1000 -> meters / 1000 to "km"
+        units == UnitSystem.METRIC -> meters to "m"
+        meters >= METERS_PER_MILE -> meters / METERS_PER_MILE to "mi"
+        else -> meters / METERS_PER_FOOT to "ft"
+    }
+    return String.format(locale, "%,d %s", value.roundToInt(), unit)
 }
 
 /** The largest 1-2-5 round distance that fits. */

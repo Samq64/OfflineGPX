@@ -15,9 +15,32 @@ import kotlin.math.log10
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 
-/** SI to display strings; the only place units are applied. */
+/**
+ * SI to display strings; the only place units are applied. Numbers take the default locale
+ * per call; dates are fixed at construction, so a locale or 12/24-hour change needs a new one.
+ *
+ * @param dateTimePattern and [timePattern] from the platform, which knows the 12/24-hour
+ * setting; java.time's localized styles only know the locale's habit.
+ */
 @Immutable
-class Formatters(val units: UnitSystem) {
+class Formatters(
+    val units: UnitSystem,
+    locale: Locale = Locale.getDefault(),
+    dateTimePattern: String? = null,
+    timePattern: String? = null,
+) {
+    private val dateTimeFormat = patternOr(dateTimePattern, locale) {
+        DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
+    }
+    private val timeFormat = patternOr(timePattern, locale) {
+        DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)
+    }
+
+    fun dateTime(instant: Instant?, zone: ZoneId = ZoneId.systemDefault()): String =
+        instant?.let { dateTimeFormat.withZone(zone).format(it) } ?: EMPTY
+
+    fun time(instant: Instant?, zone: ZoneId = ZoneId.systemDefault()): String =
+        instant?.let { timeFormat.withZone(zone).format(it) } ?: EMPTY
 
     private val metric: Boolean get() = units == UnitSystem.METRIC
 
@@ -36,7 +59,7 @@ class Formatters(val units: UnitSystem) {
             abs(meters) < 10 * METERS_PER_KM ->
                 String.format(locale, "%.2f km", meters / METERS_PER_KM)
 
-            else -> String.format(locale, "%.1f km", meters / METERS_PER_KM)
+            else -> String.format(locale, "%,.1f km", meters / METERS_PER_KM)
         }
 
         else -> {
@@ -44,7 +67,7 @@ class Formatters(val units: UnitSystem) {
             when {
                 abs(miles) < 0.1 -> String.format(locale, "%,.0f ft", meters * FEET_PER_METER)
                 abs(miles) < 10.0 -> String.format(locale, "%.2f mi", miles)
-                else -> String.format(locale, "%.1f mi", miles)
+                else -> String.format(locale, "%,.1f mi", miles)
             }
         }
     }
@@ -113,28 +136,32 @@ class Formatters(val units: UnitSystem) {
         internal const val FEET_PER_METER = 3.280839895
         private const val SECONDS_PER_HOUR = 3600.0
 
-        /** `h:mm:ss` past an hour, `m:ss` below it. */
-        fun duration(seconds: Double): String {
+        /** `h:mm:ss` past an hour, `m:ss` below it, in the locale's digits. */
+        fun duration(seconds: Double, locale: Locale = Locale.getDefault()): String {
             if (seconds.isNaN() || seconds < 0) return EMPTY
             val total = seconds.roundToLong()
             val hours = total / 3600
             val minutes = (total % 3600) / 60
             val secs = total % 60
             return if (hours > 0) {
-                String.format(Locale.ROOT, "%d:%02d:%02d", hours, minutes, secs)
+                String.format(locale, "%d:%02d:%02d", hours, minutes, secs)
             } else {
-                String.format(Locale.ROOT, "%d:%02d", minutes, secs)
+                String.format(locale, "%d:%02d", minutes, secs)
             }
         }
 
         /** Compact form: `h:mm` when [hours], else `m:ss`. */
-        fun durationAxis(seconds: Float, hours: Boolean = seconds >= SECONDS_PER_HOUR): String {
+        fun durationAxis(
+            seconds: Float,
+            hours: Boolean = seconds >= SECONDS_PER_HOUR,
+            locale: Locale = Locale.getDefault(),
+        ): String {
             if (seconds.isNaN() || seconds < 0) return EMPTY
             val total = seconds.roundToLong()
             return if (hours) {
-                String.format(Locale.ROOT, "%d:%02d", total / 3600, (total % 3600) / 60)
+                String.format(locale, "%d:%02d", total / 3600, (total % 3600) / 60)
             } else {
-                String.format(Locale.ROOT, "%d:%02d", total / 60, total % 60)
+                String.format(locale, "%d:%02d", total / 60, total % 60)
             }
         }
 
@@ -147,16 +174,10 @@ class Formatters(val units: UnitSystem) {
         fun count(value: Int, locale: Locale = Locale.getDefault()): String =
             String.format(locale, "%,d", value)
 
-        fun dateTime(instant: Instant?, zone: ZoneId = ZoneId.systemDefault()): String =
-            instant?.let { DATE_TIME.withZone(zone).format(it) } ?: EMPTY
-
-        fun time(instant: Instant?, zone: ZoneId = ZoneId.systemDefault()): String =
-            instant?.let { TIME.withZone(zone).format(it) } ?: EMPTY
-
-        private val DATE_TIME: DateTimeFormatter =
-            DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
-
-        private val TIME: DateTimeFormatter = DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)
+        /** A platform pattern java.time can't parse falls back to the locale's style. */
+        private fun patternOr(pattern: String?, locale: Locale, style: () -> DateTimeFormatter) =
+            pattern?.let { runCatching { DateTimeFormatter.ofPattern(it, locale) }.getOrNull() }
+                ?: style().withLocale(locale)
     }
 }
 

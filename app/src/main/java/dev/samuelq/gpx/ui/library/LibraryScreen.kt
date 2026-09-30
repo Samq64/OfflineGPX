@@ -366,7 +366,7 @@ private fun TrackRow(
             val recorded = track.startedAtEpochMillis ?: track.lastOpenedAtEpochMillis
             if (recorded > 0) {
                 append("  ·  ")
-                append(Formatters.dateTime(Instant.ofEpochMilli(recorded)))
+                append(formatters.dateTime(Instant.ofEpochMilli(recorded)))
             }
         }
     }
