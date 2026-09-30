@@ -11,11 +11,13 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import dev.samuelq.gpx.data.db.TrackEntity
 import dev.samuelq.gpx.data.track.TrackRepository
 import dev.samuelq.gpx.di.appContainer
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -33,6 +35,7 @@ sealed interface LibraryEvent {
 }
 
 /** `@Stable` so a row's captured lambdas can be memoised. */
+@OptIn(ExperimentalCoroutinesApi::class)
 @Stable
 class LibraryViewModel(
     private val repository: TrackRepository,
@@ -47,6 +50,11 @@ class LibraryViewModel(
         combine(repository.tracks, _query) { tracks, query ->
             tracks.filter { it.matches(query) }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** Read apart from the rows, so the list shows before every file is statted. */
+    val sizes: StateFlow<Map<Long, Long>> = repository.tracks
+        .mapLatest { repository.fileSizes(it) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
     fun search(query: String) {
         _query.value = query

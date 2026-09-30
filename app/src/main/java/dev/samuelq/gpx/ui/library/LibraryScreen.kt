@@ -98,6 +98,7 @@ fun LibraryScreen(
     viewModel: LibraryViewModel = viewModel(factory = LibraryViewModel.Factory),
 ) {
     val loaded by viewModel.tracks.collectAsStateWithLifecycle()
+    val sizes by viewModel.sizes.collectAsStateWithLifecycle()
     val tracks = loaded.orEmpty()
     val selection by viewModel.selection.collectAsStateWithLifecycle()
     val query by viewModel.query.collectAsStateWithLifecycle()
@@ -262,6 +263,7 @@ fun LibraryScreen(
                 items(tracks, key = TrackEntity::id) { track ->
                     TrackRow(
                         track = track,
+                        sizeBytes = sizes[track.id],
                         color = palette.slot(track.colorIndex),
                         selected = track.id in selection,
                         selectionActive = selection.isNotEmpty(),
@@ -343,6 +345,7 @@ private fun SelectionBar(
 @Composable
 private fun TrackRow(
     track: TrackEntity,
+    sizeBytes: Long?,
     color: androidx.compose.ui.graphics.Color,
     selected: Boolean,
     selectionActive: Boolean,
@@ -356,19 +359,16 @@ private fun TrackRow(
     val formatters = LocalFormatters.current
 
     // Remembered: a DateTimeFormatter's first use loads locale data, janking the entry animation.
-    val summary = remember(track, formatters) {
-        buildString {
-            append(formatters.distance(track.distanceMeters))
-            if (track.totalSeconds > 0) {
-                append("  ·  ")
-                append(Formatters.duration(track.totalSeconds))
-            }
-            val recorded = track.startedAtEpochMillis ?: track.lastOpenedAtEpochMillis
-            if (recorded > 0) {
-                append("  ·  ")
-                append(formatters.dateTime(Instant.ofEpochMilli(recorded)))
-            }
-        }
+    val date = remember(track, formatters) {
+        val recorded = track.startedAtEpochMillis ?: track.lastOpenedAtEpochMillis
+        formatters.dateTime(Instant.ofEpochMilli(recorded))
+    }
+    val summary = remember(track, sizeBytes, formatters) {
+        listOfNotNull(
+            track.totalSeconds.takeIf { it > 0 }?.let { Formatters.duration(it) },
+            formatters.distance(track.distanceMeters),
+            sizeBytes?.let { Formatters.kilobytes(it) },
+        ).joinToString("  ·  ")
     }
 
     ListItem(
@@ -398,12 +398,20 @@ private fun TrackRow(
             )
         },
         supportingContent = {
-            Text(
-                text = summary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.bodySmall,
-            )
+            Column {
+                Text(
+                    text = date,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Text(
+                    text = summary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
         },
         trailingContent = {
             if (!selectionActive) {

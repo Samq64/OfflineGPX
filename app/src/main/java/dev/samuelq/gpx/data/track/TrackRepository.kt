@@ -240,6 +240,11 @@ class TrackRepository(
         }.recoverFailure()
     }
 
+    /** Bytes of each track's file, by id; a stat, not a parse. */
+    suspend fun fileSizes(tracks: List<TrackEntity>): Map<Long, Long> = withContext(io) {
+        tracks.associate { it.id to fileOf(it).length() }
+    }
+
     suspend fun touch(id: Long) = dao.touch(id, System.currentTimeMillis())
 
     /** Renames a track; a blank [name] clears it, falling back to the filename. */

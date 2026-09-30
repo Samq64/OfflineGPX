@@ -171,6 +171,12 @@ class Formatters(
             return { seconds -> durationAxis(seconds, hours) }
         }
 
+        /** Always kilobytes, rounded up, so tracks compare at a glance. */
+        fun kilobytes(bytes: Long, locale: Locale = Locale.getDefault()): String =
+            String.format(locale, "%,d kB", (bytes + BYTES_PER_KB - 1) / BYTES_PER_KB)
+
+        private const val BYTES_PER_KB = 1000L
+
         fun count(value: Int, locale: Locale = Locale.getDefault()): String =
             String.format(locale, "%,d", value)
 
