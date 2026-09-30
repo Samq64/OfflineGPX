@@ -16,6 +16,9 @@ class MapFileHeader(
     val maxLongitude: Double,
     val maxLatitude: Double,
     val attribution: String?,
+    /** The [baseZoom] sub-file, whose tile index starts it (non-debug files only). */
+    val subFileStart: Long = 0,
+    val subFileSize: Long = 0,
 ) {
 
     companion object {
@@ -87,10 +90,18 @@ class MapFileHeader(
                 val intervals = cursor.byte()
                 if (intervals <= 0) return null
                 var deepestBase = Int.MIN_VALUE
+                var subFileStart = 0L
+                var subFileSize = 0L
                 repeat(intervals) {
-                    deepestBase = maxOf(deepestBase, cursor.byte())
+                    val base = cursor.byte()
                     cursor.skip(2) // min and max zoom
-                    cursor.skip(16) // sub-file start and size
+                    val start = cursor.long()
+                    val size = cursor.long()
+                    if (base > deepestBase) {
+                        deepestBase = base
+                        subFileStart = start
+                        subFileSize = size
+                    }
                 }
 
                 MapFileHeader(
@@ -101,6 +112,8 @@ class MapFileHeader(
                     maxLatitude = maxLatitude,
                     // The comment carries the data credit; created-by is a fallback.
                     attribution = comment?.takeIf { it.isNotBlank() } ?: createdBy?.takeIf { it.isNotBlank() },
+                    subFileStart = subFileStart,
+                    subFileSize = subFileSize,
                 )
             } catch (_: IndexOutOfBoundsException) {
                 null
@@ -127,6 +140,8 @@ class MapFileHeader(
         fun short(): Int = (byte() shl 8) or byte()
 
         fun int(): Int = (short() shl 16) or short()
+
+        fun long(): Long = (int().toLong() shl 32) or (int().toLong() and 0xFFFFFFFFL)
 
         /** A VBE-U length, then that many UTF-8 bytes. */
         fun string(): String {

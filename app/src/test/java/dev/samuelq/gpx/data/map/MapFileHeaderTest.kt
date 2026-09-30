@@ -30,6 +30,13 @@ class MapFileHeaderTest {
         assertEquals(14, header.baseZoom)
     }
 
+    @Test
+    fun `locates the deepest sub-file`() {
+        val header = assertNotNull(MapFileHeader.read(fixture()))
+        assertEquals(171_810L, header.subFileStart)
+        assertEquals(144_339L, header.subFileSize)
+    }
+
     /** Where an extract's ODbL credit lives. */
     @Test
     fun `attribution comes from the comment`() {

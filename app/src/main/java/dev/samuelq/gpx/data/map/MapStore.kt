@@ -28,12 +28,16 @@ class OfflineMap(
 
     val displayName: String get() = file.nameWithoutExtension
 
-    /** Bounding-box overlap; conservative, and the user confirms before anything is replaced. */
+    /** Bounding-box overlap; true of most neighbours too, so see [duplicates]. */
     fun overlaps(other: OfflineMap): Boolean =
         header.minLongitude < other.header.maxLongitude &&
             other.header.minLongitude < header.maxLongitude &&
             header.minLatitude < other.header.maxLatitude &&
             other.header.minLatitude < header.maxLatitude
+
+    /** Whether [other] covers the same place, not just a box that reaches over this one. */
+    fun duplicates(other: OfflineMap): Boolean =
+        overlaps(other) && (sharedData(this, other) ?: 1.0) >= DUPLICATE_SHARE
 }
 
 enum class MapImportError {
@@ -68,7 +72,7 @@ class MapStore(context: Context) {
 
     private val _maps = MutableStateFlow<List<OfflineMap>>(emptyList())
 
-    /** Newest first; all drawn, since imports never leave two overlapping. */
+    /** Newest first; all drawn, since an import replaces any it duplicates. */
     val maps: StateFlow<List<OfflineMap>> = _maps.asStateFlow()
 
     /** Filenames deleted but still undoable; in memory, like pending track deletes. */
@@ -132,8 +136,8 @@ class MapStore(context: Context) {
                 return@withContext MapImportResult.Failed(MapImportError.NOT_A_MAP_FILE)
             }
 
-            // Stacked renderings are illegible, so an overlap means replacing.
-            val overlapping = _maps.value.filter { it.overlaps(map) }
+            // Neighbours draw together; a second copy of a place is a replacement.
+            val overlapping = _maps.value.filter { it.duplicates(map) }
             if (overlapping.isEmpty()) install(map) else MapImportResult.Overlaps(map, overlapping)
         }
 

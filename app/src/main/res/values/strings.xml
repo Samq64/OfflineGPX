@@ -57,13 +57,13 @@
     <string name="settings_maps_failed_format">That isn\'t a supported map format.</string>
     <string name="settings_maps_failed_space">Not enough free space for that map.</string>
     <plurals name="settings_maps_replace_title">
-        <item quantity="one">Replace overlapping map?</item>
-        <item quantity="other">Replace overlapping maps?</item>
+        <item quantity="one">Replace existing map?</item>
+        <item quantity="other">Replace existing maps?</item>
     </plurals>
-    <!-- %1$s is the new map, %2$s a list of the maps it overlaps, each already quoted. -->
+    <!-- %1$s is the new map, %2$s a list of the maps covering the same area, each already quoted. -->
     <plurals name="settings_maps_replace_body">
-        <item quantity="one">“%1$s” overlaps %2$s. Overlapping maps can\'t be drawn together, so replacing deletes it.</item>
-        <item quantity="other">“%1$s” overlaps %2$s. Overlapping maps can\'t be drawn together, so replacing deletes them.</item>
+        <item quantity="one">“%1$s” covers the same area as %2$s. Replacing deletes it.</item>
+        <item quantity="other">“%1$s” covers the same area as %2$s. Replacing deletes them.</item>
     </plurals>
     <string name="settings_maps_replace">Replace</string>
     <string name="settings_maps_no_browser">No app on this device can open a web page.</string>
