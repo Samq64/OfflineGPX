@@ -72,7 +72,7 @@ class MapStore(context: Context) {
 
     private val _maps = MutableStateFlow<List<OfflineMap>>(emptyList())
 
-    /** Newest first; all drawn, since an import replaces any it duplicates. */
+    /** Newest first; all drawn, overlapping or not. */
     val maps: StateFlow<List<OfflineMap>> = _maps.asStateFlow()
 
     /** Filenames deleted but still undoable; in memory, like pending track deletes. */
@@ -136,22 +136,19 @@ class MapStore(context: Context) {
                 return@withContext MapImportResult.Failed(MapImportError.NOT_A_MAP_FILE)
             }
 
-            // Neighbours draw together; a second copy of a place is a replacement.
+            // Neighbours go straight in; a second copy of a place is asked about.
             val overlapping = _maps.value.filter { it.duplicates(map) }
             if (overlapping.isEmpty()) install(map) else MapImportResult.Overlaps(map, overlapping)
         }
 
+    /** Keeps both; the renderer passes on repeated features once. */
     suspend fun confirmImport(overlaps: MapImportResult.Overlaps): MapImportResult =
-        withContext(Dispatchers.IO) {
-            overlaps.existing.forEach { it.file.delete() }
-            install(overlaps.staged)
-        }
+        withContext(Dispatchers.IO) { install(overlaps.staged) }
 
     fun cancelImport(overlaps: MapImportResult.Overlaps) {
         scope.launch { overlaps.staged.file.delete() }
     }
 
-    /** After the replaced maps are deleted, so re-importing a file keeps its name. */
     private suspend fun install(staged: OfflineMap): MapImportResult {
         val destination = uniqueFile(directory, staged.file.name, EXTENSION, fallback = "map")
         if (!staged.file.renameTo(destination)) {

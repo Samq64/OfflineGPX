@@ -56,16 +56,16 @@
     <string name="settings_maps_failed_unreadable">Couldn\'t read that file.</string>
     <string name="settings_maps_failed_format">That isn\'t a supported map format.</string>
     <string name="settings_maps_failed_space">Not enough free space for that map.</string>
-    <plurals name="settings_maps_replace_title">
-        <item quantity="one">Replace existing map?</item>
-        <item quantity="other">Replace existing maps?</item>
+    <plurals name="settings_maps_merge_title">
+        <item quantity="one">Merge with existing map?</item>
+        <item quantity="other">Merge with existing maps?</item>
     </plurals>
     <!-- %1$s is the new map, %2$s a list of the maps covering the same area, each already quoted. -->
-    <plurals name="settings_maps_replace_body">
-        <item quantity="one">“%1$s” covers the same area as %2$s. Replacing deletes it.</item>
-        <item quantity="other">“%1$s” covers the same area as %2$s. Replacing deletes them.</item>
+    <plurals name="settings_maps_merge_body">
+        <item quantity="one">“%1$s” covers the same area as %2$s. Both are kept and drawn as one.</item>
+        <item quantity="other">“%1$s” covers the same area as %2$s. All are kept and drawn as one.</item>
     </plurals>
-    <string name="settings_maps_replace">Replace</string>
+    <string name="settings_maps_merge">Merge</string>
     <string name="settings_maps_no_browser">No app on this device can open a web page.</string>
 
     <string name="library_title">Tracks</string>

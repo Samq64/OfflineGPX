@@ -148,10 +148,10 @@ fun SettingsScreen(
     }
 
     overlapping?.let { overlaps ->
-        ReplaceMapsDialog(
+        MergeMapsDialog(
             newMap = overlaps.staged.displayName,
             existing = overlaps.existing.map { it.displayName },
-            onReplace = viewModel::replaceOverlapping,
+            onMerge = viewModel::mergeOverlapping,
             onCancel = viewModel::cancelImport,
         )
     }
@@ -282,21 +282,21 @@ fun SettingsScreen(
 }
 
 @Composable
-private fun ReplaceMapsDialog(
+private fun MergeMapsDialog(
     newMap: String,
     existing: List<String>,
-    onReplace: () -> Unit,
+    onMerge: () -> Unit,
     onCancel: () -> Unit,
 ) {
     AlertDialog(
         onDismissRequest = onCancel,
         title = {
-            Text(pluralStringResource(R.plurals.settings_maps_replace_title, existing.size))
+            Text(pluralStringResource(R.plurals.settings_maps_merge_title, existing.size))
         },
         text = {
             Text(
                 pluralStringResource(
-                    R.plurals.settings_maps_replace_body,
+                    R.plurals.settings_maps_merge_body,
                     existing.size,
                     newMap,
                     existing.joinToString { "“$it”" },
@@ -304,7 +304,7 @@ private fun ReplaceMapsDialog(
             )
         },
         confirmButton = {
-            TextButton(onClick = onReplace) { Text(stringResource(R.string.settings_maps_replace)) }
+            TextButton(onClick = onMerge) { Text(stringResource(R.string.settings_maps_merge)) }
         },
         dismissButton = {
             TextButton(onClick = onCancel) { Text(stringResource(R.string.action_cancel)) }

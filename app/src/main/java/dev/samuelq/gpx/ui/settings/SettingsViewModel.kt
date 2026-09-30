@@ -42,7 +42,7 @@ class SettingsViewModel(
     private val _importing = MutableStateFlow(false)
     val importing: StateFlow<Boolean> = _importing.asStateFlow()
 
-    /** An import waiting on the user to confirm replacing the maps it overlaps. */
+    /** An import waiting on the user to confirm merging with the maps it duplicates. */
     private val _overlapping = MutableStateFlow<MapImportResult.Overlaps?>(null)
     val overlapping: StateFlow<MapImportResult.Overlaps?> = _overlapping.asStateFlow()
 
@@ -62,7 +62,7 @@ class SettingsViewModel(
         }
     }
 
-    fun replaceOverlapping() {
+    fun mergeOverlapping() {
         val overlaps = _overlapping.value ?: return
         _overlapping.value = null
         viewModelScope.launch { report(mapStore.confirmImport(overlaps)) }
