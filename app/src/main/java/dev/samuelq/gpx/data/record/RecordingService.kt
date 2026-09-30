@@ -87,7 +87,6 @@ class RecordingService : Service() {
         val settings = container.settingsRepository.settings.value
         session = RecordingSession(
             maxAccuracyMeters = settings.maxAccuracyMeters,
-            minDisplacementMeters = settings.minDisplacementMeters,
             clock = SystemClock::elapsedRealtime,
         )
 

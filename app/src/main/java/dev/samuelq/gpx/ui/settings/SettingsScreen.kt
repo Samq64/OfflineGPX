@@ -1,15 +1,23 @@
 package dev.samuelq.gpx.ui.settings
 
+import android.content.Context
 import android.content.Intent
+import android.os.PowerManager
+import android.provider.Settings as AndroidSettings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -17,6 +25,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -28,6 +37,7 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -37,12 +47,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -50,8 +63,11 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import dev.samuelq.gpx.BuildConfig
 import dev.samuelq.gpx.R
 import dev.samuelq.gpx.core.model.UnitSystem
 import dev.samuelq.gpx.data.map.OfflineMap
@@ -77,6 +93,7 @@ fun SettingsScreen(
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val maps by viewModel.maps.collectAsStateWithLifecycle()
     val importing by viewModel.importing.collectAsStateWithLifecycle()
+    val overlapping by viewModel.overlapping.collectAsStateWithLifecycle()
     val formatters = LocalFormatters.current
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -107,6 +124,14 @@ fun SettingsScreen(
     val noSpace = stringResource(R.string.settings_maps_failed_space)
     val noBrowser = stringResource(R.string.settings_maps_no_browser)
 
+    // The browser fetches it, so no INTERNET permission is needed.
+    fun openUrl(url: String) {
+        val opened = runCatching {
+            context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri()))
+        }.isSuccess
+        if (!opened) viewModel.reportNoBrowser()
+    }
+
     LaunchedEffect(viewModel) {
         viewModel.messages.collect { message ->
             snackbarHostState.currentSnackbarData?.dismiss()
@@ -120,6 +145,21 @@ fun SettingsScreen(
                 }
             )
         }
+    }
+
+    overlapping?.let { overlaps ->
+        ReplaceMapsDialog(
+            newMap = overlaps.staged.displayName,
+            existing = overlaps.existing.map { it.displayName },
+            onReplace = viewModel::replaceOverlapping,
+            onCancel = viewModel::cancelImport,
+        )
+    }
+
+    // Rechecked on resume, since the user changes it in system settings.
+    var batteryRestricted by remember { mutableStateOf(false) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        batteryRestricted = !context.isIgnoringBatteryOptimizations()
     }
 
     Scaffold(
@@ -152,15 +192,7 @@ fun SettingsScreen(
                 importing = importing,
                 onImport = { importer.launch(MAP_MIME_TYPES) },
                 onDelete = ::deleteMap,
-                onOpenHelp = {
-                    // The browser fetches it, so no INTERNET permission is needed.
-                    val opened = runCatching {
-                        context.startActivity(
-                            Intent(Intent.ACTION_VIEW, MAP_HELP_URL.toUri())
-                        )
-                    }.isSuccess
-                    if (!opened) viewModel.reportNoBrowser()
-                },
+                onOpenHelp = { openUrl(MAP_HELP_URL) },
             )
 
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
@@ -206,56 +238,170 @@ fun SettingsScreen(
                 explanation = stringResource(R.string.settings_accuracy_explanation),
                 value = formatters.meters(accuracy.toDouble()),
             ) {
-                Slider(
+                MarkedSlider(
                     value = accuracy,
                     onValueChange = { accuracy = it },
                     onValueChangeFinished = {
                         viewModel.setMaxAccuracy(accuracy.roundToInt().toDouble())
                     },
                     valueRange = Settings.ACCURACY_RANGE.toFloatRange(),
+                    marker = Settings.Defaults.maxAccuracyMeters.toFloat(),
                 )
             }
 
-            var displacement by remember(settings.minDisplacementMeters) {
-                mutableFloatStateOf(settings.minDisplacementMeters.toFloat())
+            if (batteryRestricted) {
+                Setting(
+                    title = stringResource(R.string.settings_battery),
+                    explanation = stringResource(R.string.settings_battery_explanation),
+                ) {
+                    TextButton(
+                        onClick = { context.openBatterySettings() },
+                        // Aligns the label, not the ripple, with the text above.
+                        modifier = Modifier.offset(x = (-12).dp),
+                    ) {
+                        Text(stringResource(R.string.settings_battery_open))
+                    }
+                }
             }
-            Setting(
-                title = stringResource(R.string.settings_displacement),
-                explanation = stringResource(R.string.settings_displacement_explanation),
-                value = if (displacement < 0.5f) {
-                    stringResource(R.string.settings_displacement_off)
-                } else {
-                    formatters.meters(displacement.toDouble())
-                },
-            ) {
-                Slider(
-                    value = displacement,
-                    onValueChange = { displacement = it },
-                    onValueChangeFinished = {
-                        viewModel.setMinDisplacement(displacement.roundToInt().toDouble())
-                    },
-                    valueRange = Settings.DISPLACEMENT_RANGE.toFloatRange(),
-                )
-            }
+
+            HorizontalDivider(Modifier.padding(vertical = 8.dp))
+            SectionHeading(stringResource(R.string.settings_section_about))
 
             Text(
-                text = stringResource(R.string.settings_recording_applies_next),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = ScreenPadding),
+                text = stringResource(R.string.settings_about_version, VERSION),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(horizontal = ScreenPadding, vertical = 8.dp),
             )
-
-            Spacer(Modifier.height(16.dp))
-
-            TextButton(
-                onClick = viewModel::resetRecording,
-                modifier = Modifier.padding(horizontal = ScreenPadding - 12.dp),
-            ) {
-                Text(stringResource(R.string.settings_reset))
+            LIBRARIES.forEach { library ->
+                LibraryRow(library, onClick = { openUrl(library.url) })
             }
 
             Spacer(Modifier.height(24.dp))
         }
+    }
+}
+
+@Composable
+private fun ReplaceMapsDialog(
+    newMap: String,
+    existing: List<String>,
+    onReplace: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = {
+            Text(pluralStringResource(R.plurals.settings_maps_replace_title, existing.size))
+        },
+        text = {
+            Text(
+                pluralStringResource(
+                    R.plurals.settings_maps_replace_body,
+                    existing.size,
+                    newMap,
+                    existing.joinToString { "“$it”" },
+                )
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onReplace) { Text(stringResource(R.string.settings_maps_replace)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onCancel) { Text(stringResource(R.string.action_cancel)) }
+        },
+    )
+}
+
+/** A [Slider] with a dot at [marker], drawn in the colours of a step tick. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MarkedSlider(
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    onValueChangeFinished: () -> Unit,
+    valueRange: ClosedFloatingPointRange<Float>,
+    marker: Float,
+) {
+    val colors = SliderDefaults.colors()
+    val fraction = (marker - valueRange.start) / (valueRange.endInclusive - valueRange.start)
+    val markerColor = if (value >= marker) colors.activeTickColor else colors.inactiveTickColor
+    Slider(
+        value = value,
+        onValueChange = onValueChange,
+        onValueChangeFinished = onValueChangeFinished,
+        valueRange = valueRange,
+        colors = colors,
+        track = { state ->
+            // The track spans the thumb's travel, so a fraction of its width lines up.
+            Box {
+                SliderDefaults.Track(sliderState = state, colors = colors)
+                Canvas(Modifier.matchParentSize()) {
+                    drawCircle(
+                        color = markerColor,
+                        radius = MarkerRadius.toPx(),
+                        center = Offset(size.width * fraction, center.y),
+                    )
+                }
+            }
+        },
+    )
+}
+
+private val MarkerRadius = 2.dp
+
+private fun Context.isIgnoringBatteryOptimizations(): Boolean =
+    getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(packageName)
+
+/**
+ * The system list rather than a direct exemption request, which needs a permission Play
+ * restricts. App info is the fallback where an OEM drops the list.
+ */
+private fun Context.openBatterySettings() {
+    val opened = runCatching {
+        startActivity(Intent(AndroidSettings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+    }.isSuccess
+    if (!opened) {
+        runCatching {
+            startActivity(
+                Intent(AndroidSettings.ACTION_APPLICATION_DETAILS_SETTINGS, "package:$packageName".toUri())
+            )
+        }
+    }
+}
+
+private class Library(val name: String, val licence: String, val url: String)
+
+private val LIBRARIES = listOf(
+    Library("VTM", "LGPL-3.0", "https://github.com/mapsforge/vtm"),
+    Library("JTS", "EDL-1.0", "https://github.com/locationtech/jts"),
+    Library("AndroidX", "Apache-2.0", "https://developer.android.com/jetpack/androidx"),
+    Library("Kotlin", "Apache-2.0", "https://kotlinlang.org"),
+)
+
+private val VERSION = BuildConfig.VERSION_NAME +
+    BuildConfig.GIT_HASH.takeIf { it.isNotEmpty() }?.let { " ($it)" }.orEmpty()
+
+@Composable
+private fun LibraryRow(library: Library, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .heightIn(min = 48.dp)
+            .padding(horizontal = ScreenPadding),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = library.name,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Text(
+            text = library.licence,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

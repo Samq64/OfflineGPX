@@ -15,10 +15,9 @@ import java.time.Instant
  */
 internal class RecordingSession(
     private val maxAccuracyMeters: Double,
-    minDisplacementMeters: Double,
     private val clock: () -> Long,
 ) {
-    private val filter = FixFilter(maxAccuracyMeters, minDisplacementMeters)
+    private val filter = FixFilter(maxAccuracyMeters)
     private val speedWindow = SpeedWindow()
 
     var paused = false

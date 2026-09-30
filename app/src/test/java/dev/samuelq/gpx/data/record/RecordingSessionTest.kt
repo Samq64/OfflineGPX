@@ -17,7 +17,6 @@ class RecordingSessionTest {
 
     private fun session() = RecordingSession(
         maxAccuracyMeters = 20.0,
-        minDisplacementMeters = 3.0,
         clock = { now },
     )
 

@@ -78,8 +78,7 @@ class MapViewModel(
     mapStore: MapStore,
 ) : ViewModel() {
 
-    val basemaps: StateFlow<List<OfflineMap>> = mapStore.active
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val basemaps: StateFlow<List<OfflineMap>> = mapStore.maps
 
     private val _state = MutableStateFlow(MapUiState())
     val state: StateFlow<MapUiState> = _state.asStateFlow()

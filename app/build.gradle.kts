@@ -50,6 +50,14 @@ abstract class CheckNoNetworkPermissions : DefaultTask() {
     }
 }
 
+/** The built commit, shown beside the version. Empty outside a git checkout. */
+val gitHash: String = runCatching {
+    providers.exec {
+        commandLine("git", "rev-parse", "--short", "HEAD")
+        isIgnoreExitValue = true
+    }.standardOutput.asText.get().trim()
+}.getOrDefault("")
+
 android {
     namespace = "dev.samuelq.gpx"
     compileSdk = libs.versions.compileSdk.get().toInt()
@@ -61,6 +69,7 @@ android {
         targetSdk = libs.versions.targetSdk.get().toInt()
         versionCode = 1
         versionName = "0.1.0"
+        buildConfigField("String", "GIT_HASH", "\"$gitHash\"")
     }
 
     buildTypes {
@@ -76,6 +85,8 @@ android {
 
     buildFeatures {
         compose = true
+        // For the version and commit shown in Settings.
+        buildConfig = true
     }
 
     compileOptions {

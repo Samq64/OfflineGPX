@@ -14,19 +14,12 @@ data class Settings(
 
     /** See [FixFilter]. */
     val maxAccuracyMeters: Double = FixFilter.MAX_ACCURACY_METERS,
-
-    val minDisplacementMeters: Double = FixFilter.MIN_DISPLACEMENT_METERS,
-
-    /** Filenames of the basemaps to draw; never overlapping, so no stacking order. */
-    val activeMapFiles: Set<String> = emptySet(),
-
 ) {
     companion object {
         val Defaults = Settings()
 
-        /** Slider ranges, deliberately wider than useful. */
+        /** Deliberately wider than useful. */
         val ACCURACY_RANGE = 5.0..100.0
-        val DISPLACEMENT_RANGE = 0.0..25.0
     }
 }
 
@@ -45,17 +38,6 @@ class SettingsRepository(context: Context) {
     fun setMaxAccuracyMeters(meters: Double) =
         update { putFloat(KEY_ACCURACY, meters.toFloat()) }
 
-    fun setMinDisplacementMeters(meters: Double) =
-        update { putFloat(KEY_DISPLACEMENT, meters.toFloat()) }
-
-    fun setActiveMapFiles(names: Set<String>) = update { putStringSet(KEY_ACTIVE_MAPS, names) }
-
-    /** Resets only the recording filters. */
-    fun resetRecording() = update {
-        remove(KEY_ACCURACY)
-        remove(KEY_DISPLACEMENT)
-    }
-
     private inline fun update(crossinline edits: SharedPreferences.Editor.() -> Unit) {
         prefs.edit { edits() }
         _settings.value = read()
@@ -69,9 +51,6 @@ class SettingsRepository(context: Context) {
                 ?: defaults.units,
             maxAccuracyMeters = prefs
                 .getFloat(KEY_ACCURACY, defaults.maxAccuracyMeters.toFloat()).toDouble(),
-            minDisplacementMeters = prefs
-                .getFloat(KEY_DISPLACEMENT, defaults.minDisplacementMeters.toFloat()).toDouble(),
-            activeMapFiles = prefs.getStringSet(KEY_ACTIVE_MAPS, null) ?: defaults.activeMapFiles,
         )
     }
 
@@ -80,7 +59,5 @@ class SettingsRepository(context: Context) {
 
         const val KEY_UNITS = "units"
         const val KEY_ACCURACY = "max_accuracy_meters"
-        const val KEY_DISPLACEMENT = "min_displacement_meters"
-        const val KEY_ACTIVE_MAPS = "active_map_files"
     }
 }

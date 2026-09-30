@@ -33,14 +33,15 @@
     <string name="settings_units_imperial">Imperial</string>
 
     <string name="settings_accuracy">Accuracy limit</string>
-    <string name="settings_accuracy_explanation">Fixes less certain than this are ignored. Lower keeps out the wandering a phone does indoors; too low and a wooded valley records nothing.</string>
+    <string name="settings_accuracy_explanation">Fixes less certain than this are ignored. Lower keeps out the wandering a phone does indoors; too low and a wooded valley records nothing. Read when a recording starts.</string>
 
-    <string name="settings_displacement">Minimum movement</string>
-    <string name="settings_displacement_explanation">How far a fix must move to count as travel. Stops a parked phone recording a ride; lower it if real rides come out short.</string>
-    <string name="settings_displacement_off">Off</string>
+    <string name="settings_battery">Battery optimisation</string>
+    <string name="settings_battery_explanation">Some phones stop recordings in the background. Turn optimisation off for this app to keep them running.</string>
+    <string name="settings_battery_open">Open battery settings</string>
 
-    <string name="settings_recording_applies_next">Both are read when a recording starts, so they won\'t affect one already running.</string>
-    <string name="settings_reset">Reset recording settings</string>
+    <string name="settings_section_about">About</string>
+    <!-- %1$s is the version and commit, e.g. 0.1.0 (8c5759b). -->
+    <string name="settings_about_version">Version %1$s. GPL-3.0.</string>
 
     <string name="settings_section_maps">Offline maps</string>
     <string name="settings_maps_explanation">No internet access here, so maps come from a .map file you import. Without one, tracks are drawn on a plain background.</string>
@@ -55,6 +56,16 @@
     <string name="settings_maps_failed_unreadable">Couldn\'t read that file.</string>
     <string name="settings_maps_failed_format">That isn\'t a supported map format.</string>
     <string name="settings_maps_failed_space">Not enough free space for that map.</string>
+    <plurals name="settings_maps_replace_title">
+        <item quantity="one">Replace overlapping map?</item>
+        <item quantity="other">Replace overlapping maps?</item>
+    </plurals>
+    <!-- %1$s is the new map, %2$s a list of the maps it overlaps, each already quoted. -->
+    <plurals name="settings_maps_replace_body">
+        <item quantity="one">“%1$s” overlaps %2$s. Overlapping maps can\'t be drawn together, so replacing deletes it.</item>
+        <item quantity="other">“%1$s” overlaps %2$s. Overlapping maps can\'t be drawn together, so replacing deletes them.</item>
+    </plurals>
+    <string name="settings_maps_replace">Replace</string>
     <string name="settings_maps_no_browser">No app on this device can open a web page.</string>
 
     <string name="library_title">Tracks</string>

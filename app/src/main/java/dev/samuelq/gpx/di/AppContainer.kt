@@ -35,7 +35,7 @@ class AppContainer(context: Context) {
 
     val settingsRepository by lazy { SettingsRepository(appContext) }
 
-    val mapStore by lazy { MapStore(appContext, settingsRepository) }
+    val mapStore by lazy { MapStore(appContext) }
 
     /** Undispatched, so it holds the recovery lock before any recording can start. */
     fun claimAbandonedRecording() {
