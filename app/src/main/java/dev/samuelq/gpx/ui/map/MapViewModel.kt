@@ -17,6 +17,9 @@ import dev.samuelq.gpx.data.record.AbandonedRecording
 import dev.samuelq.gpx.data.record.DiscardedRecording
 import dev.samuelq.gpx.data.record.RecordingController
 import dev.samuelq.gpx.data.record.RecordingRecovery
+import dev.samuelq.gpx.data.record.RecordingState
+import dev.samuelq.gpx.data.record.LocationSource
+import dev.samuelq.gpx.core.model.TrackPoint
 import dev.samuelq.gpx.data.track.LoadedTrack
 import dev.samuelq.gpx.data.track.TrackRepository
 import dev.samuelq.gpx.di.appContainer
@@ -24,6 +27,7 @@ import dev.samuelq.gpx.ui.track.FocusedTrack
 import dev.samuelq.gpx.ui.track.TrackRef
 import dev.samuelq.gpx.ui.track.toTrackMessageRes
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -34,7 +38,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.runningFold
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -47,6 +58,8 @@ sealed interface MapMessage {
     data object RenameFailed : MapMessage
     data object ImportFailed : MapMessage
     data object RecoveryFailed : MapMessage
+    data object LocationOff : MapMessage
+    data object LocationDenied : MapMessage
 
     /** Undone with [MapViewModel.show]. */
     class Hidden(val id: Long) : MapMessage
@@ -76,6 +89,7 @@ class MapViewModel(
     private val recovery: RecordingRecovery,
     controller: RecordingController,
     mapStore: MapStore,
+    private val locationSource: LocationSource,
 ) : ViewModel() {
 
     val basemaps: StateFlow<List<OfflineMap>> = mapStore.maps
@@ -114,6 +128,44 @@ class MapViewModel(
     /** A channel, not state, so a rotation can't re-announce something. */
     private val _messages = Channel<MapMessage>(Channel.BUFFERED)
     val messages: Flow<MapMessage> = _messages.receiveAsFlow()
+
+    private val _locating = MutableStateFlow(false)
+    /** Kept across navigation, so returning to the map shows the position again. */
+    val locating: StateFlow<Boolean> = _locating.asStateFlow()
+
+    val isGpsEnabled: Boolean get() = locationSource.isGpsEnabled
+
+    fun showLocation(shown: Boolean) {
+        _locating.value = shown
+    }
+
+    /**
+     * The latest fix while [locating], null while waiting for one. Stops off screen, and while
+     * recording, whose puck is the position then.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val position: StateFlow<TrackPoint?> = combine(
+        _locating,
+        controller.state.map { it is RecordingState.Active },
+    ) { locating, recording -> locating && !recording }
+        .distinctUntilChanged()
+        .flatMapLatest { on ->
+            if (!on) {
+                flowOf(null)
+            } else {
+                flow<TrackPoint?> {
+                    emit(null)
+                    emitAll(locationSource.fixes(onUnavailable = { stopLocating(MapMessage.LocationOff) }))
+                }.catch { if (it is SecurityException) stopLocating(MapMessage.LocationDenied) else throw it }
+            }
+        }
+        // No replay: a fix from before the screen went away would show a stale position.
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000, replayExpirationMillis = 0), null)
+
+    private fun stopLocating(message: MapMessage) {
+        _locating.value = false
+        _messages.trySend(message)
+    }
 
     /** The oldest recording a crash left unsaved, until it is saved or discarded. */
     private val _abandoned = MutableStateFlow<AbandonedRecording?>(null)
@@ -336,6 +388,7 @@ class MapViewModel(
                     recovery = appContainer.recordingRecovery,
                     controller = appContainer.recordingController,
                     mapStore = appContainer.mapStore,
+                    locationSource = appContainer.locationSource,
                 )
             }
         }

@@ -25,6 +25,11 @@
     <string name="sheet_drag_handle">Drag handle</string>
     <string name="map_none_shown">No tracks shown</string>
     <string name="map_hidden_hint">Show a track from the list</string>
+    <string name="map_my_location">My location</string>
+    <string name="map_location_outside">You\'re outside your tracks and maps.</string>
+    <string name="map_location_off">Location is switched off.</string>
+    <string name="map_location_denied">Showing where you are needs location access.</string>
+    <string name="map_precise_required">Showing where you are needs precise location.</string>
     <!-- How many of the imported tracks are currently drawn on the map, not the library's total. -->
     <plurals name="map_shown">
         <item quantity="one">%d track shown</item>

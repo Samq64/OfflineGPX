@@ -5,7 +5,9 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -115,6 +117,8 @@ fun MapScreen(
     val recording = recorder.state.collectAsStateWithLifecycle()
     val isRecording by remember { derivedStateOf { recording.value is RecordingState.Active } }
     val basemaps by viewModel.basemaps.collectAsStateWithLifecycle()
+    val locating by viewModel.locating.collectAsStateWithLifecycle()
+    val position by viewModel.position.collectAsStateWithLifecycle()
 
     val palette = routePalette()
     val liveColor = recordingColor()
@@ -151,6 +155,8 @@ fun MapScreen(
     val importFailed = stringResource(R.string.library_import_failed)
     val saveFailed = stringResource(R.string.record_save_failed)
     val stopToOpen = stringResource(R.string.record_stop_to_open)
+    val locationOff = stringResource(R.string.map_location_off)
+    val locationDenied = stringResource(R.string.map_location_denied)
 
     val undo = stringResource(R.string.action_undo)
     val deleted = pluralStringResource(R.plurals.library_deleted, 1, 1)
@@ -167,6 +173,29 @@ fun MapScreen(
     }
 
     val startRecording = rememberStartRecording(recorder, ::say)
+
+    // On the first fix after a tap; later ones move the dot, not the map.
+    var centreOnFix by remember { mutableStateOf(false) }
+    val showLocation = rememberShowLocation(
+        isGpsEnabled = { viewModel.isGpsEnabled },
+        onShow = {
+            viewModel.showLocation(true)
+            centreOnFix = true
+        },
+        say = ::say,
+    )
+    val outside = stringResource(R.string.map_location_outside)
+    LaunchedEffect(position, centreOnFix) {
+        val at = position?.takeIf { centreOnFix } ?: return@LaunchedEffect
+        when (mapController.centreOn(at)) {
+            CentreResult.Centred -> centreOnFix = false
+            CentreResult.OutOfBounds -> {
+                centreOnFix = false
+                say(outside)
+            }
+            CentreResult.NotLaidOut -> Unit
+        }
+    }
     val liveWaypoints by remember {
         derivedStateOf { (recording.value as? RecordingState.Active)?.waypoints.orEmpty() }
     }
@@ -200,6 +229,8 @@ fun MapScreen(
                 MapMessage.RenameFailed -> say(renameFailed)
                 MapMessage.ImportFailed -> say(importFailed)
                 MapMessage.RecoveryFailed -> say(saveFailed)
+                MapMessage.LocationOff -> say(locationOff)
+                MapMessage.LocationDenied -> say(locationDenied)
                 is MapMessage.Hidden -> offerUndo(hidden, onUndo = { viewModel.show(message.id) })
                 is MapMessage.AbandonedDiscarded -> offerUndo(
                     discarded,
@@ -526,6 +557,7 @@ fun MapScreen(
                     },
                     showPuck = isRecording,
                     puckColor = liveColor,
+                    position = position,
                     // Only the focused track's and the recording's.
                     trackWaypoints = focusedTrack?.track?.waypoints.orEmpty(),
                     liveWaypoints = liveWaypoints,
@@ -626,7 +658,31 @@ fun MapScreen(
                         .padding(start = panelCover, bottom = sheetInset)
                         .onSizeChanged { controlsHeight = with(density) { it.height.toDp() } },
                 ) {
-                    if (!isRecording) RecordButton(onStart = startRecording)
+                    // While recording, the puck shows the position.
+                    if (!isRecording) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                            horizontalAlignment = Alignment.End,
+                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                        ) {
+                            // Nothing to place the dot against without a track or a map.
+                            if (hasContent) {
+                                LocationButton(
+                                    shown = locating,
+                                    waiting = locating && position == null,
+                                    onToggle = { show ->
+                                        if (show) {
+                                            showLocation()
+                                        } else {
+                                            viewModel.showLocation(false)
+                                            centreOnFix = false
+                                        }
+                                    },
+                                )
+                            }
+                            RecordButton(onStart = startRecording)
+                        }
+                    }
                 }
 
                 SidePanel(

@@ -31,6 +31,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import dev.samuelq.gpx.R
+import dev.samuelq.gpx.core.model.TrackPoint
 import dev.samuelq.gpx.core.model.Waypoint
 import dev.samuelq.gpx.data.map.OfflineMap
 import kotlinx.coroutines.Dispatchers
@@ -40,6 +41,7 @@ import org.oscim.android.canvas.AndroidBitmap
 import org.oscim.core.BoundingBox
 import org.oscim.core.MapPosition
 import org.oscim.core.MercatorProjection
+import org.oscim.core.Tile
 import org.oscim.layers.marker.ItemizedLayer
 import org.oscim.layers.marker.MarkerInterface
 import org.oscim.layers.marker.MarkerSymbol
@@ -73,8 +75,10 @@ fun OfflineMapCanvas(
     markerColor: Color,
     /** Whether to mark [liveRoute]'s last point. */
     showPuck: Boolean,
-    /** [liveRoute]'s colour, for the puck and [liveWaypoints]. */
+    /** [liveRoute]'s colour, for the puck, [position] and [liveWaypoints]. */
     puckColor: Color,
+    /** The user's position, marked like the puck: it becomes one when a recording starts. */
+    position: TrackPoint?,
     /** [focusedTrackId]'s waypoints. */
     trackWaypoints: List<Waypoint>,
     /** [liveRoute]'s waypoints. */
@@ -237,16 +241,17 @@ fun OfflineMapCanvas(
 
     LaunchedEffect(
         belowPinsLayer, pinLayer, abovePinsLayer, onTopLayer, symbols, routes, liveRoute, showPuck, focusedTrackId, selectedIndex,
-        trackWaypoints, liveWaypoints, followedWaypoint,
+        trackWaypoints, liveWaypoints, followedWaypoint, position,
     ) {
         val puckRoute = liveRoute?.takeIf { showPuck }
+        val here = symbols.puck(position, bearing = null)
         val markerAt = routeFor(focusedTrackId, routes, liveRoute)?.points?.getOrNull(selectedIndex ?: -1)
 
         val selected = symbols.selectedDot(markerAt)
         val pinTapped = followedWaypoint != null
         belowPinsLayer.show(if (pinTapped) emptyList() else selected)
         pinLayer.show(symbols.pins(trackWaypoints, liveWaypoints, followedWaypoint))
-        abovePinsLayer.show(symbols.puck(puckRoute?.points?.lastOrNull(), puckRoute?.headingDegrees()) + if (pinTapped) selected else emptyList())
+        abovePinsLayer.show(symbols.puck(puckRoute?.points?.lastOrNull(), puckRoute?.headingDegrees()) + here + if (pinTapped) selected else emptyList())
         onTopLayer.show(symbols.onTopPin(followedWaypoint, liveWaypoints))
         map.render()
     }
@@ -311,9 +316,28 @@ fun OfflineMapCanvas(
         return true
     }
 
+    // Centred in the uncovered part, zooming in if too far out to place it. Admitted to the
+    // clamp like a framed track, but only if some of the extent would show: a blank view
+    // says nothing about where the user is.
+    fun centreOn(point: TrackPoint): CentreResult {
+        val size = viewSize?.takeIf { it.usable(insets) != null } ?: return CentreResult.NotLaidOut
+        val camera = map.mapPosition
+        camera.setPosition(point.latitude, point.longitude)
+        camera.setScale(maxOf(camera.scale, LOCATE_SCALE).coerceAtMost(map.viewport().maxScale))
+        val mapSize = Tile.SIZE * camera.scale
+        camera.x -= (insets.left - insets.right) / 2.0 / mapSize
+        camera.y -= (insets.top - insets.bottom) / 2.0 / mapSize
+        val view = camera.visibleBox(size)
+        if (currentExtent?.overlaps(view) == false) return CentreResult.OutOfBounds
+        framedView = view
+        map.moveTo(camera, currentClamp(), currentCover)
+        return CentreResult.Centred
+    }
+
     SideEffect {
         controller.zoomBy = ::zoomBy
         controller.showAll = ::frameAll
+        controller.centre = ::centreOn
     }
 
     // Also as screen reader actions, so a TalkBack or switch user needn't turn the buttons on.
@@ -342,8 +366,10 @@ fun OfflineMapCanvas(
         map.events.bind(listener)
         onDispose { map.events.unbind(listener) }
     }
+    // Fresh too: launched for a new extent, it can run after a centring in the same frame
+    // widened the clamp, and would pull the camera back to the old one.
     LaunchedEffect(map, clampExtent, viewSize, cover) {
-        clampExtent?.let { map.keepInView(it, cover) }
+        currentClamp()?.let { map.keepInView(it, cover) }
     }
 
     // Only used until a camera is remembered, i.e. once per process. Tracks first; the maps'
@@ -436,6 +462,9 @@ private const val TAP_REACH_DP = 40f
 /** How far inside the uncovered box a scrubbed point is kept. */
 private const val FOLLOW_MARGIN_DP = 36f
 
+/** Street level, for finding yourself; 2^15. */
+private const val LOCATE_SCALE = 32768.0
+
 /** Used when no map is shown. */
 private const val DEFAULT_MAX_ZOOM = 18
 
@@ -457,11 +486,16 @@ private fun ItemizedLayer.show(items: List<MarkerInterface>) {
 class MapController {
     internal var zoomBy: (Double) -> Boolean = { false }
     internal var showAll: () -> Boolean = { false }
+    internal var centre: (TrackPoint) -> CentreResult = { CentreResult.NotLaidOut }
 
     fun zoomIn() = zoomBy(2.0)
     fun zoomOut() = zoomBy(0.5)
     fun showAllTracks() = showAll()
+
+    fun centreOn(point: TrackPoint) = centre(point)
 }
+
+enum class CentreResult { Centred, OutOfBounds, NotLaidOut }
 
 /** Drag per doubling of scale in a double-tap-and-drag zoom. */
 private const val QUICK_ZOOM_DOUBLING_DP = 100f

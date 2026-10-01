@@ -6,6 +6,7 @@ import androidx.lifecycle.viewmodel.CreationExtras
 import dev.samuelq.gpx.GpxApplication
 import dev.samuelq.gpx.data.db.GpxDatabase
 import dev.samuelq.gpx.data.map.MapStore
+import dev.samuelq.gpx.data.record.LocationSource
 import dev.samuelq.gpx.data.record.RecordingController
 import dev.samuelq.gpx.data.record.RecordingRecovery
 import dev.samuelq.gpx.data.settings.SettingsRepository
@@ -36,6 +37,8 @@ class AppContainer(context: Context) {
     val settingsRepository by lazy { SettingsRepository(appContext) }
 
     val mapStore by lazy { MapStore(appContext) }
+
+    val locationSource by lazy { LocationSource(appContext) }
 
     /** Undispatched, so it holds the recovery lock before any recording can start. */
     fun claimAbandonedRecording() {

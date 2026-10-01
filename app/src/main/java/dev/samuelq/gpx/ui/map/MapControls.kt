@@ -2,9 +2,9 @@ package dev.samuelq.gpx.ui.map
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -26,7 +26,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -67,15 +69,35 @@ internal fun WaypointTooltip(waypoint: Waypoint, tipAt: () -> Offset) {
 /** Starts a recording; once running, it lives in the sheet. */
 @Composable
 internal fun RecordButton(onStart: () -> Unit) {
-    Box(
-        modifier = Modifier.fillMaxWidth().padding(16.dp),
-        contentAlignment = Alignment.CenterEnd,
+    ExtendedFloatingActionButton(
+        onClick = onStart,
+        icon = { Icon(Icons.Default.PlayArrow, contentDescription = null) },
+        text = { Text(stringResource(R.string.record_start)) },
+    )
+}
+
+/** Toggles the position dot; [waiting] until its first fix. Styled like the zoom controls. */
+@Composable
+internal fun LocationButton(shown: Boolean, waiting: Boolean, onToggle: (Boolean) -> Unit) {
+    val label = stringResource(R.string.map_my_location)
+    val waitingLabel = stringResource(R.string.record_waiting_for_fix)
+    Surface(
+        checked = shown,
+        onCheckedChange = onToggle,
+        modifier = Modifier.size(48.dp).semantics {
+            contentDescription = label
+            if (waiting) stateDescription = waitingLabel
+        },
+        shape = CircleShape,
+        color = if (shown) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+        shadowElevation = 2.dp,
     ) {
-        ExtendedFloatingActionButton(
-            onClick = onStart,
-            icon = { Icon(Icons.Default.PlayArrow, contentDescription = null) },
-            text = { Text(stringResource(R.string.record_start)) },
-        )
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                painterResource(if (shown && !waiting) R.drawable.ic_my_location else R.drawable.ic_location_searching),
+                contentDescription = null,
+            )
+        }
     }
 }
 

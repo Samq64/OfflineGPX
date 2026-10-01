@@ -36,16 +36,40 @@ internal fun rememberStartRecording(recorder: RecordingController, say: (String)
             else -> say(locationDenied)
         }
     }
-    return { permissions.requestThenStart(context, start) }
+    return { permissions.requestThenStart(context, start, withNotifications = true) }
+}
+
+/** Shows the user's position, asking for location on the tap. [say] explains a refusal. */
+@Composable
+internal fun rememberShowLocation(isGpsEnabled: () -> Boolean, onShow: () -> Unit, say: (String) -> Unit): () -> Unit {
+    val context = LocalContext.current
+    val locationOff = stringResource(R.string.map_location_off)
+    val locationDenied = stringResource(R.string.map_location_denied)
+    val preciseRequired = stringResource(R.string.map_precise_required)
+
+    val show = { if (isGpsEnabled()) onShow() else say(locationOff) }
+
+    val permissions = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { granted ->
+        when {
+            // GPS_PROVIDER needs fine.
+            granted[Manifest.permission.ACCESS_FINE_LOCATION] == true -> show()
+            granted[Manifest.permission.ACCESS_COARSE_LOCATION] == true -> say(preciseRequired)
+            else -> say(locationDenied)
+        }
+    }
+    return { permissions.requestThenStart(context, show, withNotifications = false) }
 }
 
 /**
- * Coarse is requested with fine because Android 12+ ignores fine alone; notifications are
- * requested but not required.
+ * Coarse is requested with fine because Android 12+ ignores fine alone; notifications, for a
+ * recording, are requested but not required.
  */
 private fun ManagedActivityResultLauncher<Array<String>, Map<String, Boolean>>.requestThenStart(
     context: Context,
     onAlreadyGranted: () -> Unit,
+    withNotifications: Boolean,
 ) {
     val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
     if (fine == PackageManager.PERMISSION_GRANTED) {
@@ -56,7 +80,7 @@ private fun ManagedActivityResultLauncher<Array<String>, Map<String, Boolean>>.r
     val wanted = buildList {
         add(Manifest.permission.ACCESS_FINE_LOCATION)
         add(Manifest.permission.ACCESS_COARSE_LOCATION)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        if (withNotifications && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             add(Manifest.permission.POST_NOTIFICATIONS)
         }
     }

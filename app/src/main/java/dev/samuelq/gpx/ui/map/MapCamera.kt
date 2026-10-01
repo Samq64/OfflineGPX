@@ -96,6 +96,10 @@ internal fun BoundingBox.including(other: BoundingBox?): BoundingBox = if (other
     maxOf(maxLongitude, other.maxLongitude),
 )
 
+internal fun BoundingBox.overlaps(other: BoundingBox): Boolean =
+    minLatitude <= other.maxLatitude && other.minLatitude <= maxLatitude &&
+        minLongitude <= other.maxLongitude && other.minLongitude <= maxLongitude
+
 /** What a [size] view shows with the camera at [this]. */
 internal fun MapPosition.visibleBox(size: IntSize): BoundingBox {
     val mapSize = Tile.SIZE * scale
