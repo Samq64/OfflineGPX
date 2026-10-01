@@ -1,11 +1,18 @@
 package dev.samuelq.gpx.data.db
 
 import android.content.Context
+import androidx.room.AutoMigration
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-@Database(entities = [TrackEntity::class], version = 1, exportSchema = true)
+/** 2 keeps each track's stats and bounds; a 1 row gets defaults and is summarised at launch. */
+@Database(
+    entities = [TrackEntity::class],
+    version = 2,
+    exportSchema = true,
+    autoMigrations = [AutoMigration(from = 1, to = 2)],
+)
 abstract class GpxDatabase : RoomDatabase() {
 
     abstract fun trackDao(): TrackDao

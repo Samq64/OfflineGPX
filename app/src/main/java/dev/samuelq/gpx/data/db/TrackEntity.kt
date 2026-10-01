@@ -1,11 +1,10 @@
 package dev.samuelq.gpx.data.db
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
-import dev.samuelq.gpx.core.analysis.TrackStats
 import dev.samuelq.gpx.core.model.GeoBounds
-import java.time.Instant
 
 /**
  * One row per track, holding its summary so files are only read to draw or chart them.
@@ -33,33 +32,27 @@ data class TrackEntity(
     /** Assigned once so a track's colour only changes when the user picks another. */
     val colorIndex: Int = 0,
 
-    // The whole TrackStats, so a list or a framing never has to read the file.
-    val pointCount: Int,
+    // The whole TrackStats, so a list or a framing never has to read the file. Defaults for
+    // rows from before these columns: pointCount -1 marks one TrackRepository has yet to read.
+    @ColumnInfo(defaultValue = "-1") val pointCount: Int,
     val distanceMeters: Double,
     val totalSeconds: Double,
-    val movingSeconds: Double,
-    val averageSpeedMps: Double,
-    val ascentMeters: Double,
-    val descentMeters: Double,
+    @ColumnInfo(defaultValue = "0") val movingSeconds: Double,
+    @ColumnInfo(defaultValue = "0") val averageSpeedMps: Double,
+    @ColumnInfo(defaultValue = "0") val ascentMeters: Double,
+    @ColumnInfo(defaultValue = "0") val descentMeters: Double,
 
-    val southLatitude: Double,
-    val westLongitude: Double,
-    val northLatitude: Double,
-    val eastLongitude: Double,
+    @ColumnInfo(defaultValue = "0") val southLatitude: Double,
+    @ColumnInfo(defaultValue = "0") val westLongitude: Double,
+    @ColumnInfo(defaultValue = "0") val northLatitude: Double,
+    @ColumnInfo(defaultValue = "0") val eastLongitude: Double,
 ) {
-    val bounds: GeoBounds get() = GeoBounds(southLatitude, westLongitude, northLatitude, eastLongitude)
+    /** Whether the summary has been read off the file; rows from before it was kept start without. */
+    val summarised: Boolean get() = pointCount >= 0
 
-    val stats: TrackStats
-        get() = TrackStats(
-            startedAt = startedAtEpochMillis?.let(Instant::ofEpochMilli),
-            pointCount = pointCount,
-            distanceMeters = distanceMeters,
-            totalDurationSeconds = totalSeconds,
-            movingDurationSeconds = movingSeconds,
-            averageSpeedMps = averageSpeedMps,
-            ascentMeters = ascentMeters,
-            descentMeters = descentMeters,
-        )
+    /** Null until [summarised]. */
+    val bounds: GeoBounds?
+        get() = if (summarised) GeoBounds(southLatitude, westLongitude, northLatitude, eastLongitude) else null
 
     companion object {
         const val PALETTE_SIZE = 7
@@ -68,3 +61,21 @@ data class TrackEntity(
         const val NEUTRAL_SLOT = PALETTE_SIZE - 1
     }
 }
+
+/** The columns a file's contents decide, written alone so a concurrent rename or recolour survives. */
+data class TrackSummary(
+    val id: Long,
+    val startedAtEpochMillis: Long?,
+    val pointCount: Int,
+    val distanceMeters: Double,
+    val totalSeconds: Double,
+    val movingSeconds: Double,
+    val averageSpeedMps: Double,
+    val ascentMeters: Double,
+    val descentMeters: Double,
+    val southLatitude: Double,
+    val westLongitude: Double,
+    val northLatitude: Double,
+    val eastLongitude: Double,
+)
+

@@ -12,6 +12,7 @@ import dev.samuelq.gpx.core.model.bounds
 import dev.samuelq.gpx.data.db.ColorUse
 import dev.samuelq.gpx.data.db.TrackDao
 import dev.samuelq.gpx.data.db.TrackEntity
+import dev.samuelq.gpx.data.db.TrackSummary
 import dev.samuelq.gpx.data.gpx.GpxNameRewriter
 import dev.samuelq.gpx.data.gpx.GpxParseException
 import dev.samuelq.gpx.data.gpx.GpxParser
@@ -302,7 +303,7 @@ class TrackRepository(
             val file = fileOf(entity)
             val backup = backUp(file, id)
             val track = rewrite(file, file, loaded, from..to, name = null)
-            dao.upsert(entity.summarising(track, TrackAnalyzer.analyze(track)))
+            dao.setSummary(summary(id, track, TrackAnalyzer.analyze(track)))
             TrackEdit(id, backup, entity, added = null)
         }.recoverFailure()
     }
@@ -335,7 +336,8 @@ class TrackRepository(
                 throw e
             }
             val firstTrack = rewrite(file, file, loaded, 0..at, name = firstName)
-            dao.upsert(entity.copy(trackName = firstName).summarising(firstTrack, TrackAnalyzer.analyze(firstTrack)))
+            dao.setSummary(summary(id, firstTrack, TrackAnalyzer.analyze(firstTrack)))
+            dao.setTrackName(id, firstName)
             TrackEdit(id, backup, entity, addedId)
         }.recoverFailure()
     }
@@ -373,7 +375,9 @@ class TrackRepository(
             val temp = File(file.parentFile, "${file.name}.tmp")
             edit.backup.copyTo(temp, overwrite = true)
             if (!temp.renameTo(file)) throw IOException("Could not restore ${file.name}")
-            dao.upsert(edit.before)
+            // Only what the edit changed, so a recolour since survives the undo.
+            dao.setSummary(edit.before.summary)
+            dao.setTrackName(edit.id, edit.before.trackName)
             cache.delete(edit.id)
             edit.added?.let { added ->
                 dao.byId(added)?.let(::deleteFile)
@@ -388,6 +392,22 @@ class TrackRepository(
     /** The undo has lapsed. */
     fun commitEdit(edit: TrackEdit) {
         scope.launch { edit.backup.delete() }
+    }
+
+    /**
+     * At launch: reads the files of rows from before the summary was kept. One at a time, so
+     * the map's own first reads aren't crowded out. A file that can't be read is tried again
+     * next launch.
+     */
+    fun summariseOlderRows() {
+        scope.launch {
+            for (entity in dao.unsummarised()) {
+                runCatching {
+                    val loaded = load(entity)
+                    dao.setSummary(summary(entity.id, loaded.track, loaded.profile))
+                }.onFailure { Log.d(TAG, "Could not summarise ${entity.displayName}", it) }
+            }
+        }
     }
 
     /** At launch: an undo from a previous process can no longer be taken. */
@@ -454,11 +474,12 @@ class TrackRepository(
         eastLongitude = 0.0,
     ).summarising(track, profile)
 
-    /** With [track]'s stats and bounds, as after an edit changed its points. */
-    private fun TrackEntity.summarising(track: Track, profile: TrackProfile): TrackEntity {
+    /** [track]'s stats and bounds, for row [id]. */
+    private fun summary(id: Long, track: Track, profile: TrackProfile): TrackSummary {
         val stats = profile.stats
-        val bounds = checkNotNull(track.points.bounds()) { "Indexing an empty track" }
-        return copy(
+        val bounds = checkNotNull(track.points.bounds()) { "Summarising an empty track" }
+        return TrackSummary(
+            id = id,
             startedAtEpochMillis = stats.startedAt?.toEpochMilli(),
             pointCount = stats.pointCount,
             distanceMeters = stats.distanceMeters,
@@ -473,6 +494,30 @@ class TrackRepository(
             eastLongitude = bounds.eastLongitude,
         )
     }
+
+    private fun TrackEntity.summarising(track: Track, profile: TrackProfile): TrackEntity {
+        val summary = summary(id, track, profile)
+        return copy(
+            startedAtEpochMillis = summary.startedAtEpochMillis,
+            pointCount = summary.pointCount,
+            distanceMeters = summary.distanceMeters,
+            totalSeconds = summary.totalSeconds,
+            movingSeconds = summary.movingSeconds,
+            averageSpeedMps = summary.averageSpeedMps,
+            ascentMeters = summary.ascentMeters,
+            descentMeters = summary.descentMeters,
+            southLatitude = summary.southLatitude,
+            westLongitude = summary.westLongitude,
+            northLatitude = summary.northLatitude,
+            eastLongitude = summary.eastLongitude,
+        )
+    }
+
+    private val TrackEntity.summary: TrackSummary
+        get() = TrackSummary(
+            id, startedAtEpochMillis, pointCount, distanceMeters, totalSeconds, movingSeconds,
+            averageSpeedMps, ascentMeters, descentMeters, southLatitude, westLongitude, northLatitude, eastLongitude,
+        )
 
     /** Reads and analyses [stream], closing it. */
     /** Reads [stream], closing it. */
@@ -508,7 +553,7 @@ class TrackRepository(
                 is TrackLoadException -> e
                 is GpxParseException -> TrackLoadException.Invalid(e.message ?: "Not valid GPX", e)
                 is FileNotFoundException -> TrackLoadException.Unreadable("File no longer exists", e)
-                // A transient URI grant can be revoked mid-read.
+                // A temporary URI grant can be revoked mid-read.
                 is SecurityException ->
                     TrackLoadException.Unreadable("No longer permitted to read this file", e)
 

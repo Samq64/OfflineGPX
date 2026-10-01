@@ -6,7 +6,7 @@ This is a GPX viewer and recorder for Android written in Kotlin and Compose with
 core/        JVM Gradle module, so no Android: model (Track, TrackPoints columns,
              TrackPoint for single points), analysis (FixFilter, SpeedWindow,
              TrackAnalyzer -> TrackProfile).
-app/ data/   gpx (streaming parser/writer), db (Room), map (MapStore, .map headers, VTM
+app/ data/   gpx (streaming parser/writer/trimmer), db (Room), map (MapStore, .map headers, VTM
              tile source), record (LocationSource, RecordingWal, RecordingService/
              Controller/Recovery), settings, track (TrackRepository, TrackCache).
 app/ ui/     map (MapScreen, VTM canvas, layers, generated render theme), track (sheet),
@@ -30,7 +30,13 @@ app/ di/     AppContainer: manual wiring, no Hilt.
   stats and bounding box, and no geometry. Rows store paths relative to `filesDir` so a
   device transfer still resolves. Parsed points are cached in binary under `cacheDir`, which
   is regenerable and never backed up or shared. A saved track's name and colour come from
-  its row only.
+  its row only. Files shared from other apps join the library; MainActivity is singleTask so
+  they reach the one instance.
+- Schema changes need a migration: installs exist. 1 to 2 added the stats columns with
+  defaults, and `pointCount` -1 marks a row that `summariseOlderRows` reads at launch.
+- Trim and split rewrite a file with `GpxTrimmer`, which streams it through and keeps
+  everything but the points cut; `GpxWriter` writes only what the app reads. The original
+  waits under `noBackupFilesDir/edits` for the undo, and is purged at the next launch.
   A recording appends to a line-per-fix WAL and becomes GPX on stop, so a crash leaves a
   recoverable log rather than truncated XML.
 - The render theme is generated at runtime in the mapsforge theme dialect, from the app's

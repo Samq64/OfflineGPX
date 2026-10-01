@@ -2,11 +2,11 @@
   "formatVersion": 1,
   "database": {
     "version": 1,
-    "identityHash": "51feb88fdc5cb43baaed7a1ed3d3fbe7",
+    "identityHash": "a8dbf2c0d26daefd66ba682599b42733",
     "entities": [
       {
         "tableName": "tracks",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `location` TEXT NOT NULL, `displayName` TEXT NOT NULL, `trackName` TEXT, `startedAtEpochMillis` INTEGER, `lastOpenedAtEpochMillis` INTEGER NOT NULL, `visible` INTEGER NOT NULL, `colorIndex` INTEGER NOT NULL, `pointCount` INTEGER NOT NULL, `distanceMeters` REAL NOT NULL, `totalSeconds` REAL NOT NULL, `movingSeconds` REAL NOT NULL, `averageSpeedMps` REAL NOT NULL, `ascentMeters` REAL NOT NULL, `descentMeters` REAL NOT NULL, `southLatitude` REAL NOT NULL, `westLongitude` REAL NOT NULL, `northLatitude` REAL NOT NULL, `eastLongitude` REAL NOT NULL)",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `location` TEXT NOT NULL, `displayName` TEXT NOT NULL, `trackName` TEXT, `startedAtEpochMillis` INTEGER, `lastOpenedAtEpochMillis` INTEGER NOT NULL, `visible` INTEGER NOT NULL, `colorIndex` INTEGER NOT NULL, `distanceMeters` REAL NOT NULL, `totalSeconds` REAL NOT NULL)",
         "fields": [
           {
             "fieldPath": "id",
@@ -55,12 +55,6 @@
             "notNull": true
           },
           {
-            "fieldPath": "pointCount",
-            "columnName": "pointCount",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
             "fieldPath": "distanceMeters",
             "columnName": "distanceMeters",
             "affinity": "REAL",
@@ -69,54 +63,6 @@
           {
             "fieldPath": "totalSeconds",
             "columnName": "totalSeconds",
-            "affinity": "REAL",
-            "notNull": true
-          },
-          {
-            "fieldPath": "movingSeconds",
-            "columnName": "movingSeconds",
-            "affinity": "REAL",
-            "notNull": true
-          },
-          {
-            "fieldPath": "averageSpeedMps",
-            "columnName": "averageSpeedMps",
-            "affinity": "REAL",
-            "notNull": true
-          },
-          {
-            "fieldPath": "ascentMeters",
-            "columnName": "ascentMeters",
-            "affinity": "REAL",
-            "notNull": true
-          },
-          {
-            "fieldPath": "descentMeters",
-            "columnName": "descentMeters",
-            "affinity": "REAL",
-            "notNull": true
-          },
-          {
-            "fieldPath": "southLatitude",
-            "columnName": "southLatitude",
-            "affinity": "REAL",
-            "notNull": true
-          },
-          {
-            "fieldPath": "westLongitude",
-            "columnName": "westLongitude",
-            "affinity": "REAL",
-            "notNull": true
-          },
-          {
-            "fieldPath": "northLatitude",
-            "columnName": "northLatitude",
-            "affinity": "REAL",
-            "notNull": true
-          },
-          {
-            "fieldPath": "eastLongitude",
-            "columnName": "eastLongitude",
             "affinity": "REAL",
             "notNull": true
           }
@@ -142,7 +88,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '51feb88fdc5cb43baaed7a1ed3d3fbe7')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'a8dbf2c0d26daefd66ba682599b42733')"
     ]
   }
 }
