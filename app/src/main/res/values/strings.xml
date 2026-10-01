@@ -65,7 +65,7 @@
     <string name="library_duplicate">Duplicate</string>
     <string name="library_duplicate_failed">Couldn\'t duplicate that track.</string>
     <!-- Not "files are read only when you pick them": import keeps a copy. -->
-    <string name="library_empty_body">Record one, or import a .gpx file into this app's storage.</string>
+    <string name="library_empty_body">Record one, or import a .gpx file into this app\'s storage.</string>
     <string name="library_empty_title">No tracks yet</string>
     <string name="library_export_all">Export to a folder</string>
     <string name="library_export_failed">Couldn\'t export to that folder.</string>
