@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -19,6 +20,7 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.tappableElement
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
@@ -60,6 +62,8 @@ import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -95,8 +99,10 @@ fun MapScreen(
     onOpenList: () -> Unit,
     onOpenSettings: () -> Unit,
     recorder: RecordingController,
+    showZoomButtons: Boolean,
     viewModel: MapViewModel = viewModel(factory = MapViewModel.Factory),
 ) {
+    val mapController = remember { MapController() }
     val context = LocalContext.current
     // Not context.getString: a long-lived collector would keep the old locale.
     val resources = LocalResources.current
@@ -157,7 +163,7 @@ fun MapScreen(
     }
 
     fun offerUndo(message: String, onUndo: () -> Unit, onCommit: () -> Unit = {}) = scope.launch {
-        snackbarHostState.showUndo(message, undo, onUndo, onCommit)
+        snackbarHostState.showUndo(context, message, undo, onUndo, onCommit)
     }
 
     val startRecording = rememberStartRecording(recorder, ::say)
@@ -403,6 +409,18 @@ fun MapScreen(
     }
 
     // Shared by the sheet and the side panel.
+    // From a pin tap, or the sheet's screen reader actions.
+    fun selectWaypoint(waypoint: Waypoint) {
+        tappedWaypoint = waypoint
+        // Only the charted route's waypoints have a chart position.
+        val charted = if (isRecording) {
+            live?.takeIf { waypoint in liveWaypoints }
+        } else {
+            focusedTrack?.takeIf { waypoint in it.track.waypoints }?.profile
+        }
+        charted?.indexOf(waypoint.point)?.takeIf { it >= 0 }?.let { selectedIndex = it }
+    }
+
     val sheetBody: @Composable (SheetSubject, Dp, (() -> Unit)?, (Dp) -> Unit) -> Unit =
         { current, maxHeight, onClose, onPeekHeightChange ->
             when (current) {
@@ -419,6 +437,7 @@ fun MapScreen(
                     onDismiss = { viewModel.focus(null) },
                     onClose = onClose,
                     onPeekHeightChange = onPeekHeightChange,
+                    onSelectWaypoint = ::selectWaypoint,
                 )
                 // Idle while the side panel slides away after a stop.
                 SheetSubject.Recording -> (recording.value as? RecordingState.Active)?.let { active ->
@@ -440,189 +459,206 @@ fun MapScreen(
             }
         }
 
-    BottomSheetScaffold(
-        modifier = Modifier.onSizeChanged { scaffoldHeight = it.height },
-        scaffoldState = scaffoldState,
-        sheetPeekHeight = peekHeight,
-        sheetDragHandle = { CompactDragHandle() },
-        // A step off the map's background so the sheet's edge stays visible.
-        sheetContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        when {
-                            state.totalCount == 0 -> stringResource(R.string.app_name)
-                            state.entities.isEmpty() -> stringResource(R.string.map_none_shown)
-                            else -> pluralStringResource(
-                                R.plurals.map_shown,
-                                state.entities.size,
-                                state.entities.size,
+    Box {
+        BottomSheetScaffold(
+            modifier = Modifier.onSizeChanged { scaffoldHeight = it.height },
+            scaffoldState = scaffoldState,
+            sheetPeekHeight = peekHeight,
+            sheetDragHandle = { CompactDragHandle() },
+            // A step off the map's background so the sheet's edge stays visible.
+            sheetContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Text(
+                            when {
+                                state.totalCount == 0 -> stringResource(R.string.app_name)
+                                state.entities.isEmpty() -> stringResource(R.string.map_none_shown)
+                                else -> pluralStringResource(
+                                    R.plurals.map_shown,
+                                    state.entities.size,
+                                    state.entities.size,
+                                )
+                            }
+                        )
+                    },
+                    actions = {
+                        IconButton(onClick = onOpenList) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.List,
+                                stringResource(R.string.map_open_list),
                             )
                         }
-                    )
-                },
-                actions = {
-                    IconButton(onClick = onOpenList) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.List,
-                            stringResource(R.string.map_open_list),
-                        )
-                    }
-                    IconButton(onClick = onOpenSettings) {
-                        Icon(Icons.Default.Settings, stringResource(R.string.settings_open))
-                    }
-                },
-            )
-        },
-        sheetContent = {
-            // Placeholder at peek height: shorter content leaves the scaffold nothing to anchor to.
-            if (sidePanel || sheetSubject == null) {
-                Spacer(Modifier.fillMaxWidth().height(TrackSheetPeekHeight))
-            } else {
-                sheetBody(sheetSubject, sheetMaxHeight, null) { peekContentHeight = it }
-            }
-        },
-    ) { padding ->
-        // Top padding only: the map runs under the sheet so the sheet can hide fully.
-        Box(Modifier.fillMaxSize().padding(top = padding.calculateTopPadding())) {
-
-            // Always composed: a basemap is worth showing with no tracks.
-            OfflineMapCanvas(
-                routes = overlays,
-                liveRoute = liveOverlay,
-                basemaps = basemaps,
-                // So the cold-start frame waits for tracks instead of settling on the bare basemap.
-                tracksLoading = state.loading,
-                contentDescription = stringResource(R.string.map_description),
-                focusedTrackId = if (isRecording) LIVE_TRACK_ID else focusedTrack?.id,
-                selectedIndex = selectedIndex,
-                markerColor = when {
-                    isRecording -> liveColor
-                    focusedTrack != null -> palette.slot(focusedTrack.colorIndex)
-                    else -> MaterialTheme.colorScheme.primary
-                },
-                showPuck = isRecording,
-                puckColor = liveColor,
-                // Only the focused track's and the recording's.
-                trackWaypoints = focusedTrack?.track?.waypoints.orEmpty(),
-                liveWaypoints = liveWaypoints,
-                onSelect = { trackId, index ->
-                    // An open note takes the first tap, so closing it never moves the marker.
-                    if (tappedWaypoint != null) tappedWaypoint = null
-                    else when (trackId) {
-                        LIVE_TRACK_ID, focusedTrack?.id -> selectedIndex = index
-                        // Not while recording, which holds the sheet.
-                        else -> if (!isRecording) viewModel.focus(TrackRef.Saved(trackId))
-                    }
-                },
-                onSelectNothing = {
-                    when {
-                        tappedWaypoint != null -> tappedWaypoint = null
-                        isRecording -> selectedIndex = null
-                        else -> viewModel.focus(null)
-                    }
-                },
-                onSelectWaypoint = { waypoint ->
-                    tappedWaypoint = waypoint
-                    // Only the charted route's waypoints have a chart position.
-                    val charted = if (isRecording) {
-                        live?.takeIf { waypoint in liveWaypoints }
-                    } else {
-                        focusedTrack?.takeIf { waypoint in it.track.waypoints }?.profile
-                    }
-                    charted?.indexOf(waypoint.point)?.takeIf { it >= 0 }?.let { selectedIndex = it }
-                },
-                followedWaypoint = tappedWaypoint,
-                onFollowedWaypointMove = { tappedWaypointAt.value = it },
-                contentPadding = canvasPadding,
-                frameTrackId = frameTrackId,
-                framePadding = framePadding,
-                onFramed = { framing = null },
-                sheetHeight = sheetCover,
-                panelWidth = panelCover,
-                // Distinct from land so ground no file covers reads as empty.
-                backgroundColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                landColor = MaterialTheme.colorScheme.surfaceContainerLowest,
-                labelColor = MaterialTheme.colorScheme.onSurface,
-                onScaleChange = { metersPerPixel.doubleValue = it },
-                // Resume where the camera was left rather than re-fitting.
-                initialCamera = viewModel.lastCamera,
-                onCameraChange = viewModel::rememberCamera,
-                modifier = Modifier.fillMaxSize(),
-            )
-
-            tappedWaypoint?.let { tapped ->
-                WaypointTooltip(tapped, tipAt = { tappedWaypointAt.value })
-            }
-
-            // First run only; hidden-by-choice gets the hint below.
-            val mapIsEmpty = overlays.isEmpty() && liveOverlay == null &&
-                !state.loading && basemaps.isEmpty() && state.totalCount == 0
-
-            val allHidden = overlays.isEmpty() && liveOverlay == null &&
-                !state.loading && basemaps.isEmpty() && state.totalCount > 0
-
-            // Nothing to measure against without a basemap or route.
-            val hasContent = overlays.isNotEmpty() || liveOverlay != null || basemaps.isNotEmpty()
-
-            when {
-                overlays.isNotEmpty() || liveOverlay != null -> Unit
-
-                state.loading -> Box(Modifier.fillMaxSize(), Alignment.Center) {
-                    LinearProgressIndicator(Modifier.padding(32.dp))
+                        IconButton(onClick = onOpenSettings) {
+                            Icon(Icons.Default.Settings, stringResource(R.string.settings_open))
+                        }
+                    },
+                )
+            },
+            sheetContent = {
+                // Placeholder at peek height: shorter content leaves the scaffold nothing to anchor to.
+                if (sidePanel || sheetSubject == null) {
+                    Spacer(Modifier.fillMaxWidth().height(TrackSheetPeekHeight))
+                } else {
+                    // Closable without a drag, as the side panel is.
+                    sheetBody(sheetSubject, sheetMaxHeight, { viewModel.focus(null) }) { peekContentHeight = it }
                 }
+            },
+        ) { padding ->
+            // Top padding only: the map runs under the sheet so the sheet can hide fully.
+            Box(Modifier.fillMaxSize().padding(top = padding.calculateTopPadding())) {
 
-                mapIsEmpty -> EmptyState(
-                    onImportMap = onOpenSettings,
-                    onImportTrack = { trackImporter.launch(arrayOf("*/*")) },
+                // Always composed: a basemap is worth showing with no tracks.
+                OfflineMapCanvas(
+                    routes = overlays,
+                    liveRoute = liveOverlay,
+                    basemaps = basemaps,
+                    // So the cold-start frame waits for tracks instead of settling on the bare basemap.
+                    tracksLoading = state.loading,
+                    contentDescription = stringResource(R.string.map_description),
+                    controller = mapController,
+                    focusedTrackId = if (isRecording) LIVE_TRACK_ID else focusedTrack?.id,
+                    selectedIndex = selectedIndex,
+                    markerColor = when {
+                        isRecording -> liveColor
+                        focusedTrack != null -> palette.slot(focusedTrack.colorIndex)
+                        else -> MaterialTheme.colorScheme.primary
+                    },
+                    showPuck = isRecording,
+                    puckColor = liveColor,
+                    // Only the focused track's and the recording's.
+                    trackWaypoints = focusedTrack?.track?.waypoints.orEmpty(),
+                    liveWaypoints = liveWaypoints,
+                    onSelect = { trackId, index ->
+                        // An open note takes the first tap, so closing it never moves the marker.
+                        if (tappedWaypoint != null) tappedWaypoint = null
+                        else when (trackId) {
+                            LIVE_TRACK_ID, focusedTrack?.id -> selectedIndex = index
+                            // Not while recording, which holds the sheet.
+                            else -> if (!isRecording) viewModel.focus(TrackRef.Saved(trackId))
+                        }
+                    },
+                    onSelectNothing = {
+                        when {
+                            tappedWaypoint != null -> tappedWaypoint = null
+                            isRecording -> selectedIndex = null
+                            else -> viewModel.focus(null)
+                        }
+                    },
+                    onSelectWaypoint = ::selectWaypoint,
+                    followedWaypoint = tappedWaypoint,
+                    onFollowedWaypointMove = { tappedWaypointAt.value = it },
+                    contentPadding = canvasPadding,
+                    frameTrackId = frameTrackId,
+                    framePadding = framePadding,
+                    onFramed = { framing = null },
+                    sheetHeight = sheetCover,
+                    panelWidth = panelCover,
+                    // Distinct from land so ground no file covers reads as empty.
+                    backgroundColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                    landColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+                    labelColor = MaterialTheme.colorScheme.onSurface,
+                    onScaleChange = { metersPerPixel.doubleValue = it },
+                    // Resume where the camera was left rather than re-fitting.
+                    initialCamera = viewModel.lastCamera,
+                    onCameraChange = viewModel::rememberCamera,
                     modifier = Modifier.fillMaxSize(),
                 )
 
-                allHidden -> ShowTracksHint(
-                    onClick = onOpenList,
-                    modifier = Modifier.align(Alignment.Center),
-                )
+                tappedWaypoint?.let { tapped ->
+                    WaypointTooltip(tapped, tipAt = { tappedWaypointAt.value })
+                }
 
-                else -> Unit
-            }
+                // First run only; hidden-by-choice gets the hint below.
+                val mapIsEmpty = overlays.isEmpty() && liveOverlay == null &&
+                    !state.loading && basemaps.isEmpty() && state.totalCount == 0
 
-            if (hasContent) {
-                ScaleBar(
-                    // The state, not its value: the bar re-reads it as the camera moves.
-                    metersPerPixel = metersPerPixel,
+                val allHidden = overlays.isEmpty() && liveOverlay == null &&
+                    !state.loading && basemaps.isEmpty() && state.totalCount > 0
+
+                // Nothing to measure against without a basemap or route.
+                val hasContent = overlays.isNotEmpty() || liveOverlay != null || basemaps.isNotEmpty()
+
+                when {
+                    overlays.isNotEmpty() || liveOverlay != null -> Unit
+
+                    state.loading -> Box(Modifier.fillMaxSize(), Alignment.Center) {
+                        val loading = stringResource(R.string.map_loading)
+                        LinearProgressIndicator(Modifier.padding(32.dp).semantics { contentDescription = loading })
+                    }
+
+                    mapIsEmpty -> EmptyState(
+                        onImportMap = onOpenSettings,
+                        onImportTrack = { trackImporter.launch(arrayOf("*/*")) },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+
+                    allHidden -> ShowTracksHint(
+                        onClick = onOpenList,
+                        modifier = Modifier.align(Alignment.Center),
+                    )
+
+                    else -> Unit
+                }
+
+                if (hasContent && showZoomButtons) {
+                    MapZoomControls(
+                        controller = mapController,
+                        // Halfway down the start edge: clear of the sheet, the record button and the panel.
+                        modifier = Modifier.align(Alignment.CenterStart).padding(start = panelCover + 8.dp),
+                    )
+                }
+
+                if (hasContent) {
+                    ScaleBar(
+                        // The state, not its value: the bar re-reads it as the camera moves.
+                        metersPerPixel = metersPerPixel,
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(start = panelCover + 12.dp, bottom = sheetInset + 4.dp),
+                    )
+                }
+
+                Box(
                     modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(start = panelCover + 12.dp, bottom = sheetInset + 4.dp),
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .padding(start = panelCover, bottom = sheetInset)
+                        .onSizeChanged { controlsHeight = with(density) { it.height.toDp() } },
+                ) {
+                    if (!isRecording) RecordButton(onStart = startRecording)
+                }
+
+                SidePanel(
+                    subject = subject,
+                    visible = sidePanel && hasSheet,
+                    width = panelWidth,
+                    modifier = Modifier.align(Alignment.TopStart),
+                ) { shown ->
+                    sheetBody(shown, Dp.Unspecified, { viewModel.focus(null) }) {}
+                }
+
+                // Here, not the scaffold's slot, which pins it to the bottom edge over the record
+                // controls. Sits on whichever reaches higher: the controls or the sheet.
+                SnackbarHost(
+                    snackbarHostState,
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(start = panelCover, bottom = coveredHeight),
                 )
             }
+        }
 
+        // Behind three see-through buttons, in the sheet's colour, so its next lines don't show
+        // through at peek; drawn over it rather than spaced into it. Zero with gesture navigation.
+        if (hasSheet && !sidePanel) {
+            val buttonsHeight = with(density) { WindowInsets.tappableElement.getBottom(this).toDp() }
             Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .padding(start = panelCover, bottom = sheetInset)
-                    .onSizeChanged { controlsHeight = with(density) { it.height.toDp() } },
-            ) {
-                if (!isRecording) RecordButton(onStart = startRecording)
-            }
-
-            SidePanel(
-                subject = subject,
-                visible = sidePanel && hasSheet,
-                width = panelWidth,
-                modifier = Modifier.align(Alignment.TopStart),
-            ) { shown ->
-                sheetBody(shown, Dp.Unspecified, { viewModel.focus(null) }) {}
-            }
-
-            // Here, not the scaffold's slot, which pins it to the bottom edge over the record
-            // controls. Sits on whichever reaches higher: the controls or the sheet.
-            SnackbarHost(
-                snackbarHostState,
                 Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(start = panelCover, bottom = coveredHeight),
+                    .fillMaxWidth()
+                    .height(buttonsHeight)
+                    .background(MaterialTheme.colorScheme.surfaceContainer)
             )
         }
     }

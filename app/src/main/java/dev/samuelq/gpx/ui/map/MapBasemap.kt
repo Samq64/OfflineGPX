@@ -49,7 +49,12 @@ internal suspend fun Map.attachBasemap(
         val shown = maps.filter { it.opens() }
         val theme = if (shown.isEmpty()) null else ThemeLoader.load(
             GeneratedRenderTheme(
-                MapRenderTheme.xml(land = colors.land, label = colors.label, background = colors.background)
+                MapRenderTheme.xml(
+                    land = colors.land,
+                    label = colors.label,
+                    background = colors.background,
+                    textScale = density.fontScale,
+                )
             )
         )
         shown to theme

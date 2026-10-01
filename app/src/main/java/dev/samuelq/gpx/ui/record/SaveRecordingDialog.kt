@@ -23,6 +23,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -135,13 +139,15 @@ private fun SaveRecordingDialog(
         ),
     ) {
         Surface(
+            // A custom dialog isn't announced by name otherwise.
+            modifier = Modifier.semantics { paneTitle = title },
             shape = AlertDialogDefaults.shape,
             color = AlertDialogDefaults.containerColor,
             tonalElevation = AlertDialogDefaults.TonalElevation,
         ) {
             Column(Modifier.padding(bottom = 12.dp)) {
                 Column(Modifier.padding(start = 24.dp, end = 24.dp, top = 24.dp)) {
-                    Text(title, style = MaterialTheme.typography.headlineSmall)
+                    Text(title, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
                     Spacer(Modifier.height(16.dp))
                     summary()
                     Spacer(Modifier.height(16.dp))
@@ -166,7 +172,13 @@ private fun SaveRecordingDialog(
                     if (onDismiss != null) {
                         TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
                     }
-                    TextButton(onClick = { onSave(name) }, enabled = canSave) {
+                    // The distance says why to a sighted user; a screen reader hears only "disabled".
+                    val tooShort = stringResource(R.string.record_too_short)
+                    TextButton(
+                        onClick = { onSave(name) },
+                        enabled = canSave,
+                        modifier = Modifier.semantics { if (!canSave) stateDescription = tooShort },
+                    ) {
                         Text(stringResource(R.string.action_save))
                     }
                 }

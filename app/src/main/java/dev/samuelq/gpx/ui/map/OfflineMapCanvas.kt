@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -18,16 +19,18 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.view.ViewCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import dev.samuelq.gpx.R
 import dev.samuelq.gpx.core.model.Waypoint
 import dev.samuelq.gpx.data.map.OfflineMap
 import kotlinx.coroutines.Dispatchers
@@ -53,6 +56,7 @@ fun OfflineMapCanvas(
     routes: List<RouteOverlay>,
     basemaps: List<OfflineMap>,
     contentDescription: String,
+    controller: MapController,
     modifier: Modifier = Modifier,
     /**
          * True while [routes] may still be missing tracks. Without it an empty first frame would
@@ -128,6 +132,9 @@ fun OfflineMapCanvas(
     val tapReach = remember(density) { with(density) { TAP_REACH_DP.dp.toPx() } }
     val pinHeadRadius = remember(density) { with(density) { WaypointPinHeadRadius.toPx() } }
     val pinTipLength = remember(density) { with(density) { PIN_TIP_LENGTH_DP.dp.toPx() } }
+    val doublingPx = remember(density) { with(density) { QUICK_ZOOM_DOUBLING_DP.dp.toPx() } }
+    // A 48dp target, the pin itself being narrower.
+    val pinMinHalf = remember(density) { with(density) { 24.dp.toPx() } }
     val followMargin = remember(density) { with(density) { FOLLOW_MARGIN_DP.dp.roundToPx() } }
 
     val insets = remember(contentPadding, layoutDirection, density) {
@@ -137,13 +144,6 @@ fun OfflineMapCanvas(
         framePadding.toInsets(density, layoutDirection)
     }
     val framed by rememberUpdatedState(onFramed)
-
-    AndroidView(
-        factory = { mapView },
-        modifier = modifier
-            .onSizeChanged { viewSize = it }
-            .semantics { this.contentDescription = contentDescription },
-    )
 
     val routeLayer = remember(map) { LineLayer(map) }
     val traceLayer = remember(map) { LineLayer(map) }
@@ -163,10 +163,11 @@ fun OfflineMapCanvas(
         layers.add(traceLayer.layer, LayerGroup.Trace.ordinal)
         listOf(belowPinsLayer, pinLayer, abovePinsLayer, onTopLayer)
             .forEach { layers.add(it, LayerGroup.Markers.ordinal) }
-        val taps = TapDetector(ViewConfiguration.get(context)) { x, y ->
+        val taps = TapDetector(ViewConfiguration.get(context), map, doublingPx) { x, y ->
             // Waypoints first: a pin sits on its own track's line and is the more specific hit.
             val waypointHit = pickWaypoint(
-                x, y, map, currentWaypoints, pinHeadRadius, pinTipLength, onTop = currentFollowedWaypoint,
+                x, y, map, currentWaypoints, pinHeadRadius, pinTipLength, pinMinHalf,
+                onTop = currentFollowedWaypoint,
             )
             if (waypointHit != null) {
                 selectWaypoint(waypointHit)
@@ -201,8 +202,9 @@ fun OfflineMapCanvas(
         onDispose { map.events.unbind(listener) }
     }
 
-    // New files or colours need a new theme and data source; the only reason to rebuild tiles.
-    LaunchedEffect(map, basemaps, backgroundColor, landColor, labelColor) {
+    // New files, colours or font scale need a new theme and data source; the only reason to
+    // rebuild tiles. Font scale changes without recreating the activity.
+    LaunchedEffect(map, basemaps, backgroundColor, landColor, labelColor, density.fontScale) {
         basemap?.let(map::detach)
         basemap = null
         map.attachBasemap(
@@ -215,8 +217,8 @@ fun OfflineMapCanvas(
     val routeStyles = remember(density) { RouteStyles(density) }
 
     // Built off the main thread: a long ride is hundreds of thousands of coordinates.
-    LaunchedEffect(routeLayer, routes) {
-        val built = withContext(Dispatchers.Default) { routes.toLines(routeStyles) }
+    LaunchedEffect(routeLayer, routes, focusedTrackId) {
+        val built = withContext(Dispatchers.Default) { routes.toLines(routeStyles, focusedTrackId) }
         routeLayer.replaceWith(built)
     }
 
@@ -292,6 +294,47 @@ fun OfflineMapCanvas(
     // Read fresh, not via recomposition: a framing move's own update must already see its view.
     fun currentClamp() = currentExtent?.including(framedView)
     val currentCover by rememberUpdatedState(cover)
+
+    // For the zoom buttons: pinching needs two fingers, and nothing else zooms out.
+    fun zoomBy(factor: Double): Boolean {
+        val position = map.mapPosition
+        val viewport = map.viewport()
+        position.setScale((position.scale * factor).coerceIn(viewport.minScale, viewport.maxScale))
+        map.moveTo(position, currentClamp(), currentCover)
+        return true
+    }
+    fun frameAll(): Boolean {
+        val target = extentOf(currentRoutes, currentLiveRoute, emptyList())
+            ?: extentOf(emptyList(), null, basemaps) ?: return false
+        val usable = viewSize?.usable(insets) ?: return false
+        map.moveTo(fit(target, usable, insets, map.viewport().maxScale), currentClamp(), currentCover)
+        return true
+    }
+
+    SideEffect {
+        controller.zoomBy = ::zoomBy
+        controller.showAll = ::frameAll
+    }
+
+    // Also as screen reader actions, so a TalkBack or switch user needn't turn the buttons on.
+    // On the view: Compose semantics on an AndroidView don't reach its native node.
+    val zoomIn = stringResource(R.string.map_zoom_in)
+    val zoomOut = stringResource(R.string.map_zoom_out)
+    val showAll = stringResource(R.string.map_show_all)
+    DisposableEffect(mapView, controller, zoomIn, zoomOut, showAll) {
+        val ids = listOf(
+            zoomIn to controller::zoomIn,
+            zoomOut to controller::zoomOut,
+            showAll to controller::showAllTracks,
+        ).map { (label, act) -> ViewCompat.addAccessibilityAction(mapView, label) { _, _ -> act() } }
+        onDispose { ids.forEach { ViewCompat.removeAccessibilityAction(mapView, it) } }
+    }
+
+    AndroidView(
+        factory = { mapView },
+        update = { it.contentDescription = contentDescription },
+        modifier = modifier.onSizeChanged { viewSize = it },
+    )
     DisposableEffect(map) {
         val listener = Map.UpdateListener { _, _ ->
             currentClamp()?.let { map.keepInView(it, currentCover) }
@@ -408,3 +451,17 @@ private fun ItemizedLayer.show(items: List<MarkerInterface>) {
     addItems(items)
     update()
 }
+
+/** Camera moves asked of the map from outside it, wired once it's composed. */
+@Stable
+class MapController {
+    internal var zoomBy: (Double) -> Boolean = { false }
+    internal var showAll: () -> Boolean = { false }
+
+    fun zoomIn() = zoomBy(2.0)
+    fun zoomOut() = zoomBy(0.5)
+    fun showAllTracks() = showAll()
+}
+
+/** Drag per doubling of scale in a double-tap-and-drag zoom. */
+private const val QUICK_ZOOM_DOUBLING_DP = 100f

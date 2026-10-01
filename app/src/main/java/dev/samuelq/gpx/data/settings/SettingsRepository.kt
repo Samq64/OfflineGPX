@@ -14,6 +14,9 @@ data class Settings(
 
     /** See [FixFilter]. */
     val maxAccuracyMeters: Double = FixFilter.MAX_ACCURACY_METERS,
+
+    /** Off by default: they're for those who can't pinch, and in everyone else's way. */
+    val showZoomButtons: Boolean = false,
 ) {
     companion object {
         val Defaults = Settings()
@@ -38,6 +41,8 @@ class SettingsRepository(context: Context) {
     fun setMaxAccuracyMeters(meters: Double) =
         update { putFloat(KEY_ACCURACY, meters.toFloat()) }
 
+    fun setShowZoomButtons(show: Boolean) = update { putBoolean(KEY_ZOOM_BUTTONS, show) }
+
     private inline fun update(crossinline edits: SharedPreferences.Editor.() -> Unit) {
         prefs.edit { edits() }
         _settings.value = read()
@@ -51,6 +56,7 @@ class SettingsRepository(context: Context) {
                 ?: defaults.units,
             maxAccuracyMeters = prefs
                 .getFloat(KEY_ACCURACY, defaults.maxAccuracyMeters.toFloat()).toDouble(),
+            showZoomButtons = prefs.getBoolean(KEY_ZOOM_BUTTONS, defaults.showZoomButtons),
         )
     }
 
@@ -58,6 +64,7 @@ class SettingsRepository(context: Context) {
         const val FILE = "settings"
 
         const val KEY_UNITS = "units"
+        const val KEY_ZOOM_BUTTONS = "show_zoom_buttons"
         const val KEY_ACCURACY = "max_accuracy_meters"
     }
 }

@@ -13,8 +13,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -22,10 +25,13 @@ import dev.samuelq.gpx.R
 import dev.samuelq.gpx.core.analysis.TrackStats
 import dev.samuelq.gpx.ui.format.Formatters
 import dev.samuelq.gpx.ui.format.LocalFormatters
+import dev.samuelq.gpx.ui.format.spokenDuration
 import dev.samuelq.gpx.ui.format.tabularFigures
+import dev.samuelq.gpx.ui.isLargeText
 
+/** [spoken] replaces [value] for a screen reader, as for a duration. */
 @Immutable
-class Stat(val label: String, val value: String)
+class Stat(val label: String, val value: String, val spoken: String = value)
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -40,7 +46,9 @@ fun StatRow(
         verticalArrangement = Arrangement.Center,
     ) {
         stats.forEach { stat ->
-            Column {
+            // One stop, label first; apart, the value comes unlabelled.
+            val spoken = stringResource(R.string.stat_spoken, stat.label, stat.spoken)
+            Column(Modifier.clearAndSetSemantics { contentDescription = spoken }) {
                 Text(
                     text = stat.value,
                     style = MaterialTheme.typography.titleLarge.tabularFigures(),
@@ -71,8 +79,9 @@ fun trackHeadline(stats: TrackStats, hasTime: Boolean): List<Stat> {
     val timeLabel = stringResource(R.string.stat_elapsed)
     val speedLabel = stringResource(R.string.stat_avg_speed)
     val pointsLabel = pluralStringResource(R.plurals.stat_points, stats.pointCount)
+    val resources = LocalResources.current
 
-    return remember(stats, hasTime, formatters, distanceLabel, timeLabel, speedLabel, pointsLabel) {
+    return remember(stats, hasTime, formatters, resources, distanceLabel, timeLabel, speedLabel, pointsLabel) {
         buildList {
             add(Stat(distanceLabel, formatters.distance(stats.distanceMeters)))
             if (hasTime) {
@@ -80,6 +89,7 @@ fun trackHeadline(stats: TrackStats, hasTime: Boolean): List<Stat> {
                     Stat(
                         label = timeLabel,
                         value = Formatters.duration(stats.totalDurationSeconds),
+                        spoken = resources.spokenDuration(stats.totalDurationSeconds),
                     )
                 )
                 add(Stat(speedLabel, formatters.speed(stats.averageSpeedMps)))
@@ -105,6 +115,7 @@ fun TrackDetails(
     pointCount: Int? = null,
 ) {
     val formatters = LocalFormatters.current
+    val resources = LocalResources.current
 
     val movingLabel = stringResource(R.string.stat_moving)
     val ascentLabel = stringResource(R.string.stat_ascent)
@@ -113,7 +124,7 @@ fun TrackDetails(
     val pointsLabel = pluralStringResource(R.plurals.stat_points, points)
 
     val details = remember(
-        stats, hasTime, hasElevation, complete, points, formatters,
+        stats, hasTime, hasElevation, complete, points, formatters, resources,
         movingLabel, ascentLabel, descentLabel, pointsLabel,
     ) {
         val timed = stats?.takeIf { hasTime }
@@ -121,38 +132,42 @@ fun TrackDetails(
         buildList {
             // Shown even when equal to elapsed time, for a stable layout.
             if (hasTime || complete) {
-                add(movingLabel to Formatters.duration(timed?.movingDurationSeconds ?: 0.0))
+                val moving = timed?.movingDurationSeconds ?: 0.0
+                add(Stat(movingLabel, Formatters.duration(moving), resources.spokenDuration(moving)))
             }
             if (hasElevation || complete) {
-                add(ascentLabel to formatters.meters(climbed?.ascentMeters ?: 0.0))
-                add(descentLabel to formatters.meters(climbed?.descentMeters ?: 0.0))
+                add(Stat(ascentLabel, formatters.meters(climbed?.ascentMeters ?: 0.0)))
+                add(Stat(descentLabel, formatters.meters(climbed?.descentMeters ?: 0.0)))
             }
             if (hasTime || complete) {
-                add(pointsLabel to Formatters.count(points))
+                add(Stat(pointsLabel, Formatters.count(points)))
             }
         }
     }
 
     Column(modifier.fillMaxWidth()) {
         if (details.isNotEmpty()) {
-            Row(
+            // Equal columns in one row, or two to a row when text is large enough to clip.
+            FlowRow(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(20.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                maxItemsInEachRow = if (isLargeText()) 2 else details.size,
             ) {
-                details.forEach { (label, value) ->
-                    // Value over label, like StatRow.
-                    Column(Modifier.weight(1f)) {
+                details.forEach { stat ->
+                    // Value over label, like StatRow, and read as one like it.
+                    val spoken = stringResource(R.string.stat_spoken, stat.label, stat.spoken)
+                    Column(Modifier.weight(1f).clearAndSetSemantics { contentDescription = spoken }) {
                         Text(
-                            text = value,
+                            text = stat.value,
                             style = MaterialTheme.typography.bodyLarge.tabularFigures(),
                             fontWeight = FontWeight.SemiBold,
                             maxLines = 1,
                         )
                         Text(
-                            text = label,
+                            text = stat.label,
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
                         )
                     }
                 }

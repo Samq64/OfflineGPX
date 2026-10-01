@@ -11,12 +11,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -34,8 +37,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -63,9 +64,18 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -76,6 +86,8 @@ import dev.samuelq.gpx.R
 import dev.samuelq.gpx.data.db.TrackEntity
 import dev.samuelq.gpx.ui.format.Formatters
 import dev.samuelq.gpx.ui.format.LocalFormatters
+import dev.samuelq.gpx.ui.isLargeText
+import dev.samuelq.gpx.ui.readFirst
 import dev.samuelq.gpx.ui.showUndo
 import dev.samuelq.gpx.ui.theme.routePalette
 import dev.samuelq.gpx.ui.theme.slot
@@ -136,6 +148,7 @@ fun LibraryScreen(
         viewModel.delete(ids)
         scope.launch {
             snackbarHostState.showUndo(
+                context = context,
                 message = resources.getQuantityString(R.plurals.library_deleted, ids.size, ids.size),
                 undoLabel = undo,
                 onUndo = { viewModel.undoDelete(ids) },
@@ -168,7 +181,7 @@ fun LibraryScreen(
     }
 
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        snackbarHost = { SnackbarHost(snackbarHostState, Modifier.readFirst()) },
         topBar = {
             if (selection.isNotEmpty()) {
                 SelectionBar(
@@ -193,7 +206,9 @@ fun LibraryScreen(
                 )
             } else {
                 TopAppBar(
-                    title = { Text(stringResource(R.string.library_title)) },
+                    title = {
+                        Text(stringResource(R.string.library_title), Modifier.semantics { heading() })
+                    },
                     navigationIcon = {
                         IconButton(onClick = onBack) {
                             Icon(
@@ -252,6 +267,11 @@ fun LibraryScreen(
             )
 
             else -> {
+            // Filtering is silent otherwise.
+            if (query.isNotBlank()) {
+                val found = pluralStringResource(R.plurals.library_search_found, tracks.size, tracks.size)
+                Box(Modifier.semantics { liveRegion = LiveRegionMode.Polite; contentDescription = found })
+            }
             val palette = routePalette()
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
@@ -313,13 +333,19 @@ private fun SelectionBar(
     onDelete: () -> Unit,
 ) {
     val allSelected = count >= total
-    val selectAll = stringResource(R.string.library_select_all)
+    // It clears once everything is selected, so it says so.
+    val selectAll = stringResource(if (allSelected) R.string.library_clear_selection else R.string.library_select_all)
 
     TopAppBar(
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = MaterialTheme.colorScheme.secondaryContainer,
         ),
-        title = { Text(stringResource(R.string.library_selected, count)) },
+        title = {
+            Text(
+                stringResource(R.string.library_selected, count),
+                Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+            )
+        },
         navigationIcon = {
             IconButton(onClick = onClose) {
                 Icon(Icons.Default.Clear, stringResource(R.string.library_clear_selection))
@@ -335,7 +361,7 @@ private fun SelectionBar(
                 Icon(Icons.Default.Share, stringResource(R.string.library_export_all))
             }
             IconButton(onClick = onDelete) {
-                Icon(Icons.Default.Delete, stringResource(R.string.library_delete))
+                Icon(Icons.Default.Delete, stringResource(R.string.library_delete_selected))
             }
         },
     )
@@ -357,6 +383,13 @@ private fun TrackRow(
     onDelete: () -> Unit,
 ) {
     val formatters = LocalFormatters.current
+    val title = trackTitle(track.trackName, track.displayName)
+    val showOnMap = stringResource(R.string.library_show_on_map, title)
+    val openLabel = stringResource(R.string.library_open_on_map)
+    val selectLabel = stringResource(R.string.library_select)
+    val renameLabel = stringResource(R.string.library_rename)
+    val shareLabel = stringResource(R.string.library_share)
+    val deleteLabel = stringResource(R.string.library_delete)
 
     // Remembered: a DateTimeFormatter's first use loads locale data, janking the entry animation.
     val date = remember(track, formatters) {
@@ -371,64 +404,78 @@ private fun TrackRow(
         ).joinToString("  ·  ")
     }
 
-    ListItem(
-        colors = if (selected) {
-            ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
-        } else {
-            ListItemDefaults.colors()
-        },
-        leadingContent = {
-            if (selectionActive) {
-                Checkbox(checked = selected, onCheckedChange = { onToggleSelected() })
-            } else {
-                // Same hue as the map line.
-                Box(
-                    Modifier
-                        .size(16.dp)
-                        .clip(CircleShape)
-                        .background(if (track.visible) color else MaterialTheme.colorScheme.outlineVariant)
-                )
-            }
-        },
-        headlineContent = {
-            Text(
-                text = trackTitle(track.trackName, track.displayName),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+    // A row, not ListItem: with three lines it pins the dot and the controls to the top
+    // padding, out of line with each other and the text.
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface
             )
-        },
-        supportingContent = {
-            Column {
-                Text(
-                    text = date,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                Text(
-                    text = summary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-        },
-        trailingContent = {
-            if (!selectionActive) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Switch(
-                        checked = track.visible,
-                        onCheckedChange = { onToggleVisible() },
+            .combinedClickable(
+                onClickLabel = if (selectionActive) null else openLabel,
+                onLongClickLabel = if (selectionActive) null else selectLabel,
+                role = if (selectionActive) Role.Checkbox else null,
+                onClick = { if (selectionActive) onToggleSelected() else onOpen() },
+                onLongClick = onToggleSelected,
+            )
+            .semantics {
+                if (selectionActive) {
+                    toggleableState = ToggleableState(selected)
+                } else {
+                    // Long-press and the menu, without finding either.
+                    customActions = listOf(
+                        CustomAccessibilityAction(selectLabel) { onToggleSelected(); true },
+                        CustomAccessibilityAction(renameLabel) { onRename(); true },
+                        CustomAccessibilityAction(shareLabel) { onShare(); true },
+                        CustomAccessibilityAction(deleteLabel) { onDelete(); true },
                     )
-                    TrackMenu(onRename, onShare, onHide = null, onDelete)
                 }
             }
-        },
-        modifier = Modifier.combinedClickable(
-            onClick = { if (selectionActive) onToggleSelected() else onOpen() },
-            onLongClick = onToggleSelected,
-        ),
-    )
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (selectionActive) {
+            // The row toggles, so it's one stop that says what's selected.
+            Checkbox(checked = selected, onCheckedChange = null)
+        } else {
+            // Same hue as the map line.
+            Box(
+                Modifier
+                    .size(16.dp)
+                    .clip(CircleShape)
+                    .background(if (track.visible) color else MaterialTheme.colorScheme.outlineVariant)
+            )
+        }
+        Spacer(Modifier.width(16.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                maxLines = if (isLargeText()) 2 else 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            // Wrapping, not cut: at large text sizes the ends are the time and size.
+            Text(
+                text = date,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = summary,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (!selectionActive) {
+            Switch(
+                checked = track.visible,
+                onCheckedChange = { onToggleVisible() },
+                modifier = Modifier.padding(start = 8.dp).semantics { contentDescription = showOnMap },
+            )
+            TrackMenu(onRename, onShare, onHide = null, onDelete, trackTitle = title)
+        }
+    }
 }
 
 @Composable
@@ -440,6 +487,7 @@ private fun EmptyState(modifier: Modifier = Modifier) {
     ) {
         Text(
             text = stringResource(R.string.library_empty_title),
+            modifier = Modifier.semantics { heading() },
             style = MaterialTheme.typography.titleMedium,
         )
         Text(
@@ -455,6 +503,7 @@ private fun NoMatches(query: String, modifier: Modifier = Modifier) {
     Box(modifier.padding(32.dp), contentAlignment = Alignment.Center) {
         Text(
             text = stringResource(R.string.library_search_empty, query.trim()),
+            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -471,6 +520,9 @@ private fun SearchBar(
 ) {
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    // The placeholder goes once there's text, and with it the field's only name.
+    val hint = stringResource(R.string.library_search_hint)
 
     TopAppBar(
         title = {
@@ -480,13 +532,17 @@ private fun SearchBar(
                 placeholder = { Text(stringResource(R.string.library_search_hint)) },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = { keyboard?.hide() }),
                 colors = TextFieldDefaults.colors(
                     focusedContainerColor = Color.Transparent,
                     unfocusedContainerColor = Color.Transparent,
                     focusedIndicatorColor = Color.Transparent,
                     unfocusedIndicatorColor = Color.Transparent,
                 ),
-                modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(focusRequester)
+                    .semantics { contentDescription = hint },
             )
         },
         navigationIcon = {

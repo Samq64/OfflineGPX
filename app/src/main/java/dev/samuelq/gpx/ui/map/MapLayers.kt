@@ -15,6 +15,7 @@ import org.oscim.layers.vector.geometries.LineDrawable
 import org.oscim.layers.vector.geometries.Style
 import org.oscim.map.Map
 import kotlin.math.hypot
+import kotlin.math.pow
 
 /**
  * Stacking order, bottom first; VTM keeps each group together however late it's added.
@@ -28,9 +29,14 @@ internal enum class LayerGroup { Land, Tiles, Mask, Outline, Routes, Trace, Labe
  * which comes from onSingleTapConfirmed and so waits out the double-tap timeout on every
  * tap. The second tap of a double tap is swallowed: VTM zooms on it, and a second
  * selection would undo the first.
+ *
+ * Holding the second tap and dragging zooms around it, down to zoom in, as in other map
+ * apps: one-handed, and the only way out besides a pinch. [doublingPx] of drag doubles the scale.
  */
 internal class TapDetector(
     config: ViewConfiguration,
+    private val map: Map,
+    private val doublingPx: Float,
     private val onTap: (x: Float, y: Float) -> Unit,
 ) : Map.InputListener {
     private val slop = config.scaledTouchSlop.toFloat()
@@ -44,6 +50,9 @@ internal class TapDetector(
     private var lastTapY = 0f
     private var lastTapAt = Long.MIN_VALUE / 2
 
+    private var scaling = false
+    private var scaledY = 0f
+
     // VTM passes a null event.
     override fun onInputEvent(e: Event?, motion: MotionEvent) {
         when (motion.action and MotionEvent.ACTION_MASK) {
@@ -52,14 +61,34 @@ internal class TapDetector(
                 downY = motion.y
                 downAt = motion.time
                 candidate = true
+                if (motion.time - lastTapAt <= ViewConfiguration.getDoubleTapTimeout() &&
+                    hypot(downX - lastTapX, downY - lastTapY) <= doubleTapSlop
+                ) {
+                    // Before any move, so VTM doesn't pan the drag too.
+                    scaling = true
+                    scaledY = motion.y
+                    map.eventLayer.enableMove(false)
+                }
             }
 
-            MotionEvent.ACTION_MOVE ->
+            MotionEvent.ACTION_MOVE -> {
                 if (hypot(motion.x - downX, motion.y - downY) > slop) candidate = false
+                if (scaling && !candidate) {
+                    val factor = 2.0.pow(((motion.y - scaledY) / doublingPx).toDouble()).toFloat()
+                    scaledY = motion.y
+                    // Pivot relative to the centre, as VTM takes it.
+                    map.viewport().scaleMap(factor, downX - map.width / 2f, downY - map.height / 2f)
+                    map.updateMap(true)
+                }
+            }
 
-            MotionEvent.ACTION_POINTER_DOWN, MotionEvent.ACTION_CANCEL -> candidate = false
+            MotionEvent.ACTION_POINTER_DOWN, MotionEvent.ACTION_CANCEL -> {
+                candidate = false
+                endScaling()
+            }
 
             MotionEvent.ACTION_UP -> {
+                endScaling()
                 if (!candidate || motion.time - downAt > ViewConfiguration.getLongPressTimeout()) return
                 candidate = false
                 val second = motion.time - lastTapAt <= ViewConfiguration.getDoubleTapTimeout() &&
@@ -75,15 +104,22 @@ internal class TapDetector(
             }
         }
     }
+
+    private fun endScaling() {
+        if (!scaling) return
+        scaling = false
+        map.eventLayer.enableMove(true)
+    }
 }
 
-/** One style per colour: VectorLayer batches consecutive same-style lines into one draw. */
+/** One style per colour and width: VectorLayer batches consecutive same-style lines into one draw. */
 internal class RouteStyles(density: Density) {
-    private val width = with(density) { ROUTE_WIDTH_DP.dp.toPx() }
-    private val cache = HashMap<Int, Style>()
+    val width = with(density) { ROUTE_WIDTH_DP.dp.toPx() }
+    val focusedWidth = with(density) { FOCUSED_ROUTE_WIDTH_DP.dp.toPx() }
+    private val cache = HashMap<Pair<Int, Float>, Style>()
 
     @Synchronized
-    fun of(color: Color): Style = cache.getOrPut(color.toArgb()) {
+    fun of(color: Color, width: Float = this.width): Style = cache.getOrPut(color.toArgb() to width) {
         Style.builder()
             .strokeColor(color.toArgb())
             .strokeWidth(width)
@@ -95,21 +131,34 @@ internal class RouteStyles(density: Density) {
     }
 }
 
-/** One line per segment, never across a gap. Stacked in list order, the last on top. */
-internal fun List<RouteOverlay>.toLines(styles: RouteStyles): List<LineDrawable> {
+/**
+ * One line per segment, never across a gap. Stacked in list order, the last on top.
+ *
+ * [focusedId]'s route is told apart by more than its colour, which repeats past six tracks
+ * and is the only difference to some colour vision: it's drawn wider and on top, and the
+ * rest are dimmed.
+ */
+internal fun List<RouteOverlay>.toLines(styles: RouteStyles, focusedId: Long? = null): List<LineDrawable> {
     val out = ArrayList<LineDrawable>()
-    forEachIndexed { priority, route ->
+    val focusing = focusedId != null && any { it.trackId == focusedId }
+    forEachIndexed { index, route ->
+        val focused = focusing && route.trackId == focusedId
         // Within one priority VTM orders by spatial index, not insertion, so each route gets its own.
-        val style = styles.of(route.color)
+        val priority = if (focused) size else index
+        val style = when {
+            focused -> styles.of(route.color, styles.focusedWidth)
+            focusing -> styles.of(route.color.copy(alpha = UNFOCUSED_ALPHA))
+            else -> styles.of(route.color)
+        }
         route.forEachRun { from, to ->
             // A single position isn't a line; still drawn as the puck if it is live.
             if (to - from < 2) return@forEachRun
 
             val lonLat = DoubleArray((to - from) * 2)
-            for (index in from until to) {
-                val point = route.points[index]
-                lonLat[(index - from) * 2] = point.longitude
-                lonLat[(index - from) * 2 + 1] = point.latitude
+            for (i in from until to) {
+                val point = route.points[i]
+                lonLat[(i - from) * 2] = point.longitude
+                lonLat[(i - from) * 2 + 1] = point.latitude
             }
             out.add(LineDrawable(lonLat, style).also { it.priority = priority })
         }
@@ -175,6 +224,8 @@ internal class LineLayer(map: Map) {
 }
 
 private const val ROUTE_WIDTH_DP = 3f
+private const val FOCUSED_ROUTE_WIDTH_DP = 5f
+private const val UNFOCUSED_ALPHA = 0.45f
 
 /** Settle time before an overlay checks it drew for the current camera. */
 private const val OVERLAY_CHECK_MS = 150L

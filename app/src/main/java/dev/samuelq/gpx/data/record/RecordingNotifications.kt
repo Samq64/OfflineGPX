@@ -8,6 +8,9 @@ import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.SystemClock
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.TtsSpan
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.getSystemService
@@ -15,6 +18,7 @@ import dev.samuelq.gpx.MainActivity
 import dev.samuelq.gpx.R
 import dev.samuelq.gpx.core.model.UnitSystem
 import dev.samuelq.gpx.ui.format.Formatters
+import dev.samuelq.gpx.ui.format.spokenDuration
 
 internal class NotificationContent(
     val paused: Boolean,
@@ -50,8 +54,11 @@ internal class RecordingNotifications(private val service: Service) {
     private fun build(content: NotificationContent): Notification {
         val open = activity(null)
         val paused = content.paused
-        val text = Formatters(content.units).distance(content.distanceMeters) +
-            "  ·  " + Formatters.duration(content.totalSeconds)
+        val text = spokenText(
+            Formatters(content.units).distance(content.distanceMeters),
+            Formatters.duration(content.totalSeconds),
+            service.resources.spokenDuration(content.totalSeconds),
+        )
 
         return NotificationCompat.Builder(service, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_monochrome)
@@ -111,5 +118,14 @@ internal class RecordingNotifications(private val service: Service) {
         const val NOTIFICATION_ID = 1
 
         const val MIN_INTERVAL_MILLIS = 5_000L
+    }
+}
+
+/** "12.3 km  ·  1:02:03", read with the duration in words and the dot as a pause. */
+private fun spokenText(distance: String, duration: String, spokenDuration: String): CharSequence {
+    val separator = "  ·  "
+    return SpannableStringBuilder(distance).apply {
+        append(separator, TtsSpan.TextBuilder(", ").build(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        append(duration, TtsSpan.TextBuilder(spokenDuration).build(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
     }
 }

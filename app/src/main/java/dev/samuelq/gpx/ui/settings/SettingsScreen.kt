@@ -18,7 +18,9 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -38,6 +40,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -52,6 +55,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
@@ -78,6 +86,8 @@ import dev.samuelq.gpx.data.map.OfflineMap
 import dev.samuelq.gpx.data.settings.Settings
 import dev.samuelq.gpx.ui.format.LocalFormatters
 import dev.samuelq.gpx.ui.format.tabularFigures
+import dev.samuelq.gpx.ui.isLargeText
+import dev.samuelq.gpx.ui.readFirst
 import dev.samuelq.gpx.ui.showUndo
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
@@ -116,6 +126,7 @@ fun SettingsScreen(
         viewModel.deleteMap(map)
         scope.launch {
             snackbarHostState.showUndo(
+                context = context,
                 message = deleted,
                 undoLabel = undo,
                 onUndo = { viewModel.undoDeleteMap(map) },
@@ -167,10 +178,10 @@ fun SettingsScreen(
     }
 
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        snackbarHost = { SnackbarHost(snackbarHostState, Modifier.readFirst()) },
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.settings_title)) },
+                title = { Text(stringResource(R.string.settings_title), Modifier.semantics { heading() }) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
@@ -229,6 +240,13 @@ fun SettingsScreen(
                 }
             }
 
+            SwitchSetting(
+                title = stringResource(R.string.settings_zoom_buttons),
+                explanation = stringResource(R.string.settings_zoom_buttons_explanation),
+                checked = settings.showZoomButtons,
+                onCheckedChange = viewModel::setShowZoomButtons,
+            )
+
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
             SectionHeading(stringResource(R.string.settings_section_recording))
 
@@ -237,12 +255,23 @@ fun SettingsScreen(
             var accuracy by remember(settings.maxAccuracyMeters) {
                 mutableFloatStateOf(settings.maxAccuracyMeters.toFloat())
             }
+            val accuracyTitle = stringResource(R.string.settings_accuracy)
+            // The slider alone reads as a bare percentage, and the dot not at all.
+            val accuracyState = stringResource(
+                R.string.settings_accuracy_state,
+                formatters.meters(accuracy.toDouble()),
+                formatters.meters(Settings.Defaults.maxAccuracyMeters),
+            )
             Setting(
-                title = stringResource(R.string.settings_accuracy),
+                title = accuracyTitle,
                 explanation = stringResource(R.string.settings_accuracy_explanation),
                 value = formatters.meters(accuracy.toDouble()),
             ) {
                 MarkedSlider(
+                    modifier = Modifier.semantics {
+                        contentDescription = accuracyTitle
+                        stateDescription = accuracyState
+                    },
                     value = accuracy,
                     onValueChange = { accuracy = it },
                     onValueChangeFinished = {
@@ -279,7 +308,9 @@ fun SettingsScreen(
             Text(
                 text = stringResource(R.string.settings_about_libraries),
                 style = MaterialTheme.typography.titleSmall,
-                modifier = Modifier.padding(horizontal = ScreenPadding, vertical = 4.dp),
+                modifier = Modifier
+                    .padding(horizontal = ScreenPadding, vertical = 4.dp)
+                    .semantics { heading() },
             )
             LIBRARIES.forEach { library ->
                 LibraryLine(library, onClick = { openUrl(library.url) })
@@ -325,6 +356,7 @@ private fun MergeMapsDialog(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MarkedSlider(
+    modifier: Modifier = Modifier,
     value: Float,
     onValueChange: (Float) -> Unit,
     onValueChangeFinished: () -> Unit,
@@ -340,6 +372,7 @@ private fun MarkedSlider(
         onValueChangeFinished = onValueChangeFinished,
         valueRange = valueRange,
         colors = colors,
+        modifier = modifier,
         track = { state ->
             // The track spans the thumb's travel, so a fraction of its width lines up.
             Box {
@@ -449,6 +482,7 @@ private fun MapsSection(
                 Text(
                     text = stringResource(R.string.settings_maps_importing),
                     style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                 )
             }
         }
@@ -482,11 +516,12 @@ private fun MapRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Column(Modifier.weight(1f)) {
+        // One stop for name, credit and size.
+        Column(Modifier.weight(1f).semantics(mergeDescendants = true) {}) {
             Text(
                 text = map.displayName,
                 style = MaterialTheme.typography.titleSmall,
-                maxLines = 1,
+                maxLines = if (isLargeText()) 2 else 1,
                 overflow = TextOverflow.Ellipsis,
             )
             map.attribution?.let { attribution ->
@@ -506,7 +541,7 @@ private fun MapRow(
         IconButton(onClick = onDelete) {
             Icon(
                 Icons.Default.Delete,
-                contentDescription = stringResource(R.string.settings_maps_delete),
+                contentDescription = stringResource(R.string.settings_maps_delete_named, map.displayName),
             )
         }
     }
@@ -569,5 +604,37 @@ private fun Setting(
         )
         Spacer(Modifier.height(8.dp))
         control()
+    }
+}
+
+/** A [Setting] whose control is a switch, beside the text; the whole row toggles it. */
+@Composable
+private fun SwitchSetting(
+    title: String,
+    explanation: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange)
+            .padding(horizontal = ScreenPadding, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text = explanation,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Spacer(Modifier.width(16.dp))
+        Switch(checked = checked, onCheckedChange = null)
     }
 }

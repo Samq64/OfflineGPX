@@ -6,7 +6,10 @@ import org.oscim.core.MercatorProjection
 import org.oscim.core.Tile
 import org.oscim.map.Map
 
-/** The waypoint whose pin was tapped: [onTop] first, since it's drawn over the rest, else the nearest. */
+/**
+ * The waypoint whose pin was tapped: [onTop] first, since it's drawn over the rest, else the
+ * nearest. The pin's box is padded out to [minHalfPx] each way, as it's smaller than a finger.
+ */
 internal fun pickWaypoint(
     screenX: Float,
     screenY: Float,
@@ -14,15 +17,19 @@ internal fun pickWaypoint(
     waypoints: List<Waypoint>,
     headRadiusPx: Float,
     tipLengthPx: Float,
+    minHalfPx: Float,
     onTop: Waypoint?,
 ): Waypoint? {
     val tap = Offset(screenX, screenY)
+    val halfWidth = maxOf(headRadiusPx, minHalfPx)
+    val height = tipLengthPx + headRadiusPx
+    val padY = maxOf(0f, minHalfPx - height / 2)
     var best: Waypoint? = null
     var bestDistance = Float.MAX_VALUE
     for (waypoint in waypoints) {
         val tip = map.screenPosition(waypoint.point)
-        val onIcon = kotlin.math.abs(tap.x - tip.x) <= headRadiusPx &&
-            tap.y <= tip.y && tap.y >= tip.y - tipLengthPx - headRadiusPx
+        val onIcon = kotlin.math.abs(tap.x - tip.x) <= halfWidth &&
+            tap.y <= tip.y + padY && tap.y >= tip.y - height - padY
         if (!onIcon) continue
         if (waypoint == onTop) return waypoint
         val distance = (tip - Offset(0f, tipLengthPx) - tap).getDistanceSquared()

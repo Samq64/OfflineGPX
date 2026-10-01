@@ -33,9 +33,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import dev.samuelq.gpx.R
+import dev.samuelq.gpx.core.model.Waypoint
 import dev.samuelq.gpx.ui.theme.slot
 import dev.samuelq.gpx.ui.track.FocusedTrack
 import dev.samuelq.gpx.ui.track.TrackActions
@@ -58,6 +63,7 @@ internal fun FocusedTrackContent(
     onDismiss: () -> Unit,
     onClose: (() -> Unit)?,
     onPeekHeightChange: (Dp) -> Unit,
+    onSelectWaypoint: (Waypoint) -> Unit,
 ) {
     when (focused) {
         FocusedTrack.None -> Unit
@@ -78,6 +84,7 @@ internal fun FocusedTrackContent(
             onPeekHeightChange = onPeekHeightChange,
             onClose = onClose,
             actions = actions,
+            onSelectWaypoint = onSelectWaypoint,
         )
     }
 }
@@ -124,8 +131,10 @@ internal val DragHandleHeight = 20.dp
 /** Half the Material handle, which spends 44 of 48dp on padding; the whole sheet drags anyway. */
 @Composable
 internal fun CompactDragHandle() {
+    // Named like Material's; the scaffold adds expand and collapse to it.
+    val description = stringResource(R.string.sheet_drag_handle)
     Box(
-        Modifier.fillMaxWidth().height(DragHandleHeight),
+        Modifier.fillMaxWidth().height(DragHandleHeight).semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
     ) {
         Box(

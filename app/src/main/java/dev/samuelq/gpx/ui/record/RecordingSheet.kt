@@ -1,5 +1,6 @@
 package dev.samuelq.gpx.ui.record
 
+import android.provider.Settings
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -37,13 +38,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.samuelq.gpx.R
@@ -51,6 +58,7 @@ import dev.samuelq.gpx.core.analysis.TrackProfile
 import dev.samuelq.gpx.data.record.RecordingState
 import dev.samuelq.gpx.ui.format.Formatters
 import dev.samuelq.gpx.ui.format.LocalFormatters
+import dev.samuelq.gpx.ui.format.spokenDuration
 import dev.samuelq.gpx.ui.track.Stat
 import dev.samuelq.gpx.ui.theme.recordingColor
 import dev.samuelq.gpx.ui.track.ProfileSheet
@@ -124,6 +132,12 @@ private fun RecordingHeader(
 
             else -> stringResource(R.string.record_waiting_for_fix)
         }
+        // Announced on change, so without the accuracy, which changes with every fix.
+        val spokenStatus = if (poorSignal != null && state.lastPoint == null && !state.paused) {
+            stringResource(R.string.record_weak_signal_spoken)
+        } else {
+            status
+        }
         val waypointCount = if (state.waypoints.isNotEmpty()) {
             pluralStringResource(
                 R.plurals.record_waypoints_logged,
@@ -140,6 +154,10 @@ private fun RecordingHeader(
             Spacer(Modifier.width(8.dp))
             Text(
                 text = listOfNotNull(status, waypointCount).joinToString("  ·  "),
+                modifier = Modifier.semantics {
+                    liveRegion = LiveRegionMode.Polite
+                    contentDescription = listOfNotNull(spokenStatus, waypointCount).joinToString(", ")
+                },
                 style = MaterialTheme.typography.labelLarge,
                 color = if (poorSignal != null && state.lastPoint == null) {
                     MaterialTheme.colorScheme.error
@@ -204,7 +222,11 @@ private fun RecordingHeader(
 @Composable
 internal fun recordingStats(distanceMeters: Double, elapsedSeconds: Double): List<Stat> = listOf(
     Stat(stringResource(R.string.axis_distance), LocalFormatters.current.distance(distanceMeters)),
-    Stat(stringResource(R.string.stat_elapsed), Formatters.duration(elapsedSeconds)),
+    Stat(
+        stringResource(R.string.stat_elapsed),
+        Formatters.duration(elapsedSeconds),
+        LocalResources.current.spokenDuration(elapsedSeconds),
+    ),
 )
 
 @Composable
@@ -239,8 +261,13 @@ private fun WaypointDialog(
     )
 }
 
+/** Pulses while recording, unless animations are off. */
 @Composable
 private fun RecordingDot(paused: Boolean) {
+    val context = LocalContext.current
+    val animate = remember {
+        Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) > 0f
+    }
     val transition = rememberInfiniteTransition(label = "recording")
     val alpha by transition.animateFloat(
         initialValue = 1f,
@@ -252,7 +279,7 @@ private fun RecordingDot(paused: Boolean) {
     Box(
         Modifier
             .size(10.dp)
-            .alpha(if (paused) 0.35f else alpha)
+            .alpha(if (paused) 0.35f else if (animate) alpha else 1f)
             .clip(CircleShape)
             .background(recordingColor())
     )

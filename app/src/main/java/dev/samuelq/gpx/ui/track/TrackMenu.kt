@@ -20,13 +20,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import dev.samuelq.gpx.R
 
-/** [onHide] only where hiding closes something. */
+/** [onHide] only where hiding closes something. [trackTitle] names the button in a list of them. */
 @Composable
 fun TrackMenu(
     onRename: () -> Unit,
     onShare: () -> Unit,
     onHide: (() -> Unit)?,
     onDelete: () -> Unit,
+    trackTitle: String? = null,
 ) {
     var open by remember { mutableStateOf(false) }
 
@@ -46,7 +47,11 @@ fun TrackMenu(
 
     Box {
         IconButton(onClick = { open = true }) {
-            Icon(Icons.Default.MoreVert, stringResource(R.string.track_manage))
+            Icon(
+                Icons.Default.MoreVert,
+                trackTitle?.let { stringResource(R.string.track_manage_named, it) }
+                    ?: stringResource(R.string.track_manage),
+            )
         }
         // Composed only when open; per-row menu setup adds up in a list.
         if (open) DropdownMenu(expanded = true, onDismissRequest = { open = false }) {

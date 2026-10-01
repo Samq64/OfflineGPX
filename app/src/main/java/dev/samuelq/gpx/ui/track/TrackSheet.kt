@@ -38,6 +38,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,13 +47,19 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.samuelq.gpx.R
 import dev.samuelq.gpx.core.analysis.TrackProfile
+import dev.samuelq.gpx.core.model.Waypoint
 import dev.samuelq.gpx.data.track.LoadedTrack
 import dev.samuelq.gpx.ui.chart.ChartAxisGroup
 import dev.samuelq.gpx.ui.chart.ChartSeries
@@ -64,7 +71,10 @@ import dev.samuelq.gpx.ui.chart.yScale
 import dev.samuelq.gpx.ui.chart.zoomView
 import dev.samuelq.gpx.ui.format.Formatters
 import dev.samuelq.gpx.ui.format.LocalFormatters
+import dev.samuelq.gpx.ui.isLargeText
 import dev.samuelq.gpx.ui.theme.LocalChartColors
+import java.time.Instant
+import java.time.ZoneId
 
 internal val SheetPadding = 20.dp
 
@@ -95,8 +105,10 @@ fun TrackSheet(
     onPeekHeightChange: (Dp) -> Unit,
     /** Close button, for the landscape panel. */
     onClose: (() -> Unit)? = null,
+    onSelectWaypoint: (Waypoint) -> Unit = {},
 ) {
     val profile = loaded.profile
+    val waypointActions = waypointActions(loaded.track.waypoints, profile.stats.startedAt, onSelectWaypoint)
     ProfileSheet(
         profile = profile,
         viewKey = profile,
@@ -114,7 +126,10 @@ fun TrackSheet(
             routeColor = routeColor,
             actions = actions,
             onClose = onClose,
-            modifier = Modifier.padding(start = SheetPadding, end = 4.dp),
+            // Waypoints are otherwise reached only by their pins, and the sheet has no room to list them.
+            modifier = Modifier
+                .padding(start = SheetPadding, end = 4.dp)
+                .semantics { if (waypointActions.isNotEmpty()) customActions = waypointActions },
         )
 
         StatRow(
@@ -164,9 +179,14 @@ fun ProfileSheet(
             }
     ) {
         // Measured, since a larger font would push the date under the gesture bar.
-        Column(Modifier.onSizeChanged { onPeekHeightChange(with(density) { it.height.toDp() }) }) {
-            header()
+        val measuredHeader = @Composable {
+            Column(Modifier.onSizeChanged { onPeekHeightChange(with(density) { it.height.toDp() }) }) {
+                header()
+            }
         }
+        // Scrolls with the rest at large text sizes, or a tall header could push controls out of a short panel.
+        val scrollHeader = isLargeText()
+        if (!scrollHeader) measuredHeader()
 
         Column(
             modifier = Modifier
@@ -176,6 +196,7 @@ fun ProfileSheet(
                 .verticalScroll(rememberScrollState())
                 .navigationBarsPadding(),
         ) {
+            if (scrollHeader) measuredHeader()
             // Just above the gesture bar at peek: a second hint, beside the handle, that there's more.
             HorizontalDivider(Modifier.padding(horizontal = SheetPadding, vertical = 8.dp))
             if (profile != null) {
@@ -289,6 +310,7 @@ private fun ProfileDetails(
         Spacer(Modifier.height(16.dp))
     }
 
+
     @Composable
     fun Profile(
         @StringRes title: Int,
@@ -327,6 +349,9 @@ private fun ProfileDetails(
                 selectedIndex = selectedIndex,
                 onSelectedIndexChange = onSelectedIndexChange,
                 onZoom = onZoom,
+                // Undoing a pinch otherwise takes another pinch.
+                zoomed = zoomed != null,
+                onResetZoom = { zoomed = null },
                 axisGroup = axisGroup,
                 contentDescription = stringResource(title),
                 breakLabel = breakLabel,
@@ -384,9 +409,9 @@ private fun SheetTitle(
             text = name,
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
+            maxLines = if (isLargeText()) 2 else 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).semantics { heading() },
         )
         actions?.let { TrackMenu(it.onRename, it.onShare, it.onHide, it.onDelete) }
         onClose?.let {
@@ -430,6 +455,7 @@ fun TrackSheetError(
         Text(
             text = stringResource(R.string.track_error_title),
             style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.semantics { heading() },
         )
         Text(
             text = stringResource(messageRes),
@@ -476,7 +502,7 @@ private fun ChartSection(
     content: @Composable () -> Unit,
 ) {
     Column(modifier.fillMaxWidth()) {
-        Text(title, style = MaterialTheme.typography.titleSmall)
+        Text(title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.semantics { heading() })
         Spacer(Modifier.height(4.dp))
         content()
     }
@@ -524,3 +550,39 @@ private fun Unavailable(message: String) {
         modifier = Modifier.padding(vertical = 24.dp),
     )
 }
+
+/**
+ * A screen reader action per waypoint, in time order: "Waypoint 3, 10:42 AM: bridge closed".
+ * The date joins the time off [trackStart]'s day; a long note is cut, as the tooltip has it whole.
+ */
+@Composable
+private fun waypointActions(
+    waypoints: List<Waypoint>,
+    trackStart: Instant?,
+    onSelect: (Waypoint) -> Unit,
+): List<CustomAccessibilityAction> {
+    val formatters = LocalFormatters.current
+    val resources = LocalResources.current
+    val select by rememberUpdatedState(onSelect)
+    return remember(waypoints, trackStart, formatters, resources) {
+        val zone = ZoneId.systemDefault()
+        val startDay = trackStart?.atZone(zone)?.toLocalDate()
+        // Stable, so undated ones keep file order after the dated.
+        waypoints.sortedWith(compareBy(nullsLast()) { it.point.time }).mapIndexed { i, waypoint ->
+            val time = waypoint.point.time?.let {
+                if (it.atZone(zone).toLocalDate() == startDay) formatters.time(it) else formatters.dateTime(it)
+            }
+            val note = waypoint.description?.trim()?.takeIf(String::isNotEmpty)?.let {
+                if (it.length > NOTE_LABEL_LENGTH) it.take(NOTE_LABEL_LENGTH).trimEnd() + "…" else it
+            }
+            val label = buildString {
+                append(resources.getString(R.string.record_waypoint_title, i + 1))
+                time?.let { append(resources.getString(R.string.waypoint_action_time, it)) }
+                note?.let { append(resources.getString(R.string.waypoint_action_note, it)) }
+            }
+            CustomAccessibilityAction(label) { select(waypoint); true }
+        }
+    }
+}
+
+private const val NOTE_LABEL_LENGTH = 60

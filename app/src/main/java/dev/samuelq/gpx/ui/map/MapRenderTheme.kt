@@ -3,6 +3,7 @@ package dev.samuelq.gpx.ui.map
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
+import java.util.Locale
 
 /**
  * Basemap render theme, built at runtime so it can take the user's theme colours. Written in
@@ -12,7 +13,8 @@ import androidx.compose.ui.graphics.toArgb
  */
 object MapRenderTheme {
 
-    fun xml(land: Color, label: Color, background: Color): String {
+    /** @param textScale the user's font scale, which VTM's fixed label sizes don't follow. */
+    fun xml(land: Color, label: Color, background: Color, textScale: Float = 1f): String {
         // Derived colours move away from the background, not toward black, or roads vanish in dark mode.
         val dark = background.luminance() < DARK_THRESHOLD
 
@@ -29,7 +31,7 @@ object MapRenderTheme {
             water(dark)
             buildings(land, dark)
             roads(land, dark)
-            labels(label, background)
+            labels(label, background, textScale)
 
             append("</rendertheme>")
         }
@@ -117,14 +119,17 @@ object MapRenderTheme {
     // --- Names -----------------------------------------------------------------------
 
     /** Collisions are settled by `priority`, higher winning, not by document order. */
-    private fun StringBuilder.labels(label: Color, background: Color) {
-        caption("natural", "water", label, background, minZoom = 10, size = 12, priority = 10)
-        caption("place", "city|town|village|hamlet|locality", label, background, minZoom = 6, size = 14, priority = 20)
+    private fun StringBuilder.labels(label: Color, background: Color, scale: Float) {
+        caption("natural", "water", label, background, minZoom = 10, size = fontSize(12, scale), priority = 10)
+        caption(
+            "place", "city|town|village|hamlet|locality", label, background,
+            minZoom = 6, size = fontSize(14, scale), priority = 20,
+        )
 
         // Trail names win every collision: "which trail is this" is the app's core question.
         append("""<rule e="way" k="highway" v="*" zoom-min="14">""")
         append(
-            """<pathText k="name" font-size="11" priority="30" fill="${label.css()}" """ +
+            """<pathText k="name" font-size="${fontSize(11, scale)}" priority="30" fill="${label.css()}" """ +
                 """stroke="${background.css()}" stroke-width="2.0"/></rule>""",
         )
     }
@@ -135,7 +140,7 @@ object MapRenderTheme {
         label: Color,
         halo: Color,
         minZoom: Int,
-        size: Int,
+        size: String,
         priority: Int,
     ) {
         append("""<rule e="any" k="$key" v="$values" zoom-min="$minZoom">""")
@@ -144,6 +149,8 @@ object MapRenderTheme {
                 """stroke="${halo.css()}" stroke-width="2.0" display="ifspace"/></rule>""",
         )
     }
+
+    private fun fontSize(base: Int, scale: Float) = String.format(Locale.ROOT, "%.1f", base * scale)
 
     // --- Rule construction -------------------------------------------------------------
 

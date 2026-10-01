@@ -14,6 +14,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.samuelq.gpx.R
 
@@ -34,6 +36,7 @@ internal fun EmptyState(
         Text(
             text = stringResource(R.string.map_empty_title),
             style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.semantics { heading() },
         )
         Text(
             text = stringResource(R.string.map_empty_body),

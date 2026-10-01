@@ -14,7 +14,16 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.input.pointer.PointerInputChange
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.setProgress
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.Text
@@ -59,6 +68,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.toSize
+import dev.samuelq.gpx.R
 import dev.samuelq.gpx.ui.PointTooltip
 import dev.samuelq.gpx.ui.format.tabularFigures
 import dev.samuelq.gpx.ui.theme.ChartColors
@@ -98,6 +108,9 @@ fun ProfileChart(
     formatPosition: (Float) -> String,
     /** Pinch or pan as (anchor, zoom, pan), anchor and pan as fractions of plot width. */
     onZoom: (Float, Float, Float) -> Unit,
+    /** Shows a reset in the corner, and a double tap resets too. */
+    zoomed: Boolean,
+    onResetZoom: () -> Unit,
     /** Shared by stacked charts so their plots line up. */
     axisGroup: ChartAxisGroup,
     modifier: Modifier = Modifier,
@@ -133,15 +146,19 @@ fun ProfileChart(
     val ownGutter = render.yTicks.maxOfOrNull { it.size.width }?.toFloat() ?: 0f
     SideEffect { if (ownGutter > axisGroup.gutterPx) axisGroup.gutterPx = ownGutter }
     val gutter = maxOf(ownGutter, axisGroup.gutterPx)
+    // Sized to the labels, which grow with the font; a pinch doesn't change their height.
+    val xLabelHeight = render.xTicks.maxOfOrNull { it.size.height } ?: 0
+    val bandPx = with(density) { maxOf(AxisBand.toPx(), xLabelHeight + LabelGap.toPx()) }
+    val plotHeight = PlotHeight * textGrowth(density.fontScale)
     // Not keyed on render: a pinch makes a new one every frame and would restart the gesture.
-    val geometry = remember(gutter, density) {
+    val geometry = remember(gutter, density, bandPx) {
         with(density) {
             ChartGeometry(
                 gutterPx = gutter,
                 plotLeft = gutter + LabelGap.toPx(),
                 // Room for half a tick label, should one land on the top edge.
                 topPad = 8.dp.toPx(),
-                bottomBand = AxisBand.toPx(),
+                bottomBand = bandPx,
                 rightPad = RightPad.toPx(),
                 labelGap = LabelGap.toPx(),
             )
@@ -150,12 +167,42 @@ fun ProfileChart(
 
     var boxSize by remember { mutableStateOf(IntSize.Zero) }
 
+    // Adjustable for a screen reader: each step picks the nearest point, as a tap would.
+    val range = remember(series) { series.yRange() }
+    val summary = range?.let {
+        stringResource(R.string.chart_summary, contentDescription, formatValue(it.start), formatValue(it.endInclusive))
+    } ?: contentDescription
+    val selectedX = selectedIndex?.let { series.x.getOrNull(it) }
+    val state = if (selectedIndex != null && selectedX != null) {
+        stringResource(
+            R.string.chart_point,
+            formatPosition(selectedX),
+            series.y.getOrNull(selectedIndex)?.let(formatValue) ?: formatValue(Float.NaN),
+        )
+    } else {
+        stringResource(R.string.chart_no_point)
+    }
+
     Box(
         modifier
             .fillMaxWidth()
-            .height(PlotHeight + AxisBand)
+            .height(plotHeight + with(density) { bandPx.toDp() })
             .onSizeChanged { boxSize = it }
-            .semantics { this.contentDescription = contentDescription },
+            .semantics {
+                this.contentDescription = summary
+                stateDescription = state
+                if (series.size > 0 && xScale.max > xScale.min) {
+                    progressBarRangeInfo = ProgressBarRangeInfo(
+                        current = (selectedX ?: xScale.min).coerceIn(xScale.min, xScale.max),
+                        range = xScale.min..xScale.max,
+                    )
+                    setProgress { target ->
+                        val index = nearestIndex(series.x, target)
+                        if (index >= 0) onSelectedIndexChange(index)
+                        index >= 0
+                    }
+                }
+            },
     ) {
         StaticLayer(render, geometry, chartColors)
         ScrubberLayer(
@@ -165,6 +212,7 @@ fun ProfileChart(
             selectedIndex = selectedIndex,
             onSelectedIndexChange = onSelectedIndexChange,
             onZoom = onZoom,
+            onDoubleTap = onResetZoom,
         )
         ChartTooltip(
             render = render,
@@ -175,6 +223,15 @@ fun ProfileChart(
             formatValue = formatValue,
             formatPosition = formatPosition,
         )
+        if (zoomed) {
+            IconButton(onClick = onResetZoom, modifier = Modifier.align(Alignment.TopEnd)) {
+                Icon(
+                    painterResource(R.drawable.ic_fit),
+                    contentDescription = stringResource(R.string.chart_zoom_reset),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }
 
@@ -234,12 +291,14 @@ private fun ScrubberLayer(
     selectedIndex: Int?,
     onSelectedIndexChange: (Int?) -> Unit,
     onZoom: (Float, Float, Float) -> Unit,
+    onDoubleTap: () -> Unit,
 ) {
     val series = render.series
     val ringColor = MaterialTheme.colorScheme.surfaceContainer
     // Read through state, not keyed on, or each pinch frame would restart the gesture.
     val currentRender by rememberUpdatedState(render)
     val currentOnZoom by rememberUpdatedState(onZoom)
+    val currentOnDoubleTap by rememberUpdatedState(onDoubleTap)
 
     Canvas(
         Modifier
@@ -248,15 +307,23 @@ private fun ScrubberLayer(
                 fun select(x: Float) =
                     onSelectedIndexChange(geometry.indexAt(x, size.toSize(), currentRender))
 
+                // The first tap still selects at once, so a single tap never waits for a second.
+                var lastTapAt = Long.MIN_VALUE / 2
+                var lastTapAtX = 0f
+
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     var drift = Offset.Zero
                     var scrubbing = false
                     var zooming = false
+                    var lift: List<PointerInputChange> = emptyList()
                     while (true) {
                         val event = awaitPointerEvent()
                         val pressed = event.changes.filter { it.pressed }
-                        if (pressed.isEmpty()) break
+                        if (pressed.isEmpty()) {
+                            lift = event.changes
+                            break
+                        }
                         if (pressed.size >= 2) {
                             zooming = true
                             val plot = geometry.plotRect(size.toSize())
@@ -285,7 +352,20 @@ private fun ScrubberLayer(
                             }
                         }
                     }
-                    if (!scrubbing && !zooming) select(down.position.x)
+                    if (!scrubbing && !zooming) {
+                        // Taken, or the sheet's tap-to-clear would undo it.
+                        lift.forEach { it.consume() }
+                        val second = down.uptimeMillis - lastTapAt <= viewConfiguration.doubleTapTimeoutMillis &&
+                            abs(down.position.x - lastTapAtX) <= viewConfiguration.touchSlop * 2
+                        if (second) {
+                            lastTapAt = Long.MIN_VALUE / 2
+                            currentOnDoubleTap()
+                        } else {
+                            lastTapAt = down.uptimeMillis
+                            lastTapAtX = down.position.x
+                            select(down.position.x)
+                        }
+                    }
                 }
             },
     ) {
@@ -477,13 +557,14 @@ private fun DrawScope.drawBreaks(render: ChartRender, plot: Rect, color: Color) 
 @Composable
 fun EmptyChart(message: String, modifier: Modifier = Modifier) {
     val chartColors = LocalChartColors.current
+    val growth = textGrowth(LocalDensity.current.fontScale)
     Box(
         modifier
             .fillMaxWidth()
-            .height(PlotHeight + AxisBand)
+            .height((PlotHeight + AxisBand) * growth)
             .drawWithCache {
                 val width = GridWidth.toPx()
-                val plotHeight = PlotHeight.toPx()
+                val plotHeight = (PlotHeight * growth).toPx()
                 onDrawBehind {
                     for (i in 0..EmptyGridLines) {
                         val y = plotHeight * i / EmptyGridLines
@@ -508,6 +589,9 @@ fun EmptyChart(message: String, modifier: Modifier = Modifier) {
 
 private const val EmptyGridLines = 4
 
+/** How much taller a plot gets for large text, so its tick labels don't crowd. */
+private fun textGrowth(fontScale: Float) = fontScale.coerceIn(1f, 2f)
+
 private fun DrawScope.drawGrid(yScale: Scale, plot: Rect, color: Color, width: Float) {
     for (tick in yScale.ticks) {
         val y = plot.yFor(tick, yScale)
@@ -531,4 +615,15 @@ private fun DrawScope.drawAxisLabels(render: ChartRender, plot: Rect, geometry: 
         val x = centered.coerceIn(0f, (plot.right - layout.size.width).coerceAtLeast(0f))
         drawText(layout, topLeft = Offset(x, plot.bottom + geometry.labelGap))
     }
+}
+
+/** The finite y values' span, for a spoken summary; null with none. */
+private fun ChartSeries.yRange(): ClosedFloatingPointRange<Float>? {
+    var low = Float.POSITIVE_INFINITY
+    var high = Float.NEGATIVE_INFINITY
+    for (v in y) if (v.isFinite()) {
+        low = minOf(low, v)
+        high = maxOf(high, v)
+    }
+    return if (low <= high) low..high else null
 }

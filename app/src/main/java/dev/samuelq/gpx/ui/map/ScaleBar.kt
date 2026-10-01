@@ -1,10 +1,12 @@
 package dev.samuelq.gpx.ui.map
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -18,8 +20,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import dev.samuelq.gpx.R
 import dev.samuelq.gpx.core.model.UnitSystem
 import dev.samuelq.gpx.ui.format.Formatters
 import dev.samuelq.gpx.ui.format.LocalFormatters
@@ -61,9 +67,18 @@ fun ScaleBar(
     val bar = snapped ?: return
     if (bar.width <= 0.dp) return
 
-    Column(modifier = modifier, horizontalAlignment = Alignment.Start) {
+    val label = scaleLabel(bar.meters, formatters.units)
+    val spoken = stringResource(R.string.map_scale, label)
+    Column(
+        modifier = modifier
+            .clearAndSetSemantics { contentDescription = spoken }
+            // Over routes and water the bare label's contrast isn't guaranteed.
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = BACKING_ALPHA), RoundedCornerShape(4.dp))
+            .padding(horizontal = 4.dp, vertical = 2.dp),
+        horizontalAlignment = Alignment.Start,
+    ) {
         Text(
-            text = scaleLabel(bar.meters, formatters.units),
+            text = label,
             style = MaterialTheme.typography.labelSmall,
             color = color,
         )
@@ -125,3 +140,5 @@ private val BarHeight = 6.dp
 
 private const val METERS_PER_MILE = Formatters.METERS_PER_MILE
 private const val METERS_PER_FOOT = 1 / Formatters.FEET_PER_METER
+
+private const val BACKING_ALPHA = 0.85f

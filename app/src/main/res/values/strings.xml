@@ -10,11 +10,19 @@
     <string name="action_done">Done</string>
 
     <string name="map_open_list">Tracks</string>
-    <string name="map_description">Map showing your tracks. Tap a track to open it. Drag to move, pinch to zoom.</string>
+    <string name="map_description">Map showing your tracks. Open one by tapping its line or from the Tracks list.</string>
+    <!-- Map zoom buttons. -->
+    <string name="map_zoom_in">Zoom in</string>
+    <string name="map_zoom_out">Zoom out</string>
+    <string name="map_show_all">Show all tracks</string>
     <string name="map_empty_title">Nothing to show</string>
     <string name="map_empty_body">Record a ride or a walk, or import a track or a map.</string>
     <string name="map_empty_import_map">Import map</string>
     <string name="map_empty_import_track">Import track</string>
+    <!-- Spoken only. -->
+    <string name="map_loading">Loading tracks</string>
+    <string name="map_scale">Map scale: %1$s</string>
+    <string name="sheet_drag_handle">Drag handle</string>
     <string name="map_none_shown">No tracks shown</string>
     <string name="map_hidden_hint">Show a track from the list</string>
     <!-- How many of the imported tracks are currently drawn on the map, not the library's total. -->
@@ -31,8 +39,12 @@
     <string name="settings_units_explanation">Display only. Files stay in metres, so switching never alters a track.</string>
     <string name="settings_units_metric">Metric</string>
     <string name="settings_units_imperial">Imperial</string>
+    <string name="settings_zoom_buttons">Zoom buttons</string>
+    <string name="settings_zoom_buttons_explanation">Show zoom and fit buttons on the map, for zooming without a pinch. Double-tap and drag also zooms.</string>
 
     <string name="settings_accuracy">Accuracy limit</string>
+    <!-- Spoken for the slider: the value, then the default. -->
+    <string name="settings_accuracy_state">%1$s, default %2$s</string>
     <string name="settings_accuracy_explanation">Fixes less certain than this are ignored. Lower keeps out the wandering a phone does indoors; too low and a wooded valley records nothing. Read when a recording starts.</string>
 
     <string name="settings_battery">Battery optimisation</string>
@@ -50,7 +62,7 @@
     <!-- A direct link to where the files are published, so an action, not a heading. -->
     <string name="settings_maps_where">Get maps</string>
     <string name="settings_maps_none">No maps imported.</string>
-    <string name="settings_maps_delete">Delete map</string>
+    <string name="settings_maps_delete_named">Delete %1$s</string>
     <string name="settings_maps_importing">Copying map…</string>
     <string name="settings_maps_imported">Map imported.</string>
     <string name="settings_maps_deleted">Map deleted.</string>
@@ -89,6 +101,15 @@
         <item quantity="other">%d tracks deleted.</item>
     </plurals>
     <string name="library_select_all">Select all</string>
+    <!-- Spoken only. -->
+    <string name="library_select">Select</string>
+    <string name="library_open_on_map">Open on map</string>
+    <string name="library_show_on_map">Show %1$s on map</string>
+    <string name="library_delete_selected">Delete selected</string>
+    <plurals name="library_search_found">
+        <item quantity="one">%d track found</item>
+        <item quantity="other">%d tracks found</item>
+    </plurals>
     <string name="library_clear_selection">Clear selection</string>
     <string name="library_selected">%d selected</string>
     <string name="library_empty_title">No tracks yet</string>
@@ -108,10 +129,17 @@
     <string name="record_resume">Resume</string>
     <string name="record_stop">Stop</string>
     <string name="record_discard">Discard</string>
+    <!-- Spoken for a disabled Save. -->
+    <string name="record_too_short">Too short to save</string>
     <string name="record_waiting_for_fix">Waiting for a GPS fix…</string>
     <string name="record_weak_signal">Signal too weak to record — accurate to ±%1$s. Try outdoors.</string>
+    <!-- Spoken on change, so without the accuracy figure. -->
+    <string name="record_weak_signal_spoken">Signal too weak to record. Try outdoors.</string>
     <string name="record_add_waypoint">Add waypoint</string>
     <string name="record_waypoint_title">Waypoint %1$d</string>
+    <!-- Appended to "Waypoint 3" in a spoken action: the time, then the note. -->
+    <string name="waypoint_action_time">, %1$s</string>
+    <string name="waypoint_action_note">: %1$s</string>
     <string name="record_waypoint_label">Note (optional)</string>
     <plurals name="record_waypoints_logged">
         <item quantity="one">%1$d waypoint</item>
@@ -150,6 +178,8 @@
     <string name="track_loading">Reading track…</string>
     <string name="track_close">Close</string>
     <string name="track_manage">Manage this track</string>
+    <!-- Spoken only; names the button in a list of them. -->
+    <string name="track_manage_named">Manage %1$s</string>
     <string name="track_hide">Hide</string>
     <string name="track_hidden">Track hidden.</string>
     <string name="track_error_title">Couldn\'t open this file</string>
@@ -159,6 +189,11 @@
     <string name="track_error_unreadable">It may have been moved, renamed or deleted.</string>
 
     <string name="chart_speed">Speed</string>
+    <!-- Spoken for a chart: its title and range, then the point it's on. -->
+    <string name="chart_summary">%1$s chart, %2$s to %3$s</string>
+    <string name="chart_point">%1$s, %2$s</string>
+    <string name="chart_no_point">No point selected</string>
+    <string name="chart_zoom_reset">Show whole track</string>
     <string name="chart_elevation">Elevation</string>
     <!-- Not "Paused": a break is equally signal loss or an analyser cut, and naming one
          asserts a cause the app took care not to infer. -->
@@ -170,6 +205,21 @@
     <string name="axis_time">Time</string>
     <string name="axis_distance">Distance</string>
 
+    <!-- Spoken for a stat tile: label, then value. -->
+    <string name="stat_spoken">%1$s: %2$s</string>
+    <string name="value_unknown">unknown</string>
+    <plurals name="duration_hours">
+        <item quantity="one">%d hour</item>
+        <item quantity="other">%d hours</item>
+    </plurals>
+    <plurals name="duration_minutes">
+        <item quantity="one">%d minute</item>
+        <item quantity="other">%d minutes</item>
+    </plurals>
+    <plurals name="duration_seconds">
+        <item quantity="one">%d second</item>
+        <item quantity="other">%d seconds</item>
+    </plurals>
     <string name="stat_moving">Moving</string>
     <string name="stat_elapsed">Elapsed</string>
     <!-- Over moving time, not elapsed. -->
