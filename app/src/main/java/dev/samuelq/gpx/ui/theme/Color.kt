@@ -1,86 +1,97 @@
 package dev.samuelq.gpx.ui.theme
 
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
 import dev.samuelq.gpx.data.db.TrackEntity
 
-// Static scheme for Android 10/11, which lack wallpaper colours; shares the charts' ramp.
+// Static scheme for Android 10/11, which lack wallpaper colours: Material's 2021 tonal spot from
+// Android 10's own accent, #1A73E8, so it looks like what 12+ makes from a wallpaper.
 
 private val Blue450 = Color(0xFF2A78D6)
 private val Blue400 = Color(0xFF3987E5)
-private val Blue100 = Color(0xFFCDE2FB)
-private val Blue600 = Color(0xFF184F95)
-private val Blue700 = Color(0xFF0D366B)
 
-private val Orange = Color(0xFFEB6834)
+/** 3:1 on the light surfaces wallpapers give, as a chart mark needs. */
+private val Orange = Color(0xFFC9531F)
 private val OrangeDark = Color(0xFFD95926)
 
-private val Ink = Color(0xFF0B0B0B)
-private val InkSecondary = Color(0xFF52514E)
-private val Muted = Color(0xFF898781)
-private val Hairline = Color(0xFFE1E0D9)
-private val HairlineDark = Color(0xFF2C2C2A)
-private val Baseline = Color(0xFFC3C2B7)
-private val BaselineDark = Color(0xFF383835)
-
-private val SurfaceLight = Color(0xFFFCFCFB)
-private val SurfaceDark = Color(0xFF1A1A19)
-private val SurfaceContainerLight = Color(0xFFF4F3F0)
-private val SurfaceContainerDark = Color(0xFF232322)
-private val SurfaceVariantLight = Color(0xFFF0EFEC)
-
-private val Critical = Color(0xFFD03B3B)
-private val CriticalDark = Color(0xFFE66767)
-
 internal val StaticLightColors = lightColorScheme(
-    primary = Blue450,
-    onPrimary = Color.White,
-    primaryContainer = Blue100,
-    onPrimaryContainer = Blue700,
-    secondary = InkSecondary,
-    onSecondary = Color.White,
-    secondaryContainer = Hairline,
-    onSecondaryContainer = Ink,
-    tertiary = Orange,
-    onTertiary = Color.White,
-    background = SurfaceLight,
-    onBackground = Ink,
-    surface = SurfaceLight,
-    onSurface = Ink,
-    surfaceVariant = SurfaceVariantLight,
-    onSurfaceVariant = InkSecondary,
-    surfaceContainer = SurfaceContainerLight,
-    surfaceContainerHigh = Color(0xFFEFEEEA),
-    outline = Muted,
-    outlineVariant = Hairline,
-    error = Critical,
-    onError = Color.White,
+    primary = Color(0xFF435E91),
+    onPrimary = Color(0xFFFFFFFF),
+    primaryContainer = Color(0xFFD8E2FF),
+    onPrimaryContainer = Color(0xFF2A4678),
+    inversePrimary = Color(0xFFADC7FF),
+    secondary = Color(0xFF565E71),
+    onSecondary = Color(0xFFFFFFFF),
+    secondaryContainer = Color(0xFFDBE2F9),
+    onSecondaryContainer = Color(0xFF3F4759),
+    tertiary = Color(0xFF715574),
+    onTertiary = Color(0xFFFFFFFF),
+    tertiaryContainer = Color(0xFFFBD7FC),
+    onTertiaryContainer = Color(0xFF583E5B),
+    background = Color(0xFFF9F9FF),
+    onBackground = Color(0xFF1A1B20),
+    surface = Color(0xFFF9F9FF),
+    onSurface = Color(0xFF1A1B20),
+    surfaceVariant = Color(0xFFE1E2EC),
+    onSurfaceVariant = Color(0xFF44474F),
+    surfaceTint = Color(0xFF435E91),
+    inverseSurface = Color(0xFF2F3036),
+    inverseOnSurface = Color(0xFFF0F0F7),
+    error = Color(0xFFBA1A1A),
+    onError = Color(0xFFFFFFFF),
+    errorContainer = Color(0xFFFFDAD6),
+    onErrorContainer = Color(0xFF93000A),
+    outline = Color(0xFF74777F),
+    outlineVariant = Color(0xFFC4C6D0),
+    scrim = Color(0xFF000000),
+    surfaceBright = Color(0xFFF9F9FF),
+    surfaceDim = Color(0xFFD9D9E0),
+    surfaceContainer = Color(0xFFEDEDF4),
+    surfaceContainerHigh = Color(0xFFE8E7EE),
+    surfaceContainerHighest = Color(0xFFE2E2E9),
+    surfaceContainerLow = Color(0xFFF3F3FA),
+    surfaceContainerLowest = Color(0xFFFFFFFF),
 )
 
 internal val StaticDarkColors = darkColorScheme(
-    primary = Blue400,
-    onPrimary = Color(0xFF06203F),
-    primaryContainer = Blue600,
-    onPrimaryContainer = Blue100,
-    secondary = Baseline,
-    onSecondary = Ink,
-    secondaryContainer = BaselineDark,
-    onSecondaryContainer = Color.White,
-    tertiary = OrangeDark,
-    onTertiary = Color.White,
-    background = SurfaceDark,
-    onBackground = Color.White,
-    surface = SurfaceDark,
-    onSurface = Color.White,
-    surfaceVariant = BaselineDark,
-    onSurfaceVariant = Color(0xFFC3C2B7),
-    surfaceContainer = SurfaceContainerDark,
-    surfaceContainerHigh = Color(0xFF2B2B29),
-    outline = Muted,
-    outlineVariant = HairlineDark,
-    error = CriticalDark,
-    onError = Ink,
+    primary = Color(0xFFADC7FF),
+    onPrimary = Color(0xFF0F2F60),
+    primaryContainer = Color(0xFF2A4678),
+    onPrimaryContainer = Color(0xFFD8E2FF),
+    inversePrimary = Color(0xFF435E91),
+    secondary = Color(0xFFBFC6DC),
+    onSecondary = Color(0xFF283041),
+    secondaryContainer = Color(0xFF3F4759),
+    onSecondaryContainer = Color(0xFFDBE2F9),
+    tertiary = Color(0xFFDEBCDF),
+    onTertiary = Color(0xFF402843),
+    tertiaryContainer = Color(0xFF583E5B),
+    onTertiaryContainer = Color(0xFFFBD7FC),
+    background = Color(0xFF111318),
+    onBackground = Color(0xFFE2E2E9),
+    surface = Color(0xFF111318),
+    onSurface = Color(0xFFE2E2E9),
+    surfaceVariant = Color(0xFF44474F),
+    onSurfaceVariant = Color(0xFFC4C6D0),
+    surfaceTint = Color(0xFFADC7FF),
+    inverseSurface = Color(0xFFE2E2E9),
+    inverseOnSurface = Color(0xFF2F3036),
+    error = Color(0xFFFFB4AB),
+    onError = Color(0xFF690005),
+    errorContainer = Color(0xFF93000A),
+    onErrorContainer = Color(0xFFFFDAD6),
+    outline = Color(0xFF8E9099),
+    outlineVariant = Color(0xFF44474F),
+    scrim = Color(0xFF000000),
+    surfaceBright = Color(0xFF37393E),
+    surfaceDim = Color(0xFF111318),
+    surfaceContainer = Color(0xFF1E1F25),
+    surfaceContainerHigh = Color(0xFF282A2F),
+    surfaceContainerHighest = Color(0xFF33353A),
+    surfaceContainerLow = Color(0xFF1A1B20),
+    surfaceContainerLowest = Color(0xFF0C0E13),
 )
 
 /**
@@ -123,7 +134,10 @@ fun routePalette(): List<Color> =
 fun recordingColor(): Color =
     if (androidx.compose.foundation.isSystemInDarkTheme()) RecordingDark else RecordingLight
 
-/** Fixed, not wallpaper-derived, since the hues were checked for contrast and CVD separation. */
+/**
+ * The series are fixed, not wallpaper-derived: their hues were checked for contrast and CVD
+ * separation. Grid, axis and labels are chrome, so they follow the scheme like the text around them.
+ */
 data class ChartColors(
     val speed: Color,
     val elevation: Color,
@@ -132,20 +146,12 @@ data class ChartColors(
     val label: Color,
 ) {
     companion object {
-        val Light = ChartColors(
-            speed = Blue450,
-            elevation = Orange,
-            grid = Hairline,
-            axis = Baseline,
-            label = Muted,
-        )
-
-        val Dark = ChartColors(
-            speed = Blue400,
-            elevation = OrangeDark,
-            grid = HairlineDark,
-            axis = BaselineDark,
-            label = Muted,
+        fun of(scheme: ColorScheme, dark: Boolean) = ChartColors(
+            speed = if (dark) Blue400 else Blue450,
+            elevation = if (dark) OrangeDark else Orange,
+            grid = scheme.outlineVariant,
+            axis = scheme.outline,
+            label = scheme.onSurfaceVariant,
         )
     }
 }
