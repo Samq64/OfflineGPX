@@ -27,7 +27,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
@@ -35,6 +34,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -283,11 +283,8 @@ fun LibraryScreen(
                                     },
                                 )
                             }
-                        } else {
-                            IconButton(onClick = { picker.launch(arrayOf("*/*")) }) {
-                                Icon(Icons.Default.Add, stringResource(R.string.library_import))
-                            }
                         }
+                        // Empty, the page itself offers the import.
                     },
                 )
             }
@@ -303,6 +300,7 @@ fun LibraryScreen(
             )
 
             tracks.isEmpty() -> EmptyState(
+                onImport = { picker.launch(arrayOf("*/*")) },
                 modifier = Modifier.fillMaxSize().padding(padding),
             )
 
@@ -641,7 +639,7 @@ private val TrackSort.label: Int
     }
 
 @Composable
-private fun EmptyState(modifier: Modifier = Modifier) {
+private fun EmptyState(onImport: () -> Unit, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier.padding(32.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
@@ -657,6 +655,7 @@ private fun EmptyState(modifier: Modifier = Modifier) {
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        Button(onClick = onImport) { Text(stringResource(R.string.library_import)) }
     }
 }
 
