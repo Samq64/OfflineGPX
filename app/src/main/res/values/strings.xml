@@ -191,13 +191,11 @@
     <string name="record_channel_name">Recording</string>
     <string name="record_channel_description">Shown while a track is being recorded.</string>
 
-    <!-- What a recording is called until it is renamed. %1$s is "ride" or "walk". -->
-    <string name="track_default_morning">Morning %1$s</string>
-    <string name="track_default_afternoon">Afternoon %1$s</string>
-    <string name="track_default_evening">Evening %1$s</string>
-    <string name="track_default_night">Night %1$s</string>
-    <string name="track_default_ride">ride</string>
-    <string name="track_default_walk">walk</string>
+    <!-- What a recording is called until it is renamed. %1$s is the weekday, e.g. "Saturday". -->
+    <string name="track_default_morning">%1$s morning</string>
+    <string name="track_default_afternoon">%1$s afternoon</string>
+    <string name="track_default_evening">%1$s evening</string>
+    <string name="track_default_night">%1$s night</string>
 
     <string name="track_loading">Reading track…</string>
     <string name="track_close">Close</string>

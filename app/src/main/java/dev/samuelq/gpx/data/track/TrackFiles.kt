@@ -7,6 +7,9 @@ import dev.samuelq.gpx.data.db.TrackEntity
 import java.io.File
 import java.time.Instant
 import java.time.ZoneId
+import java.time.ZonedDateTime
+import java.time.format.TextStyle
+import java.util.Locale
 
 /** App-private track directories; `res/xml/file_paths.xml` shares both. */
 object TrackFiles {
@@ -24,25 +27,27 @@ object TrackFiles {
 /** A typed name, or null for blank so the caller falls back to its default. */
 internal fun String.asTrackName(): String? = trim().ifEmpty { null }
 
-/** Time of day plus walk or ride, inferred from average moving speed. */
+/** Weekday and part of day, like "Saturday morning". Saying nothing of the activity, which speed can't tell. */
 internal fun defaultTrackName(context: Context, stats: TrackStats): String =
-    defaultTrackName(context, stats.startedAt, stats.averageSpeedMps)
+    defaultTrackName(context, stats.startedAt)
 
-internal fun defaultTrackName(context: Context, startedAt: Instant?, averageSpeedMps: Double): String {
-    val zoned = (startedAt ?: Instant.now()).atZone(ZoneId.systemDefault())
-    val activity = if (averageSpeedMps < WALKING_SPEED_CEILING_MPS) {
-        R.string.track_default_walk
-    } else {
-        R.string.track_default_ride
-    }
-    val partOfDay = when (zoned.hour) {
+internal fun defaultTrackName(context: Context, startedAt: Instant?): String {
+    val (partOfDay, weekday) = defaultNameParts(
+        (startedAt ?: Instant.now()).atZone(ZoneId.systemDefault()),
+        context.resources.configuration.locales[0],
+    )
+    return context.getString(partOfDay, weekday)
+}
+
+/** The part-of-day string and the weekday it takes. */
+internal fun defaultNameParts(at: ZonedDateTime, locale: Locale): Pair<Int, String> {
+    val partOfDay = when (at.hour) {
         in 5..11 -> R.string.track_default_morning
         in 12..16 -> R.string.track_default_afternoon
         in 17..20 -> R.string.track_default_evening
         else -> R.string.track_default_night
     }
-    return context.getString(partOfDay, context.getString(activity))
+    // 1 am on a Sunday is Saturday night.
+    val day = if (at.hour < 5) at.minusDays(1) else at
+    return partOfDay to day.dayOfWeek.getDisplayName(TextStyle.FULL, locale)
 }
-
-/** 9 km/h. */
-private const val WALKING_SPEED_CEILING_MPS = 2.5

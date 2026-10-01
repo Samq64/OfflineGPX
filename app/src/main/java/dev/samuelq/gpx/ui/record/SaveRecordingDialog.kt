@@ -54,12 +54,7 @@ fun StopRecordingDialog(
     val context = LocalContext.current
     // Once, so the name doesn't change under the user as the ride goes on.
     val defaultName = remember {
-        val seconds = state.totalSeconds
-        defaultTrackName(
-            context,
-            startedAt = Instant.now().minusMillis((seconds * 1000).toLong()),
-            averageSpeedMps = if (seconds > 0) state.distanceMeters / seconds else 0.0,
-        )
+        defaultTrackName(context, startedAt = Instant.now().minusMillis((state.totalSeconds * 1000).toLong()))
     }
     SaveRecordingDialog(
         title = stringResource(R.string.record_stop_title),
