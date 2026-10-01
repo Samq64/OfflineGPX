@@ -9,8 +9,12 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import dev.samuelq.gpx.data.db.TrackEntity
+import dev.samuelq.gpx.data.settings.SettingsRepository
+import dev.samuelq.gpx.data.settings.TrackSort
 import dev.samuelq.gpx.data.track.TrackRepository
 import dev.samuelq.gpx.di.appContainer
+import dev.samuelq.gpx.ui.track.trackTitle
+import java.text.Collator
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -27,6 +31,8 @@ import kotlinx.coroutines.launch
 sealed interface LibraryEvent {
     data class Open(val id: Long) : LibraryEvent
     data object ImportFailed : LibraryEvent
+    /** A multi-file import; a single file opens instead. */
+    data class ImportedAll(val imported: Int, val requested: Int) : LibraryEvent
     /** Failed outright; see [ExportedAll] for a partial one. */
     data object ExportFailed : LibraryEvent
 
@@ -39,22 +45,27 @@ sealed interface LibraryEvent {
 @Stable
 class LibraryViewModel(
     private val repository: TrackRepository,
+    private val settings: SettingsRepository,
     private val savedState: SavedStateHandle,
 ) : ViewModel() {
 
     private val _query = MutableStateFlow("")
     val query: StateFlow<String> = _query.asStateFlow()
 
-    /** Null until loaded, so the empty state doesn't flash during the entry animation. */
-    val tracks: StateFlow<List<TrackEntity>?> =
-        combine(repository.tracks, _query) { tracks, query ->
-            tracks.filter { it.matches(query) }
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+    val sort: StateFlow<TrackSort> = settings.trackSort
 
     /** Read apart from the rows, so the list shows before every file is statted. */
     val sizes: StateFlow<Map<Long, Long>> = repository.tracks
         .mapLatest { repository.fileSizes(it) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+
+    /** Null until loaded, so the empty state doesn't flash during the entry animation. */
+    val tracks: StateFlow<List<TrackEntity>?> =
+        combine(repository.tracks, _query, sort) { tracks, query, sort ->
+            tracks.filter { it.matches(query) }.sortedFor(sort)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    fun setSort(sort: TrackSort) = settings.setTrackSort(sort)
 
     fun search(query: String) {
         _query.value = query
@@ -80,12 +91,18 @@ class LibraryViewModel(
         _selection.value = ids.toSet()
     }
 
-    fun import(uri: Uri) {
+    fun import(uris: List<Uri>) {
+        if (uris.isEmpty()) return
         viewModelScope.launch {
-            repository.import(uri.toString()).fold(
-                onSuccess = { _events.send(LibraryEvent.Open(it)) },
-                onFailure = { _events.send(LibraryEvent.ImportFailed) },
-            )
+            if (uris.size == 1) {
+                repository.import(uris.single().toString()).fold(
+                    onSuccess = { _events.send(LibraryEvent.Open(it)) },
+                    onFailure = { _events.send(LibraryEvent.ImportFailed) },
+                )
+                return@launch
+            }
+            val imported = uris.count { repository.import(it.toString()).isSuccess }
+            _events.send(LibraryEvent.ImportedAll(imported, uris.size))
         }
     }
 
@@ -137,7 +154,11 @@ class LibraryViewModel(
         private const val EXPORT_NAMES = "export_names"
 
         val Factory = viewModelFactory {
-            initializer { LibraryViewModel(appContainer.trackRepository, createSavedStateHandle()) }
+            initializer { LibraryViewModel(
+                    appContainer.trackRepository,
+                    appContainer.settingsRepository,
+                    createSavedStateHandle(),
+                ) }
         }
     }
 }
@@ -149,3 +170,15 @@ private fun TrackEntity.matches(query: String): Boolean {
     return trackName?.contains(needle, ignoreCase = true) == true ||
         displayName.contains(needle, ignoreCase = true)
 }
+
+/** Stable, so ties keep the repository's last-viewed order. */
+internal fun List<TrackEntity>.sortedFor(sort: TrackSort): List<TrackEntity> =
+    when (sort) {
+        TrackSort.RECENT -> this
+        TrackSort.DATE -> sortedByDescending { it.startedAtEpochMillis ?: it.lastOpenedAtEpochMillis }
+        TrackSort.LENGTH -> sortedByDescending { it.distanceMeters }
+        TrackSort.NAME -> {
+            val collator = Collator.getInstance()
+            sortedWith(compareBy(collator) { trackTitle(it.trackName, it.displayName) })
+        }
+    }

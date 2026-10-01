@@ -95,6 +95,11 @@
     <string name="library_more">More options</string>
     <string name="library_show_all">Show all</string>
     <string name="library_hide_all">Hide all</string>
+    <string name="library_sort">Sort</string>
+    <string name="library_sort_recent">Last viewed</string>
+    <string name="library_sort_date">Date</string>
+    <string name="library_sort_length">Length</string>
+    <string name="library_sort_name">Name</string>
     <string name="library_delete">Delete</string>
     <plurals name="library_deleted">
         <item quantity="one">Track deleted.</item>
@@ -116,6 +121,11 @@
     <!-- Not "files are read only when you pick them": import keeps a copy. -->
     <string name="library_empty_body">Record one, or import a .gpx file. Importing keeps a copy here; nothing leaves the device.</string>
     <string name="library_import_failed">Couldn\'t import that file.</string>
+    <plurals name="library_imported_all">
+        <item quantity="one">Imported %1$d track.</item>
+        <item quantity="other">Imported %1$d tracks.</item>
+    </plurals>
+    <string name="library_imported_some">Imported %1$d of %2$d files. The rest couldn\'t be read.</string>
     <string name="library_export_failed">Couldn\'t export to that folder.</string>
     <plurals name="library_exported_all">
         <item quantity="one">Exported %1$d track.</item>

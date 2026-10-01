@@ -26,6 +26,9 @@ data class Settings(
     }
 }
 
+/** The library's order; [DATE] keeps hidden and covered tracks easy to find. The map always stacks by [RECENT]. */
+enum class TrackSort { RECENT, DATE, LENGTH, NAME }
+
 /** `SharedPreferences` rather than DataStore, to avoid a dependency for a handful of keys. */
 class SettingsRepository(context: Context) {
 
@@ -35,6 +38,19 @@ class SettingsRepository(context: Context) {
     private val _settings = MutableStateFlow(read())
 
     val settings: StateFlow<Settings> = _settings.asStateFlow()
+
+    /** Apart from [settings] so a re-sort doesn't recompose everything that reads them. */
+    private val _trackSort = MutableStateFlow(readTrackSort())
+    val trackSort: StateFlow<TrackSort> = _trackSort.asStateFlow()
+
+    fun setTrackSort(sort: TrackSort) {
+        prefs.edit { putString(KEY_TRACK_SORT, sort.name) }
+        _trackSort.value = sort
+    }
+
+    private fun readTrackSort(): TrackSort = prefs.getString(KEY_TRACK_SORT, null)
+        ?.let { name -> TrackSort.entries.firstOrNull { it.name == name } }
+        ?: TrackSort.DATE
 
     fun setUnits(units: UnitSystem) = update { putString(KEY_UNITS, units.name) }
 
@@ -66,5 +82,6 @@ class SettingsRepository(context: Context) {
         const val KEY_UNITS = "units"
         const val KEY_ZOOM_BUTTONS = "show_zoom_buttons"
         const val KEY_ACCURACY = "max_accuracy_meters"
+        const val KEY_TRACK_SORT = "track_sort"
     }
 }
