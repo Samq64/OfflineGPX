@@ -72,9 +72,8 @@ internal fun pick(
             var previousX = 0.0
             var previousY = 0.0
             for (index in from until to) {
-                val point = route.points[index]
-                val x = MercatorProjection.longitudeToX(point.longitude) * mapSize
-                val y = MercatorProjection.latitudeToY(point.latitude) * mapSize
+                val x = MercatorProjection.longitudeToX(route.points.longitude(index)) * mapSize
+                val y = MercatorProjection.latitudeToY(route.points.latitude(index)) * mapSize
 
                 if (index == from) {
                     // A lone position is a point, not a line: measured to itself.

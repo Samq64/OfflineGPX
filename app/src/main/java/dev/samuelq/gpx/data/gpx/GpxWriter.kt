@@ -25,10 +25,10 @@ class GpxWriter(private val newSerializer: () -> XmlSerializer = DEFAULT_SERIALI
         xml.attribute(null, "version", "1.1")
         xml.attribute(null, "creator", CREATOR)
 
-        val startedAt = track.segments.firstOrNull()?.points?.firstOrNull()?.time
-        if (startedAt != null) {
+        val points = track.points
+        if (points.size > 0 && points.hasTime(0)) {
             xml.startTag(NAMESPACE, "metadata")
-            xml.textTag("time", TIMESTAMP.format(startedAt))
+            xml.textTag("time", timestamp(points.timeMillis(0)))
             xml.endTag(NAMESPACE, "metadata")
         }
 
@@ -37,7 +37,7 @@ class GpxWriter(private val newSerializer: () -> XmlSerializer = DEFAULT_SERIALI
             xml.startTag(NAMESPACE, "wpt")
             xml.attribute(null, "lat", format(waypoint.point.latitude))
             xml.attribute(null, "lon", format(waypoint.point.longitude))
-            waypoint.point.elevation?.let { xml.textTag("ele", String.format(java.util.Locale.ROOT, "%.1f", it)) }
+            waypoint.point.elevation?.let { xml.textTag("ele", oneDecimal(it)) }
             waypoint.point.time?.let { xml.textTag("time", TIMESTAMP.format(it)) }
             waypoint.description?.takeIf(String::isNotBlank)?.let { xml.textTag("desc", it) }
             xml.endTag(NAMESPACE, "wpt")
@@ -46,18 +46,17 @@ class GpxWriter(private val newSerializer: () -> XmlSerializer = DEFAULT_SERIALI
         xml.startTag(NAMESPACE, "trk")
         track.name?.takeIf(String::isNotBlank)?.let { xml.textTag("name", it) }
 
-        for (segment in track.segments) {
-            if (segment.points.isEmpty()) continue
+        for (segment in 0 until points.segmentCount) {
             xml.startTag(NAMESPACE, "trkseg")
-            for (point in segment.points) {
+            for (i in points.segmentStart(segment) until points.segmentEnd(segment)) {
                 xml.startTag(NAMESPACE, "trkpt")
                 // Six decimals is ~0.1 m, past what consumer GPS resolves.
-                xml.attribute(null, "lat", format(point.latitude))
-                xml.attribute(null, "lon", format(point.longitude))
-                point.elevation?.let { xml.textTag("ele", String.format(java.util.Locale.ROOT, "%.1f", it)) }
-                point.time?.let { xml.textTag("time", TIMESTAMP.format(it)) }
+                xml.attribute(null, "lat", format(points.latitude(i)))
+                xml.attribute(null, "lon", format(points.longitude(i)))
+                points.elevation(i).takeUnless(Float::isNaN)?.let { xml.textTag("ele", oneDecimal(it.toDouble())) }
+                if (points.hasTime(i)) xml.textTag("time", timestamp(points.timeMillis(i)))
                 // Accuracy in metres, not true HDOP; see TrackPoint.accuracyMeters.
-                point.accuracyMeters?.let { xml.textTag("hdop", String.format(java.util.Locale.ROOT, "%.1f", it)) }
+                points.accuracy(i).takeUnless(Float::isNaN)?.let { xml.textTag("hdop", oneDecimal(it.toDouble())) }
                 xml.endTag(NAMESPACE, "trkpt")
             }
             xml.endTag(NAMESPACE, "trkseg")
@@ -76,6 +75,10 @@ class GpxWriter(private val newSerializer: () -> XmlSerializer = DEFAULT_SERIALI
     }
 
     private fun format(degrees: Double) = String.format(java.util.Locale.ROOT, "%.6f", degrees)
+
+    private fun oneDecimal(value: Double) = String.format(java.util.Locale.ROOT, "%.1f", value)
+
+    private fun timestamp(epochMillis: Long) = TIMESTAMP.format(java.time.Instant.ofEpochMilli(epochMillis))
 
     companion object {
         private const val ENCODING = "UTF-8"

@@ -2,7 +2,7 @@ package dev.samuelq.gpx.data.gpx
 
 import dev.samuelq.gpx.core.model.Track
 import dev.samuelq.gpx.core.model.TrackPoint
-import dev.samuelq.gpx.core.model.TrackSegment
+import dev.samuelq.gpx.core.model.TrackPointsBuilder
 import dev.samuelq.gpx.core.model.isValidCoordinate
 import dev.samuelq.gpx.core.model.Waypoint
 import org.xmlpull.v1.XmlPullParser
@@ -48,7 +48,7 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
     }
 
     private fun readGpx(parser: XmlPullParser): Track {
-        val segments = mutableListOf<TrackSegment>()
+        val points = TrackPointsBuilder()
         val waypoints = mutableListOf<Waypoint>()
         var trackName: String? = null
         var metadataName: String? = null
@@ -78,7 +78,7 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
                             if (trackDescription == null) trackDescription = value
                         }
 
-                        TAG_TRKSEG -> readSegment(parser)?.let(segments::add)
+                        TAG_TRKSEG -> readSegment(parser, points)
                         else -> skip(parser)
                     }
                 }
@@ -86,15 +86,14 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
                 // Routes are untimed but still worth showing.
                 TAG_RTE -> {
                     var routeName: String? = null
-                    val routePoints = mutableListOf<TrackPoint>()
+                    points.startSegment()
                     forEachChild(parser) {
                         when (parser.name) {
                             TAG_NAME -> routeName = readText(parser).takeIf(String::isNotBlank)
-                            TAG_RTEPT -> readPoint(parser)?.let(routePoints::add)
+                            TAG_RTEPT -> readPoint(parser)?.let(points::add)
                             else -> skip(parser)
                         }
                     }
-                    if (routePoints.isNotEmpty()) segments += TrackSegment(routePoints)
                     if (trackName == null) trackName = routeName
                 }
 
@@ -104,7 +103,7 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
 
         return Track(
             name = trackName ?: metadataName,
-            segments = segments.filter { it.points.isNotEmpty() },
+            points = points.build(),
             description = trackDescription,
             waypoints = waypoints,
         )
@@ -133,25 +132,26 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
         return Waypoint(TrackPoint(latitude, longitude, elevation, time), description)
     }
 
-    private fun readSegment(parser: XmlPullParser): TrackSegment? {
+    /** Appends one `<trkseg>` to [points] as a segment of its own. */
+    private fun readSegment(parser: XmlPullParser, points: TrackPointsBuilder) {
         val depth = parser.depth
-        val points = mutableListOf<TrackPoint>()
+        var count = 0
+        points.startSegment()
         forEachChild(parser) {
             when (parser.name) {
                 TAG_TRKPT -> readPoint(parser)?.let {
-                    if (points.size < MAX_POINTS_PER_SEGMENT) {
-                        points += it
+                    if (count++ < MAX_POINTS_PER_SEGMENT) {
+                        points.add(it)
                     } else {
                         // Non-local return, leaving the parser on this <trkseg>'s END_TAG.
                         skipRest(parser, depth)
-                        return TrackSegment(points)
+                        return
                     }
                 }
 
                 else -> skip(parser)
             }
         }
-        return if (points.isEmpty()) null else TrackSegment(points)
     }
 
     /** Null if lat/lon are unusable. */

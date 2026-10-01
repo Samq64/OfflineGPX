@@ -7,12 +7,10 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import dev.samuelq.gpx.core.analysis.TrackAnalyzer
 import dev.samuelq.gpx.core.analysis.TrackProfile
-import dev.samuelq.gpx.core.model.Track
-import dev.samuelq.gpx.core.model.TrackSegment
+import dev.samuelq.gpx.core.model.TrackPoints
 import dev.samuelq.gpx.data.db.TrackEntity
 import dev.samuelq.gpx.data.map.MapStore
 import dev.samuelq.gpx.data.map.OfflineMap
-import dev.samuelq.gpx.data.record.LiveTrace
 import dev.samuelq.gpx.data.record.AbandonedRecording
 import dev.samuelq.gpx.data.record.DiscardedRecording
 import dev.samuelq.gpx.data.record.RecordingController
@@ -97,7 +95,7 @@ class MapViewModel(
     private val _state = MutableStateFlow(MapUiState())
     val state: StateFlow<MapUiState> = _state.asStateFlow()
 
-    val trace: StateFlow<LiveTrace> = controller.trace
+    val trace: StateFlow<TrackPoints> = controller.trace
 
     private val liveChartsShown = MutableStateFlow(false)
 
@@ -113,9 +111,9 @@ class MapViewModel(
     val live: StateFlow<TrackProfile?> = combine(controller.trace, liveChartsShown, ::Pair)
         .runningFold(null as TrackProfile?) { last, (trace, shown) ->
             when {
-                trace.points.size < 2 -> null
+                trace.size < 2 -> null
                 shown || last == null ->
-                    TrackAnalyzer.analyze(trace.toTrack()).takeIf { it.stats.distanceMeters > 0.0 }
+                    TrackAnalyzer.analyze(trace).takeIf { it.stats.distanceMeters > 0.0 }
                 else -> last
             }
         }
@@ -373,12 +371,6 @@ class MapViewModel(
     fun undoDelete(id: Long) = repository.undoDelete(listOf(id))
 
     fun commitDelete(id: Long) = repository.commitDelete(listOf(id))
-
-    private fun LiveTrace.toTrack(): Track {
-        val ends = segmentStartIndices.drop(1) + points.size
-        val segments = segmentStartIndices.zip(ends) { from, to -> TrackSegment(points.subList(from, to)) }
-        return Track(name = null, segments = segments.ifEmpty { listOf(TrackSegment(points)) })
-    }
 
     companion object {
         val Factory = viewModelFactory {

@@ -2,7 +2,7 @@ package dev.samuelq.gpx.core.model
 
 import java.time.Instant
 
-/** One GPX `<trkpt>`/`<rtept>`; [elevation] and [time] are often absent in real files. */
+/** One fix or GPX point; [elevation] and [time] are often absent in real files. */
 data class TrackPoint(
     val latitude: Double,
     val longitude: Double,
@@ -16,9 +16,6 @@ data class TrackPoint(
 fun isValidCoordinate(latitude: Double, longitude: Double): Boolean =
     latitude in -90.0..90.0 && longitude in -180.0..180.0
 
-/** Contiguous points; nothing (distance, chart lines) connects across a segment boundary. */
-data class TrackSegment(val points: List<TrackPoint>)
-
 /** A GPX `<wpt>`: a note at the last known position, not a fix of its own. */
 data class Waypoint(
     val point: TrackPoint,
@@ -28,22 +25,153 @@ data class Waypoint(
 /** Raw geometry only; derived values live in [dev.samuelq.gpx.core.analysis.TrackProfile]. */
 data class Track(
     val name: String?,
-    val segments: List<TrackSegment>,
+    val points: TrackPoints,
     /** The `<trk><desc>`. */
     val description: String? = null,
     /** Unordered. */
     val waypoints: List<Waypoint> = emptyList(),
 ) {
-    val points: List<TrackPoint> = segments.flatMap(TrackSegment::points)
+    val isEmpty: Boolean get() = points.size == 0
+}
 
-    /** Index into [points] at which each segment begins. */
-    val segmentStartIndices: IntArray = IntArray(segments.size).also { starts ->
-        var offset = 0
-        segments.forEachIndexed { index, segment ->
-            starts[index] = offset
-            offset += segment.points.size
-        }
+/**
+ * A track's points as parallel columns, a third the memory of an object per point.
+ * Nothing (distance, chart lines) connects across a segment start.
+ *
+ * May share arrays with the [TrackPointsBuilder] it came from, which only ever writes past
+ * [size], so a snapshot never changes.
+ */
+class TrackPoints internal constructor(
+    val size: Int,
+    private val latitudes: DoubleArray,
+    private val longitudes: DoubleArray,
+    private val elevations: FloatArray,
+    private val times: LongArray,
+    private val accuracies: FloatArray,
+    private val starts: IntArray,
+    val segmentCount: Int,
+) {
+    val indices: IntRange get() = 0 until size
+
+    fun latitude(i: Int): Double = latitudes[check(i)]
+    fun longitude(i: Int): Double = longitudes[check(i)]
+
+    /** NaN where absent. */
+    fun elevation(i: Int): Float = elevations[check(i)]
+
+    /** Epoch millis, or [NO_TIME]. */
+    fun timeMillis(i: Int): Long = times[check(i)]
+    fun hasTime(i: Int): Boolean = times[check(i)] != NO_TIME
+
+    /** NaN where absent. */
+    fun accuracy(i: Int): Float = accuracies[check(i)]
+
+    /** Index into the points at which segment [segment] begins. */
+    fun segmentStart(segment: Int): Int = starts[segment]
+
+    /** Exclusive. */
+    fun segmentEnd(segment: Int): Int = if (segment + 1 < segmentCount) starts[segment + 1] else size
+
+    /** Index at which each segment begins; a copy. */
+    fun segmentStarts(): IntArray = starts.copyOf(segmentCount)
+
+    /** Allocates; for single points, not loops over the track. */
+    operator fun get(i: Int): TrackPoint = TrackPoint(
+        latitude = latitude(i),
+        longitude = longitude(i),
+        elevation = elevation(i).takeUnless(Float::isNaN)?.toDouble(),
+        time = timeMillis(i).takeIf { it != NO_TIME }?.let(Instant::ofEpochMilli),
+        accuracyMeters = accuracy(i).takeUnless(Float::isNaN)?.toDouble(),
+    )
+
+    fun first(): TrackPoint = get(0)
+    fun last(): TrackPoint = get(size - 1)
+    fun lastOrNull(): TrackPoint? = if (size > 0) last() else null
+    fun getOrNull(i: Int): TrackPoint? = if (i in 0 until size) get(i) else null
+
+    /** The same points cut at [starts] instead, which must begin with 0 when non-empty. */
+    fun withSegmentStarts(starts: IntArray): TrackPoints =
+        TrackPoints(size, latitudes, longitudes, elevations, times, accuracies, starts, starts.size)
+
+    /** Bounds-checked against [size], not the possibly longer shared array. */
+    private fun check(i: Int): Int {
+        if (i !in 0 until size) throw IndexOutOfBoundsException("Index $i, size $size")
+        return i
     }
 
-    val isEmpty: Boolean get() = points.isEmpty()
+    companion object {
+        const val NO_TIME = Long.MIN_VALUE
+
+        val EMPTY: TrackPoints = TrackPointsBuilder().build()
+
+        /** One list per segment; empty lists are dropped. */
+        fun of(vararg segments: List<TrackPoint>): TrackPoints = TrackPointsBuilder().apply {
+            for (segment in segments) {
+                startSegment()
+                segment.forEach(::add)
+            }
+        }.build()
+    }
+}
+
+/** Appends points, growing its arrays; [build] snapshots without copying. Not thread-safe. */
+class TrackPointsBuilder(capacity: Int = 256) {
+    private var latitudes = DoubleArray(capacity)
+    private var longitudes = DoubleArray(capacity)
+    private var elevations = FloatArray(capacity)
+    private var times = LongArray(capacity)
+    private var accuracies = FloatArray(capacity)
+    private var starts = IntArray(8)
+    private var segmentCount = 0
+    private var startPending = true
+
+    var size: Int = 0
+        private set
+
+    /** The next point begins a segment. Repeats and trailing calls add nothing. */
+    fun startSegment() {
+        startPending = true
+    }
+
+    fun add(point: TrackPoint) = add(
+        latitude = point.latitude,
+        longitude = point.longitude,
+        elevation = point.elevation?.toFloat() ?: Float.NaN,
+        timeMillis = point.time?.toEpochMilli() ?: TrackPoints.NO_TIME,
+        accuracy = point.accuracyMeters?.toFloat() ?: Float.NaN,
+    )
+
+    fun add(
+        latitude: Double,
+        longitude: Double,
+        elevation: Float = Float.NaN,
+        timeMillis: Long = TrackPoints.NO_TIME,
+        accuracy: Float = Float.NaN,
+    ) {
+        if (startPending) {
+            if (segmentCount == starts.size) starts = starts.copyOf(segmentCount * 2)
+            starts[segmentCount++] = size
+            startPending = false
+        }
+        if (size == latitudes.size) grow()
+        latitudes[size] = latitude
+        longitudes[size] = longitude
+        elevations[size] = elevation
+        times[size] = timeMillis
+        accuracies[size] = accuracy
+        size++
+    }
+
+    fun build(): TrackPoints =
+        TrackPoints(size, latitudes, longitudes, elevations, times, accuracies, starts, segmentCount)
+
+    /** New arrays, so snapshots built before keep the old ones untouched. */
+    private fun grow() {
+        val capacity = maxOf(16, latitudes.size * 2)
+        latitudes = latitudes.copyOf(capacity)
+        longitudes = longitudes.copyOf(capacity)
+        elevations = elevations.copyOf(capacity)
+        times = times.copyOf(capacity)
+        accuracies = accuracies.copyOf(capacity)
+    }
 }

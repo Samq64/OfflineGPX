@@ -322,16 +322,7 @@ fun MapScreen(
 
     // Indexed like the analysis, so a chart index is a point on this line.
     val liveOverlay = remember(trace, liveColor) {
-        if (trace.points.isEmpty()) {
-            null
-        } else {
-            RouteOverlay(
-                trackId = LIVE_TRACK_ID,
-                points = trace.points,
-                segmentStartIndices = trace.segmentStartIndices,
-                color = liveColor,
-            )
-        }
+        if (trace.size == 0) null else RouteOverlay(trackId = LIVE_TRACK_ID, points = trace, color = liveColor)
     }
 
     val windowHeight = with(density) { windowSize.height.toDp() }

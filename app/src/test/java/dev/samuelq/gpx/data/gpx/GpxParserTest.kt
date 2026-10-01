@@ -35,7 +35,7 @@ class GpxParserTest {
         assertEquals("Morning ride", track.name)
         assertEquals(2, track.points.size)
         assertEquals(47.1, track.points[0].latitude, 1e-9)
-        assertEquals(430.2, track.points[0].elevation!!, 1e-9)
+        assertEquals(430.2, track.points[0].elevation!!, 1e-3) // Stored as a Float.
         assertEquals(Instant.parse("2026-05-01T08:00:10Z"), track.points[1].time)
     }
 
@@ -50,9 +50,9 @@ class GpxParserTest {
             """.trimIndent()
         )
 
-        assertEquals(2, track.segments.size)
+        assertEquals(2, track.points.segmentCount)
         assertEquals(3, track.points.size)
-        assertTrue(track.segmentStartIndices.contentEquals(intArrayOf(0, 2)))
+        assertTrue(track.points.segmentStarts().contentEquals(intArrayOf(0, 2)))
     }
 
     @Test
@@ -83,7 +83,7 @@ class GpxParserTest {
 
         assertEquals("Planned", track.name)
         assertEquals(2, track.points.size)
-        assertEquals(1, track.segments.size)
+        assertEquals(1, track.points.segmentCount)
         assertNull(track.points[0].time)
     }
 

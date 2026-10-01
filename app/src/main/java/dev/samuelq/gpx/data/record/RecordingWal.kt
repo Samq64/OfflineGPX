@@ -2,7 +2,7 @@ package dev.samuelq.gpx.data.record
 
 import dev.samuelq.gpx.core.model.Track
 import dev.samuelq.gpx.core.model.TrackPoint
-import dev.samuelq.gpx.core.model.TrackSegment
+import dev.samuelq.gpx.core.model.TrackPointsBuilder
 import dev.samuelq.gpx.core.model.isValidCoordinate
 import dev.samuelq.gpx.core.model.Waypoint
 import java.io.BufferedWriter
@@ -76,28 +76,21 @@ class RecordingWal private constructor(
         fun recover(file: File): Track? {
             if (!file.exists()) return null
 
-            val segments = mutableListOf<TrackSegment>()
-            var current = mutableListOf<TrackPoint>()
+            val points = TrackPointsBuilder()
             val waypoints = mutableListOf<Waypoint>()
 
             file.forEachLine { line ->
                 val text = line.trim()
                 when {
                     text.isEmpty() -> Unit
-                    text == BREAK -> {
-                        if (current.isNotEmpty()) segments += TrackSegment(current)
-                        current = mutableListOf()
-                    }
+                    text == BREAK -> points.startSegment()
 
                     text.startsWith(WAYPOINT_PREFIX) -> parseWaypoint(text)?.let(waypoints::add)
-                    else -> parsePoint(text)?.let(current::add)
+                    else -> parsePoint(text)?.let(points::add)
                 }
             }
-            if (current.isNotEmpty()) segments += TrackSegment(current)
-
-            val usable = segments.filter { it.points.isNotEmpty() }
-            if (usable.isEmpty()) return null
-            return Track(name = null, segments = usable, waypoints = waypoints)
+            if (points.size == 0) return null
+            return Track(name = null, points = points.build(), waypoints = waypoints)
         }
 
         private fun parsePoint(line: String): TrackPoint? {

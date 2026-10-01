@@ -1,7 +1,9 @@
 package dev.samuelq.gpx.core.analysis
 
 import dev.samuelq.gpx.core.model.TrackPoint
+import dev.samuelq.gpx.core.model.TrackPoints
 import java.time.Instant
+import kotlin.math.abs
 
 /** Whole-track summary, in SI units; the UI formats. */
 data class TrackStats(
@@ -23,7 +25,8 @@ data class TrackStats(
  * Not a `data class`: array equality is O(n), and `remember` keys want identity.
  */
 class TrackProfile(
-    val points: List<TrackPoint>,
+    /** Cut at [segmentStartIndices], so gaps the clock shows are breaks here too. */
+    val points: TrackPoints,
     val segmentStartIndices: IntArray,
     /** All zeroes when [hasTime] is false. */
     val elapsedSeconds: FloatArray,
@@ -42,13 +45,20 @@ class TrackProfile(
      * the right leg; by distance otherwise.
      */
     fun indexOf(point: TrackPoint): Int {
-        val at = point.time
-        return if (at != null && hasTime) {
-            points.indices.minByOrNull { i ->
-                points[i].time?.let { kotlin.math.abs(it.toEpochMilli() - at.toEpochMilli()) } ?: Long.MAX_VALUE
+        val at = point.time?.toEpochMilli()
+        var best = -1
+        var bestScore = Double.MAX_VALUE
+        for (i in points.indices) {
+            val score = if (at != null && hasTime) {
+                abs(points.timeMillis(i) - at).toDouble()
+            } else {
+                haversineMeters(points.latitude(i), points.longitude(i), point.latitude, point.longitude)
             }
-        } else {
-            points.indices.minByOrNull { haversineMeters(points[it], point) }
-        } ?: -1
+            if (score < bestScore) {
+                bestScore = score
+                best = i
+            }
+        }
+        return best
     }
 }

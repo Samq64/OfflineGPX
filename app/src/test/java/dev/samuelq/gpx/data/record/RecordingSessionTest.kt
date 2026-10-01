@@ -75,8 +75,8 @@ class RecordingSessionTest {
         session.onFix(fix(61, 1_010.0))
 
         val trace = session.trace()
-        assertEquals(4, trace.points.size)
-        assertContentEquals(intArrayOf(0, 2), trace.segmentStartIndices)
+        assertEquals(4, trace.size)
+        assertContentEquals(intArrayOf(0, 2), trace.segmentStarts())
         assertEquals(20.0, session.distanceMeters, 0.1)
     }
 
@@ -131,7 +131,7 @@ class RecordingSessionTest {
         assertEquals(0.0, closing.latitude - fix(0, 0.0).latitude)
         now = 90_000
         assertEquals(30.0, session.totalSeconds)
-        assertEquals(2, session.trace().points.size)
+        assertEquals(2, session.trace().size)
     }
 
     @Test

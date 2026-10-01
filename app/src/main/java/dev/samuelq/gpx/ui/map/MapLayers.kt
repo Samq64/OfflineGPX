@@ -156,9 +156,8 @@ internal fun List<RouteOverlay>.toLines(styles: RouteStyles, focusedId: Long? = 
 
             val lonLat = DoubleArray((to - from) * 2)
             for (i in from until to) {
-                val point = route.points[i]
-                lonLat[(i - from) * 2] = point.longitude
-                lonLat[(i - from) * 2 + 1] = point.latitude
+                lonLat[(i - from) * 2] = route.points.longitude(i)
+                lonLat[(i - from) * 2 + 1] = route.points.latitude(i)
             }
             out.add(LineDrawable(lonLat, style).also { it.priority = priority })
         }

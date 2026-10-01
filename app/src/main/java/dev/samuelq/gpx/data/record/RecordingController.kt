@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import androidx.annotation.StringRes
 import dev.samuelq.gpx.core.model.TrackPoint
+import dev.samuelq.gpx.core.model.TrackPoints
 import dev.samuelq.gpx.core.model.Waypoint
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -32,17 +33,6 @@ sealed interface RecordingState {
     ) : RecordingState
 }
 
-/** The live route for the map; apart from [RecordingState] since it updates less often. */
-class LiveTrace(
-    val points: List<TrackPoint>,
-    /** A pause starts a new segment. */
-    val segmentStartIndices: IntArray,
-) {
-    companion object {
-        val Empty = LiveTrace(emptyList(), IntArray(0))
-    }
-}
-
 /** Delivered once. */
 sealed interface RecordingEvent {
     /** [id] is the saved track's row. */
@@ -62,8 +52,9 @@ class RecordingController(context: Context) {
     private val _state = MutableStateFlow<RecordingState>(RecordingState.Idle)
     val state: StateFlow<RecordingState> = _state.asStateFlow()
 
-    private val _trace = MutableStateFlow(LiveTrace.Empty)
-    val trace: StateFlow<LiveTrace> = _trace.asStateFlow()
+    /** The live route; apart from [state] since it updates less often. A pause starts a segment. */
+    private val _trace = MutableStateFlow(TrackPoints.EMPTY)
+    val trace: StateFlow<TrackPoints> = _trace.asStateFlow()
 
     private val _events = Channel<RecordingEvent>(Channel.BUFFERED)
     val events: Flow<RecordingEvent> = _events.receiveAsFlow()
@@ -77,7 +68,7 @@ class RecordingController(context: Context) {
         if (state == RecordingState.Idle) _stopRequested.value = false
     }
 
-    internal fun updateTrace(trace: LiveTrace) {
+    internal fun updateTrace(trace: TrackPoints) {
         _trace.value = trace
     }
 

@@ -2,7 +2,7 @@ package dev.samuelq.gpx.core.analysis
 
 import dev.samuelq.gpx.core.model.Track
 import dev.samuelq.gpx.core.model.TrackPoint
-import dev.samuelq.gpx.core.model.TrackSegment
+import dev.samuelq.gpx.core.model.TrackPoints
 import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -185,7 +185,7 @@ class TrackAnalyzerTest {
     @Test
     fun `a partially timed track is not split by a gap it otherwise ignores`() {
         val track = rideWithGap(gapSeconds = 600)
-        val points = track.segments[0].points.toMutableList()
+        val points = track.points.indices.map(track.points::get).toMutableList()
         // One missing timestamp makes the whole track untimed, gap detection included.
         points[0] = points[0].copy(time = null)
         val profile = TrackAnalyzer.analyze(
@@ -408,3 +408,9 @@ class TrackAnalyzerTest {
 }
 
 private fun TrackProfile.maxSpeed(): Double = speedMps.filterNot(Float::isNaN).max().toDouble()
+
+/** Fixtures read as segments; a segment is just its points. */
+private fun TrackSegment(points: List<TrackPoint>) = points
+
+private fun Track(name: String?, segments: List<List<TrackPoint>>) =
+    Track(name, TrackPoints.of(*segments.toTypedArray()))

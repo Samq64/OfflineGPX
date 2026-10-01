@@ -1,8 +1,8 @@
 package dev.samuelq.gpx.core.analysis
 
 import dev.samuelq.gpx.core.model.Track
-import dev.samuelq.gpx.core.model.TrackPoint
-import java.time.Duration
+import dev.samuelq.gpx.core.model.TrackPoints
+import java.time.Instant
 import kotlin.math.abs
 import kotlin.math.max
 
@@ -28,15 +28,17 @@ object TrackAnalyzer {
     const val GAP_INTERVAL_MULTIPLE = 10.0
 
     /** @param minGapSeconds exposed for tests; not a setting, as it would re-cut stored stats. */
-    fun analyze(track: Track, minGapSeconds: Double = MIN_GAP_SECONDS): TrackProfile {
-        val points = track.points
+    fun analyze(track: Track, minGapSeconds: Double = MIN_GAP_SECONDS): TrackProfile =
+        analyze(track.points, minGapSeconds)
+
+    fun analyze(points: TrackPoints, minGapSeconds: Double = MIN_GAP_SECONDS): TrackProfile {
         val size = points.size
 
         // Partially timed files are treated as untimed rather than inventing speeds.
-        val hasTime = size > 1 && points.all { it.time != null }
+        val hasTime = size > 1 && points.indices.all(points::hasTime)
         val starts =
-            if (hasTime) breaksAt(points, track.segmentStartIndices, minGapSeconds)
-            else track.segmentStartIndices
+            if (hasTime) breaksAt(points, minGapSeconds)
+            else points.segmentStarts()
         val ends = IntArray(starts.size) { i -> if (i + 1 < starts.size) starts[i + 1] else size }
 
         val elapsed = FloatArray(size)
@@ -44,23 +46,18 @@ object TrackAnalyzer {
         val elevation = FloatArray(size)
         val speed = FloatArray(size)
 
-        val startedAt = points.firstOrNull()?.time
+        val startedAt = if (size > 0 && points.hasTime(0)) Instant.ofEpochMilli(points.timeMillis(0)) else null
         var hasElevation = false
 
         for (i in 0 until size) {
-            val ele = points[i].elevation
-            if (ele != null) {
-                hasElevation = true
-                elevation[i] = ele.toFloat()
-            } else {
-                elevation[i] = Float.NaN
-            }
+            elevation[i] = points.elevation(i)
+            if (!elevation[i].isNaN()) hasElevation = true
         }
 
         if (hasTime) {
-            val origin = points[0].time!!
+            val origin = points.timeMillis(0)
             for (i in 0 until size) {
-                val seconds = Duration.between(origin, points[i].time!!).toNanos() / 1e9
+                val seconds = (points.timeMillis(i) - origin) / 1000.0
                 // Clamp to monotonic: some exporters emit out-of-order timestamps.
                 elapsed[i] = if (i == 0) 0f else max(elapsed[i - 1], seconds.toFloat())
             }
@@ -72,7 +69,11 @@ object TrackAnalyzer {
             val end = ends[segment]
             for (i in start until end) {
                 // Gaps between segments are signal loss, not travel.
-                if (i > start) cumulative += haversineMeters(points[i - 1], points[i])
+                if (i > start) {
+                    cumulative += haversineMeters(
+                        points.latitude(i - 1), points.longitude(i - 1), points.latitude(i), points.longitude(i),
+                    )
+                }
                 distance[i] = cumulative.toFloat()
             }
         }
@@ -118,7 +119,7 @@ object TrackAnalyzer {
         )
 
         return TrackProfile(
-            points = points,
+            points = points.withSegmentStarts(starts),
             segmentStartIndices = starts,
             elapsedSeconds = elapsed,
             distanceMeters = distance,
@@ -134,22 +135,16 @@ object TrackAnalyzer {
      * The file's own segment boundaries, plus one wherever the clock jumps: auto-pause
      * leaves one long interval that would otherwise read as riding through the stop.
      */
-    private fun breaksAt(
-        points: List<TrackPoint>,
-        declared: IntArray,
-        minGapSeconds: Double,
-    ): IntArray {
+    private fun breaksAt(points: TrackPoints, minGapSeconds: Double): IntArray {
+        val declared = points.segmentStarts()
         if (points.size < 3) return declared
 
+        // Only called when every point is timed.
         val intervals = DoubleArray(points.size - 1)
         var timed = 0
         for (i in 1 until points.size) {
-            val previous = points[i - 1].time
-            val current = points[i].time
-            if (previous != null && current != null) {
-                val seconds = (current.toEpochMilli() - previous.toEpochMilli()) / 1000.0
-                if (seconds > 0) intervals[timed++] = seconds
-            }
+            val seconds = (points.timeMillis(i) - points.timeMillis(i - 1)) / 1000.0
+            if (seconds > 0) intervals[timed++] = seconds
         }
         if (timed < MIN_INTERVALS_FOR_GAPS) return declared
 
@@ -159,11 +154,7 @@ object TrackAnalyzer {
 
         val breaks = sortedSetOf<Int>().apply { addAll(declared.toList()) }
         for (i in 1 until points.size) {
-            val previous = points[i - 1].time ?: continue
-            val current = points[i].time ?: continue
-            if ((current.toEpochMilli() - previous.toEpochMilli()) / 1000.0 > threshold) {
-                breaks += i
-            }
+            if ((points.timeMillis(i) - points.timeMillis(i - 1)) / 1000.0 > threshold) breaks += i
         }
         return breaks.toIntArray()
     }

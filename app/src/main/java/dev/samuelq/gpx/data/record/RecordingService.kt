@@ -9,6 +9,7 @@ import androidx.annotation.StringRes
 import dev.samuelq.gpx.GpxApplication
 import dev.samuelq.gpx.R
 import dev.samuelq.gpx.core.model.TrackPoint
+import dev.samuelq.gpx.core.model.TrackPoints
 import dev.samuelq.gpx.data.track.asTrackName
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
@@ -142,7 +143,7 @@ class RecordingService : Service() {
         ticker?.cancel()
         ticker = null
         controller.update(RecordingState.Idle)
-        controller.updateTrace(LiveTrace.Empty)
+        controller.updateTrace(TrackPoints.EMPTY)
         notifications.remove()
     }
 

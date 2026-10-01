@@ -2,6 +2,7 @@ package dev.samuelq.gpx.ui.map
 
 import androidx.compose.ui.graphics.Color
 import dev.samuelq.gpx.core.model.TrackPoint
+import dev.samuelq.gpx.core.model.TrackPoints
 import dev.samuelq.gpx.data.map.OfflineMap
 import dev.samuelq.gpx.data.map.MapFileHeader
 import java.io.File
@@ -15,8 +16,7 @@ class MapExtentTest {
 
     private fun route(vararg positions: Pair<Double, Double>, id: Long = 1) = RouteOverlay(
         trackId = id,
-        points = positions.map { (lat, lon) -> TrackPoint(lat, lon, null, null) },
-        segmentStartIndices = intArrayOf(0),
+        points = TrackPoints.of(positions.map { (lat, lon) -> TrackPoint(lat, lon, null, null) }),
         color = Color.Red,
     )
 

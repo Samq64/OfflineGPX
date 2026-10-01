@@ -184,10 +184,10 @@ internal fun MarkerSymbols.pins(
 /** From the last point back to one far enough off to point from, within its segment. */
 internal fun RouteOverlay.headingDegrees(): Double? {
     val last = points.lastOrNull() ?: return null
-    val from = segmentStartIndices.lastOrNull() ?: 0
-    for (index in points.lastIndex - 1 downTo from) {
-        val earlier = points[index]
-        if (haversineMeters(earlier, last) >= HEADING_MIN_METERS) return bearingDegrees(earlier, last)
+    val from = points.segmentStart(points.segmentCount - 1)
+    for (index in points.size - 2 downTo from) {
+        val distance = haversineMeters(points.latitude(index), points.longitude(index), last.latitude, last.longitude)
+        if (distance >= HEADING_MIN_METERS) return bearingDegrees(points[index], last)
     }
     return null
 }

@@ -4,6 +4,8 @@ import dev.samuelq.gpx.core.analysis.FixFilter
 import dev.samuelq.gpx.core.analysis.SpeedWindow
 import dev.samuelq.gpx.core.analysis.haversineMeters
 import dev.samuelq.gpx.core.model.TrackPoint
+import dev.samuelq.gpx.core.model.TrackPoints
+import dev.samuelq.gpx.core.model.TrackPointsBuilder
 import dev.samuelq.gpx.core.model.Waypoint
 import java.time.Instant
 
@@ -37,9 +39,7 @@ internal class RecordingSession(
     /** First logged point, on [clock]; the ride starts where its data does. */
     private var startedAt: Long? = null
 
-    private val tracePoints = mutableListOf<TrackPoint>()
-    private val traceSegmentStarts = mutableListOf<Int>()
-    private var traceStartsSegment = true
+    private val tracePoints = TrackPointsBuilder()
     private var tracePublishedAt = 0
 
     /** On [clock]; elapsed stands still from either, as the log ends there. */
@@ -56,7 +56,7 @@ internal class RecordingSession(
     /** Also on the first point, so the map shows a position as soon as there is one. */
     val traceDue: Boolean
         get() = tracePoints.size - tracePublishedAt >= TRACE_PUBLISH_EVERY ||
-            (tracePublishedAt == 0 && tracePoints.isNotEmpty())
+            (tracePublishedAt == 0 && tracePoints.size > 0)
 
     /** Returns the point to log, or null if rejected or paused. */
     fun onFix(fix: TrackPoint): TrackPoint? {
@@ -81,11 +81,7 @@ internal class RecordingSession(
     private fun logged(point: TrackPoint) {
         lastPoint = point
         pointCount++
-        if (traceStartsSegment) {
-            traceSegmentStarts += tracePoints.size
-            traceStartsSegment = false
-        }
-        tracePoints += point
+        tracePoints.add(point)
     }
 
     /**
@@ -118,7 +114,7 @@ internal class RecordingSession(
         val closing = closeAt(at)
         paused = true
         pausedAt = clock()
-        traceStartsSegment = true
+        tracePoints.startSegment()
         distanceFrom = null
         currentSpeedMps = null
         filter.reset()
@@ -142,9 +138,10 @@ internal class RecordingSession(
         return waypoint
     }
 
-    fun trace(): LiveTrace {
+    /** A snapshot sharing the builder's arrays, so publishing doesn't copy the ride. */
+    fun trace(): TrackPoints {
         tracePublishedAt = tracePoints.size
-        return LiveTrace(tracePoints.toList(), traceSegmentStarts.toIntArray())
+        return tracePoints.build()
     }
 
     fun state() = RecordingState.Active(
