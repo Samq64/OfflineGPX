@@ -1,6 +1,7 @@
 package dev.samuelq.gpx.ui.library
 
 import dev.samuelq.gpx.data.db.TrackEntity
+import dev.samuelq.gpx.data.settings.TrackOrder
 import dev.samuelq.gpx.data.settings.TrackSort
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -35,7 +36,7 @@ class TrackSortTest {
     )
 
     private fun List<TrackEntity>.ids(sort: TrackSort) =
-        sortedFor(sort).map(TrackEntity::id)
+        sortedFor(TrackOrder(sort)).map(TrackEntity::id)
 
     @Test
     fun `recent keeps the repository order`() {
@@ -59,5 +60,12 @@ class TrackSortTest {
     fun `name sorts by title ignoring case`() {
         val tracks = listOf(track(1, "zeta.gpx"), track(2, "x.gpx", trackName = "alpha"), track(3, "Beta.gpx"))
         assertEquals(listOf(2L, 3L, 1L), tracks.ids(TrackSort.NAME))
+    }
+
+    @Test
+    fun `turned round, a sort runs the other way, ties included`() {
+        val tracks = listOf(track(1, "a", meters = 5.0), track(2, "b", meters = 9.0), track(3, "c", meters = 5.0))
+        assertEquals(listOf(2L, 1L, 3L), tracks.sortedFor(TrackOrder(TrackSort.LENGTH)).map(TrackEntity::id))
+        assertEquals(listOf(3L, 1L, 2L), tracks.sortedFor(TrackOrder(TrackSort.LENGTH, descending = false)).map(TrackEntity::id))
     }
 }

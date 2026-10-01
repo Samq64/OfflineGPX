@@ -20,6 +20,7 @@ import dev.samuelq.gpx.di.appContainer
 import dev.samuelq.gpx.ui.library.sortedFor
 import dev.samuelq.gpx.ui.track.FocusedTrack
 import dev.samuelq.gpx.ui.track.TrackRef
+import dev.samuelq.gpx.ui.track.trackTitle
 import dev.samuelq.gpx.ui.track.toTrackMessageRes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -47,11 +48,11 @@ sealed interface MapMessage {
 
     data object EditFailed : MapMessage
 
-    /** Undone with [MapViewModel.show]. */
-    class Hidden(val id: Long) : MapMessage
+    /** Undone with [MapViewModel.show]. [name] is the track's, for the message. */
+    class Hidden(val id: Long, val name: String) : MapMessage
 
-    /** A trim or split, undone with [MapViewModel.undoEdit], else [MapViewModel.commitEdit]. */
-    class Edited(val edit: TrackEdit) : MapMessage
+    /** A trim or split of [name], undone with [MapViewModel.undoEdit], else [MapViewModel.commitEdit]. */
+    class Edited(val edit: TrackEdit, val name: String) : MapMessage
 }
 
 /** Visible tracks, with their geometry once it has been read off disk. */
@@ -130,8 +131,8 @@ class MapViewModel(
     init {
         // `update` at every writer: a non-atomic read-modify-write lost renames during geometry loads.
         viewModelScope.launch {
-            combine(repository.tracks, settings.trackSort) { all, sort ->
-                all.filter(TrackEntity::visible).sortedFor(sort).asReversed()
+            combine(repository.tracks, settings.trackOrder) { all, order ->
+                all.filter(TrackEntity::visible).sortedFor(order).asReversed()
             }.collect { entities ->
                 _state.update { it.copy(entities = entities, loading = true) }
                 loadMissing(entities)
@@ -235,11 +236,15 @@ class MapViewModel(
 
     /** The caller drops focus too. */
     fun hide(id: Long) {
+        val name = nameOf(id)
         viewModelScope.launch {
             repository.setVisible(id, false)
-            _messages.trySend(MapMessage.Hidden(id))
+            _messages.trySend(MapMessage.Hidden(id, name))
         }
     }
+
+    private fun nameOf(id: Long): String =
+        _state.value.entity(id)?.let { trackTitle(it.trackName, it.displayName) }.orEmpty()
 
     fun show(id: Long) {
         viewModelScope.launch { repository.setVisible(id, true) }
@@ -253,17 +258,19 @@ class MapViewModel(
     fun commitDelete(id: Long) = repository.commitDelete(listOf(id))
 
     /** Keeps points [range], inclusive. */
-    fun trim(id: Long, range: IntRange) = edit { repository.trim(id, range.first, range.last) }
+    fun trim(id: Long, range: IntRange) = edit(id) { repository.trim(id, range.first, range.last) }
 
     /** At point [at], which both parts share. */
-    fun split(id: Long, at: Int) = edit { repository.split(id, at) }
+    fun split(id: Long, at: Int) = edit(id) { repository.split(id, at) }
 
-    private fun edit(run: suspend () -> Result<TrackEdit>) {
+    private fun edit(id: Long, run: suspend () -> Result<TrackEdit>) {
+        // Before it changes: a split renames the track.
+        val name = nameOf(id)
         viewModelScope.launch {
             run().fold(
                 onSuccess = { edit ->
                     refresh(edit.id)
-                    _messages.trySend(MapMessage.Edited(edit))
+                    _messages.trySend(MapMessage.Edited(edit, name))
                 },
                 onFailure = { _messages.trySend(MapMessage.EditFailed) },
             )

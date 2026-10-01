@@ -27,13 +27,19 @@ data class Settings(
 }
 
 /** The library's order, which the map stacks by too, the list's top drawn on top. */
-enum class TrackSort {
-    RECENT, DATE, LENGTH, NAME;
+enum class TrackSort(
+    /** The way it runs when picked: newest and longest first, names A to Z. */
+    val naturallyDescending: Boolean,
+) {
+    RECENT(true), DATE(true), LENGTH(true), NAME(false);
 
     companion object {
         val DEFAULT = RECENT
     }
 }
+
+/** A sort and which way it runs. */
+data class TrackOrder(val sort: TrackSort, val descending: Boolean = sort.naturallyDescending)
 
 /** `SharedPreferences` rather than DataStore, to avoid a dependency for a handful of keys. */
 class SettingsRepository(context: Context) {
@@ -46,17 +52,28 @@ class SettingsRepository(context: Context) {
     val settings: StateFlow<Settings> = _settings.asStateFlow()
 
     /** Apart from [settings] so a re-sort doesn't recompose everything that reads them. */
-    private val _trackSort = MutableStateFlow(readTrackSort())
-    val trackSort: StateFlow<TrackSort> = _trackSort.asStateFlow()
+    private val _trackOrder = MutableStateFlow(readTrackOrder())
+    val trackOrder: StateFlow<TrackOrder> = _trackOrder.asStateFlow()
 
-    fun setTrackSort(sort: TrackSort) {
-        prefs.edit { putString(KEY_TRACK_SORT, sort.name) }
-        _trackSort.value = sort
+    /** Runs its natural way; [setTrackSortDescending] turns it round. */
+    fun setTrackSort(sort: TrackSort) = setTrackOrder(TrackOrder(sort))
+
+    fun setTrackSortDescending(descending: Boolean) = setTrackOrder(_trackOrder.value.copy(descending = descending))
+
+    private fun setTrackOrder(order: TrackOrder) {
+        prefs.edit {
+            putString(KEY_TRACK_SORT, order.sort.name)
+            putBoolean(KEY_TRACK_SORT_DESCENDING, order.descending)
+        }
+        _trackOrder.value = order
     }
 
-    private fun readTrackSort(): TrackSort = prefs.getString(KEY_TRACK_SORT, null)
-        ?.let { name -> TrackSort.entries.firstOrNull { it.name == name } }
-        ?: TrackSort.DEFAULT
+    private fun readTrackOrder(): TrackOrder {
+        val sort = prefs.getString(KEY_TRACK_SORT, null)
+            ?.let { name -> TrackSort.entries.firstOrNull { it.name == name } }
+            ?: TrackSort.DEFAULT
+        return TrackOrder(sort, prefs.getBoolean(KEY_TRACK_SORT_DESCENDING, sort.naturallyDescending))
+    }
 
     fun setUnits(units: UnitSystem) = update { putString(KEY_UNITS, units.name) }
 
@@ -89,5 +106,6 @@ class SettingsRepository(context: Context) {
         const val KEY_ZOOM_BUTTONS = "show_zoom_buttons"
         const val KEY_ACCURACY = "max_accuracy_meters"
         const val KEY_TRACK_SORT = "track_sort"
+        const val KEY_TRACK_SORT_DESCENDING = "track_sort_descending"
     }
 }

@@ -29,6 +29,9 @@ fun RecordingOutcomes(
     val resources = LocalResources.current
     val discarded = stringResource(R.string.record_discarded)
     val saveFailed = stringResource(R.string.record_save_failed)
+    // By the name it would have been saved as; a blank one would have been the default.
+    fun discardedNamed(name: String) =
+        if (name.isBlank()) discarded else resources.getString(R.string.record_discarded_named, name.trim())
 
     LaunchedEffect(recorder) {
         recorder.events.collect { event ->
@@ -36,7 +39,7 @@ fun RecordingOutcomes(
                 is RecordingEvent.Saved -> onSaved(event.id)
                 is RecordingEvent.Discarded -> event.recording?.let { recording ->
                     offerUndo(
-                        discarded,
+                        discardedNamed(recording.name),
                         { recovery.restoreDiscarded(recording) },
                         { recovery.forgetDiscarded(recording) },
                     )
@@ -52,7 +55,7 @@ fun RecordingOutcomes(
                 is RecoveryEvent.Saved -> onSaved(event.id)
                 RecoveryEvent.Failed -> say(saveFailed)
                 is RecoveryEvent.AbandonedDiscarded -> offerUndo(
-                    discarded,
+                    discardedNamed(event.name.ifBlank { event.recording.defaultName }),
                     { recovery.restoreAbandoned(event.recording, event.name) },
                     { recovery.forgetAbandoned(event.recording) },
                 )

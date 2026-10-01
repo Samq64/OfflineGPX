@@ -509,7 +509,7 @@ private fun SheetTitle(
         actions?.let {
             TrackMenu(
                 it.onRename, it.onShare, it.onHide, it.onDelete,
-                onTrim = it.onTrim, onSplit = it.onSplit, onDuplicate = it.onDuplicate,
+                onTrim = it.onTrim, onSplit = it.onSplit, showSplit = true, onDuplicate = it.onDuplicate,
             )
         }
         onClose?.let {

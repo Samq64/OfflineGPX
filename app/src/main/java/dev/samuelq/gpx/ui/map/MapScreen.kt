@@ -60,6 +60,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -82,7 +83,6 @@ import dev.samuelq.gpx.ui.theme.slot
 import dev.samuelq.gpx.ui.track.FocusedTrack
 import dev.samuelq.gpx.ui.track.TrackActions
 import dev.samuelq.gpx.ui.track.TrimControls
-import dev.samuelq.gpx.ui.track.SplitDialog
 import dev.samuelq.gpx.ui.track.TrackNameDialog
 import dev.samuelq.gpx.ui.track.TrackRef
 import dev.samuelq.gpx.ui.track.TrackSheetPeekHeight
@@ -109,6 +109,8 @@ fun MapScreen(
 ) {
     val mapController = remember { MapController() }
     val context = LocalContext.current
+    // Not context.getString: a long-lived collector would keep the old locale.
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     val state by viewModel.state.collectAsStateWithLifecycle()
     val trace by viewModel.trace.collectAsStateWithLifecycle()
@@ -156,24 +158,18 @@ fun MapScreen(
     var selectedIndex by remember(focusedTrack?.id, isRecording) { mutableStateOf<Int?>(null) }
     // The points a trim being set up keeps; null when not trimming.
     var trimRange by remember(focusedTrack?.id) { mutableStateOf<IntRange?>(null) }
-    // The point a split waits to be confirmed at.
-    var splitAt by remember(focusedTrack?.id) { mutableStateOf<Int?>(null) }
     var tappedWaypoint by remember(focusedTrack?.id, isRecording) { mutableStateOf<Waypoint?>(null) }
     // Read only by the tooltip's layout, so panning doesn't recompose this screen.
     val tappedWaypointAt = remember { mutableStateOf(Offset.Zero) }
 
     val renameFailed = stringResource(R.string.library_rename_failed)
     val editFailed = stringResource(R.string.track_edit_failed)
-    val trimmed = stringResource(R.string.track_trimmed)
-    val splitDone = stringResource(R.string.track_split_done)
-    val hidden = stringResource(R.string.track_hidden)
     val importFailed = stringResource(R.string.library_import_failed)
     val stopToOpen = stringResource(R.string.record_stop_to_open)
     val locationOff = stringResource(R.string.map_location_off)
     val locationDenied = stringResource(R.string.map_location_denied)
 
     val undo = stringResource(R.string.action_undo)
-    val deleted = pluralStringResource(R.plurals.library_deleted, 1, 1)
 
     // Replaces rather than queues: a stale answer to a tap is misleading. Replacing an undo
     // commits it.
@@ -253,10 +249,16 @@ fun MapScreen(
             when (message) {
                 MapMessage.RenameFailed -> say(renameFailed)
                 MapMessage.ImportFailed -> say(importFailed)
-                is MapMessage.Hidden -> offerUndo(hidden, onUndo = { viewModel.show(message.id) })
+                is MapMessage.Hidden -> offerUndo(
+                    resources.getString(R.string.track_hidden, message.name),
+                    onUndo = { viewModel.show(message.id) },
+                )
                 MapMessage.EditFailed -> say(editFailed)
                 is MapMessage.Edited -> offerUndo(
-                    if (message.edit.added != null) splitDone else trimmed,
+                    resources.getString(
+                        if (message.edit.added != null) R.string.track_split_done else R.string.track_trimmed,
+                        message.name,
+                    ),
                     onUndo = { viewModel.undoEdit(message.edit) },
                     onCommit = { viewModel.commitEdit(message.edit) },
                 )
@@ -331,10 +333,6 @@ fun MapScreen(
     }
     // Declared after, so it's asked first: back leaves a trim before anything else.
     BackHandler(enabled = trimRange != null) { trimRange = null }
-    // Room for the charts the slider is set against.
-    LaunchedEffect(trimRange != null) {
-        if (trimRange != null && !sidePanel) sheetState.expand()
-    }
 
     // --- What the canvas draws, and how much room it has ---------------------------
 
@@ -400,11 +398,8 @@ fun MapScreen(
     }
     // A collapsed sheet otherwise stays at the placeholder peek it settled on. Not once the
     // subject is gone: that would cancel the hide.
-    // Not while a trim opens the sheet: its header changes the peek mid-expand, and this would cancel it.
     LaunchedEffect(peekHeight) {
-        if (hasSheet && trimRange == null && sheetState.currentValue == SheetValue.PartiallyExpanded) {
-            sheetState.partialExpand()
-        }
+        if (hasSheet && sheetState.currentValue == SheetValue.PartiallyExpanded) sheetState.partialExpand()
     }
     // From the live offset: the settled value only updates after a drag, so dependents lagged.
     var scaffoldHeight by remember { mutableIntStateOf(0) }
@@ -475,7 +470,7 @@ fun MapScreen(
                     viewModel.focus(null)
                     viewModel.delete(entity.id)
                     offerUndo(
-                        deleted,
+                        resources.getString(R.string.track_deleted, trackTitle(entity.trackName, entity.displayName)),
                         onUndo = { viewModel.undoDelete(entity.id) },
                         onCommit = { viewModel.commitDelete(entity.id) },
                     )
@@ -484,7 +479,7 @@ fun MapScreen(
                     selectedIndex = null
                     trimRange = 0..(focusedTrack.profile.points.size - 1)
                 },
-                onSplit = splittable?.let { at -> { splitAt = at } },
+                onSplit = splittable?.let { at -> { viewModel.split(entity.id, at) } },
                 onDuplicate = { viewModel.duplicate(entity.id) },
             )
         }
@@ -781,21 +776,6 @@ fun MapScreen(
                     .fillMaxWidth()
                     .height(buttonsHeight)
                     .background(MaterialTheme.colorScheme.surfaceContainer)
-            )
-        }
-    }
-
-    focusedTrack?.let { track ->
-        splitAt?.let { at ->
-            SplitDialog(
-                title = focusedTitle,
-                profile = track.profile,
-                at = at,
-                onConfirm = {
-                    splitAt = null
-                    viewModel.split(track.id, at)
-                },
-                onDismiss = { splitAt = null },
             )
         }
     }

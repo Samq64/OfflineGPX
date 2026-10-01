@@ -68,6 +68,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -129,7 +130,7 @@ fun SettingsScreen(
     }
 
     val imported = stringResource(R.string.settings_maps_imported)
-    val deleted = stringResource(R.string.settings_maps_deleted)
+    val resources = LocalResources.current
     val undo = stringResource(R.string.action_undo)
 
     // Undoable rather than confirmed: a mis-tap would cost re-fetching the file.
@@ -138,7 +139,7 @@ fun SettingsScreen(
         scope.launch {
             snackbarHostState.showUndo(
                 context = context,
-                message = deleted,
+                message = resources.getString(R.string.settings_maps_deleted, map.displayName),
                 undoLabel = undo,
                 onUndo = { viewModel.undoDeleteMap(map) },
                 onCommit = { viewModel.commitDeleteMap(map) },

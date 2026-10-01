@@ -359,6 +359,8 @@ class TrackRepository(
                     trackName = name,
                     lastOpenedAtEpochMillis = System.currentTimeMillis(),
                     colorIndex = leastUsedSlot(dao.colorUsage(), TrackEntity.NEUTRAL_SLOT),
+                    // Shown, even of a hidden track: a copy is made to be looked at.
+                    visible = true,
                 )
                 dao.upsert(row)
             } catch (e: Throwable) {

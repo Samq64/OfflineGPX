@@ -1,8 +1,5 @@
 package dev.samuelq.gpx.ui.track
 
-import dev.samuelq.gpx.ui.format.LocalFormatters
-import dev.samuelq.gpx.ui.format.Formatters
-import dev.samuelq.gpx.core.analysis.TrackProfile
 import android.content.Context
 import android.content.Intent
 import androidx.compose.material3.AlertDialog
@@ -102,27 +99,3 @@ fun shareTrackIntent(context: Context, location: String, trackName: String?, dis
 }
 
 private const val GPX = ".gpx"
-
-/** Each part's distance and duration, so the split point can be checked before it's made. */
-@Composable
-fun SplitDialog(title: String, profile: TrackProfile, at: Int, onConfirm: () -> Unit, onDismiss: () -> Unit) {
-    val formatters = LocalFormatters.current
-    @Composable
-    fun part(from: Int, to: Int, number: Int): String {
-        val distance = formatters.distance((profile.distanceMeters[to] - profile.distanceMeters[from]).toDouble())
-        val duration = if (profile.hasTime) {
-            "  ·  " + Formatters.duration((profile.elapsedSeconds[to] - profile.elapsedSeconds[from]).toDouble())
-        } else {
-            ""
-        }
-        return "${stringResource(R.string.split_part, title, number)}: $distance$duration"
-    }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.split_title, title)) },
-        text = { Text(part(0, at, 1) + "\n" + part(at, profile.points.size - 1, 2)) },
-        confirmButton = { TextButton(onClick = onConfirm) { Text(stringResource(R.string.split_confirm)) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
-    )
-}
-

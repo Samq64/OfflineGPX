@@ -10,6 +10,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import dev.samuelq.gpx.data.db.TrackEntity
 import dev.samuelq.gpx.data.settings.SettingsRepository
+import dev.samuelq.gpx.data.settings.TrackOrder
 import dev.samuelq.gpx.data.settings.TrackSort
 import dev.samuelq.gpx.data.track.TrackRepository
 import dev.samuelq.gpx.di.appContainer
@@ -39,6 +40,7 @@ sealed interface LibraryEvent {
     data class ExportedAll(val written: Int, val requested: Int) : LibraryEvent
     data object RenameFailed : LibraryEvent
     data object DuplicateFailed : LibraryEvent
+    data class Duplicated(val id: Long) : LibraryEvent
 }
 
 /** `@Stable` so a row's captured lambdas can be memoised. */
@@ -53,7 +55,7 @@ class LibraryViewModel(
     private val _query = MutableStateFlow("")
     val query: StateFlow<String> = _query.asStateFlow()
 
-    val sort: StateFlow<TrackSort> = settings.trackSort
+    val order: StateFlow<TrackOrder> = settings.trackOrder
 
     /** Read apart from the rows, so the list shows before every file is statted. */
     val sizes: StateFlow<Map<Long, Long>> = repository.tracks
@@ -62,11 +64,13 @@ class LibraryViewModel(
 
     /** Null until loaded, so the empty state doesn't flash during the entry animation. */
     val tracks: StateFlow<List<TrackEntity>?> =
-        combine(repository.tracks, _query, sort) { tracks, query, sort ->
-            tracks.filter { it.matches(query) }.sortedFor(sort)
+        combine(repository.tracks, _query, order) { tracks, query, order ->
+            tracks.filter { it.matches(query) }.sortedFor(order)
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     fun setSort(sort: TrackSort) = settings.setTrackSort(sort)
+
+    fun setSortDescending(descending: Boolean) = settings.setTrackSortDescending(descending)
 
     fun search(query: String) {
         _query.value = query
@@ -139,7 +143,10 @@ class LibraryViewModel(
     /** The copy lists first, as the last viewed. */
     fun duplicate(id: Long) {
         viewModelScope.launch {
-            repository.duplicate(id).onFailure { _events.send(LibraryEvent.DuplicateFailed) }
+            repository.duplicate(id).fold(
+                onSuccess = { _events.send(LibraryEvent.Duplicated(it)) },
+                onFailure = { _events.send(LibraryEvent.DuplicateFailed) },
+            )
         }
     }
 
@@ -183,9 +190,9 @@ private fun TrackEntity.matches(query: String): Boolean {
         displayName.contains(needle, ignoreCase = true)
 }
 
-/** Stable, so ties keep the repository's last-viewed order. */
-internal fun List<TrackEntity>.sortedFor(sort: TrackSort): List<TrackEntity> =
-    when (sort) {
+/** Stable, so ties keep the repository's last-viewed order, turned round with the rest. */
+internal fun List<TrackEntity>.sortedFor(order: TrackOrder): List<TrackEntity> {
+    val natural = when (order.sort) {
         TrackSort.RECENT -> this
         TrackSort.DATE -> sortedByDescending { it.startedAtEpochMillis ?: it.lastOpenedAtEpochMillis }
         TrackSort.LENGTH -> sortedByDescending { it.distanceMeters }
@@ -194,3 +201,5 @@ internal fun List<TrackEntity>.sortedFor(sort: TrackSort): List<TrackEntity> =
             sortedWith(compareBy(collator) { trackTitle(it.trackName, it.displayName) })
         }
     }
+    return if (order.descending == order.sort.naturallyDescending) natural else natural.asReversed()
+}

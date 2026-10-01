@@ -70,7 +70,8 @@
     <string name="settings_maps_delete_named">Delete %1$s</string>
     <string name="settings_maps_importing">Copying map…</string>
     <string name="settings_maps_imported">Map imported.</string>
-    <string name="settings_maps_deleted">Map deleted.</string>
+    <!-- Undo snackbars say what was done, then to what. %1$s is the map's name. -->
+    <string name="settings_maps_deleted">Deleted “%1$s”.</string>
     <string name="settings_maps_failed_unreadable">Couldn\'t read that file.</string>
     <string name="settings_maps_failed_format">That isn\'t a supported map format.</string>
     <string name="settings_maps_failed_space">Not enough free space for that map.</string>
@@ -109,12 +110,16 @@
     <string name="library_sort_date">Date</string>
     <string name="library_sort_length">Length</string>
     <string name="library_sort_name">Name</string>
+    <string name="library_sort_ascending">Ascending</string>
+    <string name="library_sort_descending">Descending</string>
     <string name="library_color">Colour: %1$s</string>
     <string name="library_color_change">Change colour</string>
     <string name="library_delete">Delete</string>
+    <!-- %1$s is the track's name; library_deleted is for several at once. -->
+    <string name="track_deleted">Deleted “%1$s”.</string>
     <plurals name="library_deleted">
-        <item quantity="one">Track deleted.</item>
-        <item quantity="other">%d tracks deleted.</item>
+        <item quantity="one">Deleted %d track.</item>
+        <item quantity="other">Deleted %d tracks.</item>
     </plurals>
     <string name="library_select_all">Select all</string>
     <!-- Spoken only. -->
@@ -174,7 +179,9 @@
         <item quantity="other">%1$d waypoints</item>
     </plurals>
     <string name="record_save_failed">Couldn\'t save that recording. It\'s still on the device.</string>
-    <string name="record_discarded">Recording discarded.</string>
+    <string name="record_discarded">Discarded the recording.</string>
+    <!-- %1$s is the name the recording would have been saved as. -->
+    <string name="record_discarded_named">Discarded “%1$s”.</string>
     <string name="record_stop_title">Stop recording</string>
     <string name="record_stop_to_open">Stop recording to open a track.</string>
     <string name="record_recovered_title">Unsaved recording</string>
@@ -207,19 +214,17 @@
     <!-- Spoken only; names the button in a list of them. -->
     <string name="track_manage_named">Manage %1$s</string>
     <string name="track_hide">Hide</string>
-    <string name="track_hidden">Track hidden.</string>
+    <!-- %1$s is the track's name, as in the trimmed and split ones below. -->
+    <string name="track_hidden">Hid “%1$s”.</string>
     <string name="track_trim">Trim</string>
     <string name="track_split">Split here</string>
     <!-- %1$s is the track's name. -->
     <string name="trim_title">Trim %1$s</string>
     <!-- What the trim keeps, from where to where along the track. -->
     <string name="trim_range">Keeping %1$s to %2$s</string>
-    <string name="track_trimmed">Track trimmed.</string>
-    <string name="track_split_done">Track split.</string>
+    <string name="track_trimmed">Trimmed “%1$s”.</string>
+    <string name="track_split_done">Split “%1$s”.</string>
     <string name="track_edit_failed">Couldn\'t change that track.</string>
-    <!-- %1$s is the track's name. -->
-    <string name="split_title">Split %1$s?</string>
-    <string name="split_confirm">Split</string>
     <!-- A split track's parts. %1$s is the track's name, %2$d which part. -->
     <string name="split_part">%1$s (cut %2$d)</string>
     <string name="track_error_title">Couldn\'t open this file</string>

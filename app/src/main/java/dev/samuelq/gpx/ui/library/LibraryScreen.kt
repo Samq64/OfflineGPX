@@ -66,6 +66,16 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -97,6 +107,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.samuelq.gpx.R
 import dev.samuelq.gpx.data.db.TrackEntity
+import dev.samuelq.gpx.data.settings.TrackOrder
 import dev.samuelq.gpx.data.settings.TrackSort
 import dev.samuelq.gpx.ui.format.Formatters
 import dev.samuelq.gpx.ui.format.LocalFormatters
@@ -131,7 +142,7 @@ fun LibraryScreen(
     val tracks = loaded.orEmpty()
     val selection by viewModel.selection.collectAsStateWithLifecycle()
     val query by viewModel.query.collectAsStateWithLifecycle()
-    val sort by viewModel.sort.collectAsStateWithLifecycle()
+    val order by viewModel.order.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     var menuOpen by remember { mutableStateOf(false) }
     // Separate from a blank query: an open field starts empty.
@@ -152,6 +163,7 @@ fun LibraryScreen(
     val context = LocalContext.current
     // Not `context.resources`, which misses a locale change while the screen is up.
     val resources = LocalResources.current
+    val layoutDirection = LocalLayoutDirection.current
     val importedAll: (Int, Int) -> String = { imported, requested ->
         if (imported == requested) {
             resources.getQuantityString(R.plurals.library_imported_all, imported, imported)
@@ -170,14 +182,30 @@ fun LibraryScreen(
     val scope = rememberCoroutineScope()
     val undo = stringResource(R.string.action_undo)
 
+    // A track just changed or brought back, scrolled to once its row is in the list.
+    var reveal by remember { mutableStateOf<Long?>(null) }
+    val listState = rememberLazyListState()
+    LaunchedEffect(reveal, tracks) {
+        val id = reveal ?: return@LaunchedEffect
+        val index = tracks.indexOfFirst { it.id == id }.takeIf { it >= 0 } ?: return@LaunchedEffect
+        reveal = null
+        if (listState.layoutInfo.visibleItemsInfo.none { it.key == id }) listState.animateScrollToItem(index)
+    }
+
     fun delete(ids: Set<Long>) {
         viewModel.delete(ids)
         scope.launch {
             snackbarHostState.showUndo(
                 context = context,
-                message = resources.getQuantityString(R.plurals.library_deleted, ids.size, ids.size),
+                // Named when it's one; a count says enough for several.
+                message = ids.singleOrNull()?.let { id -> tracks.firstOrNull { it.id == id } }
+                    ?.let { resources.getString(R.string.track_deleted, trackTitle(it.trackName, it.displayName)) }
+                    ?: resources.getQuantityString(R.plurals.library_deleted, ids.size, ids.size),
                 undoLabel = undo,
-                onUndo = { viewModel.undoDelete(ids) },
+                onUndo = {
+                    viewModel.undoDelete(ids)
+                    reveal = ids.first()
+                },
                 onCommit = { viewModel.commitDelete(ids) },
             )
         }
@@ -196,6 +224,7 @@ fun LibraryScreen(
         viewModel.events.collect { event ->
             when (event) {
                 is LibraryEvent.Open -> onOpenTrack(event.id)
+                is LibraryEvent.Duplicated -> reveal = event.id
                 LibraryEvent.ImportFailed -> snackbarHostState.showSnackbar(importFailed)
                 is LibraryEvent.ImportedAll -> snackbarHostState.showSnackbar(
                     importedAll(event.imported, event.requested)
@@ -211,6 +240,8 @@ fun LibraryScreen(
     }
 
     Scaffold(
+        // With the cutout: in landscape it sits beside the list.
+        contentWindowInsets = WindowInsets.safeDrawing,
         snackbarHost = { SnackbarHost(snackbarHostState, Modifier.readFirst()) },
         topBar = {
             if (selection.isNotEmpty()) {
@@ -236,6 +267,7 @@ fun LibraryScreen(
                 )
             } else {
                 TopAppBar(
+                    windowInsets = BarInsets,
                     title = {
                         Text(stringResource(R.string.library_title), Modifier.semantics { heading() })
                     },
@@ -254,7 +286,7 @@ fun LibraryScreen(
                             }
                         }
                         if (loaded == null || tracks.isNotEmpty()) {
-                            SortMenu(sort, onSort = viewModel::setSort)
+                            SortMenu(order, onSort = viewModel::setSort, onDescending = viewModel::setSortDescending)
                         }
                         // Shown while loading so icons don't pop in during the slide. Import is in
                         // the menu then: four icons wrapped the title on narrow screens.
@@ -314,9 +346,12 @@ fun LibraryScreen(
             }
             val palette = routePalette()
             LazyColumn(
+                state = listState,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
+                    start = padding.calculateStartPadding(layoutDirection),
                     top = padding.calculateTopPadding(),
+                    end = padding.calculateEndPadding(layoutDirection),
                     bottom = padding.calculateBottomPadding() + 24.dp,
                 ),
             ) {
@@ -357,6 +392,8 @@ fun LibraryScreen(
             onDismiss = { renaming = null },
             onConfirm = { name ->
                 viewModel.rename(track.id, name)
+                // A new name can move it, sorted by name.
+                reveal = track.id
                 renaming = null
             },
         )
@@ -379,6 +416,7 @@ private fun SelectionBar(
     val selectAll = stringResource(if (allSelected) R.string.library_clear_selection else R.string.library_select_all)
 
     TopAppBar(
+        windowInsets = BarInsets,
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = MaterialTheme.colorScheme.secondaryContainer,
         ),
@@ -496,7 +534,7 @@ private fun TrackRow(
                     // The row toggles, so it's one stop that says what's selected.
                     Checkbox(checked = selected, onCheckedChange = null)
                 } else {
-                    ColorDot(track.colorIndex, palette, dimmed = !track.visible, onColor = onColor)
+                    ColorDot(track.colorIndex, palette, onColor = onColor)
                 }
                 Spacer(Modifier.width(16.dp))
                 Column(Modifier.weight(1f)) {
@@ -534,7 +572,7 @@ private fun TrackRow(
 
 /** The map line's hue; a tap picks another from the palette. Its touch target reaches 48dp. */
 @Composable
-private fun ColorDot(colorIndex: Int, palette: List<Color>, dimmed: Boolean, onColor: (Int) -> Unit) {
+private fun ColorDot(colorIndex: Int, palette: List<Color>, onColor: (Int) -> Unit) {
     var open by remember { mutableStateOf(false) }
     val label = stringResource(
         R.string.library_color,
@@ -545,7 +583,8 @@ private fun ColorDot(colorIndex: Int, palette: List<Color>, dimmed: Boolean, onC
             Modifier
                 .size(DotSize)
                 .clip(CircleShape)
-                .background(if (dimmed) MaterialTheme.colorScheme.outlineVariant else palette.slot(colorIndex))
+                // Its colour even when hidden: it's the picker, and the switch says hidden.
+                .background(palette.slot(colorIndex))
                 .clickable(onClickLabel = stringResource(R.string.library_color_change)) { open = true }
                 .semantics { contentDescription = label }
         )
@@ -605,7 +644,7 @@ private fun DeleteBackground(direction: SwipeToDismissBoxValue) {
 }
 
 @Composable
-private fun SortMenu(sort: TrackSort, onSort: (TrackSort) -> Unit) {
+private fun SortMenu(order: TrackOrder, onSort: (TrackSort) -> Unit, onDescending: (Boolean) -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box {
         IconButton(onClick = { open = true }) {
@@ -620,21 +659,25 @@ private fun SortMenu(sort: TrackSort, onSort: (TrackSort) -> Unit) {
                     compareBy<TrackSort> { it != TrackSort.DEFAULT }.thenBy(collator) { resources.getString(it.label) },
                 )
             }
+            @Composable
+            fun Choice(label: String, isSelected: Boolean, onClick: () -> Unit) = DropdownMenuItem(
+                text = { Text(label) },
+                onClick = {
+                    open = false
+                    onClick()
+                },
+                // Blank space when unchecked keeps the labels aligned.
+                leadingIcon = {
+                    if (isSelected) Icon(Icons.Default.Check, null) else Spacer(Modifier.size(24.dp))
+                },
+                modifier = Modifier.semantics { selected = isSelected },
+            )
             options.forEach { option ->
-                val isSelected = option == sort
-                DropdownMenuItem(
-                    text = { Text(stringResource(option.label)) },
-                    onClick = {
-                        open = false
-                        onSort(option)
-                    },
-                    // Blank space when unchecked keeps the labels aligned.
-                    leadingIcon = {
-                        if (isSelected) Icon(Icons.Default.Check, null) else Spacer(Modifier.size(24.dp))
-                    },
-                    modifier = Modifier.semantics { selected = isSelected },
-                )
+                Choice(stringResource(option.label), option == order.sort) { onSort(option) }
             }
+            HorizontalDivider()
+            Choice(stringResource(R.string.library_sort_ascending), !order.descending) { onDescending(false) }
+            Choice(stringResource(R.string.library_sort_descending), order.descending) { onDescending(true) }
         }
     }
 }
@@ -695,6 +738,7 @@ private fun SearchBar(
     val hint = stringResource(R.string.library_search_hint)
 
     TopAppBar(
+        windowInsets = BarInsets,
         title = {
             TextField(
                 value = query,
@@ -732,3 +776,8 @@ private fun SearchBar(
         },
     )
 }
+
+/** The bars' own insets, plus the cutout, which they leave out and landscape puts beside them. */
+private val BarInsets: WindowInsets
+    @Composable get() = TopAppBarDefaults.windowInsets.union(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal))
+
