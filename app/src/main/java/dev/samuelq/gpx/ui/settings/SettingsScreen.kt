@@ -51,6 +51,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -102,6 +103,8 @@ private val ScreenPadding = 20.dp
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
+    /** Opens the map file picker on arrival. */
+    importMapOnOpen: Boolean = false,
     viewModel: SettingsViewModel = viewModel(factory = SettingsViewModel.Factory),
 ) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
@@ -116,6 +119,14 @@ fun SettingsScreen(
     val importer = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri -> viewModel.importMap(uri) }
+    // Once per visit: saved, so returning from the picker or rotating doesn't reopen it.
+    var importAsked by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        if (importMapOnOpen && !importAsked) {
+            importAsked = true
+            importer.launch(MAP_MIME_TYPES)
+        }
+    }
 
     val imported = stringResource(R.string.settings_maps_imported)
     val deleted = stringResource(R.string.settings_maps_deleted)

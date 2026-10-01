@@ -15,6 +15,7 @@ import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.toRoute
 import dev.samuelq.gpx.GpxApplication
 import dev.samuelq.gpx.data.record.RecordingController
 import dev.samuelq.gpx.data.record.RecordingState
@@ -69,7 +70,8 @@ fun GpxApp(
                     pendingFocus = pending?.let(FocusRequest::decode),
                     onFocusConsumed = { entry.savedStateHandle[FocusRequest.KEY] = null },
                     onOpenList = { navController.open(LibraryRoute) },
-                    onOpenSettings = { navController.open(SettingsRoute) },
+                    onOpenSettings = { navController.open(SettingsRoute()) },
+                    onImportMap = { navController.open(SettingsRoute(importMap = true)) },
                     recorder = container.recordingController,
                     showZoomButtons = settings.showZoomButtons,
                 )
@@ -83,8 +85,11 @@ fun GpxApp(
                 )
             }
 
-            composable<SettingsRoute> {
-                SettingsScreen(onBack = dropUnlessResumed { navController.popBackStack() })
+            composable<SettingsRoute> { entry ->
+                SettingsScreen(
+                    onBack = dropUnlessResumed { navController.popBackStack() },
+                    importMapOnOpen = entry.toRoute<SettingsRoute>().importMap,
+                )
             }
         }
 

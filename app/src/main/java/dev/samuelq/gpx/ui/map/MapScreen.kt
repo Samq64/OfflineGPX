@@ -98,6 +98,8 @@ fun MapScreen(
     onFocusConsumed: () -> Unit,
     onOpenList: () -> Unit,
     onOpenSettings: () -> Unit,
+    /** Straight to the file picker; the import itself, with its merge prompt, lives in settings. */
+    onImportMap: () -> Unit,
     recorder: RecordingController,
     showZoomButtons: Boolean,
     viewModel: MapViewModel = viewModel(factory = MapViewModel.Factory),
@@ -622,7 +624,7 @@ fun MapScreen(
                     }
 
                     mapIsEmpty -> EmptyState(
-                        onImportMap = onOpenSettings,
+                        onImportMap = onImportMap,
                         onImportTrack = { trackImporter.launch(arrayOf("*/*")) },
                         modifier = Modifier.fillMaxSize(),
                     )
