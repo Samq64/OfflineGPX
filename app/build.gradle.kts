@@ -33,8 +33,9 @@ abstract class CheckNoNetworkPermissions : DefaultTask() {
                     declared.forEach { appendLine("    $it") }
                     appendLine()
                     appendLine("This app is offline by construction. A dependency most likely")
-                    appendLine("declared one of these. Drop the dependency, or strip the")
-                    appendLine("permission with tools:node=\"remove\" in AndroidManifest.xml.")
+                    appendLine("declared one of these. Drop the dependency or, only if it works")
+                    appendLine("offline, strip the permission with tools:node=\"remove\" in")
+                    appendLine("AndroidManifest.xml and a comment saying why.")
                 }
             )
         }

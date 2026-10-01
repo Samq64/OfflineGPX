@@ -62,7 +62,7 @@ fun GpxApp(
 
             composable<MapRoute> { entry ->
                 val pending by entry.savedStateHandle
-                    .getStateFlow(FocusRequest.KEY, null as String?)
+                    .getStateFlow<Any?>(FocusRequest.KEY, null)
                     .collectAsStateWithLifecycle()
 
                 MapScreen(
@@ -111,25 +111,22 @@ private fun StopRecordingPrompt(recorder: RecordingController) {
 
 private val NavigationSpec = tween<IntOffset>(durationMillis = 300)
 
-/** One prefixed string rather than two keys, which could both be set. */
+/** A saved track's id or a transient one's Uri, under one key so only one can be set. */
 private object FocusRequest {
     const val KEY = "focus"
 
-    private const val SAVED = "saved:"
-    private const val URI = "uri:"
+    fun saved(id: Long): Any = id
+    fun uri(value: Uri): Any = value
 
-    fun saved(id: Long): String = "$SAVED$id"
-    fun uri(value: Uri): String = "$URI$value"
-
-    fun decode(raw: String): TrackRef? = when {
-        raw.startsWith(SAVED) -> raw.removePrefix(SAVED).toLongOrNull()?.let(TrackRef::Saved)
-        raw.startsWith(URI) -> TrackRef.Transient(Uri.parse(raw.removePrefix(URI)))
+    fun decode(raw: Any): TrackRef? = when (raw) {
+        is Long -> TrackRef.Saved(raw)
+        is Uri -> TrackRef.Transient(raw)
         else -> null
     }
 }
 
 /** A pop, not a navigate: the map is always on the stack. */
-private fun NavController.focusOnMap(request: String) {
+private fun NavController.focusOnMap(request: Any) {
     getBackStackEntry(MapRoute).savedStateHandle[FocusRequest.KEY] = request
     popBackStack(MapRoute, inclusive = false)
 }

@@ -3,28 +3,34 @@ This is a GPX viewer and recorder for Android written in Kotlin and Compose with
 ## Layout
 
 ```
-core/        Pure Kotlin, no Android imports: model (Track, TrackPoint), analysis
-             (FixFilter, SpeedWindow, TrackAnalyzer -> TrackProfile).
-data/        gpx (streaming parser/writer), db (Room), map (MapStore, .map headers),
-             record (LocationSource, RecordingWal, RecordingService/Controller/Recovery),
-             settings, track (TrackRepository).
-ui/          map (MapScreen, VTM canvas, layers, generated render theme), track (sheet),
+core/        JVM Gradle module, so no Android: model (Track, TrackPoints columns,
+             TrackPoint for single points), analysis (FixFilter, SpeedWindow,
+             TrackAnalyzer -> TrackProfile).
+app/ data/   gpx (streaming parser/writer), db (Room), map (MapStore, .map headers, VTM
+             tile source), record (LocationSource, RecordingWal, RecordingService/
+             Controller/Recovery), settings, track (TrackRepository, TrackCache).
+app/ ui/     map (MapScreen, VTM canvas, layers, generated render theme), track (sheet),
              chart (hand-rolled Canvas charts), library, record, settings, format, theme, nav.
-di/          AppContainer: manual wiring, no Hilt.
+app/ di/     AppContainer: manual wiring, no Hilt.
 ```
 
 ## Constraints
 
 - `CheckNoNetworkPermissions` in `app/build.gradle.kts` fails the build if INTERNET,
-  ACCESS_NETWORK_STATE or ACCESS_WIFI_STATE reaches the merged manifest. Don't silence it
-  with `tools:node="remove"`; a dependency that wants the network has to be decided on.
-  Any new permission must map to a feature a user can name.
+  ACCESS_NETWORK_STATE or ACCESS_WIFI_STATE reaches the merged manifest. A dependency that
+  declares one is dropped, or has it stripped with `tools:node="remove"` and a comment saying
+  why it works offline. Stripping can't leak, since the OS then refuses sockets, but a
+  library that does use the network will fail. Any new permission must map to a feature a
+  user can name.
 - Location is platform `LocationManager` on `GPS_PROVIDER`. Not the fused provider: that
   needs Play services.
 - VTM is on JitPack only; `settings.gradle.kts` lets JitPack serve that group and nothing
   else. Its SVG decoder is excluded since the theme draws no symbols.
-- A track is a `.gpx` file in app-private storage; Room holds one summary row per track and
-  no geometry. Rows store paths relative to `filesDir` so a device transfer still resolves.
+- A track is a `.gpx` file in app-private storage; Room holds one row per track with its
+  stats and bounding box, and no geometry. Rows store paths relative to `filesDir` so a
+  device transfer still resolves. Parsed points are cached in binary under `cacheDir`, which
+  is regenerable and never backed up or shared. A saved track's name and colour come from
+  its row only.
   A recording appends to a line-per-fix WAL and becomes GPX on stop, so a crash leaves a
   recoverable log rather than truncated XML.
 - The render theme is generated at runtime in the mapsforge theme dialect, from the app's
