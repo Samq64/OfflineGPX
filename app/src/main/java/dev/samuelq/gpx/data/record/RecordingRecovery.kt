@@ -87,7 +87,7 @@ class RecordingRecovery(
     private fun read(claimed: File): AbandonedRecording? {
         val track = RecordingWal.recover(claimed)
         val profile = track?.let(TrackAnalyzer::analyze)
-        if (track == null || profile == null || !isSaveable(profile.stats.distanceMeters)) {
+        if (track == null || profile == null || !isSaveable(profile)) {
             claimed.delete()
             return null
         }
@@ -109,11 +109,12 @@ class RecordingRecovery(
      * Moves the closed live log out of the next recording's way, for [restore] to save if the
      * discard is undone. Null if it isn't worth saving or couldn't be moved; it's deleted then.
      */
-    suspend fun setAside(log: File, distanceMeters: Double, name: String): DiscardedRecording? =
+    suspend fun setAside(log: File, name: String): DiscardedRecording? =
         lock.withLock {
             withContext(io) {
                 val aside = File(dir, "$DISCARD_PREFIX${System.currentTimeMillis()}.wal")
-                if (isSaveable(distanceMeters) && log.renameTo(aside)) {
+                val profile = RecordingWal.recover(log)?.let(TrackAnalyzer::analyze)
+                if (profile != null && isSaveable(profile) && log.renameTo(aside)) {
                     DiscardedRecording(aside, name)
                 } else {
                     log.delete()
@@ -149,9 +150,12 @@ class RecordingRecovery(
         private const val CLAIM_PREFIX = "recovering-"
         private const val DISCARD_PREFIX = "discarded-"
 
-        /** Shared by stop and recovery, so a crash can't resurrect what Stop would discard. */
         private const val MIN_SAVEABLE_DISTANCE_METERS = 10.0
 
+        /** Of the analysed log, at stop and recovery alike, so a crash can't resurrect what Stop would discard. */
+        fun isSaveable(profile: TrackProfile) = isSaveable(profile.stats.distanceMeters)
+
+        /** For Stop's dialog, from the running distance, before there is a log to analyse. */
         fun isSaveable(distanceMeters: Double) = distanceMeters >= MIN_SAVEABLE_DISTANCE_METERS
     }
 }

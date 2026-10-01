@@ -39,6 +39,19 @@ class RecordingSessionTest {
     }
 
     @Test
+    fun `lost signal breaks the line and adds no distance, as the saved track's analysis won't`() {
+        val session = session()
+        session.onFix(fix(0, 0.0))
+        session.onFix(fix(1, 10.0))
+        // Over the analysis's 30 s floor since the last point, 500 m on.
+        session.onFix(fix(60, 510.0))
+        session.onFix(fix(61, 520.0))
+
+        assertEquals(20.0, session.distanceMeters, 0.1)
+        assertContentEquals(intArrayOf(0, 2), session.trace().segmentStarts())
+    }
+
+    @Test
     fun `a rejected fix is not logged but its accuracy is shown`() {
         val session = session()
         assertNull(session.onFix(fix(0, 0.0, accuracy = 50.0)))

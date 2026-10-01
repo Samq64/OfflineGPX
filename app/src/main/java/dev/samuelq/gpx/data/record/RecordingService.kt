@@ -8,6 +8,7 @@ import android.util.Log
 import androidx.annotation.StringRes
 import dev.samuelq.gpx.GpxApplication
 import dev.samuelq.gpx.R
+import dev.samuelq.gpx.core.analysis.TrackAnalyzer
 import dev.samuelq.gpx.core.model.TrackPoint
 import dev.samuelq.gpx.core.model.TrackPoints
 import dev.samuelq.gpx.data.track.asTrackName
@@ -229,7 +230,7 @@ class RecordingService : Service() {
 
     /** A blank [name] uses the default; a discard keeps it for an undo. */
     private suspend fun stop(save: Boolean, name: String) {
-        val session = session ?: return
+        if (session == null) return
 
         // Joined, not just cancelled: a fix mid-append must land before the log closes.
         collection?.cancelAndJoin()
@@ -241,12 +242,14 @@ class RecordingService : Service() {
         try {
             log.close()
             if (!save) {
-                val aside = container.recordingRecovery.setAside(log.file, session.distanceMeters, name)
+                val aside = container.recordingRecovery.setAside(log.file, name)
                 controller.emit(RecordingEvent.Discarded(aside))
                 return
             }
+            // What was logged, analysed as it will be saved, rather than the running numbers.
             val track = RecordingWal.recover(log.file)
-            if (track == null || !RecordingRecovery.isSaveable(session.distanceMeters)) {
+            val profile = track?.let(TrackAnalyzer::analyze)
+            if (track == null || profile == null || !RecordingRecovery.isSaveable(profile)) {
                 log.file.delete()
                 controller.emit(
                     RecordingEvent.Failed(
@@ -255,7 +258,7 @@ class RecordingService : Service() {
                 )
                 return
             }
-            container.trackRepository.saveRecording(track.copy(name = name.asTrackName())).fold(
+            container.trackRepository.saveRecording(track.copy(name = name.asTrackName()), profile).fold(
                 onSuccess = {
                     log.file.delete()
                     controller.emit(RecordingEvent.Saved(it))

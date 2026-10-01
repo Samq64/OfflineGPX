@@ -1,12 +1,14 @@
 package dev.samuelq.gpx.data.record
 
 import dev.samuelq.gpx.core.analysis.FixFilter
+import dev.samuelq.gpx.core.analysis.TrackAnalyzer
 import dev.samuelq.gpx.core.analysis.SpeedWindow
 import dev.samuelq.gpx.core.analysis.haversineMeters
 import dev.samuelq.gpx.core.model.TrackPoint
 import dev.samuelq.gpx.core.model.TrackPoints
 import dev.samuelq.gpx.core.model.TrackPointsBuilder
 import dev.samuelq.gpx.core.model.Waypoint
+import java.time.Duration
 import java.time.Instant
 
 /**
@@ -68,7 +70,12 @@ internal class RecordingSession(
         val point = filter.pointFor(fix)?.copy(accuracyMeters = fix.accuracyMeters)
         if (point != null) {
             if (startedAt == null) startedAt = clock()
-            distanceFrom?.let { distanceMeters += haversineMeters(it, point) }
+            val from = distanceFrom
+            if (from != null && isGap(from, point)) {
+                tracePoints.startSegment()
+            } else if (from != null) {
+                distanceMeters += haversineMeters(from, point)
+            }
             distanceFrom = point
             logged(point)
         }
@@ -76,6 +83,15 @@ internal class RecordingSession(
         speedWindow.add(at.toEpochMilli() / 1000.0, distanceMeters)
         currentSpeedMps = speedWindow.speedMps
         return point
+    }
+
+    /**
+     * Lost signal, which the saved track's analysis won't count as travel either. Its floor
+     * only: the analysis also scales with the median interval, which a ride has yet to show.
+     */
+    private fun isGap(from: TrackPoint, to: TrackPoint): Boolean {
+        val seconds = Duration.between(from.time ?: return false, to.time ?: return false).seconds
+        return seconds > TrackAnalyzer.MIN_GAP_SECONDS
     }
 
     private fun logged(point: TrackPoint) {
