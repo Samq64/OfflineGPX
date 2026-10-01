@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
 import android.util.Log
+import dev.samuelq.gpx.R
 import dev.samuelq.gpx.core.analysis.TrackAnalyzer
 import dev.samuelq.gpx.core.analysis.TrackProfile
 import dev.samuelq.gpx.core.model.Track
@@ -14,6 +15,7 @@ import dev.samuelq.gpx.data.db.TrackEntity
 import dev.samuelq.gpx.data.gpx.GpxNameRewriter
 import dev.samuelq.gpx.data.gpx.GpxParseException
 import dev.samuelq.gpx.data.gpx.GpxParser
+import dev.samuelq.gpx.data.gpx.GpxTrimmer
 import dev.samuelq.gpx.data.gpx.GpxWriter
 import dev.samuelq.gpx.data.gpx.GPX_MIME_TYPE
 import dev.samuelq.gpx.data.copyInto
@@ -50,6 +52,7 @@ class TrackRepository(
 
     private val parser = GpxParser()
     private val writer = GpxWriter()
+    private val trimmer = GpxTrimmer()
     private val io = Dispatchers.IO
 
     private val appContext = context.applicationContext
@@ -62,6 +65,9 @@ class TrackRepository(
 
     /** Parsed tracks on disk; what's drawn is held in memory by the map, not here. */
     private val cache = TrackCache(File(appContext.cacheDir, "tracks"))
+
+    /** Files an edit replaced, until its undo lapses. Not the cache, which the system may clear. */
+    private val editsDir: File get() = File(appContext.noBackupFilesDir, "edits").apply { mkdirs() }
 
     /**
      * Deleted but still undoable, so left out of every list. In memory only: if the process
@@ -283,6 +289,143 @@ class TrackRepository(
         }
     }
 
+    /**
+     * Keeps points [from] to [to], inclusive, and the waypoints nearest them. In place, with
+     * the original kept for [undoEdit] until [commitEdit].
+     */
+    suspend fun trim(id: Long, from: Int, to: Int): Result<TrackEdit> = withContext(io) {
+        runCatching {
+            val entity = entity(id)
+            val loaded = load(entity)
+            require(from in 0 until to && to < loaded.track.points.size) { "Can't trim to $from..$to" }
+
+            val file = fileOf(entity)
+            val backup = backUp(file, id)
+            val track = rewrite(file, file, loaded, from..to, name = null)
+            dao.upsert(entity.summarising(track, TrackAnalyzer.analyze(track)))
+            TrackEdit(id, backup, entity, added = null)
+        }.recoverFailure()
+    }
+
+    /**
+     * Splits at point [at], which ends the first part and starts the second. The first stays
+     * this track, named "(cut 1)"; the second is a new one, "(cut 2)". Undone like [trim].
+     */
+    suspend fun split(id: Long, at: Int): Result<TrackEdit> = withContext(io) {
+        runCatching {
+            val entity = entity(id)
+            val loaded = load(entity)
+            val last = loaded.track.points.size - 1
+            require(at in 1 until last) { "Can't split at $at" }
+
+            val file = fileOf(entity)
+            val title = (entity.trackName ?: entity.displayName.removeSuffix(".gpx")).trim()
+            val firstName = appContext.getString(R.string.split_part, title, 1)
+            val secondName = appContext.getString(R.string.split_part, title, 2)
+            val second = uniqueFile(file.parentFile!!, secondName, "gpx", fallback = "track")
+            val backup = backUp(file, id)
+
+            // The second from the untouched original, before the first overwrites it.
+            val secondTrack = rewrite(file, second, loaded, at..last, name = secondName)
+            val addedId = try {
+                dao.upsert(newEntity(second, second.name, secondTrack, TrackAnalyzer.analyze(secondTrack)))
+                    .also { cache.write(it, second, secondTrack) }
+            } catch (e: Throwable) {
+                second.delete()
+                throw e
+            }
+            val firstTrack = rewrite(file, file, loaded, 0..at, name = firstName)
+            dao.upsert(entity.copy(trackName = firstName).summarising(firstTrack, TrackAnalyzer.analyze(firstTrack)))
+            TrackEdit(id, backup, entity, addedId)
+        }.recoverFailure()
+    }
+
+    /** A copy beside the original, named "(copy)" in its file and row. Returns the new row id. */
+    suspend fun duplicate(id: Long): Result<Long> = withContext(io) {
+        runCatching {
+            val entity = entity(id)
+            val file = fileOf(entity)
+            val title = (entity.trackName ?: entity.displayName.removeSuffix(".gpx")).trim()
+            val name = appContext.getString(R.string.duplicate_name, title)
+            val copy = uniqueFile(file.parentFile!!, name, "gpx", fallback = "track")
+            try {
+                if (!GpxNameRewriter.rewrite(file, copy, name)) file.copyTo(copy, overwrite = true)
+                val row = entity.copy(
+                    id = 0,
+                    location = TrackFiles.location(appContext, copy),
+                    displayName = copy.name,
+                    trackName = name,
+                    lastOpenedAtEpochMillis = System.currentTimeMillis(),
+                    colorIndex = leastUsedSlot(dao.colorUsage(), TrackEntity.NEUTRAL_SLOT),
+                )
+                dao.upsert(row)
+            } catch (e: Throwable) {
+                copy.delete()
+                throw e
+            }
+        }.recoverFailure()
+    }
+
+    /** Puts the file and row back as they were before [edit], removing anything it added. */
+    suspend fun undoEdit(edit: TrackEdit): Result<Unit> = withContext(io) {
+        runCatching {
+            val file = fileOf(edit.before)
+            val temp = File(file.parentFile, "${file.name}.tmp")
+            edit.backup.copyTo(temp, overwrite = true)
+            if (!temp.renameTo(file)) throw IOException("Could not restore ${file.name}")
+            dao.upsert(edit.before)
+            cache.delete(edit.id)
+            edit.added?.let { added ->
+                dao.byId(added)?.let(::deleteFile)
+                dao.delete(added)
+                cache.delete(added)
+            }
+            edit.backup.delete()
+            Unit
+        }.recoverFailure()
+    }
+
+    /** The undo has lapsed. */
+    fun commitEdit(edit: TrackEdit) {
+        scope.launch { edit.backup.delete() }
+    }
+
+    /** At launch: an undo from a previous process can no longer be taken. */
+    fun purgeEdits() {
+        scope.launch { editsDir.listFiles().orEmpty().forEach(File::delete) }
+    }
+
+    private fun backUp(file: File, id: Long): File =
+        File(editsDir, "$id-${System.currentTimeMillis()}.gpx").also { file.copyTo(it, overwrite = true) }
+
+    /**
+     * Writes [source]'s points [keep], with the waypoints nearest them, to [destination], which
+     * may be [source]: via a temp file, so a crash never truncates it. Cached, and returned.
+     */
+    private fun rewrite(source: File, destination: File, loaded: LoadedTrack, keep: IntRange, name: String?): Track {
+        val waypoints = loaded.track.waypoints.indices
+            .filter { loaded.profile.indexOf(loaded.track.waypoints[it].point) in keep }
+            .toSet()
+        val trimmed = File(destination.parentFile, "${destination.name}.trim")
+        val named = File(destination.parentFile, "${destination.name}.tmp")
+        try {
+            source.inputStream().buffered().use { input ->
+                trimmed.outputStream().buffered().use { output ->
+                    trimmer.trim(input, output, keepPoint = { it in keep }, keepWaypoint = { it in waypoints })
+                }
+            }
+            // Named in the file too, since export is a byte copy; the row has it if this can't.
+            val written = if (name != null && GpxNameRewriter.rewrite(trimmed, named, name)) named else trimmed
+            if (!written.renameTo(destination)) throw IOException("Could not write ${destination.name}")
+        } finally {
+            trimmed.delete()
+            named.delete()
+        }
+        val track = parse(destination.inputStream(), destination.name)
+        loaded.id.takeIf { destination == source }?.let { cache.write(it, destination, track) }
+        return track
+    }
+
     private suspend fun entity(id: Long): TrackEntity =
         dao.byId(id) ?: throw TrackLoadException.Unreadable("No track with id $id")
 
@@ -291,16 +434,32 @@ class TrackRepository(
         displayName: String,
         track: Track,
         profile: TrackProfile,
-    ): TrackEntity {
+    ) = TrackEntity(
+        colorIndex = leastUsedSlot(dao.colorUsage(), TrackEntity.NEUTRAL_SLOT),
+        location = TrackFiles.location(appContext, file),
+        displayName = displayName,
+        trackName = track.name,
+        startedAtEpochMillis = null,
+        lastOpenedAtEpochMillis = System.currentTimeMillis(),
+        pointCount = 0,
+        distanceMeters = 0.0,
+        totalSeconds = 0.0,
+        movingSeconds = 0.0,
+        averageSpeedMps = 0.0,
+        ascentMeters = 0.0,
+        descentMeters = 0.0,
+        southLatitude = 0.0,
+        westLongitude = 0.0,
+        northLatitude = 0.0,
+        eastLongitude = 0.0,
+    ).summarising(track, profile)
+
+    /** With [track]'s stats and bounds, as after an edit changed its points. */
+    private fun TrackEntity.summarising(track: Track, profile: TrackProfile): TrackEntity {
         val stats = profile.stats
         val bounds = checkNotNull(track.points.bounds()) { "Indexing an empty track" }
-        return TrackEntity(
-            colorIndex = leastUsedSlot(dao.colorUsage(), TrackEntity.NEUTRAL_SLOT),
-            location = TrackFiles.location(appContext, file),
-            displayName = displayName,
-            trackName = track.name,
+        return copy(
             startedAtEpochMillis = stats.startedAt?.toEpochMilli(),
-            lastOpenedAtEpochMillis = System.currentTimeMillis(),
             pointCount = stats.pointCount,
             distanceMeters = stats.distanceMeters,
             totalSeconds = stats.totalDurationSeconds,

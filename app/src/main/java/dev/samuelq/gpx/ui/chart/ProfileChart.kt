@@ -79,6 +79,8 @@ import kotlin.math.roundToInt
 private val LineWidth = 2.dp
 private val GridWidth = 1.dp
 private val MarkerRadius = 4.dp
+/** Enough to read as cut while the line beneath still shows. */
+private const val CutScrimAlpha = 0.75f
 private val SurfaceRing = 2.dp
 private val LabelGap = 6.dp
 private val RightPad = 10.dp
@@ -114,6 +116,8 @@ fun ProfileChart(
     /** Shared by stacked charts so their plots line up. */
     axisGroup: ChartAxisGroup,
     modifier: Modifier = Modifier,
+    /** While trimming: the points kept, the rest greyed out. */
+    keptRange: IntRange? = null,
 ) {
     val chartColors = LocalChartColors.current
     val density = LocalDensity.current
@@ -205,6 +209,7 @@ fun ProfileChart(
             },
     ) {
         StaticLayer(render, geometry, chartColors)
+        keptRange?.let { KeptLayer(render, geometry, it) }
         ScrubberLayer(
             render = render,
             geometry = geometry,
@@ -280,6 +285,21 @@ private fun StaticLayer(
                 }
             },
     )
+}
+
+/** Scrims the plot either side of [kept], as a trim would cut it. */
+@Composable
+private fun KeptLayer(render: ChartRender, geometry: ChartGeometry, kept: IntRange) {
+    val series = render.series
+    val scrim = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = CutScrimAlpha)
+    Canvas(Modifier.fillMaxSize()) {
+        if (series.size == 0) return@Canvas
+        val plot = geometry.plotRect(size)
+        val start = plot.xFor(series.x[kept.first.coerceIn(0, series.size - 1)], render.xScale).coerceIn(plot.left, plot.right)
+        val end = plot.xFor(series.x[kept.last.coerceIn(0, series.size - 1)], render.xScale).coerceIn(plot.left, plot.right)
+        drawRect(scrim, Offset(plot.left, plot.top), Size(start - plot.left, plot.height))
+        drawRect(scrim, Offset(end, plot.top), Size(plot.right - end, plot.height))
+    }
 }
 
 /** Hairline and dot at the scrubbed position; the text is [ChartTooltip]. */

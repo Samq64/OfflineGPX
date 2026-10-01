@@ -148,6 +148,7 @@ fun LibraryScreen(
     val importFailed = stringResource(R.string.library_import_failed)
     val exportFailed = stringResource(R.string.library_export_failed)
     val renameFailed = stringResource(R.string.library_rename_failed)
+    val duplicateFailed = stringResource(R.string.library_duplicate_failed)
     val context = LocalContext.current
     // Not `context.resources`, which misses a locale change while the screen is up.
     val resources = LocalResources.current
@@ -204,6 +205,7 @@ fun LibraryScreen(
                     exportedAll(event.written, event.requested)
                 )
                 LibraryEvent.RenameFailed -> snackbarHostState.showSnackbar(renameFailed)
+                LibraryEvent.DuplicateFailed -> snackbarHostState.showSnackbar(duplicateFailed)
             }
         }
     }
@@ -340,6 +342,7 @@ fun LibraryScreen(
                             )
                         },
                         onRename = { renaming = track },
+                        onDuplicate = { viewModel.duplicate(track.id) },
                         onDelete = { delete(setOf(track.id)) },
                     )
                 }
@@ -421,6 +424,7 @@ private fun TrackRow(
     onColor: (Int) -> Unit,
     onShare: () -> Unit,
     onRename: () -> Unit,
+    onDuplicate: () -> Unit,
     onDelete: () -> Unit,
 ) {
     val formatters = LocalFormatters.current
@@ -430,6 +434,7 @@ private fun TrackRow(
     val selectLabel = stringResource(R.string.library_select)
     val renameLabel = stringResource(R.string.library_rename)
     val shareLabel = stringResource(R.string.library_share)
+    val duplicateLabel = stringResource(R.string.library_duplicate)
     val deleteLabel = stringResource(R.string.library_delete)
 
     // Remembered: a DateTimeFormatter's first use loads locale data, janking the entry animation.
@@ -479,6 +484,7 @@ private fun TrackRow(
                                 CustomAccessibilityAction(selectLabel) { onToggleSelected(); true },
                                 CustomAccessibilityAction(renameLabel) { onRename(); true },
                                 CustomAccessibilityAction(shareLabel) { onShare(); true },
+                                CustomAccessibilityAction(duplicateLabel) { onDuplicate(); true },
                                 CustomAccessibilityAction(deleteLabel) { onDelete(); true },
                             )
                         }
@@ -518,7 +524,7 @@ private fun TrackRow(
                         onCheckedChange = { onToggleVisible() },
                         modifier = Modifier.padding(start = 8.dp).semantics { contentDescription = showOnMap },
                     )
-                    TrackMenu(onRename, onShare, onHide = null, onDelete, trackTitle = title)
+                    TrackMenu(onRename, onShare, onHide = null, onDelete, trackTitle = title, onDuplicate = onDuplicate)
                 }
             }
         }

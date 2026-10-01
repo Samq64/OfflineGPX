@@ -81,6 +81,8 @@ import dev.samuelq.gpx.ui.theme.routePalette
 import dev.samuelq.gpx.ui.theme.slot
 import dev.samuelq.gpx.ui.track.FocusedTrack
 import dev.samuelq.gpx.ui.track.TrackActions
+import dev.samuelq.gpx.ui.track.TrimControls
+import dev.samuelq.gpx.ui.track.SplitDialog
 import dev.samuelq.gpx.ui.track.TrackNameDialog
 import dev.samuelq.gpx.ui.track.TrackRef
 import dev.samuelq.gpx.ui.track.TrackSheetPeekHeight
@@ -152,11 +154,18 @@ fun MapScreen(
         else -> null
     }
     var selectedIndex by remember(focusedTrack?.id, isRecording) { mutableStateOf<Int?>(null) }
+    // The points a trim being set up keeps; null when not trimming.
+    var trimRange by remember(focusedTrack?.id) { mutableStateOf<IntRange?>(null) }
+    // The point a split waits to be confirmed at.
+    var splitAt by remember(focusedTrack?.id) { mutableStateOf<Int?>(null) }
     var tappedWaypoint by remember(focusedTrack?.id, isRecording) { mutableStateOf<Waypoint?>(null) }
     // Read only by the tooltip's layout, so panning doesn't recompose this screen.
     val tappedWaypointAt = remember { mutableStateOf(Offset.Zero) }
 
     val renameFailed = stringResource(R.string.library_rename_failed)
+    val editFailed = stringResource(R.string.track_edit_failed)
+    val trimmed = stringResource(R.string.track_trimmed)
+    val splitDone = stringResource(R.string.track_split_done)
     val hidden = stringResource(R.string.track_hidden)
     val importFailed = stringResource(R.string.library_import_failed)
     val stopToOpen = stringResource(R.string.record_stop_to_open)
@@ -245,6 +254,12 @@ fun MapScreen(
                 MapMessage.RenameFailed -> say(renameFailed)
                 MapMessage.ImportFailed -> say(importFailed)
                 is MapMessage.Hidden -> offerUndo(hidden, onUndo = { viewModel.show(message.id) })
+                MapMessage.EditFailed -> say(editFailed)
+                is MapMessage.Edited -> offerUndo(
+                    if (message.edit.added != null) splitDone else trimmed,
+                    onUndo = { viewModel.undoEdit(message.edit) },
+                    onCommit = { viewModel.commitEdit(message.edit) },
+                )
             }
         }
     }
@@ -314,12 +329,18 @@ fun MapScreen(
             viewModel.focus(null)
         }
     }
+    // Declared after, so it's asked first: back leaves a trim before anything else.
+    BackHandler(enabled = trimRange != null) { trimRange = null }
+    // Room for the charts the slider is set against.
+    LaunchedEffect(trimRange != null) {
+        if (trimRange != null && !sidePanel) sheetState.expand()
+    }
 
     // --- What the canvas draws, and how much room it has ---------------------------
 
     // The recording is kept out: it grows every few seconds and would rebuild every track.
     // Keyed on the focused id, not the track: a rebuilt overlay loses its measured extent.
-    val overlays = remember(state.entities, state.geometry, focusedTrack?.id, focusedColor, palette) {
+    val overlays = remember(state.entities, state.geometry, focusedTrack?.id, focusedColor, palette, trimRange) {
         // Colour from the row, not its position, so it's stable across taps.
         val drawable = state.entities.mapNotNull { row ->
             state.geometry[row.id]?.toOverlay(palette.slot(row.colorIndex), row.bounds)
@@ -327,7 +348,23 @@ fun MapScreen(
         // Include the focused track even if hidden, so its readout has a line to go with.
         val unlisted = focusedTrack?.takeIf { focus -> drawable.none { it.trackId == focus.id } }
             ?.let { it.toOverlay(focusedColor, focusedRow?.bounds) }
-        drawable + listOfNotNull(unlisted)
+        val all = drawable + listOfNotNull(unlisted)
+        // While trimming, the kept part as the track and the whole of it dimmed beneath.
+        val range = trimRange
+        if (range == null || focusedTrack == null) {
+            all
+        } else {
+            all.flatMap { route ->
+                if (route.trackId != focusedTrack.id) {
+                    listOf(route)
+                } else {
+                    listOf(
+                        RouteOverlay(TRIM_CUT_ID, route.points, route.color, route.bounds),
+                        RouteOverlay(route.trackId, route.points.slice(range), route.color, route.bounds),
+                    )
+                }
+            }
+        }
     }
 
 
@@ -363,8 +400,11 @@ fun MapScreen(
     }
     // A collapsed sheet otherwise stays at the placeholder peek it settled on. Not once the
     // subject is gone: that would cancel the hide.
+    // Not while a trim opens the sheet: its header changes the peek mid-expand, and this would cancel it.
     LaunchedEffect(peekHeight) {
-        if (hasSheet && sheetState.currentValue == SheetValue.PartiallyExpanded) sheetState.partialExpand()
+        if (hasSheet && trimRange == null && sheetState.currentValue == SheetValue.PartiallyExpanded) {
+            sheetState.partialExpand()
+        }
     }
     // From the live offset: the settled value only updates after a drag, so dependents lagged.
     var scaffoldHeight by remember { mutableIntStateOf(0) }
@@ -415,8 +455,10 @@ fun MapScreen(
         ?.takeIf { sidePanel || peekContentHeight > 0.dp }
 
     // Null until a new import's row arrives.
+    // Not the ends: each part needs two points.
+    val splittable = selectedIndex?.takeIf { focusedTrack != null && it in 1 until focusedTrack.profile.points.size - 1 }
     val actions = focusedTrack?.let { state.entity(it.id) }?.let { entity ->
-        remember(entity.id, entity.displayName, entity.location) {
+        remember(entity.id, entity.displayName, entity.location, splittable) {
             TrackActions(
                 onRename = { renamingId = entity.id },
                 onShare = {
@@ -438,6 +480,12 @@ fun MapScreen(
                         onCommit = { viewModel.commitDelete(entity.id) },
                     )
                 },
+                onTrim = {
+                    selectedIndex = null
+                    trimRange = 0..(focusedTrack.profile.points.size - 1)
+                },
+                onSplit = splittable?.let { at -> { splitAt = at } },
+                onDuplicate = { viewModel.duplicate(entity.id) },
             )
         }
     }
@@ -473,6 +521,17 @@ fun MapScreen(
                     onClose = onClose,
                     onPeekHeightChange = onPeekHeightChange,
                     onSelectWaypoint = ::selectWaypoint,
+                    trim = trimRange?.let { range ->
+                        TrimControls(
+                            range = range,
+                            onRangeChange = { trimRange = it },
+                            onCancel = { trimRange = null },
+                            onSave = {
+                                focusedTrack?.let { viewModel.trim(it.id, range) }
+                                trimRange = null
+                            },
+                        )
+                    },
                 )
                 // Idle while the side panel slides away after a stop.
                 SheetSubject.Recording -> (recording.value as? RecordingState.Active)?.let { active ->
@@ -568,6 +627,8 @@ fun MapScreen(
                     onSelect = { trackId, index ->
                         // An open note takes the first tap, so closing it never moves the marker.
                         if (tappedWaypoint != null) tappedWaypoint = null
+                        // The slider sets a trim; a tap shouldn't drop it for another track.
+                        else if (trimRange != null) Unit
                         else when (trackId) {
                             LIVE_TRACK_ID, focusedTrack?.id -> selectedIndex = index
                             // Not while recording, which holds the sheet.
@@ -577,6 +638,7 @@ fun MapScreen(
                     onSelectNothing = {
                         when {
                             tappedWaypoint != null -> tappedWaypoint = null
+                            trimRange != null -> Unit
                             isRecording -> selectedIndex = null
                             else -> viewModel.focus(null)
                         }
@@ -723,6 +785,21 @@ fun MapScreen(
         }
     }
 
+    focusedTrack?.let { track ->
+        splitAt?.let { at ->
+            SplitDialog(
+                title = focusedTitle,
+                profile = track.profile,
+                at = at,
+                onConfirm = {
+                    splitAt = null
+                    viewModel.split(track.id, at)
+                },
+                onDismiss = { splitAt = null },
+            )
+        }
+    }
+
     // Only once loaded, which is what knows the name to offer.
     focusedRow?.takeIf { it.id == renamingId }?.let { track ->
         TrackNameDialog(
@@ -743,6 +820,9 @@ private sealed interface SheetSubject {
 
     data object Recording : SheetSubject
 }
+
+/** The whole of a track being trimmed, dimmed under the part kept. */
+private const val TRIM_CUT_ID = Long.MIN_VALUE + 1
 
 /** Live recording layer id; it has no library row. */
 private const val LIVE_TRACK_ID = Long.MIN_VALUE

@@ -28,6 +28,10 @@ fun TrackMenu(
     onHide: (() -> Unit)?,
     onDelete: () -> Unit,
     trackTitle: String? = null,
+    /** On the map only, where the charts to trim against are. */
+    onTrim: (() -> Unit)? = null,
+    onSplit: (() -> Unit)? = null,
+    onDuplicate: (() -> Unit)? = null,
 ) {
     var open by remember { mutableStateOf(false) }
 
@@ -57,7 +61,10 @@ fun TrackMenu(
         if (open) DropdownMenu(expanded = true, onDismissRequest = { open = false }) {
             Item(R.string.library_rename, onRename)
             Item(R.string.library_share, onShare)
+            onDuplicate?.let { Item(R.string.library_duplicate, it) }
             onHide?.let { Item(R.string.track_hide, it) }
+            onTrim?.let { Item(R.string.track_trim, it) }
+            onSplit?.let { Item(R.string.track_split, it) }
             HorizontalDivider()
             Item(R.string.library_delete, onDelete, error = true)
         }

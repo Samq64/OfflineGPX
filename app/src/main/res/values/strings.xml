@@ -96,6 +96,10 @@
     <string name="library_search_clear">Clear search</string>
     <string name="library_search_empty">Nothing matches “%1$s”.</string>
     <string name="library_rename">Rename</string>
+    <string name="library_duplicate">Duplicate</string>
+    <!-- A duplicated track's name. %1$s is the original's. -->
+    <string name="duplicate_name">%1$s (copy)</string>
+    <string name="library_duplicate_failed">Couldn\'t duplicate that track.</string>
     <string name="library_rename_label">Track name</string>
     <string name="library_more">More options</string>
     <string name="library_show_all">Show all</string>
@@ -204,6 +208,20 @@
     <string name="track_manage_named">Manage %1$s</string>
     <string name="track_hide">Hide</string>
     <string name="track_hidden">Track hidden.</string>
+    <string name="track_trim">Trim</string>
+    <string name="track_split">Split here</string>
+    <!-- %1$s is the track's name. -->
+    <string name="trim_title">Trim %1$s</string>
+    <!-- What the trim keeps, from where to where along the track. -->
+    <string name="trim_range">Keeping %1$s to %2$s</string>
+    <string name="track_trimmed">Track trimmed.</string>
+    <string name="track_split_done">Track split.</string>
+    <string name="track_edit_failed">Couldn\'t change that track.</string>
+    <!-- %1$s is the track's name. -->
+    <string name="split_title">Split %1$s?</string>
+    <string name="split_confirm">Split</string>
+    <!-- A split track's parts. %1$s is the track's name, %2$d which part. -->
+    <string name="split_part">%1$s (cut %2$d)</string>
     <string name="track_error_title">Couldn\'t open this file</string>
     <string name="track_error_invalid">This file isn\'t valid GPX.</string>
     <string name="track_error_empty">This GPX file has no track points.</string>

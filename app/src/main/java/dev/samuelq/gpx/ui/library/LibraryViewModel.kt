@@ -38,6 +38,7 @@ sealed interface LibraryEvent {
 
     data class ExportedAll(val written: Int, val requested: Int) : LibraryEvent
     data object RenameFailed : LibraryEvent
+    data object DuplicateFailed : LibraryEvent
 }
 
 /** `@Stable` so a row's captured lambdas can be memoised. */
@@ -133,6 +134,13 @@ class LibraryViewModel(
 
     fun setVisible(id: Long, visible: Boolean) {
         viewModelScope.launch { repository.setVisible(id, visible) }
+    }
+
+    /** The copy lists first, as the last viewed. */
+    fun duplicate(id: Long) {
+        viewModelScope.launch {
+            repository.duplicate(id).onFailure { _events.send(LibraryEvent.DuplicateFailed) }
+        }
     }
 
     fun setColor(id: Long, colorIndex: Int) {

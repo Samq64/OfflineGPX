@@ -220,7 +220,7 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
 
     companion object {
         /** OOM guard; over 11 days at 1 Hz. */
-        private const val MAX_POINTS_PER_SEGMENT = 1_000_000
+        internal const val MAX_POINTS_PER_SEGMENT = 1_000_000
 
         private const val TAG_GPX = "gpx"
         private const val TAG_METADATA = "metadata"

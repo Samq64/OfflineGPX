@@ -14,6 +14,7 @@ import dev.samuelq.gpx.data.map.OfflineMap
 import dev.samuelq.gpx.data.settings.SettingsRepository
 import dev.samuelq.gpx.data.record.RecordingController
 import dev.samuelq.gpx.data.track.LoadedTrack
+import dev.samuelq.gpx.data.track.TrackEdit
 import dev.samuelq.gpx.data.track.TrackRepository
 import dev.samuelq.gpx.di.appContainer
 import dev.samuelq.gpx.ui.library.sortedFor
@@ -44,8 +45,13 @@ sealed interface MapMessage {
     data object RenameFailed : MapMessage
     data object ImportFailed : MapMessage
 
+    data object EditFailed : MapMessage
+
     /** Undone with [MapViewModel.show]. */
     class Hidden(val id: Long) : MapMessage
+
+    /** A trim or split, undone with [MapViewModel.undoEdit], else [MapViewModel.commitEdit]. */
+    class Edited(val edit: TrackEdit) : MapMessage
 }
 
 /** Visible tracks, with their geometry once it has been read off disk. */
@@ -245,6 +251,50 @@ class MapViewModel(
     fun undoDelete(id: Long) = repository.undoDelete(listOf(id))
 
     fun commitDelete(id: Long) = repository.commitDelete(listOf(id))
+
+    /** Keeps points [range], inclusive. */
+    fun trim(id: Long, range: IntRange) = edit { repository.trim(id, range.first, range.last) }
+
+    /** At point [at], which both parts share. */
+    fun split(id: Long, at: Int) = edit { repository.split(id, at) }
+
+    private fun edit(run: suspend () -> Result<TrackEdit>) {
+        viewModelScope.launch {
+            run().fold(
+                onSuccess = { edit ->
+                    refresh(edit.id)
+                    _messages.trySend(MapMessage.Edited(edit))
+                },
+                onFailure = { _messages.trySend(MapMessage.EditFailed) },
+            )
+        }
+    }
+
+    fun undoEdit(edit: TrackEdit) {
+        viewModelScope.launch {
+            repository.undoEdit(edit).onFailure { _messages.trySend(MapMessage.EditFailed) }
+            refresh(edit.id)
+        }
+    }
+
+    fun commitEdit(edit: TrackEdit) = repository.commitEdit(edit)
+
+    /** Opens the copy, so what was made is what's shown. */
+    fun duplicate(id: Long) {
+        viewModelScope.launch {
+            repository.duplicate(id).fold(
+                onSuccess = { focus(TrackRef.Saved(it)) },
+                onFailure = { _messages.trySend(MapMessage.EditFailed) },
+            )
+        }
+    }
+
+    /** Rereads [id] after its file changed: the cached geometry, and the sheet if it shows it. */
+    private suspend fun refresh(id: Long) {
+        _state.update { it.copy(geometry = it.geometry - id) }
+        loadMissing(_state.value.entities)
+        if ((requested as? TrackRef.Saved)?.id == id) reload()
+    }
 
     companion object {
         val Factory = viewModelFactory {

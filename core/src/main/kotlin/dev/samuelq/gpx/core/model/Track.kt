@@ -89,6 +89,18 @@ class TrackPoints internal constructor(
     fun lastOrNull(): TrackPoint? = if (size > 0) last() else null
     fun getOrNull(i: Int): TrackPoint? = if (i in 0 until size) get(i) else null
 
+    /** Points [range] alone, copied, still cut where segments begin within it. */
+    fun slice(range: IntRange): TrackPoints {
+        val out = TrackPointsBuilder(capacity = maxOf(1, range.count()))
+        var segment = 0
+        for (i in range) {
+            while (segment + 1 < segmentCount && segmentStart(segment + 1) <= i) segment++
+            if (i == range.first || segmentStart(segment) == i) out.startSegment()
+            out.add(latitude(i), longitude(i), elevation(i), timeMillis(i), accuracy(i))
+        }
+        return out.build()
+    }
+
     /** The same points cut at [starts] instead, which must begin with 0 when non-empty. */
     fun withSegmentStarts(starts: IntArray): TrackPoints =
         TrackPoints(size, latitudes, longitudes, elevations, times, accuracies, starts, starts.size)

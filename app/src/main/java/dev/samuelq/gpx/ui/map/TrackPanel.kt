@@ -43,6 +43,7 @@ import dev.samuelq.gpx.R
 import dev.samuelq.gpx.core.model.Waypoint
 import dev.samuelq.gpx.ui.track.FocusedTrack
 import dev.samuelq.gpx.ui.track.TrackActions
+import dev.samuelq.gpx.ui.track.TrimControls
 import dev.samuelq.gpx.ui.track.TrackSheet
 import dev.samuelq.gpx.ui.track.TrackSheetError
 import dev.samuelq.gpx.ui.track.TrackSheetLoading
@@ -65,6 +66,7 @@ internal fun FocusedTrackContent(
     onClose: (() -> Unit)?,
     onPeekHeightChange: (Dp) -> Unit,
     onSelectWaypoint: (Waypoint) -> Unit,
+    trim: TrimControls? = null,
 ) {
     when (focused) {
         FocusedTrack.None -> Unit
@@ -87,6 +89,7 @@ internal fun FocusedTrackContent(
             onClose = onClose,
             actions = actions,
             onSelectWaypoint = onSelectWaypoint,
+            trim = trim,
         )
     }
 }

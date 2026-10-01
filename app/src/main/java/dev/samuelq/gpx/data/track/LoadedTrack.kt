@@ -2,6 +2,8 @@ package dev.samuelq.gpx.data.track
 
 import dev.samuelq.gpx.core.analysis.TrackProfile
 import dev.samuelq.gpx.core.model.Track
+import dev.samuelq.gpx.data.db.TrackEntity
+import java.io.File
 
 /**
  * A parsed and analysed track, ready to draw. A saved track's name and colour are its row's,
@@ -26,3 +28,12 @@ sealed class TrackLoadException(message: String, cause: Throwable? = null) : Exc
     /** No track points, e.g. waypoint-only files. */
     class Empty(message: String) : TrackLoadException(message)
 }
+
+/** What undoing a trim or split needs: the replaced file and row, and any track it added. */
+class TrackEdit internal constructor(
+    val id: Long,
+    internal val backup: File,
+    internal val before: TrackEntity,
+    /** The split's second part. */
+    val added: Long?,
+)

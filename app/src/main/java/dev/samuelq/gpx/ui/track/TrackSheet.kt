@@ -1,5 +1,10 @@
 package dev.samuelq.gpx.ui.track
 
+import dev.samuelq.gpx.ui.format.spokenDuration
+import dev.samuelq.gpx.ui.chart.nearestIndex
+import androidx.compose.material3.Button
+import androidx.compose.material3.RangeSlider
+import androidx.compose.foundation.systemGestureExclusion
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -88,6 +93,18 @@ class TrackActions(
     val onShare: () -> Unit,
     val onHide: () -> Unit,
     val onDelete: () -> Unit,
+    val onTrim: () -> Unit,
+    /** Null without a point selected to split at. */
+    val onSplit: (() -> Unit)?,
+    val onDuplicate: () -> Unit,
+)
+
+/** A trim being set up on the sheet: [range] is the points kept, inclusive. */
+class TrimControls(
+    val range: IntRange,
+    val onRangeChange: (IntRange) -> Unit,
+    val onCancel: () -> Unit,
+    val onSave: () -> Unit,
 )
 
 /** Stats and charts for the focused track; dragging the sheet is the only disclosure. */
@@ -107,6 +124,8 @@ fun TrackSheet(
     /** Close button, for the landscape panel. */
     onClose: (() -> Unit)? = null,
     onSelectWaypoint: (Waypoint) -> Unit = {},
+    /** Replaces the title and stats while a trim is set up. */
+    trim: TrimControls? = null,
 ) {
     val profile = loaded.profile
     val waypointActions = waypointActions(loaded.track.waypoints, profile.stats.startedAt, onSelectWaypoint)
@@ -121,7 +140,12 @@ fun TrackSheet(
         onPeekHeightChange = onPeekHeightChange,
         // The file's own <desc>; the app never writes one.
         description = loaded.track.description,
+        keptRange = trim?.range,
     ) {
+        if (trim != null) {
+            TrimHeader(title, profile, trim, useTimeAxis)
+            return@ProfileSheet
+        }
         SheetTitle(
             name = title,
             routeColor = routeColor,
@@ -166,6 +190,8 @@ fun ProfileSheet(
     description: String? = null,
     /** Overrides the profile's, for a recording's count that moves with every fix. */
     pointCount: Int? = null,
+    /** While trimming: the points kept, the rest greyed on the charts. */
+    keptRange: IntRange? = null,
     header: @Composable () -> Unit,
 ) {
     val density = LocalDensity.current
@@ -210,6 +236,7 @@ fun ProfileSheet(
                     onAxisChange = onAxisChange,
                     description = description,
                     pointCount = pointCount,
+                    keptRange = keptRange,
                 )
             } else {
                 EmptyProfile(pointCount, useTimeAxis)
@@ -228,6 +255,7 @@ private fun ProfileDetails(
     onAxisChange: (Boolean) -> Unit,
     description: String?,
     pointCount: Int?,
+    keptRange: IntRange?,
 ) {
     val chartColors = LocalChartColors.current
     val formatters = LocalFormatters.current
@@ -281,7 +309,8 @@ private fun ProfileDetails(
         if (!useTimeAxis) null else { seconds -> gapFormat.format(Formatters.durationAxis(seconds)) }
     }
 
-    description?.takeIf(String::isNotBlank)?.let {
+    // While trimming, the whole track's details would read as the trimmed one's.
+    if (keptRange == null) description?.takeIf(String::isNotBlank)?.let {
         Text(
             text = it,
             style = MaterialTheme.typography.bodyMedium,
@@ -289,7 +318,7 @@ private fun ProfileDetails(
         )
     }
 
-    Column(Modifier.padding(horizontal = SheetPadding, vertical = 4.dp)) {
+    if (keptRange == null) Column(Modifier.padding(horizontal = SheetPadding, vertical = 4.dp)) {
         TrackDetails(
             stats = profile.stats,
             hasTime = profile.hasTime,
@@ -358,6 +387,7 @@ private fun ProfileDetails(
                 breakLabel = breakLabel,
                 formatValue = formatValue,
                 formatPosition = positionValue,
+                keptRange = keptRange,
             )
         }
     }
@@ -391,6 +421,71 @@ private fun ProfileDetails(
     Spacer(Modifier.height(32.dp))
 }
 
+/** What a trim keeps, set with a slider along the charts' axis. */
+@Composable
+private fun TrimHeader(title: String, profile: TrackProfile, trim: TrimControls, useTimeAxis: Boolean) {
+    val formatters = LocalFormatters.current
+    val x = if (useTimeAxis && profile.hasTime) profile.elapsedSeconds else profile.distanceMeters
+    val last = x.size - 1
+    val first = trim.range.first
+    val end = trim.range.last
+    val format: (Float) -> String =
+        if (x === profile.elapsedSeconds) { v -> Formatters.duration(v.toDouble()) } else { v -> formatters.distance(v.toDouble()) }
+
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(start = SheetPadding, end = 8.dp, bottom = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = stringResource(R.string.trim_title, title),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f).semantics { heading() },
+            )
+            TextButton(onClick = trim.onCancel) { Text(stringResource(R.string.action_cancel)) }
+            // Nothing to save until something is cut.
+            Button(onClick = trim.onSave, enabled = first > 0 || end < last) {
+                Text(stringResource(R.string.action_save))
+            }
+        }
+
+        // From the cumulative series: a break adds nothing to either, so a difference is exact.
+        val kept = listOf(
+            Stat(
+                stringResource(R.string.axis_distance),
+                formatters.distance((profile.distanceMeters[end] - profile.distanceMeters[first]).toDouble()),
+            ),
+        ) + if (profile.hasTime) {
+            val seconds = (profile.elapsedSeconds[end] - profile.elapsedSeconds[first]).toDouble()
+            listOf(Stat(stringResource(R.string.stat_elapsed), Formatters.duration(seconds), LocalResources.current.spokenDuration(seconds)))
+        } else {
+            emptyList()
+        }
+        StatRow(kept)
+
+        RangeSlider(
+            value = x[first]..x[end],
+            onValueChange = { range ->
+                val from = nearestIndex(x, range.start)
+                val to = nearestIndex(x, range.endInclusive)
+                // At least two points, or there's no track left.
+                if (from < to) trim.onRangeChange(from..to)
+            },
+            valueRange = x[0]..x[last].coerceAtLeast(x[0] + 1f),
+            // The thumbs sit where edge swipes mean back; padded in, and claimed from the system.
+            modifier = Modifier.padding(end = SheetPadding - 8.dp).systemGestureExclusion(),
+        )
+        Text(
+            text = stringResource(R.string.trim_range, format(x[first]), format(x[end])),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
 /** Name beside the route swatch, tying the sheet to one of several overlaid routes. */
 @Composable
 private fun SheetTitle(
@@ -414,7 +509,12 @@ private fun SheetTitle(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f).semantics { heading() },
         )
-        actions?.let { TrackMenu(it.onRename, it.onShare, it.onHide, it.onDelete) }
+        actions?.let {
+            TrackMenu(
+                it.onRename, it.onShare, it.onHide, it.onDelete,
+                onTrim = it.onTrim, onSplit = it.onSplit, onDuplicate = it.onDuplicate,
+            )
+        }
         onClose?.let {
             IconButton(onClick = it) {
                 Icon(Icons.Default.Close, stringResource(R.string.track_close))

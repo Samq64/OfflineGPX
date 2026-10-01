@@ -56,6 +56,18 @@ class TrackPointsTest {
     }
 
     @Test
+    fun `a slice keeps the segment breaks inside it`() {
+        val points = TrackPoints.of(
+            listOf(TrackPoint(1.0, 0.0), TrackPoint(2.0, 0.0), TrackPoint(3.0, 0.0)),
+            listOf(TrackPoint(4.0, 0.0), TrackPoint(5.0, 0.0)),
+        )
+        val slice = points.slice(1..3)
+
+        assertEquals(listOf(2.0, 3.0, 4.0), slice.indices.map(slice::latitude))
+        assertContentEquals(intArrayOf(0, 2), slice.segmentStarts())
+    }
+
+    @Test
     fun `absent values read back as absent`() {
         val at = Instant.parse("2026-05-01T08:00:00Z")
         val points = TrackPoints.of(
