@@ -27,13 +27,16 @@ data class TrackEntity(
 
     val visible: Boolean = true,
 
-    /** Assigned once so a track's colour never changes. */
+    /** Assigned once so a track's colour only changes when the user picks another. */
     val colorIndex: Int = 0,
 
     val distanceMeters: Double,
     val totalSeconds: Double,
 ) {
     companion object {
-        const val PALETTE_SIZE = 6
+        const val PALETTE_SIZE = 7
+
+        /** Grey, for tracks worth showing but not noticing; picked by hand, never assigned. */
+        const val NEUTRAL_SLOT = PALETTE_SIZE - 1
     }
 }

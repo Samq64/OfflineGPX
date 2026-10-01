@@ -28,4 +28,9 @@ class LeastUsedSlotTest {
     fun `among equally shown slots the less used overall wins`() {
         assertEquals(2, leastUsedSlot(shown(0, 1, 2, 3, 4, 5) + hidden(0, 1, 3, 4, 5), 6))
     }
+
+    @Test
+    fun `slots past the assignable ones are neither picked nor counted`() {
+        assertEquals(0, leastUsedSlot(shown(1, 2, 3, 4, 5, 6, 6), 6))
+    }
 }

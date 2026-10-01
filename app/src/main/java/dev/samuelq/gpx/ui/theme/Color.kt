@@ -4,6 +4,7 @@ import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
+import dev.samuelq.gpx.R
 import dev.samuelq.gpx.data.db.TrackEntity
 
 // Static scheme for Android 10/11, which lack wallpaper colours: Material's 2021 tonal spot from
@@ -97,25 +98,43 @@ internal val StaticDarkColors = darkColorScheme(
 /**
  * Picked by search: at least 3:1 against map land (2:1 against water and vegetation), and
  * 25 CIEDE2000 apart from each other and [recordingColor] (12 under simulated CVD). Ordered
- * so the lowest slots are furthest apart.
+ * so the lowest slots are furthest apart. Plum and pink were redone to make room for the
+ * grey: their old, duller shades turned grey under CVD. A grey would only fit seven.
  */
 private val RoutePaletteLight = listOf(
     Color(0xFF1292C0),
-    Color(0xFF722756),
+    Color(0xFF5D2E57),
     Color(0xFF187C49),
     Color(0xFF9D8519),
-    Color(0xFFD65C88),
+    Color(0xFFFA177B),
     Color(0xFF6B3CFB),
+    Color(0xFF807879),
 ).also { check(it.size == TrackEntity.PALETTE_SIZE) }
 
 private val RoutePaletteDark = listOf(
     Color(0xFF30C0F8),
-    Color(0xFFB82989),
+    Color(0xFFAE3B87),
     Color(0xFF269E5F),
     Color(0xFFD6BD5C),
-    Color(0xFFEF90AE),
+    Color(0xFFFE85A6),
     Color(0xFF8472FE),
+    Color(0xFF746D6B),
 ).also { check(it.size == TrackEntity.PALETTE_SIZE) }
+
+/** Names for the slots, alike in both themes. */
+val RouteColorNames = listOf(
+    R.string.color_blue,
+    R.string.color_plum,
+    R.string.color_green,
+    R.string.color_gold,
+    R.string.color_pink,
+    R.string.color_violet,
+    R.string.color_grey,
+).also { check(it.size == TrackEntity.PALETTE_SIZE) }
+
+/** Slots round the colour wheel, grey last; the slots' own order is for assigning. */
+val RoutePickerOrder = listOf(4, 3, 2, 0, 5, 1, 6)
+    .also { check(it.sorted() == (0 until TrackEntity.PALETTE_SIZE).toList()) }
 
 private val RecordingLight = Color(0xFFBA0D01)
 private val RecordingDark = Color(0xFFDF2414)

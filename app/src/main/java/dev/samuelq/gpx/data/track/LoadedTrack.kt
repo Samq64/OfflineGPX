@@ -2,6 +2,7 @@ package dev.samuelq.gpx.data.track
 
 import dev.samuelq.gpx.core.analysis.TrackProfile
 import dev.samuelq.gpx.core.model.Track
+import dev.samuelq.gpx.data.db.TrackEntity
 
 /** A parsed and analysed track, ready to draw. */
 class LoadedTrack(
@@ -12,7 +13,11 @@ class LoadedTrack(
     val profile: TrackProfile,
     val colorIndex: Int,
 ) {
-    fun renamed(name: String?) = LoadedTrack(id, displayName, track.copy(name = name), profile, colorIndex)
+    /** With its row's name and colour, which can change after it was read. */
+    fun synced(name: String?, colorIndex: Int) =
+        LoadedTrack(id, displayName, track.copy(name = name), profile, colorIndex)
+
+    fun matches(row: TrackEntity) = track.name == row.trackName && colorIndex == row.colorIndex
 
     companion object {
         const val TRANSIENT_ID = 0L

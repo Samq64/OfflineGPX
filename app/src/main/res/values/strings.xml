@@ -105,6 +105,8 @@
     <string name="library_sort_date">Date</string>
     <string name="library_sort_length">Length</string>
     <string name="library_sort_name">Name</string>
+    <string name="library_color">Colour: %1$s</string>
+    <string name="library_color_change">Change colour</string>
     <string name="library_delete">Delete</string>
     <plurals name="library_deleted">
         <item quantity="one">Track deleted.</item>
@@ -139,6 +141,13 @@
     <string name="library_exported_some">Exported %1$d of %2$d tracks. The rest couldn\'t be written there.</string>
     <string name="library_rename_failed">Couldn\'t rename that track.</string>
 
+    <string name="color_blue">Blue</string>
+    <string name="color_plum">Plum</string>
+    <string name="color_green">Green</string>
+    <string name="color_gold">Gold</string>
+    <string name="color_pink">Pink</string>
+    <string name="color_violet">Violet</string>
+    <string name="color_grey">Grey</string>
     <string name="record_start">Record</string>
     <string name="record_pause">Pause</string>
     <string name="record_resume">Resume</string>

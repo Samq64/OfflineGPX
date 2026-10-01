@@ -36,6 +36,9 @@ interface TrackDao {
     @Query("UPDATE tracks SET visible = :visible WHERE id = :id")
     suspend fun setVisible(id: Long, visible: Boolean)
 
+    @Query("UPDATE tracks SET colorIndex = :colorIndex WHERE id = :id")
+    suspend fun setColor(id: Long, colorIndex: Int)
+
     @Query("UPDATE tracks SET visible = :visible")
     suspend fun setAllVisible(visible: Boolean)
 }

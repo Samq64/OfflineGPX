@@ -275,6 +275,8 @@ class TrackRepository(
 
     suspend fun setAllVisible(visible: Boolean) = dao.setAllVisible(visible)
 
+    suspend fun setColor(id: Long, colorIndex: Int) = dao.setColor(id, colorIndex.mod(TrackEntity.PALETTE_SIZE))
+
     /** Hides [ids] until [undoDelete] or [commitDelete]. */
     fun deleteLater(ids: Collection<Long>) = pendingDelete.update { it + ids }
 
@@ -300,7 +302,7 @@ class TrackRepository(
         trackName: String?,
         stats: TrackStats,
     ) = TrackEntity(
-        colorIndex = leastUsedSlot(dao.colorUsage(), TrackEntity.PALETTE_SIZE),
+        colorIndex = leastUsedSlot(dao.colorUsage(), TrackEntity.NEUTRAL_SLOT),
         location = TrackFiles.location(appContext, file),
         displayName = displayName,
         trackName = trackName,
@@ -370,12 +372,15 @@ class TrackRepository(
     }
 }
 
-/** The palette slot fewest visible tracks use, then fewest overall, then the lowest. */
+/**
+ * Of the first [size] palette slots, the one fewest visible tracks use, then fewest overall,
+ * then the lowest. Slots past [size] aren't counted.
+ */
 internal fun leastUsedSlot(usage: List<ColorUse>, size: Int): Int {
     val shown = IntArray(size)
     val all = IntArray(size)
     usage.forEach { use ->
-        val slot = use.colorIndex.mod(size)
+        val slot = use.colorIndex.takeIf { it in 0 until size } ?: return@forEach
         all[slot]++
         if (use.visible) shown[slot]++
     }

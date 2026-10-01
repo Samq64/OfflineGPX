@@ -135,6 +135,10 @@ class LibraryViewModel(
         viewModelScope.launch { repository.setVisible(id, visible) }
     }
 
+    fun setColor(id: Long, colorIndex: Int) {
+        viewModelScope.launch { repository.setColor(id, colorIndex) }
+    }
+
     fun setAllVisible(visible: Boolean) {
         viewModelScope.launch { repository.setAllVisible(visible) }
     }
