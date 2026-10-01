@@ -69,10 +69,12 @@ internal fun WaypointTooltip(waypoint: Waypoint, tipAt: () -> Offset) {
 /** Starts a recording; once running, it lives in the sheet. */
 @Composable
 internal fun RecordButton(onStart: () -> Unit) {
+    val label = stringResource(R.string.record_start)
     ExtendedFloatingActionButton(
         onClick = onStart,
-        icon = { Icon(Icons.Default.PlayArrow, contentDescription = null) },
-        text = { Text(stringResource(R.string.record_start)) },
+        // The label goes on the icon: this overload hides its text from accessibility.
+        icon = { Icon(Icons.Default.PlayArrow, contentDescription = label) },
+        text = { Text(label) },
     )
 }
 
