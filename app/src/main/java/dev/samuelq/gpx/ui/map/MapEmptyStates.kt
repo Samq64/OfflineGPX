@@ -45,10 +45,10 @@ internal fun EmptyState(
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = onImportMap) {
-                Text(stringResource(R.string.map_empty_import_map))
+                Text(stringResource(R.string.settings_maps_import))
             }
             Button(onClick = onImportTrack) {
-                Text(stringResource(R.string.map_empty_import_track))
+                Text(stringResource(R.string.library_import))
             }
         }
     }

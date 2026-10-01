@@ -470,7 +470,7 @@ fun MapScreen(
                     viewModel.focus(null)
                     viewModel.delete(entity.id)
                     offerUndo(
-                        resources.getString(R.string.track_deleted, trackTitle(entity.trackName, entity.displayName)),
+                        resources.getString(R.string.deleted_named, trackTitle(entity.trackName, entity.displayName)),
                         onUndo = { viewModel.undoDelete(entity.id) },
                         onCommit = { viewModel.commitDelete(entity.id) },
                     )
@@ -575,11 +575,11 @@ fun MapScreen(
                         IconButton(onClick = onOpenList) {
                             Icon(
                                 Icons.AutoMirrored.Filled.List,
-                                stringResource(R.string.map_open_list),
+                                stringResource(R.string.library_title),
                             )
                         }
                         IconButton(onClick = onOpenSettings) {
-                            Icon(Icons.Default.Settings, stringResource(R.string.settings_open))
+                            Icon(Icons.Default.Settings, stringResource(R.string.settings_title))
                         }
                     },
                 )

@@ -139,7 +139,7 @@ fun SettingsScreen(
         scope.launch {
             snackbarHostState.showUndo(
                 context = context,
-                message = resources.getString(R.string.settings_maps_deleted, map.displayName),
+                message = resources.getString(R.string.deleted_named, map.displayName),
                 undoLabel = undo,
                 onUndo = { viewModel.undoDeleteMap(map) },
                 onCommit = { viewModel.commitDeleteMap(map) },

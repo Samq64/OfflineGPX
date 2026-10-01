@@ -104,7 +104,7 @@ internal class RecordingNotifications(private val service: Service) {
         val manager = service.getSystemService<NotificationManager>() ?: return
         val channel = NotificationChannel(
             CHANNEL_ID,
-            service.getString(R.string.record_channel_name),
+            service.getString(R.string.record_notification_active),
             NotificationManager.IMPORTANCE_LOW,
         ).apply {
             description = service.getString(R.string.record_channel_description)

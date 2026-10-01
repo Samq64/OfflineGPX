@@ -1,258 +1,45 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="action_back">Back</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_done">Done</string>
+    <string name="action_retry">Try again</string>
+    <string name="action_save">Save</string>
+    <string name="action_undo">Undo</string>
+
     <string name="app_name">Offline GPX</string>
 
-    <string name="action_back">Back</string>
-    <string name="action_retry">Try again</string>
-    <string name="action_cancel">Cancel</string>
-    <string name="action_undo">Undo</string>
-    <string name="action_save">Save</string>
-    <string name="action_done">Done</string>
+    <string name="axis_distance">Distance</string>
+    <string name="axis_time">Time</string>
 
-    <string name="map_open_list">Tracks</string>
-    <string name="map_description">Map showing your tracks. Open one by tapping its line or from the Tracks list.</string>
-    <!-- Map zoom buttons. -->
-    <string name="map_zoom_in">Zoom in</string>
-    <string name="map_zoom_out">Zoom out</string>
-    <string name="map_show_all">Show all tracks</string>
-    <string name="map_empty_title">Nothing to show</string>
-    <string name="map_empty_body">Record a ride or a walk, or import a track or a map.</string>
-    <string name="map_empty_import_map">Import map</string>
-    <string name="map_empty_import_track">Import track</string>
-    <!-- Spoken only. -->
-    <string name="map_loading">Loading tracks</string>
-    <string name="map_scale">Map scale: %1$s</string>
-    <string name="sheet_drag_handle">Drag handle</string>
-    <string name="map_none_shown">No tracks shown</string>
-    <string name="map_hidden_hint">Show a track from the list</string>
-    <string name="map_my_location">My location</string>
-    <string name="map_location_outside">You\'re outside your tracks and maps.</string>
-    <string name="map_location_off">Location is switched off.</string>
-    <string name="map_location_denied">Showing where you are needs location access.</string>
-    <string name="map_precise_required">Showing where you are needs precise location.</string>
-    <!-- How many of the imported tracks are currently drawn on the map, not the library's total. -->
-    <plurals name="map_shown">
-        <item quantity="one">%d track shown</item>
-        <item quantity="other">%d tracks shown</item>
-    </plurals>
-
-    <string name="settings_title">Settings</string>
-    <string name="settings_open">Settings</string>
-    <string name="settings_section_display">Display</string>
-    <string name="settings_section_recording">Recording</string>
-    <string name="settings_units">Units</string>
-    <string name="settings_units_explanation">Display only. Files stay in metres, so switching never alters a track.</string>
-    <string name="settings_units_metric">Metric</string>
-    <string name="settings_units_imperial">Imperial</string>
-    <string name="settings_zoom_buttons">Zoom buttons</string>
-    <string name="settings_zoom_buttons_explanation">Show zoom and fit buttons on the map, for zooming without a pinch. Double-tap and drag also zooms.</string>
-
-    <string name="settings_accuracy">Accuracy limit</string>
-    <!-- Spoken for the slider: the value, then the default. -->
-    <string name="settings_accuracy_state">%1$s, default %2$s</string>
-    <string name="settings_accuracy_explanation">Fixes less certain than this are ignored. Lower keeps out the wandering a phone does indoors; too low and a wooded valley records nothing. Read when a recording starts.</string>
-
-    <string name="settings_battery">Battery optimisation</string>
-    <string name="settings_battery_explanation">Some phones stop recordings in the background. Turn optimisation off for this app to keep them running.</string>
-    <string name="settings_battery_open">Open battery settings</string>
-
-    <string name="settings_section_about">About</string>
-    <!-- %1$s is the version and commit, e.g. 0.1.0 (8c5759b). -->
-    <string name="settings_about_version">Version %1$s. GPL-3.0.</string>
-    <string name="settings_about_libraries">Libraries</string>
-
-    <string name="settings_section_maps">Offline maps</string>
-    <string name="settings_maps_explanation">No internet access here, so maps come from a .map file you import. Without one, tracks are drawn on a plain background.</string>
-    <string name="settings_maps_import">Import map</string>
-    <!-- A direct link to where the files are published, so an action, not a heading. -->
-    <string name="settings_maps_where">Get maps</string>
-    <string name="settings_maps_none">No maps imported.</string>
-    <string name="settings_maps_delete_named">Delete %1$s</string>
-    <string name="settings_maps_importing">Copying map…</string>
-    <string name="settings_maps_imported">Map imported.</string>
-    <!-- Undo snackbars say what was done, then to what. %1$s is the map's name. -->
-    <string name="settings_maps_deleted">Deleted “%1$s”.</string>
-    <string name="settings_maps_failed_unreadable">Couldn\'t read that file.</string>
-    <string name="settings_maps_failed_format">That isn\'t a supported map format.</string>
-    <string name="settings_maps_failed_space">Not enough free space for that map.</string>
-    <plurals name="settings_maps_merge_title">
-        <item quantity="one">Merge with existing map?</item>
-        <item quantity="other">Merge with existing maps?</item>
-    </plurals>
-    <!-- %1$s is the new map, %2$s a list of the maps covering the same area, each already quoted. -->
-    <plurals name="settings_maps_merge_body">
-        <item quantity="one">“%1$s” covers the same area as %2$s. Both are kept and drawn as one.</item>
-        <item quantity="other">“%1$s” covers the same area as %2$s. All are kept and drawn as one.</item>
-    </plurals>
-    <string name="settings_maps_merge">Merge</string>
-    <string name="settings_maps_no_browser">No app on this device can open a web page.</string>
-
-    <string name="library_title">Tracks</string>
-    <string name="library_import">Import track</string>
-    <string name="library_share">Share</string>
-    <string name="library_export_all">Export to a folder</string>
-    <string name="library_search">Search tracks</string>
-    <string name="library_search_hint">Search tracks</string>
-    <string name="library_search_close">Close search</string>
-    <string name="library_search_clear">Clear search</string>
-    <string name="library_search_empty">Nothing matches “%1$s”.</string>
-    <string name="library_rename">Rename</string>
-    <string name="library_duplicate">Duplicate</string>
-    <!-- A duplicated track's name. %1$s is the original's. -->
-    <string name="duplicate_name">%1$s (copy)</string>
-    <string name="library_duplicate_failed">Couldn\'t duplicate that track.</string>
-    <string name="library_rename_label">Track name</string>
-    <string name="library_more">More options</string>
-    <string name="library_show_all">Show all</string>
-    <string name="library_hide_all">Hide all</string>
-    <string name="library_sort">Sort</string>
-    <string name="library_sort_recent">Last viewed</string>
-    <string name="library_sort_date">Date</string>
-    <string name="library_sort_length">Length</string>
-    <string name="library_sort_name">Name</string>
-    <string name="library_sort_ascending">Ascending</string>
-    <string name="library_sort_descending">Descending</string>
-    <string name="library_color">Colour: %1$s</string>
-    <string name="library_color_change">Change colour</string>
-    <string name="library_delete">Delete</string>
-    <!-- %1$s is the track's name; library_deleted is for several at once. -->
-    <string name="track_deleted">Deleted “%1$s”.</string>
-    <plurals name="library_deleted">
-        <item quantity="one">Deleted %d track.</item>
-        <item quantity="other">Deleted %d tracks.</item>
-    </plurals>
-    <string name="library_select_all">Select all</string>
-    <!-- Spoken only. -->
-    <string name="library_select">Select</string>
-    <string name="library_open_on_map">Open on map</string>
-    <string name="library_show_on_map">Show %1$s on map</string>
-    <string name="library_delete_selected">Delete selected</string>
-    <plurals name="library_search_found">
-        <item quantity="one">%d track found</item>
-        <item quantity="other">%d tracks found</item>
-    </plurals>
-    <string name="library_clear_selection">Clear selection</string>
-    <string name="library_selected">%d selected</string>
-    <string name="library_empty_title">No tracks yet</string>
-    <!-- Not "files are read only when you pick them": import keeps a copy. -->
-    <string name="library_empty_body">Record one, or import a .gpx file. Importing keeps a copy here; nothing leaves the device.</string>
-    <string name="library_import_failed">Couldn\'t import that file.</string>
-    <plurals name="library_imported_all">
-        <item quantity="one">Imported %1$d track.</item>
-        <item quantity="other">Imported %1$d tracks.</item>
-    </plurals>
-    <string name="library_imported_some">Imported %1$d of %2$d files. The rest couldn\'t be read.</string>
-    <string name="library_export_failed">Couldn\'t export to that folder.</string>
-    <plurals name="library_exported_all">
-        <item quantity="one">Exported %1$d track.</item>
-        <item quantity="other">Exported %1$d tracks.</item>
-    </plurals>
-    <string name="library_exported_some">Exported %1$d of %2$d tracks. The rest couldn\'t be written there.</string>
-    <string name="library_rename_failed">Couldn\'t rename that track.</string>
-
-    <string name="color_blue">Blue</string>
-    <string name="color_plum">Plum</string>
-    <string name="color_green">Green</string>
-    <string name="color_gold">Gold</string>
-    <string name="color_pink">Pink</string>
-    <string name="color_violet">Violet</string>
-    <string name="color_grey">Grey</string>
-    <string name="record_start">Record</string>
-    <string name="record_pause">Pause</string>
-    <string name="record_resume">Resume</string>
-    <string name="record_stop">Stop</string>
-    <string name="record_discard">Discard</string>
-    <!-- Spoken for a disabled Save. -->
-    <string name="record_too_short">Too short to save</string>
-    <string name="record_waiting_for_fix">Waiting for a GPS fix…</string>
-    <string name="record_weak_signal">Signal too weak to record — accurate to ±%1$s. Try outdoors.</string>
-    <!-- Spoken on change, so without the accuracy figure. -->
-    <string name="record_weak_signal_spoken">Signal too weak to record. Try outdoors.</string>
-    <string name="record_add_waypoint">Add waypoint</string>
-    <string name="record_waypoint_title">Waypoint %1$d</string>
-    <!-- Appended to "Waypoint 3" in a spoken action: the time, then the note. -->
-    <string name="waypoint_action_time">, %1$s</string>
-    <string name="waypoint_action_note">: %1$s</string>
-    <string name="record_waypoint_label">Note (optional)</string>
-    <plurals name="record_waypoints_logged">
-        <item quantity="one">%1$d waypoint</item>
-        <item quantity="other">%1$d waypoints</item>
-    </plurals>
-    <string name="record_save_failed">Couldn\'t save that recording. It\'s still on the device.</string>
-    <string name="record_discarded">Discarded the recording.</string>
-    <!-- %1$s is the name the recording would have been saved as. -->
-    <string name="record_discarded_named">Discarded “%1$s”.</string>
-    <string name="record_stop_title">Stop recording</string>
-    <string name="record_stop_to_open">Stop recording to open a track.</string>
-    <string name="record_recovered_title">Unsaved recording</string>
-    <string name="record_recovered_body">Started %1$s. The app closed before it was saved.</string>
-
-    <!-- Every way starting a recording can fail, said where the user tapped. -->
-    <string name="record_location_off">Location is switched off. Turn it on to record.</string>
-    <string name="record_location_denied">Recording needs location access.</string>
-    <string name="record_precise_required">Recording needs precise location. Approximate is accurate to hundreds of metres.</string>
-    <!-- The recording stays up, so not "nothing is being recorded" - that read as stopped,
-         which is the one thing that didn't happen. -->
-    <string name="record_location_lost">Location switched off. Still recording, but no new points.</string>
-    <string name="record_nothing_recorded">Nothing recorded — no fix was accurate enough to use.</string>
-    <string name="record_no_distance">That recording didn\'t go anywhere, so it wasn\'t saved.</string>
-
-    <string name="record_notification_active">Recording</string>
-    <string name="record_notification_paused">Recording paused</string>
-    <string name="record_channel_name">Recording</string>
-    <string name="record_channel_description">Shown while a track is being recorded.</string>
-
-    <!-- What a recording is called until it is renamed. %1$s is the weekday, e.g. "Saturday". -->
-    <string name="track_default_morning">%1$s morning</string>
-    <string name="track_default_afternoon">%1$s afternoon</string>
-    <string name="track_default_evening">%1$s evening</string>
-    <string name="track_default_night">%1$s night</string>
-
-    <string name="track_loading">Reading track…</string>
-    <string name="track_close">Close</string>
-    <string name="track_manage">Manage this track</string>
-    <!-- Spoken only; names the button in a list of them. -->
-    <string name="track_manage_named">Manage %1$s</string>
-    <string name="track_hide">Hide</string>
-    <!-- %1$s is the track's name, as in the trimmed and split ones below. -->
-    <string name="track_hidden">Hid “%1$s”.</string>
-    <string name="track_trim">Trim</string>
-    <string name="track_split">Split here</string>
-    <!-- %1$s is the track's name. -->
-    <string name="trim_title">Trim %1$s</string>
-    <!-- What the trim keeps, from where to where along the track. -->
-    <string name="trim_range">Keeping %1$s to %2$s</string>
-    <string name="track_trimmed">Trimmed “%1$s”.</string>
-    <string name="track_split_done">Split “%1$s”.</string>
-    <string name="track_edit_failed">Couldn\'t change that track.</string>
-    <!-- A split track's parts. %1$s is the track's name, %2$d which part. -->
-    <string name="split_part">%1$s (cut %2$d)</string>
-    <string name="track_error_title">Couldn\'t open this file</string>
-    <string name="track_error_invalid">This file isn\'t valid GPX.</string>
-    <string name="track_error_empty">This GPX file has no track points.</string>
-    <!-- Under track_error_title, which already says it couldn\'t be opened. -->
-    <string name="track_error_unreadable">It may have been moved, renamed or deleted.</string>
-
+    <string name="chart_elevation">Elevation</string>
+    <string name="chart_elevation_empty">This track has no elevation data.</string>
+    <string name="chart_gap">Gap %1$s</string>
+    <string name="chart_no_point">No point selected</string>
+    <string name="chart_point">%1$s, %2$s</string>
     <string name="chart_speed">Speed</string>
+    <string name="chart_speed_empty">This track has no timestamps, so speed can\'t be computed.</string>
     <!-- Spoken for a chart: its title and range, then the point it's on. -->
     <string name="chart_summary">%1$s chart, %2$s to %3$s</string>
-    <string name="chart_point">%1$s, %2$s</string>
-    <string name="chart_no_point">No point selected</string>
-    <string name="chart_zoom_reset">Show whole track</string>
-    <string name="chart_elevation">Elevation</string>
     <!-- Not "Paused": a break is equally signal loss or an analyser cut, and naming one
          asserts a cause the app took care not to infer. -->
     <string name="chart_waiting">No movement yet</string>
-    <string name="chart_gap">Gap %1$s</string>
-    <string name="chart_speed_empty">This track has no timestamps, so speed can\'t be computed.</string>
-    <string name="chart_elevation_empty">This track has no elevation data.</string>
+    <string name="chart_zoom_reset">Show whole track</string>
 
-    <string name="axis_time">Time</string>
-    <string name="axis_distance">Distance</string>
+    <string name="color_blue">Blue</string>
+    <string name="color_gold">Gold</string>
+    <string name="color_green">Green</string>
+    <string name="color_grey">Grey</string>
+    <string name="color_pink">Pink</string>
+    <string name="color_plum">Plum</string>
+    <string name="color_violet">Violet</string>
 
-    <!-- Spoken for a stat tile: label, then value. -->
-    <string name="stat_spoken">%1$s: %2$s</string>
-    <string name="value_unknown">unknown</string>
+    <!-- %1$s is a track or map name. -->
+    <string name="deleted_named">Deleted “%1$s”.</string>
+
+    <!-- A duplicated track's name. %1$s is the original's. -->
+    <string name="duplicate_name">%1$s (copy)</string>
+
     <plurals name="duration_hours">
         <item quantity="one">%d hour</item>
         <item quantity="other">%d hours</item>
@@ -265,15 +52,218 @@
         <item quantity="one">%d second</item>
         <item quantity="other">%d seconds</item>
     </plurals>
-    <string name="stat_moving">Moving</string>
-    <string name="stat_elapsed">Elapsed</string>
+
+    <string name="library_clear_selection">Clear selection</string>
+    <string name="library_color">Colour: %1$s</string>
+    <string name="library_color_change">Change colour</string>
+    <string name="library_delete">Delete</string>
+    <string name="library_delete_selected">Delete selected</string>
+    <plurals name="library_deleted">
+        <item quantity="one">Deleted %d track.</item>
+        <item quantity="other">Deleted %d tracks.</item>
+    </plurals>
+    <string name="library_duplicate">Duplicate</string>
+    <string name="library_duplicate_failed">Couldn\'t duplicate that track.</string>
+    <!-- Not "files are read only when you pick them": import keeps a copy. -->
+    <string name="library_empty_body">Record one, or import a .gpx file. Importing keeps a copy here; nothing leaves the device.</string>
+    <string name="library_empty_title">No tracks yet</string>
+    <string name="library_export_all">Export to a folder</string>
+    <string name="library_export_failed">Couldn\'t export to that folder.</string>
+    <plurals name="library_exported_all">
+        <item quantity="one">Exported %1$d track.</item>
+        <item quantity="other">Exported %1$d tracks.</item>
+    </plurals>
+    <string name="library_exported_some">Exported %1$d of %2$d tracks. The rest couldn\'t be written there.</string>
+    <string name="library_hide_all">Hide all</string>
+    <string name="library_import">Import track</string>
+    <string name="library_import_failed">Couldn\'t import that file.</string>
+    <plurals name="library_imported_all">
+        <item quantity="one">Imported %1$d track.</item>
+        <item quantity="other">Imported %1$d tracks.</item>
+    </plurals>
+    <string name="library_imported_some">Imported %1$d of %2$d files. The rest couldn\'t be read.</string>
+    <string name="library_more">More options</string>
+    <string name="library_open_on_map">Open on map</string>
+    <string name="library_rename">Rename</string>
+    <string name="library_rename_failed">Couldn\'t rename that track.</string>
+    <string name="library_rename_label">Track name</string>
+    <string name="library_search">Search tracks</string>
+    <string name="library_search_clear">Clear search</string>
+    <string name="library_search_close">Close search</string>
+    <string name="library_search_empty">Nothing matches “%1$s”.</string>
+    <plurals name="library_search_found">
+        <item quantity="one">%d track found</item>
+        <item quantity="other">%d tracks found</item>
+    </plurals>
+    <!-- Spoken only. -->
+    <string name="library_select">Select</string>
+    <string name="library_select_all">Select all</string>
+    <string name="library_selected">%d selected</string>
+    <string name="library_share">Share</string>
+    <string name="library_show_all">Show all</string>
+    <string name="library_show_on_map">Show %1$s on map</string>
+    <string name="library_sort">Sort</string>
+    <string name="library_sort_ascending">Ascending</string>
+    <string name="library_sort_date">Date</string>
+    <string name="library_sort_descending">Descending</string>
+    <string name="library_sort_length">Length</string>
+    <string name="library_sort_name">Name</string>
+    <string name="library_sort_recent">Last viewed</string>
+    <string name="library_title">Tracks</string>
+
+    <string name="map_description">Map showing your tracks. Open one by tapping its line or from the Tracks list.</string>
+    <string name="map_empty_body">Record a ride or a walk, or import a track or a map.</string>
+    <string name="map_empty_title">Nothing to show</string>
+    <string name="map_hidden_hint">Show a track from the list</string>
+    <!-- Spoken only. -->
+    <string name="map_loading">Loading tracks</string>
+    <string name="map_location_denied">Showing where you are needs location access.</string>
+    <string name="map_location_off">Location is switched off.</string>
+    <string name="map_location_outside">You\'re outside your tracks and maps.</string>
+    <string name="map_my_location">My location</string>
+    <string name="map_none_shown">No tracks shown</string>
+    <string name="map_precise_required">Showing where you are needs precise location.</string>
+    <string name="map_scale">Map scale: %1$s</string>
+    <string name="map_show_all">Show all tracks</string>
+    <!-- How many of the imported tracks are currently drawn on the map, not the library's total. -->
+    <plurals name="map_shown">
+        <item quantity="one">%d track shown</item>
+        <item quantity="other">%d tracks shown</item>
+    </plurals>
+    <string name="map_zoom_in">Zoom in</string>
+    <string name="map_zoom_out">Zoom out</string>
+
+    <string name="record_add_waypoint">Add waypoint</string>
+    <string name="record_channel_description">Shown while a track is being recorded.</string>
+    <string name="record_discard">Discard</string>
+    <string name="record_discarded">Discarded the recording.</string>
+    <!-- %1$s is the name the recording would have been saved as. -->
+    <string name="record_discarded_named">Discarded “%1$s”.</string>
+    <string name="record_location_denied">Recording needs location access.</string>
+    <!-- The recording stays up, so not "nothing is being recorded" - that read as stopped,
+         which is the one thing that didn't happen. -->
+    <string name="record_location_lost">Location switched off. Still recording, but no new points.</string>
+    <string name="record_location_off">Location is switched off. Turn it on to record.</string>
+    <string name="record_no_distance">That recording didn\'t go anywhere, so it wasn\'t saved.</string>
+    <string name="record_nothing_recorded">Nothing recorded — no fix was accurate enough to use.</string>
+    <string name="record_notification_active">Recording</string>
+    <string name="record_notification_paused">Recording paused</string>
+    <string name="record_pause">Pause</string>
+    <string name="record_precise_required">Recording needs precise location. Approximate is accurate to hundreds of metres.</string>
+    <string name="record_recovered_body">Started %1$s. The app closed before it was saved.</string>
+    <string name="record_recovered_title">Unsaved recording</string>
+    <string name="record_resume">Resume</string>
+    <string name="record_save_failed">Couldn\'t save that recording. It\'s still on the device.</string>
+    <string name="record_start">Record</string>
+    <string name="record_stop">Stop</string>
+    <string name="record_stop_title">Stop recording</string>
+    <string name="record_stop_to_open">Stop recording to open a track.</string>
+    <!-- Spoken for a disabled Save. -->
+    <string name="record_too_short">Too short to save</string>
+    <string name="record_waiting_for_fix">Waiting for a GPS fix…</string>
+    <string name="record_waypoint_label">Note (optional)</string>
+    <string name="record_waypoint_title">Waypoint %1$d</string>
+    <plurals name="record_waypoints_logged">
+        <item quantity="one">%1$d waypoint</item>
+        <item quantity="other">%1$d waypoints</item>
+    </plurals>
+    <string name="record_weak_signal">Signal too weak to record — accurate to ±%1$s. Try outdoors.</string>
+    <!-- Spoken on change, so without the accuracy figure. -->
+    <string name="record_weak_signal_spoken">Signal too weak to record. Try outdoors.</string>
+
+    <string name="settings_about_libraries">Libraries</string>
+    <!-- %1$s is the version and commit, e.g. 0.1.0 (8c5759b). -->
+    <string name="settings_about_version">Version %1$s. GPL-3.0.</string>
+    <string name="settings_accuracy">Accuracy limit</string>
+    <string name="settings_accuracy_explanation">Fixes less certain than this are ignored. Lower keeps out the wandering a phone does indoors; too low and a wooded valley records nothing. Read when a recording starts.</string>
+    <!-- Spoken for the slider: the value, then the default. -->
+    <string name="settings_accuracy_state">%1$s, default %2$s</string>
+    <string name="settings_battery">Battery optimisation</string>
+    <string name="settings_battery_explanation">Some phones stop recordings in the background. Turn optimisation off for this app to keep them running.</string>
+    <string name="settings_battery_open">Open battery settings</string>
+    <string name="settings_maps_delete_named">Delete %1$s</string>
+    <string name="settings_maps_explanation">No internet access here, so maps come from a .map file you import. Without one, tracks are drawn on a plain background.</string>
+    <string name="settings_maps_failed_format">That isn\'t a supported map format.</string>
+    <string name="settings_maps_failed_space">Not enough free space for that map.</string>
+    <string name="settings_maps_failed_unreadable">Couldn\'t read that file.</string>
+    <string name="settings_maps_import">Import map</string>
+    <string name="settings_maps_imported">Map imported.</string>
+    <string name="settings_maps_importing">Copying map…</string>
+    <string name="settings_maps_merge">Merge</string>
+    <!-- %1$s is the new map, %2$s a list of the maps covering the same area, each already quoted. -->
+    <plurals name="settings_maps_merge_body">
+        <item quantity="one">“%1$s” covers the same area as %2$s. Both are kept and drawn as one.</item>
+        <item quantity="other">“%1$s” covers the same area as %2$s. All are kept and drawn as one.</item>
+    </plurals>
+    <plurals name="settings_maps_merge_title">
+        <item quantity="one">Merge with existing map?</item>
+        <item quantity="other">Merge with existing maps?</item>
+    </plurals>
+    <string name="settings_maps_no_browser">No app on this device can open a web page.</string>
+    <string name="settings_maps_none">No maps imported.</string>
+    <!-- A direct link to where the files are published, so an action, not a heading. -->
+    <string name="settings_maps_where">Get maps</string>
+    <string name="settings_section_about">About</string>
+    <string name="settings_section_display">Display</string>
+    <string name="settings_section_maps">Offline maps</string>
+    <string name="settings_section_recording">Recording</string>
+    <string name="settings_title">Settings</string>
+    <string name="settings_units">Units</string>
+    <string name="settings_units_explanation">Display only. Files stay in metres, so switching never alters a track.</string>
+    <string name="settings_units_imperial">Imperial</string>
+    <string name="settings_units_metric">Metric</string>
+    <string name="settings_zoom_buttons">Zoom buttons</string>
+    <string name="settings_zoom_buttons_explanation">Show zoom and fit buttons on the map, for zooming without a pinch. Double-tap and drag also zooms.</string>
+
+    <string name="sheet_drag_handle">Drag handle</string>
+
+    <!-- A split track's parts. %1$s is the track's name, %2$d which part. -->
+    <string name="split_part">%1$s (cut %2$d)</string>
+
+    <string name="stat_ascent">Ascent</string>
     <!-- Over moving time, not elapsed. -->
     <string name="stat_avg_speed">Avg moving speed</string>
-    <string name="stat_ascent">Ascent</string>
     <string name="stat_descent">Descent</string>
+    <string name="stat_elapsed">Elapsed</string>
+    <string name="stat_moving">Moving</string>
     <!-- A label under the count, which is shown apart. -->
     <plurals name="stat_points">
         <item quantity="one">Point</item>
         <item quantity="other">Points</item>
     </plurals>
+    <!-- Spoken for a stat tile: label, then value. -->
+    <string name="stat_spoken">%1$s: %2$s</string>
+
+    <string name="track_close">Close</string>
+    <!-- What a recording is called until it is renamed. %1$s is the weekday, e.g. "Saturday". -->
+    <string name="track_default_afternoon">%1$s afternoon</string>
+    <string name="track_default_evening">%1$s evening</string>
+    <string name="track_default_morning">%1$s morning</string>
+    <string name="track_default_night">%1$s night</string>
+    <string name="track_edit_failed">Couldn\'t change that track.</string>
+    <string name="track_error_empty">This GPX file has no track points.</string>
+    <string name="track_error_invalid">This file isn\'t valid GPX.</string>
+    <string name="track_error_title">Couldn\'t open this file</string>
+    <!-- Under track_error_title, which already says it couldn't be opened. -->
+    <string name="track_error_unreadable">It may have been moved, renamed or deleted.</string>
+    <string name="track_hidden">Hid “%1$s”.</string>
+    <string name="track_hide">Hide</string>
+    <string name="track_loading">Reading track…</string>
+    <string name="track_manage">Manage this track</string>
+    <!-- Spoken only; names the button in a list of them. -->
+    <string name="track_manage_named">Manage %1$s</string>
+    <string name="track_split">Split here</string>
+    <string name="track_split_done">Split “%1$s”.</string>
+    <string name="track_trim">Trim</string>
+    <string name="track_trimmed">Trimmed “%1$s”.</string>
+
+    <!-- What the trim keeps, from where to where along the track. -->
+    <string name="trim_range">Keeping %1$s to %2$s</string>
+    <string name="trim_title">Trim %1$s</string>
+
+    <string name="value_unknown">unknown</string>
+
+    <string name="waypoint_action_note">: %1$s</string>
+    <!-- Appended to "Waypoint 3" in a spoken action: the time, then the note. -->
+    <string name="waypoint_action_time">, %1$s</string>
 </resources>

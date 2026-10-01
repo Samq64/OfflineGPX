@@ -199,7 +199,7 @@ fun LibraryScreen(
                 context = context,
                 // Named when it's one; a count says enough for several.
                 message = ids.singleOrNull()?.let { id -> tracks.firstOrNull { it.id == id } }
-                    ?.let { resources.getString(R.string.track_deleted, trackTitle(it.trackName, it.displayName)) }
+                    ?.let { resources.getString(R.string.deleted_named, trackTitle(it.trackName, it.displayName)) }
                     ?: resources.getQuantityString(R.plurals.library_deleted, ids.size, ids.size),
                 undoLabel = undo,
                 onUndo = {
@@ -735,7 +735,7 @@ private fun SearchBar(
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
     val keyboard = LocalSoftwareKeyboardController.current
     // The placeholder goes once there's text, and with it the field's only name.
-    val hint = stringResource(R.string.library_search_hint)
+    val hint = stringResource(R.string.library_search)
 
     TopAppBar(
         windowInsets = BarInsets,
@@ -743,7 +743,7 @@ private fun SearchBar(
             TextField(
                 value = query,
                 onValueChange = onQueryChange,
-                placeholder = { Text(stringResource(R.string.library_search_hint)) },
+                placeholder = { Text(stringResource(R.string.library_search)) },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = { keyboard?.hide() }),
