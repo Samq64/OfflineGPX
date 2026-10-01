@@ -11,13 +11,7 @@ import dev.samuelq.gpx.core.model.TrackPoints
 import dev.samuelq.gpx.data.db.TrackEntity
 import dev.samuelq.gpx.data.map.MapStore
 import dev.samuelq.gpx.data.map.OfflineMap
-import dev.samuelq.gpx.data.record.AbandonedRecording
-import dev.samuelq.gpx.data.record.DiscardedRecording
 import dev.samuelq.gpx.data.record.RecordingController
-import dev.samuelq.gpx.data.record.RecordingRecovery
-import dev.samuelq.gpx.data.record.RecordingState
-import dev.samuelq.gpx.data.record.LocationSource
-import dev.samuelq.gpx.core.model.TrackPoint
 import dev.samuelq.gpx.data.track.LoadedTrack
 import dev.samuelq.gpx.data.track.TrackRepository
 import dev.samuelq.gpx.di.appContainer
@@ -25,7 +19,6 @@ import dev.samuelq.gpx.ui.track.FocusedTrack
 import dev.samuelq.gpx.ui.track.TrackRef
 import dev.samuelq.gpx.ui.track.toTrackMessageRes
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -36,14 +29,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.emitAll
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.runningFold
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -55,15 +41,9 @@ import kotlinx.coroutines.launch
 sealed interface MapMessage {
     data object RenameFailed : MapMessage
     data object ImportFailed : MapMessage
-    data object RecoveryFailed : MapMessage
-    data object LocationOff : MapMessage
-    data object LocationDenied : MapMessage
 
     /** Undone with [MapViewModel.show]. */
     class Hidden(val id: Long) : MapMessage
-
-    /** Undone with [MapViewModel.restoreAbandoned], else [MapViewModel.forgetAbandoned]. */
-    class AbandonedDiscarded(val recording: AbandonedRecording, val name: String) : MapMessage
 }
 
 /** Visible tracks, with their geometry once it has been read off disk. */
@@ -84,10 +64,8 @@ data class MapUiState(
 
 class MapViewModel(
     private val repository: TrackRepository,
-    private val recovery: RecordingRecovery,
     controller: RecordingController,
     mapStore: MapStore,
-    private val locationSource: LocationSource,
 ) : ViewModel() {
 
     val basemaps: StateFlow<List<OfflineMap>> = mapStore.maps
@@ -127,48 +105,6 @@ class MapViewModel(
     private val _messages = Channel<MapMessage>(Channel.BUFFERED)
     val messages: Flow<MapMessage> = _messages.receiveAsFlow()
 
-    private val _locating = MutableStateFlow(false)
-    /** Kept across navigation, so returning to the map shows the position again. */
-    val locating: StateFlow<Boolean> = _locating.asStateFlow()
-
-    val isGpsEnabled: Boolean get() = locationSource.isGpsEnabled
-
-    fun showLocation(shown: Boolean) {
-        _locating.value = shown
-    }
-
-    /**
-     * The latest fix while [locating], null while waiting for one. Stops off screen, and while
-     * recording, whose puck is the position then.
-     */
-    @OptIn(ExperimentalCoroutinesApi::class)
-    val position: StateFlow<TrackPoint?> = combine(
-        _locating,
-        controller.state.map { it is RecordingState.Active },
-    ) { locating, recording -> locating && !recording }
-        .distinctUntilChanged()
-        .flatMapLatest { on ->
-            if (!on) {
-                flowOf(null)
-            } else {
-                flow<TrackPoint?> {
-                    emit(null)
-                    emitAll(locationSource.fixes(onUnavailable = { stopLocating(MapMessage.LocationOff) }))
-                }.catch { if (it is SecurityException) stopLocating(MapMessage.LocationDenied) else throw it }
-            }
-        }
-        // No replay: a fix from before the screen went away would show a stale position.
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000, replayExpirationMillis = 0), null)
-
-    private fun stopLocating(message: MapMessage) {
-        _locating.value = false
-        _messages.trySend(message)
-    }
-
-    /** The oldest recording a crash left unsaved, until it is saved or discarded. */
-    private val _abandoned = MutableStateFlow<AbandonedRecording?>(null)
-    val abandoned: StateFlow<AbandonedRecording?> = _abandoned.asStateFlow()
-    private val skipped = mutableSetOf<java.io.File>()
 
     private var requested: TrackRef? = null
     private var focusJob: Job? = null
@@ -182,7 +118,6 @@ class MapViewModel(
     }
 
     init {
-        viewModelScope.launch { nextAbandoned() }
         // `update` at every writer: a non-atomic read-modify-write lost renames during geometry loads.
         viewModelScope.launch {
             repository.visibleTracks.collect { entities ->
@@ -229,56 +164,6 @@ class MapViewModel(
                 onFailure = { _messages.trySend(MapMessage.ImportFailed) },
             )
         }
-    }
-
-    /** Saves the abandoned recording on offer and opens it, as a clean stop would. */
-    fun saveAbandoned(name: String) {
-        val recording = _abandoned.value ?: return
-        _abandoned.value = null
-        restoreAbandoned(recording, name)
-    }
-
-    /** Also what undoing its discard runs. */
-    fun restoreAbandoned(recording: AbandonedRecording, name: String) {
-        viewModelScope.launch {
-            recovery.save(recording, name).fold(
-                onSuccess = { focus(TrackRef.Saved(it)) },
-                // Still on disk: asked about again next launch.
-                onFailure = {
-                    skipped += recording.file
-                    _messages.trySend(MapMessage.RecoveryFailed)
-                },
-            )
-            nextAbandoned()
-        }
-    }
-
-    /** Kept on disk, and skipped here, until the undo lapses. [name] is what an undo saves. */
-    fun discardAbandoned(name: String) {
-        val recording = _abandoned.value ?: return
-        _abandoned.value = null
-        skipped += recording.file
-        _messages.trySend(MapMessage.AbandonedDiscarded(recording, name))
-        viewModelScope.launch { nextAbandoned() }
-    }
-
-    fun forgetAbandoned(recording: AbandonedRecording) = recovery.forget(recording)
-
-    /** Undoes a Stop dialog's discard: saves the ride and opens it, as Save would have. */
-    fun restoreDiscarded(recording: DiscardedRecording) {
-        viewModelScope.launch {
-            recovery.restore(recording).fold(
-                onSuccess = { focus(TrackRef.Saved(it)) },
-                onFailure = { _messages.trySend(MapMessage.RecoveryFailed) },
-            )
-        }
-    }
-
-    fun forgetDiscarded(recording: DiscardedRecording) = recovery.forget(recording)
-
-    private suspend fun nextAbandoned() {
-        // Skipping a failed save keeps the dialog from reopening on it.
-        _abandoned.value = recovery.abandoned().firstOrNull { it.file !in skipped }
     }
 
     /** The sheet reads the name off the row, so the row's update is all it needs. */
@@ -355,10 +240,8 @@ class MapViewModel(
             initializer {
                 MapViewModel(
                     repository = appContainer.trackRepository,
-                    recovery = appContainer.recordingRecovery,
                     controller = appContainer.recordingController,
                     mapStore = appContainer.mapStore,
-                    locationSource = appContainer.locationSource,
                 )
             }
         }

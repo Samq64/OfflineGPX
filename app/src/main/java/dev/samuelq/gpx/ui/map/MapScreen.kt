@@ -60,7 +60,6 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -73,11 +72,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.samuelq.gpx.R
 import dev.samuelq.gpx.core.model.Waypoint
 import dev.samuelq.gpx.data.record.RecordingController
-import dev.samuelq.gpx.data.record.RecordingEvent
 import dev.samuelq.gpx.data.record.RecordingState
 import dev.samuelq.gpx.data.track.LoadedTrack
 import dev.samuelq.gpx.ui.record.RecordingSheet
-import dev.samuelq.gpx.ui.record.RecoveredRecordingDialog
+import dev.samuelq.gpx.ui.record.RecordingOutcomes
 import dev.samuelq.gpx.ui.showUndo
 import dev.samuelq.gpx.ui.theme.recordingColor
 import dev.samuelq.gpx.ui.theme.routePalette
@@ -104,11 +102,10 @@ fun MapScreen(
     recorder: RecordingController,
     showZoomButtons: Boolean,
     viewModel: MapViewModel = viewModel(factory = MapViewModel.Factory),
+    location: LocationViewModel = viewModel(factory = LocationViewModel.Factory),
 ) {
     val mapController = remember { MapController() }
     val context = LocalContext.current
-    // Not context.getString: a long-lived collector would keep the old locale.
-    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     val state by viewModel.state.collectAsStateWithLifecycle()
     val trace by viewModel.trace.collectAsStateWithLifecycle()
@@ -118,8 +115,8 @@ fun MapScreen(
     val recording = recorder.state.collectAsStateWithLifecycle()
     val isRecording by remember { derivedStateOf { recording.value is RecordingState.Active } }
     val basemaps by viewModel.basemaps.collectAsStateWithLifecycle()
-    val locating by viewModel.locating.collectAsStateWithLifecycle()
-    val position by viewModel.position.collectAsStateWithLifecycle()
+    val locating by location.locating.collectAsStateWithLifecycle()
+    val position by location.position.collectAsStateWithLifecycle()
 
     val palette = routePalette()
     val liveColor = recordingColor()
@@ -158,11 +155,9 @@ fun MapScreen(
     // Read only by the tooltip's layout, so panning doesn't recompose this screen.
     val tappedWaypointAt = remember { mutableStateOf(Offset.Zero) }
 
-    val discarded = stringResource(R.string.record_discarded)
     val renameFailed = stringResource(R.string.library_rename_failed)
     val hidden = stringResource(R.string.track_hidden)
     val importFailed = stringResource(R.string.library_import_failed)
-    val saveFailed = stringResource(R.string.record_save_failed)
     val stopToOpen = stringResource(R.string.record_stop_to_open)
     val locationOff = stringResource(R.string.map_location_off)
     val locationDenied = stringResource(R.string.map_location_denied)
@@ -186,9 +181,9 @@ fun MapScreen(
     // On the first fix after a tap; later ones move the dot, not the map.
     var centreOnFix by remember { mutableStateOf(false) }
     val showLocation = rememberShowLocation(
-        isGpsEnabled = { viewModel.isGpsEnabled },
+        isGpsEnabled = { location.isGpsEnabled },
         onShow = {
-            viewModel.showLocation(true)
+            location.showLocation(true)
             centreOnFix = true
         },
         say = ::say,
@@ -237,34 +232,26 @@ fun MapScreen(
             when (message) {
                 MapMessage.RenameFailed -> say(renameFailed)
                 MapMessage.ImportFailed -> say(importFailed)
-                MapMessage.RecoveryFailed -> say(saveFailed)
-                MapMessage.LocationOff -> say(locationOff)
-                MapMessage.LocationDenied -> say(locationDenied)
                 is MapMessage.Hidden -> offerUndo(hidden, onUndo = { viewModel.show(message.id) })
-                is MapMessage.AbandonedDiscarded -> offerUndo(
-                    discarded,
-                    onUndo = { viewModel.restoreAbandoned(message.recording, message.name) },
-                    onCommit = { viewModel.forgetAbandoned(message.recording) },
-                )
             }
         }
     }
 
-    LaunchedEffect(recorder) {
-        recorder.events.collect { event ->
-            when (event) {
-                is RecordingEvent.Saved -> viewModel.focus(TrackRef.Saved(event.id))
-                is RecordingEvent.Discarded -> event.recording?.let { recording ->
-                    offerUndo(
-                        discarded,
-                        onUndo = { viewModel.restoreDiscarded(recording) },
-                        onCommit = { viewModel.forgetDiscarded(recording) },
-                    )
-                } ?: say(discarded)
-                is RecordingEvent.Failed -> say(resources.getString(event.messageRes))
+    LaunchedEffect(location) {
+        location.stopped.collect { reason ->
+            when (reason) {
+                LocationStopped.OFF -> say(locationOff)
+                LocationStopped.DENIED -> say(locationDenied)
             }
         }
     }
+
+    RecordingOutcomes(
+        recorder = recorder,
+        say = ::say,
+        offerUndo = { message, onUndo, onCommit -> offerUndo(message, onUndo, onCommit) },
+        onSaved = { viewModel.focus(TrackRef.Saved(it)) },
+    )
 
     // --- The sheet -----------------------------------------------------------------
 
@@ -678,7 +665,7 @@ fun MapScreen(
                                         if (show) {
                                             showLocation()
                                         } else {
-                                            viewModel.showLocation(false)
+                                            location.showLocation(false)
                                             centreOnFix = false
                                         }
                                     },
@@ -733,15 +720,6 @@ fun MapScreen(
                 viewModel.rename(track.id, name)
                 renamingId = null
             },
-        )
-    }
-
-    val abandoned by viewModel.abandoned.collectAsStateWithLifecycle()
-    abandoned?.let { recording ->
-        RecoveredRecordingDialog(
-            recording = recording,
-            onSave = viewModel::saveAbandoned,
-            onDiscard = viewModel::discardAbandoned,
         )
     }
 }
