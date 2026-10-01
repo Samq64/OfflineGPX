@@ -21,8 +21,17 @@ class TrackSortTest {
         trackName = trackName,
         startedAtEpochMillis = started,
         lastOpenedAtEpochMillis = opened,
+        pointCount = 2,
         distanceMeters = meters,
         totalSeconds = 0.0,
+        movingSeconds = 0.0,
+        averageSpeedMps = 0.0,
+        ascentMeters = 0.0,
+        descentMeters = 0.0,
+        southLatitude = 0.0,
+        westLongitude = 0.0,
+        northLatitude = 0.0,
+        eastLongitude = 0.0,
     )
 
     private fun List<TrackEntity>.ids(sort: TrackSort) =

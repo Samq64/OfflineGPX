@@ -1,5 +1,6 @@
 package dev.samuelq.gpx.ui.track
 
+import android.net.Uri
 import androidx.annotation.StringRes
 import dev.samuelq.gpx.R
 import dev.samuelq.gpx.data.track.LoadedTrack
@@ -9,7 +10,7 @@ sealed interface TrackRef {
     data class Saved(val id: Long) : TrackRef
 
     /** A URI from a VIEW or SEND intent, deliberately not indexed. */
-    data class Transient(val uri: String) : TrackRef
+    data class Transient(val uri: Uri) : TrackRef
 }
 
 sealed interface FocusedTrack {

@@ -95,13 +95,13 @@ class LibraryViewModel(
         if (uris.isEmpty()) return
         viewModelScope.launch {
             if (uris.size == 1) {
-                repository.import(uris.single().toString()).fold(
+                repository.import(uris.single()).fold(
                     onSuccess = { _events.send(LibraryEvent.Open(it)) },
                     onFailure = { _events.send(LibraryEvent.ImportFailed) },
                 )
                 return@launch
             }
-            val imported = uris.count { repository.import(it.toString()).isSuccess }
+            val imported = uris.count { repository.import(it).isSuccess }
             _events.send(LibraryEvent.ImportedAll(imported, uris.size))
         }
     }
@@ -117,7 +117,7 @@ class LibraryViewModel(
         val names = ids.zip(savedState.remove<ArrayList<String>>(EXPORT_NAMES).orEmpty()).toMap()
         if (folder == null || names.isEmpty()) return
         viewModelScope.launch {
-            repository.exportAll(names, folder.toString()).fold(
+            repository.exportAll(names, folder).fold(
                 onSuccess = { _events.send(LibraryEvent.ExportedAll(it, names.size)) },
                 onFailure = { _events.send(LibraryEvent.ExportFailed) },
             )

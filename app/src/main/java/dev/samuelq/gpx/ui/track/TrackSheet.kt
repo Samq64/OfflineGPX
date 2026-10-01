@@ -94,6 +94,7 @@ class TrackActions(
 @Composable
 fun TrackSheet(
     loaded: LoadedTrack,
+    title: String,
     routeColor: Color,
     maxHeight: Dp,
     selectedIndex: Int?,
@@ -122,7 +123,7 @@ fun TrackSheet(
         description = loaded.track.description,
     ) {
         SheetTitle(
-            name = trackTitle(loaded.track.name, loaded.displayName),
+            name = title,
             routeColor = routeColor,
             actions = actions,
             onClose = onClose,

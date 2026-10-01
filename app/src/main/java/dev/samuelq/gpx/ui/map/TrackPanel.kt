@@ -41,7 +41,6 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import dev.samuelq.gpx.R
 import dev.samuelq.gpx.core.model.Waypoint
-import dev.samuelq.gpx.ui.theme.slot
 import dev.samuelq.gpx.ui.track.FocusedTrack
 import dev.samuelq.gpx.ui.track.TrackActions
 import dev.samuelq.gpx.ui.track.TrackSheet
@@ -52,7 +51,9 @@ import dev.samuelq.gpx.ui.track.TrackSheetLoading
 @Composable
 internal fun FocusedTrackContent(
     focused: FocusedTrack,
-    palette: List<Color>,
+    /** The ready track's, from its row when it has one. */
+    title: String,
+    routeColor: Color,
     maxHeight: Dp,
     selectedIndex: Int?,
     onSelectedIndexChange: (Int?) -> Unit,
@@ -75,7 +76,8 @@ internal fun FocusedTrackContent(
         )
         is FocusedTrack.Ready -> TrackSheet(
             loaded = focused.track,
-            routeColor = palette.slot(focused.track.colorIndex),
+            title = title,
+            routeColor = routeColor,
             maxHeight = maxHeight,
             selectedIndex = selectedIndex,
             onSelectedIndexChange = onSelectedIndexChange,

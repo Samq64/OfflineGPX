@@ -2,23 +2,19 @@ package dev.samuelq.gpx.data.track
 
 import dev.samuelq.gpx.core.analysis.TrackProfile
 import dev.samuelq.gpx.core.model.Track
-import dev.samuelq.gpx.data.db.TrackEntity
 
-/** A parsed and analysed track, ready to draw. */
+/**
+ * A parsed and analysed track, ready to draw. A saved track's name and colour are its row's,
+ * read from there rather than copied here so they can't go stale.
+ */
 class LoadedTrack(
     /** The `tracks` row, or [TRANSIENT_ID] for a track opened from an intent. */
     val id: Long,
+    /** The filename. */
     val displayName: String,
     val track: Track,
     val profile: TrackProfile,
-    val colorIndex: Int,
 ) {
-    /** With its row's name and colour, which can change after it was read. */
-    fun synced(name: String?, colorIndex: Int) =
-        LoadedTrack(id, displayName, track.copy(name = name), profile, colorIndex)
-
-    fun matches(row: TrackEntity) = track.name == row.trackName && colorIndex == row.colorIndex
-
     companion object {
         const val TRANSIENT_ID = 0L
     }

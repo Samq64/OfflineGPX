@@ -44,7 +44,7 @@ fun GpxApp(
 
     LaunchedEffect(incomingTrack) {
         val uri = incomingTrack ?: return@LaunchedEffect
-        navController.focusOnMap(FocusRequest.uri(uri.toString()))
+        navController.focusOnMap(FocusRequest.uri(uri))
         onIncomingTrackHandled()
     }
 
@@ -119,11 +119,11 @@ private object FocusRequest {
     private const val URI = "uri:"
 
     fun saved(id: Long): String = "$SAVED$id"
-    fun uri(value: String): String = "$URI$value"
+    fun uri(value: Uri): String = "$URI$value"
 
     fun decode(raw: String): TrackRef? = when {
         raw.startsWith(SAVED) -> raw.removePrefix(SAVED).toLongOrNull()?.let(TrackRef::Saved)
-        raw.startsWith(URI) -> TrackRef.Transient(raw.removePrefix(URI))
+        raw.startsWith(URI) -> TrackRef.Transient(Uri.parse(raw.removePrefix(URI)))
         else -> null
     }
 }

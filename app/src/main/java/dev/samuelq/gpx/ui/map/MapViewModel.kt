@@ -194,8 +194,6 @@ class MapViewModel(
             repository.tracks.collect { all ->
                 val before = _state.value.all
                 _state.update { it.copy(all = all) }
-                // The row is the source of truth for name and colour, including changes made from the library.
-                resyncRows(all)
                 // Close the sheet if its track was deleted, or just hidden, elsewhere. A track opened
                 // while already hidden is meant to be shown.
                 val focusedId = (requested as? TrackRef.Saved)?.id ?: return@collect
@@ -203,26 +201,6 @@ class MapViewModel(
                 val wasVisible = before.firstOrNull { it.id == focusedId }?.visible == true
                 if (row == null || (wasVisible && !row.visible)) focus(null)
             }
-        }
-    }
-
-    /** Brings the geometry cache and the open sheet, if any, in line with the rows. */
-    private fun resyncRows(entities: List<TrackEntity>) {
-        _state.update { current ->
-            var geometry = current.geometry
-            for (entity in entities) {
-                val cached = geometry[entity.id] ?: continue
-                if (!cached.matches(entity)) {
-                    geometry = geometry + (entity.id to cached.synced(entity.trackName, entity.colorIndex))
-                }
-            }
-            current.copy(geometry = geometry)
-        }
-        _focused.update { focused ->
-            if (focused !is FocusedTrack.Ready) return@update focused
-            val entity = entities.firstOrNull { it.id == focused.track.id } ?: return@update focused
-            if (focused.track.matches(entity)) return@update focused
-            FocusedTrack.Ready(focused.track.synced(entity.trackName, entity.colorIndex))
         }
     }
 
@@ -246,7 +224,7 @@ class MapViewModel(
     /** Imports a `.gpx` file from the empty state and focuses it. */
     fun importTrack(uri: Uri) {
         viewModelScope.launch {
-            repository.import(uri.toString()).fold(
+            repository.import(uri).fold(
                 onSuccess = { focus(TrackRef.Saved(it)) },
                 onFailure = { _messages.trySend(MapMessage.ImportFailed) },
             )
@@ -303,7 +281,7 @@ class MapViewModel(
         _abandoned.value = recovery.abandoned().firstOrNull { it.file !in skipped }
     }
 
-    /** The row's update brings the new name to the sheet via [resyncNames]. */
+    /** The sheet reads the name off the row, so the row's update is all it needs. */
     fun rename(id: Long, name: String) {
         viewModelScope.launch {
             repository.rename(id, name).onFailure { _messages.trySend(MapMessage.RenameFailed) }

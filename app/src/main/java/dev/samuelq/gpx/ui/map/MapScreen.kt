@@ -88,6 +88,7 @@ import dev.samuelq.gpx.ui.track.TrackNameDialog
 import dev.samuelq.gpx.ui.track.TrackRef
 import dev.samuelq.gpx.ui.track.TrackSheetPeekHeight
 import dev.samuelq.gpx.ui.track.editableTrackName
+import dev.samuelq.gpx.ui.track.trackTitle
 import dev.samuelq.gpx.ui.track.shareTrackIntent
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
@@ -138,6 +139,14 @@ fun MapScreen(
     var preferTimeAxis by rememberSaveable { mutableStateOf(false) }
 
     val focusedTrack = (focused as? FocusedTrack.Ready)?.track
+    // A saved track's name and colour are its row's; a transient one has only the file's.
+    val focusedRow = focusedTrack?.let { state.entity(it.id) }
+    val focusedColor = palette.slot(focusedRow?.colorIndex ?: 0)
+    val focusedTitle = when {
+        focusedRow != null -> trackTitle(focusedRow.trackName, focusedRow.displayName)
+        focusedTrack != null -> trackTitle(focusedTrack.track.name, focusedTrack.displayName)
+        else -> ""
+    }
     // The recording takes the sheet over; other tracks wait until it stops.
     val subject = when {
         isRecording -> SheetSubject.Recording
@@ -311,12 +320,15 @@ fun MapScreen(
 
     // The recording is kept out: it grows every few seconds and would rebuild every track.
     // Keyed on the focused id, not the track: a rebuilt overlay loses its measured extent.
-    val overlays = remember(state.entities, state.geometry, focusedTrack?.id, palette) {
-        val drawable = state.entities.mapNotNull { state.geometry[it.id] }
+    val overlays = remember(state.entities, state.geometry, focusedTrack?.id, focusedColor, palette) {
+        // Colour from the row, not its position, so it's stable across taps.
+        val drawable = state.entities.mapNotNull { row ->
+            state.geometry[row.id]?.toOverlay(palette.slot(row.colorIndex), row.bounds)
+        }
         // Include the focused track even if hidden, so its readout has a line to go with.
-        val unlisted = focusedTrack?.takeIf { focus -> drawable.none { it.id == focus.id } }
-        // Colour from the track, not its position, so it's stable across taps.
-        (drawable + listOfNotNull(unlisted)).map { it.toOverlay(palette.slot(it.colorIndex)) }
+        val unlisted = focusedTrack?.takeIf { focus -> drawable.none { it.trackId == focus.id } }
+            ?.let { it.toOverlay(focusedColor, focusedRow?.bounds) }
+        drawable + listOfNotNull(unlisted)
     }
 
 
@@ -448,7 +460,8 @@ fun MapScreen(
             when (current) {
                 is SheetSubject.Track -> FocusedTrackContent(
                     focused = current.focused,
-                    palette = palette,
+                    title = focusedTitle,
+                    routeColor = focusedColor,
                     maxHeight = maxHeight,
                     selectedIndex = selectedIndex,
                     onSelectedIndexChange = { selectedIndex = it },
@@ -543,7 +556,7 @@ fun MapScreen(
                     selectedIndex = selectedIndex,
                     markerColor = when {
                         isRecording -> liveColor
-                        focusedTrack != null -> palette.slot(focusedTrack.colorIndex)
+                        focusedTrack != null -> focusedColor
                         else -> MaterialTheme.colorScheme.primary
                     },
                     showPuck = isRecording,
@@ -711,9 +724,9 @@ fun MapScreen(
     }
 
     // Only once loaded, which is what knows the name to offer.
-    focusedTrack?.takeIf { it.id == renamingId }?.let { track ->
+    focusedRow?.takeIf { it.id == renamingId }?.let { track ->
         TrackNameDialog(
-            initialName = editableTrackName(track.track.name, track.displayName),
+            initialName = editableTrackName(track.trackName, track.displayName),
             // Prefilled, not a hint: dismissing keeps what's shown.
             onDismiss = { renamingId = null },
             onConfirm = { name ->

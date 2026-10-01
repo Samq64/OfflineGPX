@@ -4,11 +4,10 @@ import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
 import android.util.Log
-import androidx.core.net.toUri
 import dev.samuelq.gpx.core.analysis.TrackAnalyzer
 import dev.samuelq.gpx.core.analysis.TrackProfile
-import dev.samuelq.gpx.core.analysis.TrackStats
 import dev.samuelq.gpx.core.model.Track
+import dev.samuelq.gpx.core.model.bounds
 import dev.samuelq.gpx.data.db.ColorUse
 import dev.samuelq.gpx.data.db.TrackDao
 import dev.samuelq.gpx.data.db.TrackEntity
@@ -60,9 +59,8 @@ class TrackRepository(
     private val recordingsDir: File get() = TrackFiles.recordingsDir(appContext)
     private val importsDir: File get() = TrackFiles.importsDir(appContext)
 
-    /** Avoids reparsing the track the user just looked at; the sheet shows one at a time. */
-    @Volatile
-    private var cached: Pair<String, LoadedTrack>? = null
+    /** Parsed tracks on disk; what's drawn is held in memory by the map, not here. */
+    private val cache = TrackCache(File(appContext.cacheDir, "tracks"))
 
     /**
      * Deleted but still undoable, so left out of every list. In memory only: if the process
@@ -79,10 +77,9 @@ class TrackRepository(
     val visibleTracks: Flow<List<TrackEntity>> =
         tracks.map { all -> all.filter(TrackEntity::visible).asReversed() }
 
-    /** Copies [location] into app-private storage and indexes it. Returns the row id. No dedupe. */
-    suspend fun import(location: String): Result<Long> = withContext(io) {
+    /** Copies [uri] into app-private storage and indexes it. Returns the row id. No dedupe. */
+    suspend fun import(uri: Uri): Result<Long> = withContext(io) {
         runCatching {
-            val uri = location.toUri()
             val displayName = displayNameOf(uri)
             val destination = uniqueFile(importsDir, displayName, "gpx", fallback = "track")
 
@@ -94,35 +91,16 @@ class TrackRepository(
                 read(destination.inputStream(), displayName, LoadedTrack.TRANSIENT_ID)
             }.onFailure { destination.delete() }.getOrThrow()
 
-            val entity = newEntity(destination, displayName, loaded.track.name, loaded.profile.stats)
-            val id = dao.upsert(entity)
-
-            cached = entity.location to LoadedTrack(
-                id = id,
-                displayName = displayName,
-                track = loaded.track,
-                profile = loaded.profile,
-                colorIndex = entity.colorIndex,
-            )
+            val id = dao.upsert(newEntity(destination, displayName, loaded.track, loaded.profile))
+            cache.write(id, destination, loaded.track)
             id
         }.recoverFailure()
     }
 
+    /** Loads a saved track and moves it to the top of the recent order. */
     suspend fun open(id: Long): Result<LoadedTrack> = withContext(io) {
         runCatching {
-            val entity = entity(id)
-
-            cached?.let { (location, track) ->
-                if (location == entity.location) {
-                    dao.touch(id, System.currentTimeMillis())
-                    return@runCatching track
-                }
-            }
-
-            val loaded = read(fileOf(entity).inputStream(), entity.displayName, id, entity.colorIndex)
-            dao.touch(id, System.currentTimeMillis())
-            cached = entity.location to loaded
-            loaded
+            load(entity(id)).also { dao.touch(id, System.currentTimeMillis()) }
         }.recoverFailure()
     }
 
@@ -155,16 +133,14 @@ class TrackRepository(
                 }
                 file.outputStream().use { writer.write(named, it) }
 
-                val stats = profile.stats.copy(startedAt = startedAt)
-                dao.upsert(newEntity(file, file.name, named.name, stats))
+                dao.upsert(newEntity(file, file.name, named, profile)).also { cache.write(it, file, named) }
             }.recoverFailure()
         }
 
     /** Writes tracks into the SAF folder [treeUri] under [names]. Returns how many landed. */
-    suspend fun exportAll(names: Map<Long, String>, treeUri: String): Result<Int> =
+    suspend fun exportAll(names: Map<Long, String>, tree: Uri): Result<Int> =
         withContext(io) {
             runCatching {
-                val tree = treeUri.toUri()
                 // A tree URI must be turned into a document URI before creating children.
                 val folder = DocumentsContract.buildDocumentUriUsingTree(
                     tree,
@@ -218,26 +194,26 @@ class TrackRepository(
     }
 
     /** Reads a track without indexing it, for VIEW/SEND intents whose URI grants are one-shot. */
-    suspend fun openTransient(location: String): Result<LoadedTrack> = withContext(io) {
+    suspend fun openTransient(uri: Uri): Result<LoadedTrack> = withContext(io) {
         runCatching {
-            cached?.let { (cachedLocation, track) ->
-                if (cachedLocation == location) return@runCatching track
-            }
-            val uri = location.toUri()
             val stream = appContext.contentResolver.openInputStream(uri)
-                ?: throw TrackLoadException.Unreadable("No provider could open $location")
-            val loaded = read(stream, displayNameOf(uri), LoadedTrack.TRANSIENT_ID)
-            cached = location to loaded
-            loaded
+                ?: throw TrackLoadException.Unreadable("No provider could open $uri")
+            read(stream, displayNameOf(uri), LoadedTrack.TRANSIENT_ID)
         }.recoverFailure()
     }
 
-    /** Like [open] but without touching the sort order, for map redraws. */
+    /** Like [open] but without touching the sort order, for drawing. */
     suspend fun geometry(id: Long): Result<LoadedTrack> = withContext(io) {
-        runCatching {
-            val entity = entity(id)
-            read(fileOf(entity).inputStream(), entity.displayName, id, entity.colorIndex)
-        }.recoverFailure()
+        runCatching { load(entity(id)) }.recoverFailure()
+    }
+
+    /** From the cache when it's current, else parsed and cached. */
+    private fun load(entity: TrackEntity): LoadedTrack {
+        val file = fileOf(entity)
+        cache.read(entity.id, file)?.let { track ->
+            return LoadedTrack(entity.id, entity.displayName, track, TrackAnalyzer.analyze(track))
+        }
+        return read(file.inputStream(), entity.displayName, entity.id).also { cache.write(entity.id, file, it.track) }
     }
 
     /** Bytes of each track's file, by id; a stat, not a parse. */
@@ -258,14 +234,15 @@ class TrackRepository(
             val file = fileOf(entity)
             val temp = File(file.parentFile, "${file.name}.tmp")
             try {
-                if (GpxNameRewriter.rewrite(file, temp, trimmed) && !temp.renameTo(file)) {
-                    throw TrackLoadException.Unreadable("Could not rewrite ${file.name}")
+                if (GpxNameRewriter.rewrite(file, temp, trimmed)) {
+                    if (!temp.renameTo(file)) throw TrackLoadException.Unreadable("Could not rewrite ${file.name}")
+                    // The cache holds no name, so the rewrite leaves it current.
+                    cache.restamp(id, file)
                 }
             } finally {
                 // No-op once renamed; cleans up on failure.
                 temp.delete()
             }
-            if (cached?.first == entity.location) cached = null
 
             dao.setTrackName(id, trimmed)
         }.recoverFailure()
@@ -286,9 +263,9 @@ class TrackRepository(
     fun commitDelete(ids: Collection<Long>) {
         scope.launch {
             val entities = dao.byIds(ids.toList())
-            if (entities.any { it.location == cached?.first }) cached = null
             ids.forEach { dao.delete(it) }
             entities.forEach(::deleteFile)
+            ids.forEach(cache::delete)
             pendingDelete.update { it - ids.toSet() }
         }
     }
@@ -299,26 +276,34 @@ class TrackRepository(
     private suspend fun newEntity(
         file: File,
         displayName: String,
-        trackName: String?,
-        stats: TrackStats,
-    ) = TrackEntity(
-        colorIndex = leastUsedSlot(dao.colorUsage(), TrackEntity.NEUTRAL_SLOT),
-        location = TrackFiles.location(appContext, file),
-        displayName = displayName,
-        trackName = trackName,
-        startedAtEpochMillis = stats.startedAt?.toEpochMilli(),
-        lastOpenedAtEpochMillis = System.currentTimeMillis(),
-        distanceMeters = stats.distanceMeters,
-        totalSeconds = stats.totalDurationSeconds,
-    )
+        track: Track,
+        profile: TrackProfile,
+    ): TrackEntity {
+        val stats = profile.stats
+        val bounds = checkNotNull(track.points.bounds()) { "Indexing an empty track" }
+        return TrackEntity(
+            colorIndex = leastUsedSlot(dao.colorUsage(), TrackEntity.NEUTRAL_SLOT),
+            location = TrackFiles.location(appContext, file),
+            displayName = displayName,
+            trackName = track.name,
+            startedAtEpochMillis = stats.startedAt?.toEpochMilli(),
+            lastOpenedAtEpochMillis = System.currentTimeMillis(),
+            pointCount = stats.pointCount,
+            distanceMeters = stats.distanceMeters,
+            totalSeconds = stats.totalDurationSeconds,
+            movingSeconds = stats.movingDurationSeconds,
+            averageSpeedMps = stats.averageSpeedMps,
+            ascentMeters = stats.ascentMeters,
+            descentMeters = stats.descentMeters,
+            southLatitude = bounds.southLatitude,
+            westLongitude = bounds.westLongitude,
+            northLatitude = bounds.northLatitude,
+            eastLongitude = bounds.eastLongitude,
+        )
+    }
 
     /** Reads and analyses [stream], closing it. */
-    private fun read(
-        stream: InputStream,
-        displayName: String,
-        id: Long,
-        colorIndex: Int = 0,
-    ): LoadedTrack {
+    private fun read(stream: InputStream, displayName: String, id: Long): LoadedTrack {
         val track: Track = stream.use(parser::parse)
         if (track.isEmpty) throw TrackLoadException.Empty("No track points in $displayName")
 
@@ -328,7 +313,6 @@ class TrackRepository(
             displayName = displayName,
             track = track,
             profile = profile,
-            colorIndex = colorIndex,
         )
     }
 
