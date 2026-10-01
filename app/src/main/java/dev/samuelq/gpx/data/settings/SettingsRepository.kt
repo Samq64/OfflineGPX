@@ -27,7 +27,13 @@ data class Settings(
 }
 
 /** The library's order, which the map stacks by too, the list's top drawn on top. */
-enum class TrackSort { RECENT, DATE, LENGTH, NAME }
+enum class TrackSort {
+    RECENT, DATE, LENGTH, NAME;
+
+    companion object {
+        val DEFAULT = RECENT
+    }
+}
 
 /** `SharedPreferences` rather than DataStore, to avoid a dependency for a handful of keys. */
 class SettingsRepository(context: Context) {
@@ -50,7 +56,7 @@ class SettingsRepository(context: Context) {
 
     private fun readTrackSort(): TrackSort = prefs.getString(KEY_TRACK_SORT, null)
         ?.let { name -> TrackSort.entries.firstOrNull { it.name == name } }
-        ?: TrackSort.RECENT
+        ?: TrackSort.DEFAULT
 
     fun setUnits(units: UnitSystem) = update { putString(KEY_UNITS, units.name) }
 

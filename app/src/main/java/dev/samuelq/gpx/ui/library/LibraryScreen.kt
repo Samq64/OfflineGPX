@@ -609,7 +609,10 @@ private fun SortMenu(sort: TrackSort, onSort: (TrackSort) -> Unit) {
             val resources = LocalResources.current
             val options = remember(resources) {
                 val collator = Collator.getInstance()
-                TrackSort.entries.sortedWith(compareBy(collator) { resources.getString(it.label) })
+                // The default first, then the rest by name.
+                TrackSort.entries.sortedWith(
+                    compareBy<TrackSort> { it != TrackSort.DEFAULT }.thenBy(collator) { resources.getString(it.label) },
+                )
             }
             options.forEach { option ->
                 val isSelected = option == sort
