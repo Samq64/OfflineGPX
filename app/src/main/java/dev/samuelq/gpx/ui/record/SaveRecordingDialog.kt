@@ -37,7 +37,6 @@ import dev.samuelq.gpx.data.record.AbandonedRecording
 import dev.samuelq.gpx.data.record.RecordingRecovery
 import dev.samuelq.gpx.data.record.RecordingState
 import dev.samuelq.gpx.data.track.defaultTrackName
-import dev.samuelq.gpx.ui.format.Formatters
 import dev.samuelq.gpx.ui.format.LocalFormatters
 import dev.samuelq.gpx.ui.track.StatRow
 import java.time.Instant

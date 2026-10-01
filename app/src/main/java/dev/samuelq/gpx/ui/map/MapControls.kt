@@ -35,7 +35,6 @@ import androidx.compose.ui.unit.dp
 import dev.samuelq.gpx.R
 import dev.samuelq.gpx.core.model.Waypoint
 import dev.samuelq.gpx.ui.PointTooltip
-import dev.samuelq.gpx.ui.format.Formatters
 import dev.samuelq.gpx.ui.format.LocalFormatters
 import kotlin.math.roundToInt
 
