@@ -26,7 +26,7 @@ data class Settings(
     }
 }
 
-/** The library's order; [DATE] keeps hidden and covered tracks easy to find. The map always stacks by [RECENT]. */
+/** The library's order, which the map stacks by too, the list's top drawn on top. */
 enum class TrackSort { RECENT, DATE, LENGTH, NAME }
 
 /** `SharedPreferences` rather than DataStore, to avoid a dependency for a handful of keys. */
@@ -50,7 +50,7 @@ class SettingsRepository(context: Context) {
 
     private fun readTrackSort(): TrackSort = prefs.getString(KEY_TRACK_SORT, null)
         ?.let { name -> TrackSort.entries.firstOrNull { it.name == name } }
-        ?: TrackSort.DATE
+        ?: TrackSort.RECENT
 
     fun setUnits(units: UnitSystem) = update { putString(KEY_UNITS, units.name) }
 

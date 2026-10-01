@@ -69,14 +69,10 @@ class TrackRepository(
      */
     private val pendingDelete = MutableStateFlow<Set<Long>>(emptySet())
 
-    /** Most recent first. Shared with [visibleTracks] so a write wakes one query. */
+    /** Most recent first. Shared, so the map and the list wake one query between them. */
     val tracks: Flow<List<TrackEntity>> =
         combine(dao.observeByRecent(), pendingDelete) { all, pending -> all.filter { it.id !in pending } }
             .shareIn(scope, SharingStarted.WhileSubscribed(SHARE_GRACE_MILLIS), replay = 1)
-
-    /** Reversed so the most recently touched is painted last, on top. */
-    val visibleTracks: Flow<List<TrackEntity>> =
-        tracks.map { all -> all.filter(TrackEntity::visible).asReversed() }
 
     /**
      * Copies [uri] into app-private storage and indexes it. Returns the row id.

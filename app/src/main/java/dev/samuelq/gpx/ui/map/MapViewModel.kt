@@ -11,10 +11,12 @@ import dev.samuelq.gpx.core.model.TrackPoints
 import dev.samuelq.gpx.data.db.TrackEntity
 import dev.samuelq.gpx.data.map.MapStore
 import dev.samuelq.gpx.data.map.OfflineMap
+import dev.samuelq.gpx.data.settings.SettingsRepository
 import dev.samuelq.gpx.data.record.RecordingController
 import dev.samuelq.gpx.data.track.LoadedTrack
 import dev.samuelq.gpx.data.track.TrackRepository
 import dev.samuelq.gpx.di.appContainer
+import dev.samuelq.gpx.ui.library.sortedFor
 import dev.samuelq.gpx.ui.track.FocusedTrack
 import dev.samuelq.gpx.ui.track.TrackRef
 import dev.samuelq.gpx.ui.track.toTrackMessageRes
@@ -48,6 +50,7 @@ sealed interface MapMessage {
 
 /** Visible tracks, with their geometry once it has been read off disk. */
 data class MapUiState(
+    /** In the list's order, reversed so its top is drawn last, on top. */
     val entities: List<TrackEntity> = emptyList(),
     val geometry: Map<Long, LoadedTrack> = emptyMap(),
     // Starts true: a read is already in flight, and the map frames once on the first
@@ -66,6 +69,7 @@ class MapViewModel(
     private val repository: TrackRepository,
     controller: RecordingController,
     mapStore: MapStore,
+    settings: SettingsRepository,
 ) : ViewModel() {
 
     val basemaps: StateFlow<List<OfflineMap>> = mapStore.maps
@@ -120,7 +124,9 @@ class MapViewModel(
     init {
         // `update` at every writer: a non-atomic read-modify-write lost renames during geometry loads.
         viewModelScope.launch {
-            repository.visibleTracks.collect { entities ->
+            combine(repository.tracks, settings.trackSort) { all, sort ->
+                all.filter(TrackEntity::visible).sortedFor(sort).asReversed()
+            }.collect { entities ->
                 _state.update { it.copy(entities = entities, loading = true) }
                 loadMissing(entities)
             }
@@ -247,6 +253,7 @@ class MapViewModel(
                     repository = appContainer.trackRepository,
                     controller = appContainer.recordingController,
                     mapStore = appContainer.mapStore,
+                    settings = appContainer.settingsRepository,
                 )
             }
         }
