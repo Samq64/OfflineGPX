@@ -13,7 +13,7 @@ class TrackPointsTest {
     fun `a snapshot is unchanged by later appends, including past a regrow`() {
         val builder = TrackPointsBuilder(capacity = 2)
         builder.add(1.0, 1.0)
-        val before = builder.build()
+        val before = builder.snapshot()
 
         builder.startSegment()
         repeat(10) { builder.add(2.0, 2.0) }
@@ -22,8 +22,28 @@ class TrackPointsTest {
         assertEquals(1, before.segmentCount)
         assertEquals(1.0, before.latitude(0))
         assertFailsWith<IndexOutOfBoundsException> { before.latitude(1) }
-        assertEquals(11, builder.build().size)
-        assertContentEquals(intArrayOf(0, 1), builder.build().segmentStarts())
+        assertEquals(11, builder.snapshot().size)
+        assertContentEquals(intArrayOf(0, 1), builder.snapshot().segmentStarts())
+    }
+
+    @Test
+    fun `a build keeps appending into fresh arrays, leaving it unchanged`() {
+        val builder = TrackPointsBuilder(capacity = 8)
+        builder.add(1.0, 1.0)
+        val built = builder.build()
+        builder.add(2.0, 2.0)
+
+        assertEquals(1, built.size)
+        assertEquals(2, builder.snapshot().size)
+        assertEquals(2.0, builder.snapshot().latitude(1))
+    }
+
+    @Test
+    fun `a builder still grows after an empty build`() {
+        val builder = TrackPointsBuilder()
+        builder.build()
+        builder.add(1.0, 1.0)
+        assertEquals(1, builder.build().segmentCount)
     }
 
     @Test

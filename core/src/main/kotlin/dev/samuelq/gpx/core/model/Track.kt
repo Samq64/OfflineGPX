@@ -38,7 +38,7 @@ data class Track(
  * A track's points as parallel columns, a third the memory of an object per point.
  * Nothing (distance, chart lines) connects across a segment start.
  *
- * May share arrays with the [TrackPointsBuilder] it came from, which only ever writes past
+ * A [TrackPointsBuilder.snapshot] shares the builder's arrays, which it only ever writes past
  * [size], so a snapshot never changes.
  */
 class TrackPoints internal constructor(
@@ -114,7 +114,7 @@ class TrackPoints internal constructor(
     }
 }
 
-/** Appends points, growing its arrays; [build] snapshots without copying. Not thread-safe. */
+/** Appends points, growing its arrays. Not thread-safe. */
 class TrackPointsBuilder(capacity: Int = 256) {
     private var latitudes = DoubleArray(capacity)
     private var longitudes = DoubleArray(capacity)
@@ -149,7 +149,7 @@ class TrackPointsBuilder(capacity: Int = 256) {
         accuracy: Float = Float.NaN,
     ) {
         if (startPending) {
-            if (segmentCount == starts.size) starts = starts.copyOf(segmentCount * 2)
+            if (segmentCount == starts.size) starts = starts.copyOf(maxOf(8, segmentCount * 2))
             starts[segmentCount++] = size
             startPending = false
         }
@@ -162,7 +162,21 @@ class TrackPointsBuilder(capacity: Int = 256) {
         size++
     }
 
-    fun build(): TrackPoints =
+    /** Trimmed to [size], since growth leaves up to half the arrays spare. */
+    fun build(): TrackPoints {
+        if (latitudes.size != size) {
+            latitudes = latitudes.copyOf(size)
+            longitudes = longitudes.copyOf(size)
+            elevations = elevations.copyOf(size)
+            times = times.copyOf(size)
+            accuracies = accuracies.copyOf(size)
+        }
+        if (starts.size != segmentCount) starts = starts.copyOf(segmentCount)
+        return snapshot()
+    }
+
+    /** Without copying, for a track still growing; keeps the spare capacity. */
+    fun snapshot(): TrackPoints =
         TrackPoints(size, latitudes, longitudes, elevations, times, accuracies, starts, segmentCount)
 
     /** New arrays, so snapshots built before keep the old ones untouched. */

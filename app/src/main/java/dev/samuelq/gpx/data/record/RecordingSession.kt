@@ -157,7 +157,7 @@ internal class RecordingSession(
     /** A snapshot sharing the builder's arrays, so publishing doesn't copy the ride. */
     fun trace(): TrackPoints {
         tracePublishedAt = tracePoints.size
-        return tracePoints.build()
+        return tracePoints.snapshot()
     }
 
     fun state() = RecordingState.Active(
