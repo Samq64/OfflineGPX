@@ -8,17 +8,13 @@ import dev.samuelq.gpx.core.model.Track
  * read from there rather than copied here so they can't go stale.
  */
 class LoadedTrack(
-    /** The `tracks` row, or [TRANSIENT_ID] for a track opened from an intent. */
+    /** The `tracks` row. */
     val id: Long,
     /** The filename. */
     val displayName: String,
     val track: Track,
     val profile: TrackProfile,
-) {
-    companion object {
-        const val TRANSIENT_ID = 0L
-    }
-}
+)
 
 /** The UI maps these to messages. */
 sealed class TrackLoadException(message: String, cause: Throwable? = null) : Exception(message, cause) {

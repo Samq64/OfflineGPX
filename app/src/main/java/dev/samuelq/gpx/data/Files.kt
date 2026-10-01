@@ -48,3 +48,17 @@ internal fun uniqueName(name: String?, extension: String, fallback: String, take
 
 private const val MAX_FILENAME_LENGTH = 80
 private val UNSAFE_FILENAME_CHARACTERS = Regex("""[\\/:*?"<>|]""")
+
+/** Byte for byte, streamed; lengths first, so a mismatch is usually a stat. */
+internal fun sameBytes(a: File, b: File): Boolean {
+    if (a.length() != b.length()) return false
+    a.inputStream().buffered().use { x ->
+        b.inputStream().buffered().use { y ->
+            while (true) {
+                val byte = x.read()
+                if (byte != y.read()) return false
+                if (byte == -1) return true
+            }
+        }
+    }
+}

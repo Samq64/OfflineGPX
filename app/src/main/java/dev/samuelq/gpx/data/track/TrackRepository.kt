@@ -19,6 +19,7 @@ import dev.samuelq.gpx.data.gpx.GPX_MIME_TYPE
 import dev.samuelq.gpx.data.copyInto
 import dev.samuelq.gpx.data.displayName
 import dev.samuelq.gpx.data.uniqueFile
+import dev.samuelq.gpx.data.sameBytes
 import dev.samuelq.gpx.data.uniqueName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -77,24 +78,47 @@ class TrackRepository(
     val visibleTracks: Flow<List<TrackEntity>> =
         tracks.map { all -> all.filter(TrackEntity::visible).asReversed() }
 
-    /** Copies [uri] into app-private storage and indexes it. Returns the row id. No dedupe. */
-    suspend fun import(uri: Uri): Result<Long> = withContext(io) {
+    /**
+     * Copies [uri] into app-private storage and indexes it. Returns the row id.
+     *
+     * @param reuseIdentical returns the existing row instead when an import of the same name has
+     *   the same bytes, so opening a shared file twice doesn't add it twice. A deliberate import
+     *   always copies.
+     */
+    suspend fun import(uri: Uri, reuseIdentical: Boolean = false): Result<Long> = withContext(io) {
         runCatching {
             val displayName = displayNameOf(uri)
             val destination = uniqueFile(importsDir, displayName, "gpx", fallback = "track")
 
-            // Deleted again if copy or parse fails, so nothing unusable is left behind.
-            val loaded = runCatching {
+            // Deleted again on any failure, so nothing unindexed is left behind.
+            try {
                 if (!appContext.contentResolver.copyInto(uri, destination)) {
                     throw TrackLoadException.Unreadable("No provider could open $uri")
                 }
-                read(destination.inputStream(), displayName, LoadedTrack.TRANSIENT_ID)
-            }.onFailure { destination.delete() }.getOrThrow()
-
-            val id = dao.upsert(newEntity(destination, displayName, loaded.track, loaded.profile))
-            cache.write(id, destination, loaded.track)
-            id
+                if (reuseIdentical) {
+                    identicalImport(destination, displayName)?.let { existing ->
+                        destination.delete()
+                        return@runCatching existing
+                    }
+                }
+                val track = parse(destination.inputStream(), displayName)
+                val id = dao.upsert(newEntity(destination, displayName, track, TrackAnalyzer.analyze(track)))
+                cache.write(id, destination, track)
+                id
+            } catch (e: Throwable) {
+                destination.delete()
+                throw e
+            }
         }.recoverFailure()
+    }
+
+    /** A live import named [displayName] whose file matches [copy] byte for byte. */
+    private suspend fun identicalImport(copy: File, displayName: String): Long? {
+        val pending = pendingDelete.value
+        return dao.byDisplayName(displayName)
+            .filter { it.id !in pending && it.location != TrackFiles.location(appContext, copy) }
+            .firstOrNull { sameBytes(fileOf(it), copy) }
+            ?.id
     }
 
     /** Loads a saved track and moves it to the top of the recent order. */
@@ -194,14 +218,6 @@ class TrackRepository(
     }
 
     /** Reads a track without indexing it, for VIEW/SEND intents whose URI grants are one-shot. */
-    suspend fun openTransient(uri: Uri): Result<LoadedTrack> = withContext(io) {
-        runCatching {
-            val stream = appContext.contentResolver.openInputStream(uri)
-                ?: throw TrackLoadException.Unreadable("No provider could open $uri")
-            read(stream, displayNameOf(uri), LoadedTrack.TRANSIENT_ID)
-        }.recoverFailure()
-    }
-
     /** Like [open] but without touching the sort order, for drawing. */
     suspend fun geometry(id: Long): Result<LoadedTrack> = withContext(io) {
         runCatching { load(entity(id)) }.recoverFailure()
@@ -213,7 +229,8 @@ class TrackRepository(
         cache.read(entity.id, file)?.let { track ->
             return LoadedTrack(entity.id, entity.displayName, track, TrackAnalyzer.analyze(track))
         }
-        return read(file.inputStream(), entity.displayName, entity.id).also { cache.write(entity.id, file, it.track) }
+        val track = parse(file.inputStream(), entity.displayName).also { cache.write(entity.id, file, it) }
+        return LoadedTrack(entity.id, entity.displayName, track, TrackAnalyzer.analyze(track))
     }
 
     /** Bytes of each track's file, by id; a stat, not a parse. */
@@ -303,17 +320,11 @@ class TrackRepository(
     }
 
     /** Reads and analyses [stream], closing it. */
-    private fun read(stream: InputStream, displayName: String, id: Long): LoadedTrack {
+    /** Reads [stream], closing it. */
+    private fun parse(stream: InputStream, displayName: String): Track {
         val track: Track = stream.use(parser::parse)
         if (track.isEmpty) throw TrackLoadException.Empty("No track points in $displayName")
-
-        val profile: TrackProfile = TrackAnalyzer.analyze(track)
-        return LoadedTrack(
-            id = id,
-            displayName = displayName,
-            track = track,
-            profile = profile,
-        )
+        return track
     }
 
     private fun fileOf(entity: TrackEntity) = TrackFiles.file(appContext, entity.location)

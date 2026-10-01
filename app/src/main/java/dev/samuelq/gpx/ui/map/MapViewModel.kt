@@ -178,19 +178,24 @@ class MapViewModel(
         focusJob?.cancel()
         _focused.value = FocusedTrack.Loading
         focusJob = viewModelScope.launch {
+            val id = when (ref) {
+                is TrackRef.Saved -> ref.id
+                // Into the library, then opened like any saved track; a retry imports again.
+                is TrackRef.Shared -> repository.import(ref.uri, reuseIdentical = true).getOrElse {
+                    _focused.value = FocusedTrack.Failed(it.toTrackMessageRes())
+                    return@launch
+                }.also { requested = TrackRef.Saved(it) }
+            }
+
             // A visible track is already parsed.
-            val cached = (ref as? TrackRef.Saved)?.let { _state.value.geometry[it.id] }
+            val cached = _state.value.geometry[id]
             if (cached != null) {
                 _focused.value = FocusedTrack.Ready(cached)
-                repository.touch(cached.id)
+                repository.touch(id)
                 return@launch
             }
 
-            val result = when (ref) {
-                is TrackRef.Saved -> repository.open(ref.id)
-                is TrackRef.Transient -> repository.openTransient(ref.uri)
-            }
-            _focused.value = result.fold(
+            _focused.value = repository.open(id).fold(
                 onSuccess = FocusedTrack::Ready,
                 onFailure = { FocusedTrack.Failed(it.toTrackMessageRes()) },
             )

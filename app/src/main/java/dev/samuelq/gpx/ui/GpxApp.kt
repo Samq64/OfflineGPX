@@ -111,7 +111,7 @@ private fun StopRecordingPrompt(recorder: RecordingController) {
 
 private val NavigationSpec = tween<IntOffset>(durationMillis = 300)
 
-/** A saved track's id or a transient one's Uri, under one key so only one can be set. */
+/** A saved track's id or a shared file's Uri, under one key so only one can be set. */
 private object FocusRequest {
     const val KEY = "focus"
 
@@ -120,7 +120,7 @@ private object FocusRequest {
 
     fun decode(raw: Any): TrackRef? = when (raw) {
         is Long -> TrackRef.Saved(raw)
-        is Uri -> TrackRef.Transient(raw)
+        is Uri -> TrackRef.Shared(raw)
         else -> null
     }
 }

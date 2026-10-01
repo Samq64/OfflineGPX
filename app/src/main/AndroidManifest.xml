@@ -30,10 +30,13 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.GpxViewer">
 
+        <!-- singleTask: a file opened from another app comes to the one instance, since a second
+             would split the recorder's one-shot events with the first. -->
         <activity
             android:name=".MainActivity"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode|density|fontScale|smallestScreenSize"
             android:exported="true"
+            android:launchMode="singleTask"
             android:windowSoftInputMode="adjustResize">
 
             <intent-filter>

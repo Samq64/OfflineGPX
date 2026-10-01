@@ -9,8 +9,8 @@ import dev.samuelq.gpx.data.track.TrackLoadException
 sealed interface TrackRef {
     data class Saved(val id: Long) : TrackRef
 
-    /** A URI from a VIEW or SEND intent, deliberately not indexed. */
-    data class Transient(val uri: Uri) : TrackRef
+    /** From a VIEW or SEND intent; added to the library as it opens. */
+    data class Shared(val uri: Uri) : TrackRef
 }
 
 sealed interface FocusedTrack {

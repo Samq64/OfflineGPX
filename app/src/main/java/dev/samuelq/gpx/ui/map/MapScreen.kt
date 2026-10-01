@@ -73,7 +73,6 @@ import dev.samuelq.gpx.R
 import dev.samuelq.gpx.core.model.Waypoint
 import dev.samuelq.gpx.data.record.RecordingController
 import dev.samuelq.gpx.data.record.RecordingState
-import dev.samuelq.gpx.data.track.LoadedTrack
 import dev.samuelq.gpx.ui.record.RecordingSheet
 import dev.samuelq.gpx.ui.record.RecordingOutcomes
 import dev.samuelq.gpx.ui.showUndo
@@ -136,7 +135,7 @@ fun MapScreen(
     var preferTimeAxis by rememberSaveable { mutableStateOf(false) }
 
     val focusedTrack = (focused as? FocusedTrack.Ready)?.track
-    // A saved track's name and colour are its row's; a transient one has only the file's.
+    // Name and colour are the row's; the file's name stands in until a new import's row arrives.
     val focusedRow = focusedTrack?.let { state.entity(it.id) }
     val focusedColor = palette.slot(focusedRow?.colorIndex ?: 0)
     val focusedTitle = when {
@@ -394,14 +393,15 @@ fun MapScreen(
         ?.takeIf { id ->
             when (val ref = framing) {
                 is TrackRef.Saved -> ref.id == id
-                is TrackRef.Transient -> id == LoadedTrack.TRANSIENT_ID
+                // Imported as it opened, so its id wasn't known when asked for.
+                is TrackRef.Shared -> true
                 null -> false
             }
         }
         // The peek is measured off the loaded sheet.
         ?.takeIf { sidePanel || peekContentHeight > 0.dp }
 
-    // Null for an intent-opened file: no row to act on, and sharing would hand it back to itself.
+    // Null until a new import's row arrives.
     val actions = focusedTrack?.let { state.entity(it.id) }?.let { entity ->
         remember(entity.id, entity.displayName, entity.location) {
             TrackActions(
