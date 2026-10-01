@@ -34,6 +34,7 @@ import dev.samuelq.gpx.R
 import dev.samuelq.gpx.core.model.TrackPoint
 import dev.samuelq.gpx.core.model.Waypoint
 import dev.samuelq.gpx.data.map.OfflineMap
+import dev.samuelq.gpx.data.map.maxViewZoom
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.oscim.android.MapView

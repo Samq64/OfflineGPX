@@ -19,7 +19,7 @@ import kotlin.math.pow
 
 /**
  * Stacking order, bottom first; VTM keeps each group together however late it's added.
- * Labels sit over routes (haloed) and so over the mask too, which is why [ClippedMapSource]
+ * Labels sit over routes (haloed) and so over the mask too, which is why [dev.samuelq.gpx.data.map.ClippedMapSource]
  * drops data past a file's edge before a name can be placed there.
  */
 internal enum class LayerGroup { Land, Tiles, Mask, Outline, Routes, Trace, Labels, Markers }

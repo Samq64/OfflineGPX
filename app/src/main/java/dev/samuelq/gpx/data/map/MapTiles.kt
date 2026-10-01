@@ -1,8 +1,5 @@
-package dev.samuelq.gpx.ui.map
+package dev.samuelq.gpx.data.map
 
-import dev.samuelq.gpx.data.map.OfflineMap
-import dev.samuelq.gpx.data.map.SubFile
-import dev.samuelq.gpx.data.map.TileIndex
 import org.oscim.core.BoundingBox
 import org.oscim.core.MapElement
 import org.oscim.core.MercatorProjection

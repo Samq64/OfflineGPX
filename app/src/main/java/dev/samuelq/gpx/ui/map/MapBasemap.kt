@@ -4,7 +4,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import dev.samuelq.gpx.data.map.ClippedMapSource
+import dev.samuelq.gpx.data.map.GeneratedRenderTheme
 import dev.samuelq.gpx.data.map.OfflineMap
+import dev.samuelq.gpx.data.map.opens
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.oscim.layers.Layer
