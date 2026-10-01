@@ -175,7 +175,18 @@ fun MapScreen(
         snackbarHostState.showUndo(context, message, undo, onUndo, onCommit)
     }
 
-    val startRecording = rememberStartRecording(recorder, ::say)
+    // A ride starts where the user is, which may be nowhere near the view; centred on its first point.
+    var centreOnRecording by remember { mutableStateOf(false) }
+    val requestRecording = rememberStartRecording(recorder, ::say)
+    val startRecording = {
+        centreOnRecording = true
+        requestRecording()
+    }
+    val firstRecorded = trace.takeIf { isRecording && it.size > 0 }?.first()
+    LaunchedEffect(firstRecorded, centreOnRecording) {
+        val at = firstRecorded?.takeIf { centreOnRecording } ?: return@LaunchedEffect
+        if (mapController.centreOn(at) != CentreResult.NotLaidOut) centreOnRecording = false
+    }
 
     // On the first fix after a tap; later ones move the dot, not the map.
     var centreOnFix by remember { mutableStateOf(false) }
