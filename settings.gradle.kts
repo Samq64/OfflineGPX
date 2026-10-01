@@ -26,4 +26,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "GpxViewer"
-include(":app")
+include(":app", ":core")

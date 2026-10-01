@@ -135,6 +135,7 @@ configurations.configureEach {
 }
 
 dependencies {
+    implementation(project(":core"))
     implementation(libs.androidx.core)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
