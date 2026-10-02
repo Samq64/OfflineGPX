@@ -43,10 +43,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SwipeToDismissBox
-import androidx.compose.material3.SwipeToDismissBoxDefaults
-import androidx.compose.material3.SwipeToDismissBoxState
-import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
@@ -447,7 +443,7 @@ private fun SelectionBar(
     )
 }
 
-@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun TrackRow(
     modifier: Modifier,
@@ -488,82 +484,72 @@ private fun TrackRow(
         ).joinToString("  ·  ")
     }
 
-    // Not rememberSwipeToDismissBoxState: the list would restore an undone row as dismissed.
-    val positionalThreshold = SwipeToDismissBoxDefaults.positionalThreshold
-    val swipe = remember { SwipeToDismissBoxState(SwipeToDismissBoxValue.Settled, positionalThreshold) }
     Column(modifier) {
-        SwipeToDismissBox(
-            state = swipe,
-            backgroundContent = { DeleteBackground(swipe.dismissDirection) },
-            gesturesEnabled = !selectionActive,
-            onDismiss = { onDelete() },
-        ) {
-            // A row, not ListItem: with three lines it pins the dot and the controls to the top
-            // padding, out of line with each other and the text.
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface
-                    )
-                    .combinedClickable(
-                        onClickLabel = if (selectionActive) null else openLabel,
-                        onLongClickLabel = if (selectionActive) null else selectLabel,
-                        role = if (selectionActive) Role.Checkbox else null,
-                        onClick = { if (selectionActive) onToggleSelected() else onOpen() },
-                        onLongClick = onToggleSelected,
-                    )
-                    .semantics {
-                        if (selectionActive) {
-                            toggleableState = ToggleableState(selected)
-                        } else {
-                            // Long-press and the menu, without finding either.
-                            customActions = listOf(
-                                CustomAccessibilityAction(selectLabel) { onToggleSelected(); true },
-                                CustomAccessibilityAction(renameLabel) { onRename(); true },
-                                CustomAccessibilityAction(shareLabel) { onShare(); true },
-                                CustomAccessibilityAction(duplicateLabel) { onDuplicate(); true },
-                                CustomAccessibilityAction(deleteLabel) { onDelete(); true },
-                            )
-                        }
+        // A row, not ListItem: with three lines it pins the dot and the controls to the top
+        // padding, out of line with each other and the text.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface
+                )
+                .combinedClickable(
+                    onClickLabel = if (selectionActive) null else openLabel,
+                    onLongClickLabel = if (selectionActive) null else selectLabel,
+                    role = if (selectionActive) Role.Checkbox else null,
+                    onClick = { if (selectionActive) onToggleSelected() else onOpen() },
+                    onLongClick = onToggleSelected,
+                )
+                .semantics {
+                    if (selectionActive) {
+                        toggleableState = ToggleableState(selected)
+                    } else {
+                        // Long-press and the menu, without finding either.
+                        customActions = listOf(
+                            CustomAccessibilityAction(selectLabel) { onToggleSelected(); true },
+                            CustomAccessibilityAction(renameLabel) { onRename(); true },
+                            CustomAccessibilityAction(shareLabel) { onShare(); true },
+                            CustomAccessibilityAction(duplicateLabel) { onDuplicate(); true },
+                            CustomAccessibilityAction(deleteLabel) { onDelete(); true },
+                        )
                     }
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                if (selectionActive) {
-                    // The row toggles, so it's one stop that says what's selected.
-                    Checkbox(checked = selected, onCheckedChange = null)
-                } else {
-                    ColorDot(track.colorIndex, palette, onColor = onColor)
                 }
-                Spacer(Modifier.width(16.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.bodyLarge,
-                        maxLines = if (isLargeText()) 2 else 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    // Wrapping, not cut: at large text sizes the ends are the time and size.
-                    Text(
-                        text = date,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        text = summary,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                if (!selectionActive) {
-                    Switch(
-                        checked = track.visible,
-                        onCheckedChange = { onToggleVisible() },
-                        modifier = Modifier.padding(start = 8.dp).semantics { contentDescription = showOnMap },
-                    )
-                    TrackMenu(onRename, onShare, onHide = null, onDelete, trackTitle = title, onDuplicate = onDuplicate)
-                }
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (selectionActive) {
+                // The row toggles, so it's one stop that says what's selected.
+                Checkbox(checked = selected, onCheckedChange = null)
+            } else {
+                ColorDot(track.colorIndex, palette, onColor = onColor)
+            }
+            Spacer(Modifier.width(16.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = if (isLargeText()) 2 else 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                // Wrapping, not cut: at large text sizes the ends are the time and size.
+                Text(
+                    text = date,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = summary,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (!selectionActive) {
+                Switch(
+                    checked = track.visible,
+                    onCheckedChange = { onToggleVisible() },
+                    modifier = Modifier.padding(start = 8.dp).semantics { contentDescription = showOnMap },
+                )
+                TrackMenu(onRename, onShare, onHide = null, onDelete, trackTitle = title, onDuplicate = onDuplicate)
             }
         }
         HorizontalDivider()
@@ -625,23 +611,6 @@ private fun ColorDot(colorIndex: Int, palette: List<Color>, onColor: (Int) -> Un
 }
 
 private val DotSize = 20.dp
-
-@Composable
-private fun DeleteBackground(direction: SwipeToDismissBoxValue) {
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.errorContainer)
-            .padding(horizontal = 24.dp),
-        contentAlignment = when (direction) {
-            SwipeToDismissBoxValue.EndToStart -> Alignment.CenterEnd
-            else -> Alignment.CenterStart
-        },
-    ) {
-        // The row's delete action already names it.
-        Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.onErrorContainer)
-    }
-}
 
 @Composable
 private fun SortMenu(order: TrackOrder, onSort: (TrackSort) -> Unit, onDescending: (Boolean) -> Unit) {
