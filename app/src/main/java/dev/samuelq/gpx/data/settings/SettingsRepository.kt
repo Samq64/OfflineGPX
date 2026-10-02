@@ -31,11 +31,7 @@ enum class TrackSort(
     /** The way it runs when picked: newest and longest first, names A to Z. */
     val naturallyDescending: Boolean,
 ) {
-    RECENT(true), DATE(true), LENGTH(true), NAME(false);
-
-    companion object {
-        val DEFAULT = RECENT
-    }
+    RECENT(true), DATE(true), LENGTH(true), NAME(false)
 }
 
 /** A sort and which way it runs. */
@@ -71,7 +67,7 @@ class SettingsRepository(context: Context) {
     private fun readTrackOrder(): TrackOrder {
         val sort = prefs.getString(KEY_TRACK_SORT, null)
             ?.let { name -> TrackSort.entries.firstOrNull { it.name == name } }
-            ?: TrackSort.DEFAULT
+            ?: TrackSort.DATE
         return TrackOrder(sort, prefs.getBoolean(KEY_TRACK_SORT_DESCENDING, sort.naturallyDescending))
     }
 

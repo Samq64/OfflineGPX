@@ -654,10 +654,7 @@ private fun SortMenu(order: TrackOrder, onSort: (TrackSort) -> Unit, onDescendin
             val resources = LocalResources.current
             val options = remember(resources) {
                 val collator = Collator.getInstance()
-                // The default first, then the rest by name.
-                TrackSort.entries.sortedWith(
-                    compareBy<TrackSort> { it != TrackSort.DEFAULT }.thenBy(collator) { resources.getString(it.label) },
-                )
+                TrackSort.entries.sortedWith(compareBy(collator) { resources.getString(it.label) })
             }
             @Composable
             fun Choice(label: String, isSelected: Boolean, onClick: () -> Unit) = DropdownMenuItem(
