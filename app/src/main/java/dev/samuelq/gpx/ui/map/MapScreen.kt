@@ -487,7 +487,9 @@ fun MapScreen(
 
     // Shared by the sheet and the side panel.
     // From a pin tap, or the sheet's screen reader actions.
-    fun selectWaypoint(waypoint: Waypoint) {
+    // A lambda, not a local fun: Compose keeps a `::` reference from the first composition,
+    // still writing the state of a track no longer focused.
+    val selectWaypoint: (Waypoint) -> Unit = { waypoint ->
         tappedWaypoint = waypoint
         // Only the charted route's waypoints have a chart position.
         val charted = if (isRecording) {
@@ -515,7 +517,7 @@ fun MapScreen(
                     onDismiss = { viewModel.focus(null) },
                     onClose = onClose,
                     onPeekHeightChange = onPeekHeightChange,
-                    onSelectWaypoint = ::selectWaypoint,
+                    onSelectWaypoint = selectWaypoint,
                     trim = trimRange?.let { range ->
                         TrimControls(
                             range = range,
@@ -638,7 +640,7 @@ fun MapScreen(
                             else -> viewModel.focus(null)
                         }
                     },
-                    onSelectWaypoint = ::selectWaypoint,
+                    onSelectWaypoint = selectWaypoint,
                     followedWaypoint = tappedWaypoint,
                     onFollowedWaypointMove = { tappedWaypointAt.value = it },
                     contentPadding = canvasPadding,
