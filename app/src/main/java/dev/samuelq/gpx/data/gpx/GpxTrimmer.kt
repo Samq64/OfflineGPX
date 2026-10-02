@@ -14,7 +14,7 @@ import java.io.OutputStream
  *
  * Points are counted as [GpxParser] reads them, so an index here is one in the parsed track.
  * Unreadable points and waypoints, which have no index, are dropped. A segment left with no
- * points goes too.
+ * points goes too, as does `<metadata><bounds>`.
  */
 class GpxTrimmer(
     private val newPullParser: () -> XmlPullParser = { XmlPullParserFactory.newInstance().newPullParser() },
@@ -88,6 +88,8 @@ class GpxTrimmer(
             val keep = when {
                 name == TAG_TRKPT && path == TRKSEG_PATH || name == TAG_RTEPT && path == RTE_PATH -> point()
                 name == TAG_WPT && path == ROOT_PATH -> readable() && keepWaypoint(waypointIndex++)
+                // Wider than what's left; optional, so dropped rather than recomputed ahead of the points.
+                name == TAG_BOUNDS && path == METADATA_PATH -> false
                 // Nothing but points is worth reopening an emptied segment for.
                 pendingSegment != null -> false
                 else -> true
@@ -193,10 +195,12 @@ class GpxTrimmer(
         const val TAG_RTE = "rte"
         const val TAG_RTEPT = "rtept"
         const val TAG_WPT = "wpt"
+        const val TAG_BOUNDS = "bounds"
         const val ATTR_LAT = "lat"
         const val ATTR_LON = "lon"
 
         val ROOT_PATH = listOf("gpx")
+        val METADATA_PATH = listOf("gpx", "metadata")
         val TRK_PATH = listOf("gpx", TAG_TRK)
         val TRKSEG_PATH = listOf("gpx", TAG_TRK, TAG_TRKSEG)
         val RTE_PATH = listOf("gpx", TAG_RTE)

@@ -58,7 +58,7 @@ internal fun WaypointTooltip(waypoint: Waypoint, tipAt: () -> Offset) {
                 style = MaterialTheme.typography.labelMedium,
                 color = LocalContentColor.current.copy(alpha = 0.7f),
             )
-            waypoint.description?.takeIf(String::isNotBlank)?.let {
+            waypoint.name?.takeIf(String::isNotBlank)?.let {
                 Text(text = it, style = MaterialTheme.typography.bodyMedium)
             }
         }

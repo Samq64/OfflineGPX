@@ -109,16 +109,16 @@ class RecordingSessionTest {
     }
 
     @Test
-    fun `a waypoint needs a position and trims its description`() {
+    fun `a waypoint needs a position and trims its name`() {
         val session = session()
         val at = origin.plusSeconds(30)
         assertNull(session.addWaypoint("early", at))
 
         session.onFix(fix(0, 0.0))
         val waypoint = assertNotNull(session.addWaypoint("  summit ", at))
-        assertEquals("summit", waypoint.description)
+        assertEquals("summit", waypoint.name)
         assertEquals(at, waypoint.point.time)
-        assertNull(session.addWaypoint("   ", at)?.description)
+        assertNull(session.addWaypoint("   ", at)?.name)
         assertEquals(2, session.state().waypoints.size)
     }
 

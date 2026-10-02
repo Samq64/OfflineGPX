@@ -78,7 +78,7 @@ internal class TrackCache(private val dir: File) {
     internal companion object {
         private const val TAG = "TrackCache"
         private const val MAGIC = 0x47505843 // "GPXC"
-        private const val VERSION = 1
+        private const val VERSION = 2
         private const val STAMP_OFFSET = 8
 
         fun encode(track: Track, stamp: Stamp): ByteArray {
@@ -98,7 +98,7 @@ internal class TrackCache(private val dir: File) {
                     writeDouble(point.longitude)
                     writeDouble(point.elevation ?: Double.NaN)
                     writeLong(point.time?.toEpochMilli() ?: TrackPoints.NO_TIME)
-                    writeString(waypoint.description)
+                    writeString(waypoint.name)
                 }
 
                 writeInt(points.segmentCount)

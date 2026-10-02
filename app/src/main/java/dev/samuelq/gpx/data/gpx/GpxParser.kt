@@ -60,7 +60,7 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
 
                 TAG_METADATA -> forEachChild(parser) {
                     when (parser.name) {
-                        TAG_NAME -> metadataName = readText(parser).takeIf(String::isNotBlank)
+                        TAG_NAME -> metadataName = readLabel(parser)
                         else -> skip(parser)
                     }
                 }
@@ -68,13 +68,13 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
                 TAG_TRK -> forEachChild(parser) {
                     when (parser.name) {
                         TAG_NAME -> {
-                            val value = readText(parser).takeIf(String::isNotBlank)
+                            val value = readLabel(parser)
                             // First named track wins; later ones are usually laps.
                             if (trackName == null) trackName = value
                         }
 
                         TAG_DESC -> {
-                            val value = readText(parser).takeIf(String::isNotBlank)
+                            val value = readLabel(parser)
                             if (trackDescription == null) trackDescription = value
                         }
 
@@ -89,7 +89,7 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
                     points.startSegment()
                     forEachChild(parser) {
                         when (parser.name) {
-                            TAG_NAME -> routeName = readText(parser).takeIf(String::isNotBlank)
+                            TAG_NAME -> routeName = readLabel(parser)
                             TAG_RTEPT -> readPoint(parser)?.let(points::add)
                             else -> skip(parser)
                         }
@@ -116,20 +116,25 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
 
         var elevation: Double? = null
         var time: Instant? = null
+        var name: String? = null
         var description: String? = null
+        var comment: String? = null
 
         forEachChild(parser) {
             when (parser.name) {
                 TAG_ELE -> elevation = readText(parser).trim().toDoubleOrNull()
                 TAG_TIME -> time = parseGpxTime(readText(parser))
-                TAG_DESC -> description = readText(parser).takeIf(String::isNotBlank)
+                TAG_NAME -> name = readLabel(parser)
+                TAG_DESC -> description = readLabel(parser)
+                TAG_CMT -> comment = readLabel(parser)
                 else -> skip(parser)
             }
         }
 
         if (latitude == null || longitude == null) return null
         if (!isValidCoordinate(latitude, longitude)) return null
-        return Waypoint(TrackPoint(latitude, longitude, elevation, time), description)
+        // Older files from this app put the label in <desc>.
+        return Waypoint(TrackPoint(latitude, longitude, elevation, time), name ?: description ?: comment)
     }
 
     /** Appends one `<trkseg>` to [points] as a segment of its own. */
@@ -218,6 +223,9 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
         return text
     }
 
+    /** Trimmed; null if blank. */
+    private fun readLabel(parser: XmlPullParser): String? = readText(parser).trim().takeIf(String::isNotEmpty)
+
     companion object {
         /** OOM guard; over 11 days at 1 Hz. */
         internal const val MAX_POINTS_PER_SEGMENT = 1_000_000
@@ -232,6 +240,7 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
         private const val TAG_WPT = "wpt"
         private const val TAG_NAME = "name"
         private const val TAG_DESC = "desc"
+        private const val TAG_CMT = "cmt"
         private const val TAG_ELE = "ele"
         private const val TAG_TIME = "time"
         private const val ATTR_LAT = "lat"

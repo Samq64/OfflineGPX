@@ -8,10 +8,16 @@ import android.location.LocationManager
 import android.os.Bundle
 import android.os.Looper
 import androidx.core.content.getSystemService
+import androidx.core.location.LocationCompat
+import androidx.core.location.altitude.AltitudeConverterCompat
 import dev.samuelq.gpx.core.model.TrackPoint
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
+import java.io.IOException
 import java.time.Instant
 
 /** Raw `GPS_PROVIDER` fixes; not the fused provider, which needs Play Services. */
@@ -28,13 +34,13 @@ class LocationSource(context: Context) {
      * @throws SecurityException if the location permission is not held.
      */
     @SuppressLint("MissingPermission")
-    fun fixes(onUnavailable: () -> Unit): Flow<TrackPoint> = callbackFlow {
+    fun fixes(onUnavailable: () -> Unit): Flow<TrackPoint> = callbackFlow<Location> {
         val locationManager = manager
             ?: throw IllegalStateException("No LocationManager on this device")
 
         val listener = object : LocationListener {
             override fun onLocationChanged(location: Location) {
-                trySend(location.toTrackPoint())
+                trySend(location)
             }
 
             // Required below API 30, else AbstractMethodError on some OEM builds.
@@ -57,16 +63,36 @@ class LocationSource(context: Context) {
 
         awaitClose { locationManager.removeUpdates(listener) }
     }
+        .map { it.toTrackPoint(elevation = elevationOf(it)) }
+        // The conversion may read the geoid model from disk.
+        .flowOn(Dispatchers.IO)
+
+    /**
+     * GPS altitude is above the WGS84 ellipsoid, up to ~100 m from sea level. Converted with a
+     * bundled geoid map, offline; ellipsoid height if that fails.
+     */
+    private fun elevationOf(location: Location): Double? {
+        if (!location.hasAltitude()) return null
+        if (!LocationCompat.hasMslAltitude(location)) {
+            try {
+                AltitudeConverterCompat.addMslAltitudeToLocation(appContext, location)
+            } catch (_: IOException) {
+            } catch (_: IllegalArgumentException) {
+            }
+        }
+        return if (LocationCompat.hasMslAltitude(location)) LocationCompat.getMslAltitudeMeters(location) else location.altitude
+    }
 
     private companion object {
         const val INTERVAL_MILLIS = 1000L
 
-        fun Location.toTrackPoint() = TrackPoint(
+        fun Location.toTrackPoint(elevation: Double?) = TrackPoint(
             latitude = latitude,
             longitude = longitude,
-            elevation = if (hasAltitude()) altitude else null,
+            elevation = elevation,
             time = Instant.ofEpochMilli(time.takeIf { it > 0 } ?: System.currentTimeMillis()),
             accuracyMeters = if (hasAccuracy()) accuracy.toDouble() else null,
         )
     }
 }
+

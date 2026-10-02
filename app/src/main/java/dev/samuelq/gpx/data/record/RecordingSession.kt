@@ -147,9 +147,9 @@ internal class RecordingSession(
     }
 
     /** At the last known position, stamped [at] (the button press). Null before the first fix. */
-    fun addWaypoint(description: String, at: Instant): Waypoint? {
+    fun addWaypoint(name: String, at: Instant): Waypoint? {
         val point = lastPoint ?: return null
-        val waypoint = Waypoint(point.copy(time = at), description.trim().takeIf(String::isNotEmpty))
+        val waypoint = Waypoint(point.copy(time = at), name.trim().takeIf(String::isNotEmpty))
         waypoints += waypoint
         return waypoint
     }

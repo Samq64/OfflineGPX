@@ -6,10 +6,10 @@ import java.time.Instant
 data class TrackPoint(
     val latitude: Double,
     val longitude: Double,
-    /** Metres above the WGS84 ellipsoid. */
+    /** Metres above sea level; older recordings from this app hold WGS84 ellipsoid height. */
     val elevation: Double? = null,
     val time: Instant? = null,
-    /** Horizontal accuracy in metres, stored in `<hdop>` as the closest GPX slot. */
+    /** Horizontal accuracy in metres, while recording only: `<hdop>` is unitless, not this. */
     val accuracyMeters: Double? = null,
 )
 
@@ -19,7 +19,8 @@ fun isValidCoordinate(latitude: Double, longitude: Double): Boolean =
 /** A GPX `<wpt>`: a note at the last known position, not a fix of its own. */
 data class Waypoint(
     val point: TrackPoint,
-    val description: String? = null,
+    /** The `<name>`, else the `<desc>` or `<cmt>`. */
+    val name: String? = null,
 )
 
 /** Raw geometry only; derived values live in [dev.samuelq.gpx.core.analysis.TrackProfile]. */

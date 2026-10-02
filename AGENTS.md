@@ -23,7 +23,8 @@ app/ di/     AppContainer: manual wiring, no Hilt.
   library that does use the network will fail. Any new permission must map to a feature a
   user can name.
 - Location is platform `LocationManager` on `GPS_PROVIDER`. Not the fused provider: that
-  needs Play services.
+  needs Play services. Its altitude is converted to sea level by `core-location-altitude`,
+  whose geoid map is bundled.
 - VTM is on JitPack only; `settings.gradle.kts` lets JitPack serve that group and nothing
   else. Its SVG decoder is excluded since the theme draws no symbols.
 - A track is a `.gpx` file in app-private storage; Room holds one row per track with its

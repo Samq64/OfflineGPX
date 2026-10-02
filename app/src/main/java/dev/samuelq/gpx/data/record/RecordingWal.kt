@@ -19,10 +19,10 @@ import java.util.Base64
  * ```
  * <epochMillis>,<lat>,<lon>[,<ele>][,<accuracyMeters>]   a fix
  * -                                                       a segment break
- * W,<epochMillis>,<lat>,<lon>[,<ele>][,<base64 desc>]     a waypoint
+ * W,<epochMillis>,<lat>,<lon>[,<ele>][,<base64 name>]     a waypoint
  * ```
  *
- * Base64 keeps commas and newlines in descriptions from breaking the format.
+ * Base64 keeps commas and newlines in names from breaking the format.
  */
 class RecordingWal private constructor(
     val file: File,
@@ -48,12 +48,12 @@ class RecordingWal private constructor(
     fun appendWaypoint(waypoint: Waypoint) {
         val point = waypoint.point
         val elevation = point.elevation?.toString() ?: ""
-        val description = waypoint.description
+        val name = waypoint.name
             ?.let { Base64.getEncoder().encodeToString(it.toByteArray(Charsets.UTF_8)) }
             ?: ""
         writer.write(
             "$WAYPOINT,${point.time?.toEpochMilli() ?: 0},${point.latitude},${point.longitude}," +
-                "$elevation,$description"
+                "$elevation,$name"
         )
         writer.newLine()
         writer.flush()
@@ -116,7 +116,7 @@ class RecordingWal private constructor(
             val latitude = parts[2].toDoubleOrNull() ?: return null
             val longitude = parts[3].toDoubleOrNull() ?: return null
             if (!isValidCoordinate(latitude, longitude)) return null
-            val description = parts.getOrNull(5)?.takeIf(String::isNotEmpty)?.let {
+            val name = parts.getOrNull(5)?.takeIf(String::isNotEmpty)?.let {
                 runCatching { String(Base64.getDecoder().decode(it), Charsets.UTF_8) }.getOrNull()
             }
             return Waypoint(
@@ -126,7 +126,7 @@ class RecordingWal private constructor(
                     elevation = parts.getOrNull(4)?.toDoubleOrNull(),
                     time = millis.takeIf { it > 0 }?.let(Instant::ofEpochMilli),
                 ),
-                description,
+                name,
             )
         }
     }

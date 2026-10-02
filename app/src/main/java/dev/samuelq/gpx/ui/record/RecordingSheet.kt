@@ -80,8 +80,8 @@ fun RecordingSheet(
     onPause: () -> Unit,
     onResume: () -> Unit,
     onStop: () -> Unit,
-    /** [description] may be blank. */
-    onAddWaypoint: (description: String) -> Unit,
+    /** [name] may be blank. */
+    onAddWaypoint: (name: String) -> Unit,
 ) {
     ProfileSheet(
         profile = profile,
@@ -107,7 +107,7 @@ private fun RecordingHeader(
     onPause: () -> Unit,
     onResume: () -> Unit,
     onStop: () -> Unit,
-    onAddWaypoint: (description: String) -> Unit,
+    onAddWaypoint: (name: String) -> Unit,
 ) {
     val formatters = LocalFormatters.current
     var addingWaypoint by remember { mutableStateOf(false) }
@@ -233,9 +233,9 @@ internal fun recordingStats(distanceMeters: Double, elapsedSeconds: Double): Lis
 private fun WaypointDialog(
     number: Int,
     onDismiss: () -> Unit,
-    onConfirm: (description: String) -> Unit,
+    onConfirm: (name: String) -> Unit,
 ) {
-    var description by remember { mutableStateOf("") }
+    var name by remember { mutableStateOf("") }
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(focusRequester) { focusRequester.requestFocus() }
 
@@ -244,14 +244,14 @@ private fun WaypointDialog(
         title = { Text(stringResource(R.string.record_waypoint_title, number)) },
         text = {
             OutlinedTextField(
-                value = description,
-                onValueChange = { description = it },
+                value = name,
+                onValueChange = { name = it },
                 label = { Text(stringResource(R.string.record_waypoint_label)) },
                 modifier = Modifier.focusRequester(focusRequester),
             )
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(description) }) {
+            TextButton(onClick = { onConfirm(name) }) {
                 Text(stringResource(R.string.action_done))
             }
         },

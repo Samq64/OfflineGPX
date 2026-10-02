@@ -168,4 +168,22 @@ class GpxParserTest {
         assertNull(GpxParser.parseGpxTime("2026-05-01"))
         assertNull(GpxParser.parseGpxTime("2026-05-01T08:00:00+"))
     }
+
+    @Test
+    fun `labels a waypoint by its name, else its desc or cmt, trimmed`() {
+        val track = parse(
+            """
+            <gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+              <wpt lat="1" lon="1"><name>
+                Summit
+              </name><cmt>Comment</cmt><desc>Description</desc></wpt>
+              <wpt lat="2" lon="2"><cmt>Comment</cmt><desc>Description</desc></wpt>
+              <wpt lat="3" lon="3"><cmt>Comment</cmt></wpt>
+              <wpt lat="4" lon="4"><name> </name></wpt>
+            </gpx>
+            """.trimIndent()
+        )
+
+        assertEquals(listOf("Summit", "Description", "Comment", null), track.waypoints.map { it.name })
+    }
 }

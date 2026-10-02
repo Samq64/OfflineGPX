@@ -107,9 +107,9 @@ class RecordingController(context: Context) {
         send(action) { putExtra(RecordingService.EXTRA_NAME, name) }
     }
 
-    /** [description] may be blank. */
-    fun addWaypoint(description: String) = send(RecordingService.ACTION_WAYPOINT) {
-        putExtra(RecordingService.EXTRA_DESCRIPTION, description)
+    /** [name] may be blank. */
+    fun addWaypoint(name: String) = send(RecordingService.ACTION_WAYPOINT) {
+        putExtra(RecordingService.EXTRA_WAYPOINT_NAME, name)
     }
 
     private fun send(action: String, extras: Intent.() -> Unit = {}) {

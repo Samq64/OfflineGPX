@@ -17,7 +17,7 @@ class GpxTrimmerTest {
         <?xml version="1.0" encoding="UTF-8"?>
         <gpx version="1.1" creator="other" xmlns="http://www.topografix.com/GPX/1/1"
              xmlns:hr="urn:example:hr">
-          <metadata><name>Kept metadata</name></metadata>
+          <metadata><name>Kept metadata</name><bounds minlat="47.0" minlon="8.0" maxlat="47.3" maxlon="8.3"/></metadata>
           <wpt lat="47.0" lon="8.0"><time>2026-05-01T08:00:00Z</time><desc>Start</desc></wpt>
           <wpt lat="99.0" lon="8.0"><desc>Unreadable</desc></wpt>
           <wpt lat="47.3" lon="8.3"><desc>End</desc></wpt>
@@ -75,8 +75,15 @@ class GpxTrimmerTest {
     fun `waypoints are kept by index, unreadable ones having none`() {
         val trimmed = trim(keepPoint = { true }, keepWaypoint = { it == 1 })
         val waypoints = parser.parse(trimmed.byteInputStream()).waypoints
-        assertEquals(listOf("End"), waypoints.map { it.description })
+        assertEquals(listOf("End"), waypoints.map { it.name })
         assertFalse("Unreadable" in trimmed)
+    }
+
+    @Test
+    fun `stale bounds are dropped`() {
+        val trimmed = trim(keepPoint = { it >= 1 })
+        assertFalse("<bounds" in trimmed, trimmed)
+        assertTrue("Kept metadata" in trimmed, trimmed)
     }
 
     @Test

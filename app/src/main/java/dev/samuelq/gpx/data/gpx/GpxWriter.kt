@@ -1,11 +1,15 @@
 package dev.samuelq.gpx.data.gpx
 
 import dev.samuelq.gpx.core.model.Track
+import dev.samuelq.gpx.core.model.bounds
 import org.xmlpull.v1.XmlSerializer
 import java.io.OutputStream
 import java.time.format.DateTimeFormatter
 
 const val GPX_MIME_TYPE = "application/gpx+xml"
+
+/** Without the control characters XML 1.0 forbids even escaped, which a pasted name can carry. */
+internal fun String.xmlSafe(): String = filterNot { it < ' ' && it != '\t' && it != '\n' && it != '\r' || it == '\uFFFE' || it == '\uFFFF' }
 
 /**
  * Writes a [Track] as GPX 1.1, the on-disk format for recordings.
@@ -26,9 +30,17 @@ class GpxWriter(private val newSerializer: () -> XmlSerializer = DEFAULT_SERIALI
         xml.attribute(null, "creator", CREATOR)
 
         val points = track.points
-        if (points.size > 0 && points.hasTime(0)) {
+        // Waypoints are dropped at a fix, so the points' box holds them too.
+        val bounds = points.bounds()
+        if (bounds != null) {
             xml.startTag(NAMESPACE, "metadata")
-            xml.textTag("time", timestamp(points.timeMillis(0)))
+            if (points.hasTime(0)) xml.textTag("time", timestamp(points.timeMillis(0)))
+            xml.startTag(NAMESPACE, "bounds")
+            xml.attribute(null, "minlat", format(bounds.southLatitude))
+            xml.attribute(null, "minlon", format(bounds.westLongitude))
+            xml.attribute(null, "maxlat", format(bounds.northLatitude))
+            xml.attribute(null, "maxlon", format(bounds.eastLongitude))
+            xml.endTag(NAMESPACE, "bounds")
             xml.endTag(NAMESPACE, "metadata")
         }
 
@@ -39,7 +51,7 @@ class GpxWriter(private val newSerializer: () -> XmlSerializer = DEFAULT_SERIALI
             xml.attribute(null, "lon", format(waypoint.point.longitude))
             waypoint.point.elevation?.let { xml.textTag("ele", oneDecimal(it)) }
             waypoint.point.time?.let { xml.textTag("time", TIMESTAMP.format(it)) }
-            waypoint.description?.takeIf(String::isNotBlank)?.let { xml.textTag("desc", it) }
+            waypoint.name?.takeIf(String::isNotBlank)?.let { xml.textTag("name", it) }
             xml.endTag(NAMESPACE, "wpt")
         }
 
@@ -55,8 +67,6 @@ class GpxWriter(private val newSerializer: () -> XmlSerializer = DEFAULT_SERIALI
                 xml.attribute(null, "lon", format(points.longitude(i)))
                 points.elevation(i).takeUnless(Float::isNaN)?.let { xml.textTag("ele", oneDecimal(it.toDouble())) }
                 if (points.hasTime(i)) xml.textTag("time", timestamp(points.timeMillis(i)))
-                // Accuracy in metres, not true HDOP; see TrackPoint.accuracyMeters.
-                points.accuracy(i).takeUnless(Float::isNaN)?.let { xml.textTag("hdop", oneDecimal(it.toDouble())) }
                 xml.endTag(NAMESPACE, "trkpt")
             }
             xml.endTag(NAMESPACE, "trkseg")
@@ -70,7 +80,7 @@ class GpxWriter(private val newSerializer: () -> XmlSerializer = DEFAULT_SERIALI
 
     private fun XmlSerializer.textTag(name: String, value: String) {
         startTag(NAMESPACE, name)
-        text(value)
+        text(value.xmlSafe())
         endTag(NAMESPACE, name)
     }
 

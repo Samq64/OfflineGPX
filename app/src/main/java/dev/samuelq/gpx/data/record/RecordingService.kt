@@ -74,7 +74,7 @@ class RecordingService : Service() {
                     ACTION_RELEASE -> release()
                     ACTION_STOP -> stop(save = true, name = intent.getStringExtra(EXTRA_NAME).orEmpty())
                     ACTION_DISCARD -> stop(save = false, name = intent.getStringExtra(EXTRA_NAME).orEmpty())
-                    ACTION_WAYPOINT -> addWaypoint(intent.getStringExtra(EXTRA_DESCRIPTION) ?: "")
+                    ACTION_WAYPOINT -> addWaypoint(intent.getStringExtra(EXTRA_WAYPOINT_NAME) ?: "")
                 }
                 // By id, so a START queued behind a stop still gets its recording.
                 if (session == null) stopSelf(startId)
@@ -178,8 +178,8 @@ class RecordingService : Service() {
         publish()
     }
 
-    private fun addWaypoint(description: String) {
-        val waypoint = session?.addWaypoint(description, Instant.now()) ?: return
+    private fun addWaypoint(name: String) {
+        val waypoint = session?.addWaypoint(name, Instant.now()) ?: return
         wal?.appendWaypoint(waypoint)
         publish()
     }
@@ -303,8 +303,8 @@ class RecordingService : Service() {
         internal const val ACTION_STOP = "dev.samuelq.gpx.RECORD_STOP"
         internal const val ACTION_DISCARD = "dev.samuelq.gpx.RECORD_DISCARD"
         internal const val ACTION_WAYPOINT = "dev.samuelq.gpx.RECORD_WAYPOINT"
-        internal const val EXTRA_DESCRIPTION = "description"
         internal const val EXTRA_NAME = "name"
+        internal const val EXTRA_WAYPOINT_NAME = "waypoint_name"
 
         private const val TAG = "RecordingService"
 

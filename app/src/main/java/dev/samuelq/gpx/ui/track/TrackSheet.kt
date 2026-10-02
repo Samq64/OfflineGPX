@@ -670,7 +670,7 @@ private fun waypointActions(
             val time = waypoint.point.time?.let {
                 if (it.atZone(zone).toLocalDate() == startDay) formatters.time(it) else formatters.dateTime(it)
             }
-            val note = waypoint.description?.trim()?.takeIf(String::isNotEmpty)?.let {
+            val note = waypoint.name?.trim()?.takeIf(String::isNotEmpty)?.let {
                 if (it.length > NOTE_LABEL_LENGTH) it.take(NOTE_LABEL_LENGTH).trimEnd() + "…" else it
             }
             val label = buildString {

@@ -95,7 +95,7 @@ internal object GpxNameRewriter {
 
     /** XML-escaped and UTF-8 encoded, one char per byte, to match the ISO-8859-1 header. */
     private fun escape(value: String): String {
-        val escaped = value
+        val escaped = value.xmlSafe()
             .replace("&", "&amp;")
             .replace("<", "&lt;")
             .replace(">", "&gt;")
