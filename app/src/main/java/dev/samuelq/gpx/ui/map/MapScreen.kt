@@ -610,6 +610,7 @@ fun MapScreen(
                     controller = mapController,
                     focusedTrackId = if (isRecording) LIVE_TRACK_ID else focusedTrack?.id,
                     selectedIndex = selectedIndex,
+                    markEnds = trimRange != null,
                     markerColor = when {
                         isRecording -> liveColor
                         focusedTrack != null -> focusedColor

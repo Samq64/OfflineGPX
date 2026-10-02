@@ -72,6 +72,8 @@ fun OfflineMapCanvas(
     focusedTrackId: Long?,
     /** Highlighted point within [focusedTrackId]'s route, as an index into its points. */
     selectedIndex: Int?,
+    /** Marks both ends of [focusedTrackId]'s route, which a trim being set up has cut to. */
+    markEnds: Boolean,
     /** [focusedTrackId]'s colour, for its selected point and its [trackWaypoints]. */
     markerColor: Color,
     /** Whether to mark [liveRoute]'s last point. */
@@ -241,14 +243,17 @@ fun OfflineMapCanvas(
     }
 
     LaunchedEffect(
-        belowPinsLayer, pinLayer, abovePinsLayer, onTopLayer, symbols, routes, liveRoute, showPuck, focusedTrackId, selectedIndex,
+        belowPinsLayer, pinLayer, abovePinsLayer, onTopLayer, symbols, routes, liveRoute, showPuck, focusedTrackId, selectedIndex, markEnds,
         trackWaypoints, liveWaypoints, followedWaypoint, position,
     ) {
         val puckRoute = liveRoute?.takeIf { showPuck }
         val here = symbols.puck(position, bearing = null)
-        val markerAt = routeFor(focusedTrackId, routes, liveRoute)?.points?.getOrNull(selectedIndex ?: -1)
+        val focused = routeFor(focusedTrackId, routes, liveRoute)?.points
+        val markerAt = focused?.getOrNull(selectedIndex ?: -1)
+        // An out-and-back's kept part lies over its cut part; only its ends tell them apart.
+        val ends = if (markEnds) symbols.selectedDot(focused?.getOrNull(0)) + symbols.selectedDot(focused?.lastOrNull()) else emptyList()
 
-        val selected = symbols.selectedDot(markerAt)
+        val selected = symbols.selectedDot(markerAt) + ends
         val pinTapped = followedWaypoint != null
         belowPinsLayer.show(if (pinTapped) emptyList() else selected)
         pinLayer.show(symbols.pins(trackWaypoints, liveWaypoints, followedWaypoint))
