@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -42,7 +41,6 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -58,7 +56,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.stateDescription
@@ -264,13 +261,6 @@ fun SettingsScreen(
                     }
                 }
             }
-
-            SwitchSetting(
-                title = stringResource(R.string.settings_zoom_buttons),
-                explanation = stringResource(R.string.settings_zoom_buttons_explanation),
-                checked = settings.showZoomButtons,
-                onCheckedChange = viewModel::setShowZoomButtons,
-            )
 
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
             SectionHeading(stringResource(R.string.settings_section_recording))
@@ -528,7 +518,7 @@ private fun MapsSection(
     }
 }
 
-/** A row, not ListItem, for the reasons [SwitchSetting] gives. */
+/** A row, not ListItem: that insets 16dp against this screen's 20. */
 @Composable
 private fun MapRow(
     map: OfflineMap,
@@ -651,41 +641,5 @@ private fun Setting(
         )
         Spacer(Modifier.height(8.dp))
         control()
-    }
-}
-
-/**
- * A [Setting] whose control is a switch, beside the text; the whole row toggles it. A row, not
- * ListItem: that insets 16dp against this screen's 20, and pins the switch to the top once the
- * text wraps.
- */
-@Composable
-private fun SwitchSetting(
-    title: String,
-    explanation: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange)
-            .padding(horizontal = ScreenPadding, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Text(
-                text = explanation,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        Spacer(Modifier.width(16.dp))
-        Switch(checked = checked, onCheckedChange = null)
     }
 }

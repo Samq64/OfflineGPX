@@ -214,8 +214,6 @@
     <string name="settings_units_explanation">Display only. File content stays in metric.</string>
     <string name="settings_units_imperial">Imperial</string>
     <string name="settings_units_metric">Metric</string>
-    <string name="settings_zoom_buttons">Zoom buttons</string>
-    <string name="settings_zoom_buttons_explanation">Show zoom and fit buttons on the map, for zooming without a pinch. Double-tap and drag also zooms.</string>
 
     <string name="sheet_drag_handle">Drag handle</string>
 

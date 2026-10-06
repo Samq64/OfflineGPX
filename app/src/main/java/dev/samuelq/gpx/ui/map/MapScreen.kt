@@ -106,7 +106,6 @@ fun MapScreen(
     /** Straight to the file picker; the import itself, with its merge prompt, lives in settings. */
     onImportMap: () -> Unit,
     recorder: RecordingController,
-    showZoomButtons: Boolean,
     viewModel: MapViewModel = viewModel(factory = MapViewModel.Factory),
     location: LocationViewModel = viewModel(factory = LocationViewModel.Factory),
 ) {
@@ -668,14 +667,6 @@ fun MapScreen(
                     else -> ShowTracksHint(
                         onClick = onOpenList,
                         modifier = Modifier.align(Alignment.Center),
-                    )
-                }
-
-                if (hasContent && showZoomButtons) {
-                    MapZoomControls(
-                        controller = mapController,
-                        // Halfway down the start edge: clear of the sheet, the record button and the panel.
-                        modifier = Modifier.align(Alignment.CenterStart).padding(start = panelCover + 8.dp),
                     )
                 }
 

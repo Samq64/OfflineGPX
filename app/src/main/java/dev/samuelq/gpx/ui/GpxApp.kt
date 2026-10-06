@@ -73,7 +73,6 @@ fun GpxApp(
                     onOpenSettings = { navController.open(SettingsRoute()) },
                     onImportMap = { navController.open(SettingsRoute(importMap = true)) },
                     recorder = container.recordingController,
-                    showZoomButtons = settings.showZoomButtons,
                 )
             }
 

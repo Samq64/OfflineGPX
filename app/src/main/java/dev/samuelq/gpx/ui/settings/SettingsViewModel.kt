@@ -52,7 +52,6 @@ class SettingsViewModel(
     val messages: Flow<SettingsMessage> = _messages.receiveAsFlow()
 
     fun setUnits(units: UnitSystem) = repository.setUnits(units)
-    fun setShowZoomButtons(show: Boolean) = repository.setShowZoomButtons(show)
     fun setMaxAccuracy(meters: Double) = repository.setMaxAccuracyMeters(meters)
 
     fun importMap(uri: Uri?) {

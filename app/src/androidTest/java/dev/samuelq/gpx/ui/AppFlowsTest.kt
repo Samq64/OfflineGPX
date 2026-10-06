@@ -2,22 +2,19 @@ package dev.samuelq.gpx.ui
 
 import android.content.Intent
 import android.net.Uri
-import androidx.compose.ui.test.assertIsOff
-import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
 import androidx.core.content.FileProvider
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.samuelq.gpx.MainActivity
 import dev.samuelq.gpx.R
 import dev.samuelq.gpx.container
+import dev.samuelq.gpx.core.model.UnitSystem
 import dev.samuelq.gpx.data.track.TrackFiles
 import dev.samuelq.gpx.sampleGpx
 import dev.samuelq.gpx.targetContext
@@ -128,21 +125,16 @@ class AppFlowsTest {
     }
 
     @Test
-    fun zoomButtonsToggle() {
+    fun unitsChoice() {
         val settings = container.settingsRepository
-        settings.setShowZoomButtons(false)
+        settings.setUnits(UnitSystem.METRIC)
         launch()
 
         compose.onNodeWithContentDescription(string(R.string.settings_title)).performClick()
-        val toggle = compose.onNode(hasText(string(R.string.settings_zoom_buttons)) and isToggleable())
-        toggle.performScrollTo().assertIsOff()
-        toggle.performClick()
-        toggle.assertIsOn()
-        assertEquals(true, settings.settings.value.showZoomButtons)
-
-        toggle.performClick()
-        toggle.assertIsOff()
-        assertEquals(false, settings.settings.value.showZoomButtons)
+        compose.onNodeWithText(string(R.string.settings_units_imperial)).performClick()
+        assertEquals(UnitSystem.IMPERIAL, settings.settings.value.units)
+        compose.onNodeWithText(string(R.string.settings_units_metric)).performClick()
+        assertEquals(UnitSystem.METRIC, settings.settings.value.units)
 
         // Back to the map, the root.
         scenario!!.onActivity { it.onBackPressedDispatcher.onBackPressed() }

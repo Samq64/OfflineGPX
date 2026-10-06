@@ -281,7 +281,7 @@ internal fun OfflineMapCanvas(
     fun currentClamp() = currentExtent?.including(framedView)
     val currentCover by rememberUpdatedState(cover)
 
-    // For the zoom buttons: pinching needs two fingers, and nothing else zooms out.
+    // For the screen reader actions: pinching needs two fingers, and nothing else zooms out.
     fun zoomBy(factor: Double): Boolean {
         val position = map.mapPosition
         val viewport = map.viewport()
