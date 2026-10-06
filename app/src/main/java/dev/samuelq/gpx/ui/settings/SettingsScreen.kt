@@ -431,14 +431,14 @@ private val LIBRARIES = listOf(
     Library("Kotlin", "Apache-2.0", "https://kotlinlang.org"),
 )
 
-private const val COMMIT_URL = "https://github.com/Samq64/offline-gpx-android/commit/"
+private const val COMMIT_URL = "https://github.com/Samq64/offline-gpx-android/commits/"
 
 @Composable
 private fun linkStyles() = TextLinkStyles(
     SpanStyle(color = MaterialTheme.colorScheme.primary, textDecoration = TextDecoration.Underline)
 )
 
-/** The commit hash, when the build has one, links to its source. */
+/** The commit hash, when the build has one, links to the history up to it. */
 @Composable
 private fun VersionLine(onOpenCommit: (String) -> Unit) {
     val hash = BuildConfig.GIT_HASH
