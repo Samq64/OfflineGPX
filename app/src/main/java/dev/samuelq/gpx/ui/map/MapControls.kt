@@ -53,12 +53,16 @@ internal fun WaypointTooltip(waypoint: Waypoint, tipAt: () -> Offset) {
     ) {
         // Announced as it opens, since a screen reader action can open it with focus elsewhere.
         Column(Modifier.semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }) {
-            Text(
-                text = LocalFormatters.current.time(waypoint.point.time),
-                style = MaterialTheme.typography.labelMedium,
-                color = LocalContentColor.current.copy(alpha = 0.7f),
-            )
-            waypoint.name?.takeIf(String::isNotBlank)?.let {
+            val name = waypoint.name?.takeIf(String::isNotBlank)
+            // The placeholder dash only when there's nothing else to show.
+            if (waypoint.point.time != null || name == null) {
+                Text(
+                    text = LocalFormatters.current.time(waypoint.point.time),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = LocalContentColor.current.copy(alpha = 0.7f),
+                )
+            }
+            name?.let {
                 Text(text = it, style = MaterialTheme.typography.bodyMedium)
             }
         }
