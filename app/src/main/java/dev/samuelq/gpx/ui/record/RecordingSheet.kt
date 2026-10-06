@@ -1,6 +1,5 @@
 package dev.samuelq.gpx.ui.record
 
-import android.provider.Settings
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -36,9 +35,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.MotionDurationScale
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
@@ -263,9 +263,11 @@ private fun WaypointDialog(
 /** Pulses while recording, unless animations are off. */
 @Composable
 private fun RecordingDot(paused: Boolean) {
-    val context = LocalContext.current
-    val animate = remember {
-        Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) > 0f
+    // Compose's own scale, which follows the setting; at zero an infinite pulse would stop dim.
+    var animate by remember { mutableStateOf(true) }
+    LaunchedEffect(Unit) {
+        val scale = coroutineContext[MotionDurationScale] ?: return@LaunchedEffect
+        snapshotFlow { scale.scaleFactor > 0f }.collect { animate = it }
     }
     val transition = rememberInfiniteTransition(label = "recording")
     val alpha by transition.animateFloat(
