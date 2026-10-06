@@ -154,6 +154,45 @@ class TrackRepositoryTest {
     }
 
     @Test
+    fun renameMovesTheFileAfterTheName() {
+        val name = "sample-${System.nanoTime()}.gpx"
+        val id = importSample(name = name)
+        val before = fileOf(id)
+        runBlocking { repository.rename(id, "Tom & Jerry's: ride ${System.nanoTime()}").getOrThrow() }
+        val renamed = row(id)
+        assertEquals("${renamed.trackName!!.replace(':', '_')}.gpx", File(renamed.location).name)
+        assertFalse(before.exists())
+        assertTrue(fileOf(id).exists())
+        assertEquals(20, loaded(id).track.points.size)
+        // Still the name it arrived as.
+        assertEquals(name, renamed.displayName)
+
+        // Taken by another: numbered.
+        val other = importSample()
+        runBlocking { repository.rename(other, renamed.trackName!!).getOrThrow() }
+        assertEquals(File(renamed.location).nameWithoutExtension + " (2).gpx", File(row(other).location).name)
+
+        // Cleared: back to the name it arrived as.
+        runBlocking { repository.rename(id, " ").getOrThrow() }
+        assertEquals(name, File(row(id).location).name)
+    }
+
+    @Test
+    fun undoingATrimFindsARenamedFile() {
+        val id = importSample()
+        val original = fileOf(id).readBytes()
+        val edit = runBlocking { repository.trim(id, 5, 14).getOrThrow() }
+        val trimmedAt = fileOf(id)
+        runBlocking { repository.rename(id, "Renamed ${System.nanoTime()}").getOrThrow() }
+        assertFalse(trimmedAt.exists())
+
+        runBlocking { repository.undoEdit(edit).getOrThrow() }
+        assertFalse(trimmedAt.exists(), "nothing written where it was")
+        assertEquals(20, loaded(id).track.points.size)
+        assertContentEquals(original, fileOf(id).readBytes())
+    }
+
+    @Test
     fun trimAndUndo() {
         val id = importSample()
         val original = fileOf(id).readBytes()

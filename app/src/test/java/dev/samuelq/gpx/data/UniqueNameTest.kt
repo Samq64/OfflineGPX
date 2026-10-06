@@ -23,4 +23,12 @@ class UniqueNameTest {
         assertEquals("Mon_Tue ride.gpx", uniqueName("Mon/Tue ride", "gpx", "track") { false })
         assertEquals("track.gpx", uniqueName("  ", "gpx", "track") { false })
     }
+
+    @Test
+    fun `only characters a filesystem refuses are replaced`() {
+        assertEquals("Tom & Jerry's ride", safeFileName("Tom & Jerry's ride"))
+        assertEquals("a_b_c_d_e_f_g_h_i_j", safeFileName("a/b\\c:d*e?f\"g<h>i|j"))
+        assertEquals("tab_new_line_del_", safeFileName("tab\tnew\nline\u0000del\u007f"))
+        assertEquals("Café, 9.5 km (copy) #2", safeFileName("Café, 9.5 km (copy) #2"))
+    }
 }

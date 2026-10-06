@@ -44,9 +44,8 @@ internal fun uniqueFile(dir: File, name: String?, extension: String, fallback: S
  */
 internal fun uniqueName(name: String?, extension: String, fallback: String, taken: (String) -> Boolean): String {
     // A slash is replaced, not cut at: a track called "Mon/Tue ride" keeps both halves.
-    val base = name.orEmpty()
+    val base = safeFileName(name.orEmpty())
         .let { if (it.endsWith(".$extension", ignoreCase = true)) it.dropLast(extension.length + 1) else it }
-        .replace(UNSAFE_FILENAME_CHARACTERS, "_")
         .take(MAX_FILENAME_LENGTH)
         .ifBlank { fallback }
 
@@ -59,8 +58,11 @@ internal fun uniqueName(name: String?, extension: String, fallback: String, take
     return candidate
 }
 
+/** Only what Android, FAT or a SAF provider refuses is replaced; `&` and `'` are kept. */
+internal fun safeFileName(name: String): String = name.replace(UNSAFE_FILENAME_CHARACTERS, "_")
+
 private const val MAX_FILENAME_LENGTH = 80
-private val UNSAFE_FILENAME_CHARACTERS = Regex("""[\\/:*?"<>|]""")
+private val UNSAFE_FILENAME_CHARACTERS = Regex("""[\\/:*?"<>|\u0000-\u001f\u007f]""")
 
 /** Replaces [file] only once [write] has finished and its bytes are synced, so a crash leaves the old one. */
 internal inline fun writeAtomically(file: File, write: (OutputStream) -> Unit) {

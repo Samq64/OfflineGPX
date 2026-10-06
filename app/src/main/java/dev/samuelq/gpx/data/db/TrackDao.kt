@@ -35,6 +35,9 @@ interface TrackDao {
     @Query("UPDATE tracks SET trackName = :name WHERE id = :id")
     suspend fun setTrackName(id: Long, name: String?)
 
+    @Query("UPDATE tracks SET location = :location WHERE id = :id")
+    suspend fun setLocation(id: Long, location: String)
+
     @Query("DELETE FROM tracks WHERE id = :id")
     suspend fun delete(id: Long)
 

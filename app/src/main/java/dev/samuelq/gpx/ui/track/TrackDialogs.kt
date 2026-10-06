@@ -25,6 +25,7 @@ import androidx.core.content.FileProvider
 import dev.samuelq.gpx.R
 import dev.samuelq.gpx.data.gpx.GPX_MIME_TYPE
 import dev.samuelq.gpx.data.db.TrackEntity
+import dev.samuelq.gpx.data.safeFileName
 import dev.samuelq.gpx.data.track.TrackFiles
 
 /** Opens with the name selected, so the first keystroke replaces it. */
@@ -74,9 +75,9 @@ fun trackTitle(trackName: String?, displayName: String): String =
 private fun String.dropGpxSuffix(): String =
     if (endsWith(GPX, ignoreCase = true)) dropLast(GPX.length) else this
 
-/** The track's name; unnamed, the file it's stored under, whose stamp sorts. */
+/** The track's name, made safe as a filename; unnamed, the file it's stored under, whose stamp sorts. */
 fun exportFileName(trackName: String?, displayName: String): String =
-    (trackName?.takeIf(String::isNotBlank) ?: displayName.dropGpxSuffix()).ensureGpxSuffix()
+    safeFileName(trackName?.takeIf(String::isNotBlank) ?: displayName.dropGpxSuffix()).ensureGpxSuffix()
 
 fun String.ensureGpxSuffix(): String =
     if (endsWith(GPX, ignoreCase = true)) this else "$this$GPX"

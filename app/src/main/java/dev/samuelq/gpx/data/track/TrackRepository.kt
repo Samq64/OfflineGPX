@@ -235,17 +235,38 @@ class TrackRepository(
 
     suspend fun touch(id: Long) = dao.touch(id, System.currentTimeMillis())
 
-    /** Renames a track; a blank [name] clears it, falling back to the filename. */
+    /**
+     * Renames a track and its file; a blank [name] clears it, and the file goes back to the
+     * name it arrived as.
+     */
     suspend fun rename(id: Long, name: String): Result<Unit> = withContext(io) {
         runCatching {
             val trimmed = name.asTrackName()
+            val entity = entity(id)
             // Written into the file since export is a byte copy.
-            val file = fileOf(entity(id))
+            val file = fileOf(entity)
             writeAtomically(file) { output -> file.inputStream().use { trimmer.trim(it, output, name = trimmed.orEmpty()) } }
             // The cache holds no name, so the rewrite leaves it current.
             cache.restamp(id, file)
             dao.setTrackName(id, trimmed)
+            moveTo(id, file, trimmed ?: entity.displayName)
         }.recoverFailure()
+    }
+
+    /**
+     * Renames [file] after [name], numbered if taken. In place, so atomic; a rename that fails
+     * leaves the old name, which still works.
+     */
+    private suspend fun moveTo(id: Long, file: File, name: String) {
+        val dir = file.parentFile ?: return
+        val target = File(dir, uniqueName(name, "gpx", fallback = "track") { it != file.name && File(dir, it).exists() })
+        if (target == file || !file.renameTo(target)) return
+        try {
+            dao.setLocation(id, TrackFiles.location(appContext, target))
+        } catch (e: Throwable) {
+            target.renameTo(file)
+            throw e
+        }
     }
 
     suspend fun setVisible(id: Long, visible: Boolean) = dao.setVisible(id, visible)
@@ -353,7 +374,8 @@ class TrackRepository(
     /** Puts the file and row back as they were before [edit], removing anything it added. */
     suspend fun undoEdit(edit: TrackEdit): Result<Unit> = withContext(io) {
         runCatching {
-            writeAtomically(fileOf(edit.before)) { output -> edit.backup.inputStream().use { it.copyTo(output) } }
+            // Where it is now: a rename since moves the file.
+            writeAtomically(fileOf(dao.byId(edit.id) ?: edit.before)) { output -> edit.backup.inputStream().use { it.copyTo(output) } }
             // Only what the edit changed, so a recolour since survives the undo.
             dao.setSummary(SummaryUpdate(edit.id, edit.before.startedAtEpochMillis, edit.before.summary))
             dao.setTrackName(edit.id, edit.before.trackName)
