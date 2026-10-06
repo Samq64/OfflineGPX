@@ -11,6 +11,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -107,6 +108,8 @@ internal fun OfflineMapCanvas(
     /** Cold-start camera, if remembered; takes priority over fitting to tracks or maps. */
     initialCamera: CameraSnapshot?,
     onCameraChange: (CameraSnapshot) -> Unit,
+    /** True while framing every track was asked for but would leave them all specks; see [tooFarApart]. */
+    onTooFarApartChange: (Boolean) -> Unit,
 ) {
     val density = LocalDensity.current
     val context = LocalContext.current
@@ -118,6 +121,8 @@ internal fun OfflineMapCanvas(
     var basemap by remember { mutableStateOf<Basemap?>(null) }
     // Framed once: re-fitting on every route change would yank the map out from under a pan.
     var hasFramed by remember { mutableStateOf(false) }
+    // Kept so a rotation doesn't drop back to the specks.
+    var spread by rememberSaveable { mutableStateOf(false) }
     // From layout: first composition precedes it, and fitting to 0 x 0 zooms to the world.
     var viewSize by remember { mutableStateOf<IntSize?>(null) }
 
@@ -139,6 +144,7 @@ internal fun OfflineMapCanvas(
     // A 48dp target, the pin itself being narrower.
     val pinMinHalf = remember(density) { with(density) { 24.dp.toPx() } }
     val followMargin = remember(density) { with(density) { FOLLOW_MARGIN_DP.dp.roundToPx() } }
+    val speckPx = remember(density) { with(density) { SPECK_DP.dp.toPx() } }
 
     val insets = remember(contentPadding, layoutDirection, density) {
         contentPadding.toInsets(density, layoutDirection)
@@ -289,11 +295,17 @@ internal fun OfflineMapCanvas(
         map.moveTo(position, currentClamp(), currentCover)
         return true
     }
+    // Tracks first, else the maps. Too far apart, the camera stays put and the screen says so.
     fun frameAll(): Boolean {
-        val target = extentOf(currentRoutes, currentLiveRoute, emptyList())
-            ?: extentOf(emptyList(), null, basemaps) ?: return false
         val usable = viewSize?.usable(insets) ?: return false
-        map.moveTo(fit(target, usable, insets, map.viewport().maxScale), currentClamp(), currentCover)
+        val maxScale = map.viewport().maxScale
+        val tracks = extentOf(currentRoutes, currentLiveRoute, emptyList())
+        val boxes = (currentRoutes + listOfNotNull(currentLiveRoute)).mapNotNull { it.bounds?.toBoundingBox() }
+        spread = tracks != null && tooFarApart(tracks, boxes, usable, maxScale, speckPx)
+        if (spread) return true
+        val target = tracks ?: extentOf(emptyList(), null, basemaps) ?: return false
+        map.moveTo(fit(target, usable, insets, maxScale), currentClamp(), currentCover)
+        hasFramed = true
         return true
     }
 
@@ -310,6 +322,7 @@ internal fun OfflineMapCanvas(
         camera.y -= (insets.top - insets.bottom) / 2.0 / mapSize
         val view = camera.visibleBox(size)
         if (currentExtent?.intersects(view) == false) return CentreResult.OutOfBounds
+        spread = false
         framedView = view
         map.moveTo(camera, currentClamp(), currentCover)
         return CentreResult.Centred
@@ -366,6 +379,13 @@ internal fun OfflineMapCanvas(
         extentOf(routes, liveRoute, emptyList()) ?: extentOf(emptyList(), null, basemaps)
     }
 
+    val reportSpread by rememberUpdatedState(onTooFarApartChange)
+    LaunchedEffect(spread) { reportSpread(spread) }
+    // Hiding or adding tracks may bring them close enough to frame after all.
+    LaunchedEffect(routes, liveRoute, viewSize, insets) {
+        if (spread) frameAll()
+    }
+
     // Read once: the camera is republished as the map moves, so keying on it would restore
     // the map to its own current position.
     val rememberedCamera = remember { initialCamera }
@@ -383,13 +403,8 @@ internal fun OfflineMapCanvas(
             hasFramed = true
             return@LaunchedEffect
         }
-        if (tracksLoading) return@LaunchedEffect
-        val target = initialExtent ?: return@LaunchedEffect
-        val size = viewSize ?: return@LaunchedEffect
-        val usable = size.usable(insets) ?: return@LaunchedEffect
-
-        map.moveTo(fit(target, usable, insets, map.viewport().maxScale), currentClamp(), currentCover)
-        hasFramed = true
+        if (tracksLoading || initialExtent == null) return@LaunchedEffect
+        frameAll()
     }
 
     // After the cold-start frame, so it wins when both land on the same composition.
@@ -402,6 +417,7 @@ internal fun OfflineMapCanvas(
         extentOf(listOf(route), null, emptyList())?.let { target ->
             val position = fit(target, usable, frameInsets, map.viewport().maxScale)
             val view = position.visibleBox(size)
+            spread = false
             framedView = view
             map.moveTo(position, currentClamp(), currentCover)
         }
@@ -439,6 +455,9 @@ private const val TAP_REACH_DP = 40f
 
 /** How far inside the uncovered box a scrubbed point is kept. */
 private const val FOLLOW_MARGIN_DP = 36f
+
+/** Across which every track framed together counts as a speck. */
+private const val SPECK_DP = 16f
 
 /** Street level, for finding yourself; 2^15. */
 private const val LOCATE_SCALE = 32768.0

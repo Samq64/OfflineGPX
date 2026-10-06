@@ -13,6 +13,7 @@ import org.oscim.core.MercatorProjection
 import org.oscim.core.Tile
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
@@ -84,6 +85,35 @@ class MapCameraTest {
         assertEquals(200f, centre.x, 0.5f)
         val west = screenPosition(TrackPoint(51.5, -1.0), position, 400, 800)
         assertTrue(west.x >= -0.5f, "$west")
+    }
+
+    @Test
+    fun `tracks are too far apart when framing them together leaves only specks`() {
+        val ottawa = BoundingBox(45.415, -75.701, 45.439, -75.699)
+        val usable = IntSize(1080, 1900)
+        val minPx = 42f
+        // Alone, a track fills the view.
+        assertFalse(tooFarApart(ottawa, listOf(ottawa), usable, Double.MAX_VALUE, minPx))
+        // A few km apart, still lines.
+        val nearby = BoundingBox(45.380, -75.750, 45.404, -75.748)
+        assertFalse(tooFarApart(ottawa.extendBoundingBox(nearby), listOf(ottawa, nearby), usable, Double.MAX_VALUE, minPx))
+        // Ottawa and Sydney, or Ottawa and Kingston, both specks.
+        val sydney = BoundingBox(-33.870, 151.209, -33.846, 151.211)
+        assertTrue(tooFarApart(ottawa.extendBoundingBox(sydney), listOf(ottawa, sydney), usable, Double.MAX_VALUE, minPx))
+        val kingston = BoundingBox(44.230, -76.481, 44.254, -76.479)
+        assertTrue(tooFarApart(ottawa.extendBoundingBox(kingston), listOf(ottawa, kingston), usable, Double.MAX_VALUE, minPx))
+        // One long ride among them is enough to frame.
+        val ride = BoundingBox(44.3, -76.4, 45.4, -75.7)
+        assertFalse(
+            tooFarApart(ottawa.extendBoundingBox(kingston), listOf(ottawa, kingston, ride), usable, Double.MAX_VALUE, minPx),
+        )
+    }
+
+    @Test
+    fun `tiny tracks at the zoom cap aren't too far apart`() {
+        val a = BoundingBox(51.5, 0.0, 51.50001, 0.00001)
+        val b = BoundingBox(51.5001, 0.0001, 51.50011, 0.00011)
+        assertFalse(tooFarApart(a.extendBoundingBox(b), listOf(a, b), IntSize(400, 400), maxScale = scale, minPx = 42f))
     }
 
     @Test

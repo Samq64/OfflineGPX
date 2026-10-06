@@ -161,6 +161,8 @@ fun MapScreen(
     val screen = rememberMapScreenState(focusedTrack?.id, isRecording) { viewModel.focus(it) }
     // Read only by the tooltip's layout, so panning doesn't recompose this screen.
     val tappedWaypointAt = remember { mutableStateOf(Offset.Zero) }
+    // Reported by the map, which keeps it.
+    var tooFarApart by remember { mutableStateOf(false) }
 
     // Replaces rather than queues: a stale answer to a tap is misleading. An undo comes back after.
     fun say(message: String, openSettings: (() -> Unit)? = null) = scope.launch {
@@ -649,6 +651,7 @@ fun MapScreen(
                     // Resume where the camera was left rather than re-fitting.
                     initialCamera = viewModel.lastCamera,
                     onCameraChange = viewModel::rememberCamera,
+                    onTooFarApartChange = { tooFarApart = it },
                     modifier = Modifier.fillMaxSize(),
                 )
 
@@ -664,6 +667,8 @@ fun MapScreen(
                 val hasContent = hasRoutes || basemaps.isNotEmpty()
 
                 when {
+                    hasRoutes && tooFarApart -> TooFarApartState(onOpenList, Modifier.fillMaxSize())
+
                     hasRoutes -> Unit
 
                     state.loading -> Box(Modifier.fillMaxSize(), Alignment.Center) {
@@ -686,7 +691,7 @@ fun MapScreen(
                     )
                 }
 
-                if (hasContent) {
+                if (hasContent && !(hasRoutes && tooFarApart)) {
                     ScaleBar(
                         // The state, not its value: the bar re-reads it as the camera moves.
                         metersPerPixel = metersPerPixel,

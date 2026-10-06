@@ -1,5 +1,6 @@
 package dev.samuelq.gpx.ui.map
 
+import dev.samuelq.gpx.core.model.GeoBounds
 import dev.samuelq.gpx.core.model.TrackPoint
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.ui.geometry.Offset
@@ -64,16 +65,13 @@ internal fun extentOf(
     basemaps: List<OfflineMap>,
 ): BoundingBox? {
     // From each route's cached bounds, so a growing recording doesn't re-walk every position.
-    val tracks = (routes + listOfNotNull(liveRoute)).mapNotNull { route ->
-        route.bounds?.let {
-            BoundingBox(it.southLatitude, it.westLongitude, it.northLatitude, it.eastLongitude)
-                .extendMargin(TRACK_MARGIN_FACTOR)
-        }
-    }
+    val tracks = (routes + listOfNotNull(liveRoute)).mapNotNull { it.bounds?.toBoundingBox()?.extendMargin(TRACK_MARGIN_FACTOR) }
     val extent = (tracks + basemaps.map { it.bounds }).reduceOrNull(BoundingBox::extendBoundingBox)
     // A single position isn't a box to fit.
     return extent?.takeIf { it.latitudeSpan > 0 || it.longitudeSpan > 0 }
 }
+
+internal fun GeoBounds.toBoundingBox() = BoundingBox(southLatitude, westLongitude, northLatitude, eastLongitude)
 
 /** [this] widened to take in [other], if any. */
 internal fun BoundingBox.including(other: BoundingBox?): BoundingBox = other?.let(::extendBoundingBox) ?: this
@@ -113,6 +111,22 @@ internal fun fit(target: BoundingBox, usable: IntSize, insets: Insets, maxScale:
     position.x -= offsetX / mapSize
     position.y -= offsetY / mapSize
     return position
+}
+
+/**
+ * Whether fitting [extent] to [usable] leaves every one of [tracks] under [minPx] across: then
+ * they're too far apart to show together, as specks. Never at the zoom cap, where the whole
+ * extent is small rather than spread.
+ */
+internal fun tooFarApart(extent: BoundingBox, tracks: List<BoundingBox>, usable: IntSize, maxScale: Double, minPx: Float): Boolean {
+    val scale = MapPosition().apply { setByBoundingBox(extent, usable.width, usable.height) }.scale
+    if (scale >= maxScale) return false
+    val mapSize = Tile.SIZE * scale
+    return tracks.none {
+        val width = MercatorProjection.longitudeToX(it.maxLongitude) - MercatorProjection.longitudeToX(it.minLongitude)
+        val height = MercatorProjection.latitudeToY(it.minLatitude) - MercatorProjection.latitudeToY(it.maxLatitude)
+        maxOf(width, height) * mapSize >= minPx
+    }
 }
 
 /**
