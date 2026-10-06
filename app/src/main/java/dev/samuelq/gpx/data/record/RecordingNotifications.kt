@@ -102,7 +102,8 @@ internal class RecordingNotifications(private val service: Service) {
             .setContentTitle(
                 service.getString(
                     when (content.status) {
-                        RecordingStatus.WAITING, RecordingStatus.RECORDING -> R.string.record_notification_active
+                        RecordingStatus.WAITING -> R.string.record_waiting_for_fix
+                        RecordingStatus.RECORDING -> R.string.record_notification_active
                         RecordingStatus.LOCATION_OFF -> R.string.record_location_is_off
                         RecordingStatus.PAUSED -> R.string.record_notification_paused
                     }
