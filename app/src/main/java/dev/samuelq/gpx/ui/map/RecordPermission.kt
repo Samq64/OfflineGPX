@@ -1,6 +1,7 @@
 package dev.samuelq.gpx.ui.map
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -16,6 +17,11 @@ import androidx.compose.ui.platform.LocalResources
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import dev.samuelq.gpx.R
+
+/** The system's location switch. Not every build has the screen. */
+internal fun Context.openLocationSettings() {
+    runCatching { startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)) }
+}
 
 /** What location is asked for, which words a refusal gets, and whether notifications come too. */
 internal enum class LocationUse(
@@ -46,7 +52,9 @@ internal fun rememberLocationRequest(
     val resources = LocalResources.current
 
     // Also checked in the service, for location switched off in between; only this one can explain.
-    val start = { if (isGpsEnabled()) onGranted() else say(resources.getString(use.off), null) }
+    val start = {
+        if (isGpsEnabled()) onGranted() else say(resources.getString(use.off)) { context.openLocationSettings() }
+    }
 
     val permissions = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()

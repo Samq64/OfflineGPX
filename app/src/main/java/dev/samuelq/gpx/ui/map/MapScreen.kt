@@ -258,7 +258,7 @@ fun MapScreen(
     LaunchedEffect(location) {
         location.stopped.collect { reason ->
             when (reason) {
-                LocationStopped.OFF -> say(resources.getString(R.string.map_location_off))
+                LocationStopped.OFF -> say(resources.getString(R.string.map_location_off)) { context.openLocationSettings() }
                 LocationStopped.DENIED -> say(resources.getString(R.string.map_location_denied))
             }
         }
