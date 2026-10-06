@@ -69,11 +69,11 @@ internal suspend fun Map.attachBasemap(
 
     val landStyle = Style.builder().fillColor(colors.land.toArgb()).fillAlpha(1f)
         .strokeColor(TRANSPARENT).build()
+    // Solid: a dashed edge read as a railway.
     val outlineStyle = with(density) {
         Style.builder()
             .strokeColor(colors.label.copy(alpha = COVERAGE_OPACITY).toArgb())
             .strokeWidth(COVERAGE_WIDTH_DP.dp.toPx())
-            .stipple(COVERAGE_DASH_DP.dp.roundToPx()).stippleColor(TRANSPARENT).stippleWidth(1f)
             .fixed(true)
             .build()
     }
@@ -167,7 +167,5 @@ private const val TRANSPARENT = 0
 private const val MASK_MARGIN_FACTOR = 7f
 
 private const val COVERAGE_WIDTH_DP = 1.2f
-
-private const val COVERAGE_DASH_DP = 4f
 
 private const val COVERAGE_OPACITY = 0.55f
