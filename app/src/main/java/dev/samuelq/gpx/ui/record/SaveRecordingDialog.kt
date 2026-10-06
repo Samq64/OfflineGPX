@@ -21,7 +21,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.paneTitle
@@ -36,10 +35,8 @@ import dev.samuelq.gpx.R
 import dev.samuelq.gpx.data.record.AbandonedRecording
 import dev.samuelq.gpx.data.record.RecordingRecovery
 import dev.samuelq.gpx.data.record.RecordingState
-import dev.samuelq.gpx.data.track.defaultTrackName
 import dev.samuelq.gpx.ui.format.LocalFormatters
 import dev.samuelq.gpx.ui.track.StatRow
-import java.time.Instant
 
 /** Stop's question. Dismissing it keeps recording. */
 @Composable
@@ -50,16 +47,10 @@ fun StopRecordingDialog(
     onDiscard: (name: String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val context = LocalContext.current
-    // Once, so the name doesn't change under the user as the ride goes on.
-    val defaultName = remember {
-        defaultTrackName(context, startedAt = Instant.now().minusMillis((state.totalSeconds * 1000).toLong()))
-    }
     SaveRecordingDialog(
         title = stringResource(R.string.record_stop_title),
         // The distance says why Save is off, so no separate "too short" message.
         summary = { StatRow(recordingStats(state.distanceMeters, state.totalSeconds)) },
-        defaultName = defaultName,
         canSave = RecordingRecovery.isSaveable(state.distanceMeters),
         onSave = onSave,
         onDiscard = onDiscard,
@@ -98,7 +89,6 @@ fun RecoveredRecordingDialog(
                     )
                 }
             },
-            defaultName = recording.defaultName,
             canSave = true,
             onSave = onSave,
             onDiscard = onDiscard,
@@ -116,14 +106,13 @@ fun RecoveredRecordingDialog(
 private fun SaveRecordingDialog(
     title: String,
     summary: @Composable () -> Unit,
-    defaultName: String,
     canSave: Boolean,
     onSave: (name: String) -> Unit,
     onDiscard: (name: String) -> Unit,
     onDismiss: (() -> Unit)?,
 ) {
-    // Not auto-focused: a keyboard would hide the map, and the default is usually kept.
-    var name by remember { mutableStateOf(defaultName) }
+    // Optional, so not auto-focused: a keyboard would hide the map.
+    var name by remember { mutableStateOf("") }
 
     BasicAlertDialog(
         onDismissRequest = { onDismiss?.invoke() },

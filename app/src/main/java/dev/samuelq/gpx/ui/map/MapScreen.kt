@@ -438,7 +438,7 @@ fun MapScreen(
     // Not the ends: each part needs two points.
     val splittable = screen.selectedIndex?.takeIf { focusedTrack != null && it in 1 until focusedTrack.profile.points.size - 1 }
     val actions = focusedTrack?.let { state.entity(it.id) }?.let { entity ->
-        remember(entity.id, entity.displayName, entity.location, splittable, screen) {
+        remember(entity.id, entity.trackName, entity.displayName, entity.location, splittable, screen) {
             TrackActions(
                 onRename = { screen.renamingId = entity.id },
                 onShare = {

@@ -185,7 +185,6 @@ class RecordingServiceTest {
             val abandoned = recovery.abandoned()
             val ride = abandoned.single { it.track.points.size == 10 }
             assertEquals(2, ride.track.points.segmentCount)
-            assertTrue(ride.defaultName.isNotBlank())
 
             val id = recovery.save(ride, "Recovered").getOrThrow()
             val saved = container.trackRepository.geometry(id).getOrThrow()

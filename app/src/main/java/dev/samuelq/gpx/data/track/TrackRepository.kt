@@ -42,7 +42,6 @@ import java.io.FileNotFoundException
 import java.io.IOException
 import java.time.Instant
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /** The single way the app gets at track data: Room rows plus the GPX files they index. */
@@ -146,20 +145,15 @@ class TrackRepository(
                 // Numbered if taken: local time repeats an hour when the clocks go back.
                 val file = uniqueFile(
                     recordingsDir,
-                    FILE_STAMP.format(startedAt.atZone(ZoneId.systemDefault())),
+                    TrackFiles.STAMP.format(startedAt.atZone(ZoneId.systemDefault())),
                     "gpx",
                     fallback = "recording",
                 )
 
-                // Named inside the GPX so the name survives an export.
-                val named = if (track.name.isNullOrBlank()) {
-                    track.copy(name = defaultTrackName(appContext, profile.stats))
-                } else {
-                    track
-                }
-                writeAtomically(file) { writer.write(named, it) }
+                // Unnamed unless given one: it's titled by when it started.
+                writeAtomically(file) { writer.write(track, it) }
 
-                dao.upsert(newEntity(file, file.name, named, profile)).also { cache.write(it, file, named) }
+                dao.upsert(newEntity(file, file.name, track, profile)).also { cache.write(it, file, track) }
             }.recoverFailure()
         }
 
@@ -306,7 +300,7 @@ class TrackRepository(
             require(at in 1 until last) { "Can't split at $at" }
 
             val file = fileOf(entity)
-            val title = (entity.trackName ?: entity.displayName.removeSuffix(".gpx")).trim()
+            val title = entity.title
             val firstName = appContext.getString(R.string.split_part, title, 1)
             val secondName = appContext.getString(R.string.split_part, title, 2)
             val second = uniqueFile(file.parentFile!!, secondName, "gpx", fallback = "track")
@@ -333,7 +327,7 @@ class TrackRepository(
         runCatching {
             val entity = entity(id)
             val file = fileOf(entity)
-            val title = (entity.trackName ?: entity.displayName.removeSuffix(".gpx")).trim()
+            val title = entity.title
             val name = appContext.getString(R.string.duplicate_name, title)
             val copy = uniqueFile(file.parentFile!!, name, "gpx", fallback = "track")
             try {
@@ -462,6 +456,10 @@ class TrackRepository(
         return track
     }
 
+    /** As the list shows it, for the names an edit derives from it. */
+    private val TrackEntity.title: String
+        get() = (trackName ?: TrackFiles.recordedAt(displayName) ?: displayName.removeSuffix(".gpx")).trim()
+
     private fun fileOf(entity: TrackEntity) = TrackFiles.file(appContext, entity.location)
 
     private fun deleteFile(entity: TrackEntity) {
@@ -477,10 +475,6 @@ class TrackRepository(
 
         /** Long enough to cover a rotation or a trip to another screen and back. */
         const val SHARE_GRACE_MILLIS = 5_000L
-
-        /** `Locale.ROOT` keeps ASCII digits so filenames sort. */
-        private val FILE_STAMP: DateTimeFormatter =
-            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HHmmss", java.util.Locale.ROOT)
 
         /** Maps the read failures onto the three the UI has messages for. */
         fun <T> Result<T>.recoverFailure(): Result<T> = recoverCatching { e ->

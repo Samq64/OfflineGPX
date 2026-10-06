@@ -66,20 +66,20 @@ fun TrackNameDialog(
     )
 }
 
-/** The track's own name, or the file it arrived as. */
+/** The track's own name, else an unnamed recording's start, else the file it arrived as. */
 fun trackTitle(trackName: String?, displayName: String): String =
-    trackName?.takeIf(String::isNotBlank) ?: displayName
+    trackName?.takeIf(String::isNotBlank) ?: TrackFiles.recordedAt(displayName) ?: displayName
 
 /** [trackTitle] without the `.gpx` extension. */
 fun editableTrackName(trackName: String?, displayName: String): String =
-    trackTitle(trackName, displayName.dropGpxSuffix())
+    trackName?.takeIf(String::isNotBlank) ?: TrackFiles.recordedAt(displayName) ?: displayName.dropGpxSuffix()
 
 private fun String.dropGpxSuffix(): String =
     if (endsWith(GPX, ignoreCase = true)) dropLast(GPX.length) else this
 
-/** The track's name, not the timestamp filename it's stored under. */
+/** The track's name; unnamed, the file it's stored under, whose stamp sorts. */
 fun exportFileName(trackName: String?, displayName: String): String =
-    editableTrackName(trackName, displayName).ensureGpxSuffix()
+    (trackName?.takeIf(String::isNotBlank) ?: displayName.dropGpxSuffix()).ensureGpxSuffix()
 
 fun String.ensureGpxSuffix(): String =
     if (endsWith(GPX, ignoreCase = true)) this else "$this$GPX"

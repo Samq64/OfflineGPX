@@ -182,11 +182,11 @@ class LibraryViewModel(
     }
 }
 
-/** Checks both names: a renamed import still answers to its filename. */
+/** Checks the title and the filename: a renamed import still answers to its filename. */
 private fun TrackEntity.matches(query: String): Boolean {
     val needle = query.trim()
     if (needle.isEmpty()) return true
-    return trackName?.contains(needle, ignoreCase = true) == true ||
+    return trackTitle(trackName, displayName).contains(needle, ignoreCase = true) ||
         displayName.contains(needle, ignoreCase = true)
 }
 

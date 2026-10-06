@@ -26,7 +26,7 @@ fun RecordingOutcomes(
 ) {
     // Not context.getString: a long-lived collector would keep the old locale.
     val resources = LocalResources.current
-    // By the name it would have been saved as; a blank one would have been the default.
+    // By the name it would have been saved as, if any.
     fun discardedNamed(name: String) =
         if (name.isBlank()) resources.getString(R.string.record_discarded)
         else resources.getString(R.string.record_discarded_named, name.trim())
@@ -53,7 +53,7 @@ fun RecordingOutcomes(
                 is RecoveryEvent.Saved -> onSaved(event.id)
                 RecoveryEvent.Failed -> say(resources.getString(R.string.record_save_failed))
                 is RecoveryEvent.AbandonedDiscarded -> offerUndo(
-                    discardedNamed(event.name.ifBlank { event.recording.defaultName }),
+                    discardedNamed(event.name),
                     { recovery.restoreAbandoned(event.recording, event.name) },
                     { recovery.forgetAbandoned(event.recording) },
                 )

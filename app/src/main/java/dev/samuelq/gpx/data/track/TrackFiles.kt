@@ -1,14 +1,11 @@
 package dev.samuelq.gpx.data.track
 
 import android.content.Context
-import dev.samuelq.gpx.R
-import dev.samuelq.gpx.core.analysis.TrackStats
 import dev.samuelq.gpx.data.db.TrackEntity
 import java.io.File
-import java.time.Instant
-import java.time.ZoneId
-import java.time.ZonedDateTime
-import java.time.format.TextStyle
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 import java.util.Locale
 
 /** App-private track directories; `res/xml/file_paths.xml` shares both. */
@@ -22,32 +19,22 @@ object TrackFiles {
 
     /** Relative, since a device transfer may restore filesDir under another path. */
     fun location(context: Context, file: File): String = file.relativeTo(context.filesDir).path
+
+    /** A recording's filename, from its local start. `Locale.ROOT` keeps ASCII digits so they sort. */
+    internal val STAMP: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HHmmss", Locale.ROOT)
+
+    private val STAMPED = Regex("""(\d{4}-\d{2}-\d{2}T\d{6})(?: \(\d+\))?\.gpx""")
+
+    /** When a recording named by [STAMP] started, read off its filename; null for any other name. */
+    fun stampOf(displayName: String): LocalDateTime? = STAMPED.matchEntire(displayName)?.let {
+        runCatching { LocalDateTime.parse(it.groupValues[1], STAMP) }.getOrNull()
+    }
+
+    /** [stampOf] in the default locale: what an unnamed recording is called. */
+    fun recordedAt(displayName: String): String? = stampOf(displayName)?.let {
+        DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT).withLocale(Locale.getDefault()).format(it)
+    }
 }
 
 /** A typed name, or null for blank so the caller falls back to its default. */
 internal fun String.asTrackName(): String? = trim().ifEmpty { null }
-
-/** Weekday and part of day, like "Saturday morning". Saying nothing of the activity, which speed can't tell. */
-internal fun defaultTrackName(context: Context, stats: TrackStats): String =
-    defaultTrackName(context, stats.startedAt)
-
-internal fun defaultTrackName(context: Context, startedAt: Instant?): String {
-    val (partOfDay, weekday) = defaultNameParts(
-        (startedAt ?: Instant.now()).atZone(ZoneId.systemDefault()),
-        context.resources.configuration.locales[0],
-    )
-    return context.getString(partOfDay, weekday)
-}
-
-/** The part-of-day string and the weekday it takes. */
-internal fun defaultNameParts(at: ZonedDateTime, locale: Locale): Pair<Int, String> {
-    val partOfDay = when (at.hour) {
-        in 5..11 -> R.string.track_default_morning
-        in 12..16 -> R.string.track_default_afternoon
-        in 17..20 -> R.string.track_default_evening
-        else -> R.string.track_default_night
-    }
-    // 1 am on a Sunday is Saturday night.
-    val day = if (at.hour < 5) at.minusDays(1) else at
-    return partOfDay to day.dayOfWeek.getDisplayName(TextStyle.FULL, locale)
-}

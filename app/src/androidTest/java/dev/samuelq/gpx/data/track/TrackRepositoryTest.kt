@@ -276,7 +276,7 @@ class TrackRepositoryTest {
     }
 
     @Test
-    fun saveRecordingNamesAndIndexes() {
+    fun saveRecordingIndexes() {
         val points = TrackPointsBuilder().apply {
             val start = Instant.parse("2024-05-04T18:00:00Z")
             repeat(5) { add(TrackPoint(51.5 + it * 0.001, -0.1, 20.0, start.plusSeconds(10L * it))) }
@@ -284,9 +284,9 @@ class TrackRepositoryTest {
         val id = runBlocking { repository.saveRecording(Track(name = null, points = points)).getOrThrow() }
         val entity = row(id)
         assertTrue(entity.location.startsWith("recordings/"))
-        // A default name, written into the file too.
-        assertNotNull(entity.trackName)
-        assertEquals(entity.trackName, parsed(id).name)
+        // Unnamed, in the row and the file.
+        assertNull(entity.trackName)
+        assertNull(parsed(id).name)
         assertEquals(5, entity.summary.pointCount)
 
         val named = runBlocking { repository.saveRecording(Track(name = "Commute", points = points)).getOrThrow() }

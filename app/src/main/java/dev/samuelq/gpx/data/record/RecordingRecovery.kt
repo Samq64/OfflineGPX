@@ -7,7 +7,6 @@ import dev.samuelq.gpx.core.analysis.TrackProfile
 import dev.samuelq.gpx.core.model.Track
 import dev.samuelq.gpx.data.track.TrackRepository
 import dev.samuelq.gpx.data.track.asTrackName
-import dev.samuelq.gpx.data.track.defaultTrackName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -22,7 +21,6 @@ class AbandonedRecording(
     internal val file: File,
     val track: Track,
     val profile: TrackProfile,
-    val defaultName: String,
 )
 
 /** A ride discarded moments ago, kept on disk until its undo lapses. */
@@ -89,10 +87,10 @@ class RecordingRecovery(
             claimed.delete()
             return null
         }
-        return AbandonedRecording(claimed, track, profile, defaultTrackName(appContext, profile.stats))
+        return AbandonedRecording(claimed, track, profile)
     }
 
-    /** A blank [name] uses the default. */
+    /** A blank [name] leaves it unnamed. */
     suspend fun save(recording: AbandonedRecording, name: String): Result<Long> = lock.withLock {
         val named = recording.track.copy(name = name.asTrackName())
         tracks.saveRecording(named, recording.profile).onSuccess {

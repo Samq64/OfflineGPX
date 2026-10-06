@@ -236,11 +236,6 @@
     <string name="stat_spoken">%1$s: %2$s</string>
 
     <string name="track_close">Close</string>
-    <!-- What a recording is called until it is renamed. %1$s is the weekday, e.g. "Saturday". -->
-    <string name="track_default_afternoon">%1$s afternoon</string>
-    <string name="track_default_evening">%1$s evening</string>
-    <string name="track_default_morning">%1$s morning</string>
-    <string name="track_default_night">%1$s night</string>
     <string name="track_edit_failed">Couldn\'t change that track.</string>
     <string name="track_error_empty">This GPX file has no track points.</string>
     <string name="track_error_invalid">This file isn\'t valid GPX.</string>
