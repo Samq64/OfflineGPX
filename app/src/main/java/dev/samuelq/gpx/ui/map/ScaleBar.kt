@@ -1,12 +1,11 @@
 package dev.samuelq.gpx.ui.map
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -19,6 +18,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -69,31 +70,31 @@ fun ScaleBar(
 
     val label = scaleLabel(bar.meters, formatters.units)
     val spoken = stringResource(R.string.map_scale, label)
+    // A halo rather than a box: over routes and roads the bare bar's contrast isn't guaranteed.
+    val halo = MaterialTheme.colorScheme.surface
+    val haloWidth = with(density) { HaloWidth.toPx() }
     Column(
         modifier = modifier
             .clearAndSetSemantics { contentDescription = spoken }
-            // Over routes and water the bare label's contrast isn't guaranteed.
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = BACKING_ALPHA), RoundedCornerShape(4.dp))
             .padding(horizontal = 4.dp, vertical = 2.dp),
         horizontalAlignment = Alignment.Start,
     ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = color,
-        )
+        val style = MaterialTheme.typography.labelSmall
+        Box {
+            Text(text = label, style = style.copy(drawStyle = Stroke(haloWidth, join = StrokeJoin.Round)), color = halo)
+            Text(text = label, style = style, color = color)
+        }
         // One Canvas node rather than four boxes.
         Canvas(Modifier.width(bar.width).height(BarHeight)) {
             val stroke = with(density) { 1.5.dp.toPx() }
             val top = size.height - stroke / 2f
-            drawLine(color, Offset(0f, top), Offset(size.width, top), stroke, StrokeCap.Square)
-            drawLine(color, Offset(stroke / 2f, 0f), Offset(stroke / 2f, size.height), stroke)
-            drawLine(
-                color,
-                Offset(size.width - stroke / 2f, 0f),
-                Offset(size.width - stroke / 2f, size.height),
-                stroke,
+            val lines = listOf(
+                Offset(0f, top) to Offset(size.width, top),
+                Offset(stroke / 2f, 0f) to Offset(stroke / 2f, size.height),
+                Offset(size.width - stroke / 2f, 0f) to Offset(size.width - stroke / 2f, size.height),
             )
+            for ((from, to) in lines) drawLine(halo, from, to, stroke + haloWidth, StrokeCap.Square)
+            for ((from, to) in lines) drawLine(color, from, to, stroke, StrokeCap.Square)
         }
     }
 }
@@ -137,8 +138,8 @@ private fun roundDistance(maxMeters: Double, units: UnitSystem): Double {
 
 private val MaxBarWidth = 96.dp
 private val BarHeight = 6.dp
+private val HaloWidth = 3.dp
 
 private const val METERS_PER_MILE = Formatters.METERS_PER_MILE
 private const val METERS_PER_FOOT = 1 / Formatters.FEET_PER_METER
 
-private const val BACKING_ALPHA = 0.85f
