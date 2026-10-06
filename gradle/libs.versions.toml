@@ -23,6 +23,13 @@ navigation = "2.10.2"
 serialization = "1.11.0"
 
 kxml2 = "2.3.0"
+androidxTestRunner = "1.7.0"
+androidxTestExtJunit = "1.3.0"
+# Compose ui-test brings 3.5, which calls InputManager.getInstance, gone on recent APIs.
+espresso = "3.7.0"
+
+# Gradle's and AGP's built-in coverage; pinned for current Kotlin bytecode.
+jacoco = "0.8.15"
 
 # Plain jars, so no manifest or permissions. Its native tessellator is ~45 KB per ABI.
 vtm = "0.30.0"
@@ -52,6 +59,14 @@ vtm = { group = "com.github.mapsforge.vtm", name = "vtm", version.ref = "vtm" }
 vtm-android = { group = "com.github.mapsforge.vtm", name = "vtm-android", version.ref = "vtm" }
 # The filled overlays: each map's land box.
 vtm-jts = { group = "com.github.mapsforge.vtm", name = "vtm-jts", version.ref = "vtm" }
+
+androidx-room-testing = { group = "androidx.room", name = "room-testing", version.ref = "room" }
+androidx-test-runner = { group = "androidx.test", name = "runner", version.ref = "androidxTestRunner" }
+androidx-test-rules = { group = "androidx.test", name = "rules", version.ref = "androidxTestRunner" }
+androidx-test-ext-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidxTestExtJunit" }
+androidx-test-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espresso" }
+androidx-compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
+androidx-compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
 
 kotlin-test-junit = { group = "org.jetbrains.kotlin", name = "kotlin-test-junit", version.ref = "kotlin" }
 # A real XmlPullParser for JVM tests; android.jar's is a stub.

@@ -1,5 +1,10 @@
 plugins {
     alias(libs.plugins.kotlin.jvm)
+    jacoco
+}
+
+jacoco {
+    toolVersion = libs.versions.jacoco.get()
 }
 
 // A JVM module, so the compiler rather than convention keeps Android out of the analysis.

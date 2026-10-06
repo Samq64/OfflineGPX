@@ -57,3 +57,4 @@ app/ di/     AppContainer: manual wiring, no Hilt.
 
 `./gradlew test` runs JVM unit tests. `GpxParser` takes its `XmlPullParser` as a parameter
 so tests can use kxml2; android.jar's xmlpull classes are stubs.
+`./gradlew coverageVerification` writes JVM coverage to `app/build/reports/coverage` and enforces per-file minimums.

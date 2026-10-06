@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
+    jacoco
 }
 
 /**
@@ -71,9 +72,14 @@ android {
         versionCode = 1
         versionName = "0.1.0"
         buildConfigField("String", "GIT_HASH", "\"$gitHash\"")
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
+        debug {
+            enableUnitTestCoverage = true
+            enableAndroidTestCoverage = true
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
@@ -104,6 +110,13 @@ android {
 
     // android.jar's stubs throw; defaults let code that logs on failure run in JVM tests.
     testOptions.unitTests.isReturnDefaultValues = true
+
+    testCoverage {
+        jacocoVersion = libs.versions.jacoco.get()
+    }
+
+    // Room's exported schemas, for MigrationTestHelper.
+    sourceSets.getByName("androidTest").assets.directories.add("$projectDir/schemas")
 
     // Skip the dependency-metadata blob Play would embed.
     dependenciesInfo {
@@ -169,4 +182,90 @@ dependencies {
 
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.kxml2)
+
+    androidTestImplementation(libs.kotlin.test.junit)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.rules)
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.room.testing)
+    androidTestImplementation(libs.androidx.test.espresso.core)
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    // Hosts createComposeRule's activity; debug only, so release never merges it.
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 }
+
+jacoco {
+    toolVersion = libs.versions.jacoco.get()
+}
+
+// JVM test coverage over :app and :core. Generated code is left out.
+val coverageExcludes = listOf(
+    "**/R.class", "**/R$*.class", "**/BuildConfig.*", "**/Manifest*.*",
+    "**/*_Impl*", "**/ComposableSingletons*", "**/*\$serializer*",
+)
+val coreBuild = project(":core").layout.buildDirectory
+val coverageClasses = files(
+    layout.buildDirectory.dir("intermediates/built_in_kotlinc/debug/compileDebugKotlin/classes"),
+    layout.buildDirectory.dir("intermediates/javac/debug/compileDebugJavaWithJavac/classes"),
+    coreBuild.dir("classes/kotlin/main"),
+).asFileTree.matching { exclude(coverageExcludes) }
+val coverageData = files(
+    layout.buildDirectory.file("outputs/unit_test_code_coverage/debugUnitTest/testDebugUnitTest.exec"),
+    coreBuild.file("jacoco/test.exec"),
+)
+
+val coverage = tasks.register<JacocoReport>("coverage") {
+    group = "verification"
+    description = "JVM test coverage of :app and :core, as HTML and XML."
+    dependsOn("testDebugUnitTest", ":core:test")
+    executionData.from(coverageData)
+    classDirectories.from(coverageClasses)
+    sourceDirectories.from("src/main/java", project(":core").layout.projectDirectory.dir("src/main/kotlin"))
+    reports {
+        html.required = true
+        xml.required = true
+        html.outputLocation = layout.buildDirectory.dir("reports/coverage/html")
+        xml.outputLocation = layout.buildDirectory.file("reports/coverage/coverage.xml")
+    }
+}
+
+/** Per-file line and branch minimums, for code where a bug could lose a track. UI glue isn't held. */
+val coverageMinimums = mapOf(
+    "dev/samuelq/gpx/core/model/Track.kt" to (1.00 to 0.94),
+    "dev/samuelq/gpx/core/model/GeoBounds.kt" to (1.00 to 0.92),
+    "dev/samuelq/gpx/core/analysis/TrackAnalyzer.kt" to (1.00 to 0.98),
+    "dev/samuelq/gpx/core/analysis/TrackProfile.kt" to (1.00 to 1.00),
+    "dev/samuelq/gpx/core/analysis/FixFilter.kt" to (1.00 to 0.95),
+    "dev/samuelq/gpx/core/analysis/SpeedWindow.kt" to (1.00 to 1.00),
+    "dev/samuelq/gpx/data/gpx/GpxParser.kt" to (0.99 to 0.96),
+    "dev/samuelq/gpx/data/gpx/GpxWriter.kt" to (0.98 to 1.00),
+    "dev/samuelq/gpx/data/gpx/GpxTrimmer.kt" to (0.99 to 0.89),
+    "dev/samuelq/gpx/data/record/RecordingWal.kt" to (1.00 to 0.97),
+    "dev/samuelq/gpx/data/record/RecordingSession.kt" to (1.00 to 0.95),
+    "dev/samuelq/gpx/data/track/TrackCache.kt" to (1.00 to 0.96),
+    "dev/samuelq/gpx/data/map/MapTileIndex.kt" to (1.00 to 1.00),
+    "dev/samuelq/gpx/data/map/MapOverlap.kt" to (1.00 to 1.00),
+    "dev/samuelq/gpx/ui/chart/ChartMath.kt" to (1.00 to 0.89),
+    "dev/samuelq/gpx/ui/format/Formatters.kt" to (1.00 to 0.97),
+)
+
+val coverageVerification = tasks.register<JacocoCoverageVerification>("coverageVerification") {
+    group = "verification"
+    description = "Fails if the data-safety logic drops below its coverage minimums."
+    dependsOn(coverage)
+    executionData.from(coverageData)
+    classDirectories.from(coverageClasses)
+    sourceDirectories.from("src/main/java", project(":core").layout.projectDirectory.dir("src/main/kotlin"))
+    violationRules {
+        coverageMinimums.forEach { (file, minimums) ->
+            rule {
+                element = "SOURCEFILE"
+                includes = listOf(file)
+                limit { counter = "LINE"; minimum = minimums.first.toBigDecimal() }
+                limit { counter = "BRANCH"; minimum = minimums.second.toBigDecimal() }
+            }
+        }
+    }
+}
+tasks.named("check") { dependsOn(coverageVerification) }
