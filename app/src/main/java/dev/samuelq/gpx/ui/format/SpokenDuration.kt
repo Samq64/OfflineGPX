@@ -23,3 +23,8 @@ fun Resources.spokenDuration(seconds: Double): String {
     return MeasureFormat.getInstance(configuration.locales[0], MeasureFormat.FormatWidth.WIDE)
         .formatMeasures(*parts.toTypedArray())
 }
+
+/** [Formatters.kilobytes] in words, rounded up the same way. */
+fun Resources.spokenKilobytes(bytes: Long): String =
+    MeasureFormat.getInstance(configuration.locales[0], MeasureFormat.FormatWidth.WIDE)
+        .format(Measure((bytes + 999) / 1000, MeasureUnit.KILOBYTE))

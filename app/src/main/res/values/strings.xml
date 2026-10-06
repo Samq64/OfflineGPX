@@ -100,6 +100,7 @@
     <string name="library_share">Share</string>
     <string name="library_show_all">Show all</string>
     <string name="library_show_on_map">Show %1$s on map</string>
+    <string name="library_size">Size</string>
     <string name="library_sort">Sort</string>
     <string name="library_sort_ascending">Ascending</string>
     <string name="library_sort_date">Date</string>

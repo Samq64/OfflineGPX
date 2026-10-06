@@ -103,6 +103,8 @@ import dev.samuelq.gpx.data.settings.TrackOrder
 import dev.samuelq.gpx.data.settings.TrackSort
 import dev.samuelq.gpx.ui.format.Formatters
 import dev.samuelq.gpx.ui.format.LocalFormatters
+import dev.samuelq.gpx.ui.format.spokenDuration
+import dev.samuelq.gpx.ui.format.spokenKilobytes
 import dev.samuelq.gpx.ui.isLargeText
 import dev.samuelq.gpx.ui.readFirst
 import dev.samuelq.gpx.ui.rememberSnackbars
@@ -455,6 +457,16 @@ private fun TrackRow(
             sizeBytes?.let { Formatters.kilobytes(it) },
         ).joinToString("  ·  ")
     }
+    // Labelled and in words, as the sheet's stats are: "3:57" alone reads as a time of day.
+    val resources = LocalResources.current
+    val spokenSummary = remember(track, sizeBytes, formatters, resources) {
+        fun stat(label: Int, value: String) = resources.getString(R.string.stat_spoken, resources.getString(label), value)
+        listOfNotNull(
+            track.totalSeconds.takeIf { it > 0 }?.let { stat(R.string.stat_elapsed, resources.spokenDuration(it)) },
+            stat(R.string.axis_distance, formatters.distance(track.distanceMeters)),
+            sizeBytes?.let { stat(R.string.library_size, resources.spokenKilobytes(it)) },
+        ).joinToString(", ")
+    }
 
     Column(modifier) {
         // A row, not ListItem: with three lines it pins the dot and the controls to the top
@@ -513,6 +525,7 @@ private fun TrackRow(
                     text = summary,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.semantics { contentDescription = spokenSummary },
                 )
             }
             if (!selectionActive) {
