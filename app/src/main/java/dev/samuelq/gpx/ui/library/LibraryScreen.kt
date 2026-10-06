@@ -4,15 +4,12 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -22,7 +19,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
@@ -71,10 +67,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalWindowInfo
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
@@ -109,10 +102,7 @@ import dev.samuelq.gpx.ui.format.spokenKilobytes
 import dev.samuelq.gpx.ui.isLargeText
 import dev.samuelq.gpx.ui.readFirst
 import dev.samuelq.gpx.ui.rememberSnackbars
-import dev.samuelq.gpx.ui.theme.routePalette
-import dev.samuelq.gpx.ui.theme.RouteColorNames
-import dev.samuelq.gpx.ui.theme.RoutePickerOrder
-import dev.samuelq.gpx.ui.theme.slot
+import dev.samuelq.gpx.ui.track.ColorDot
 import dev.samuelq.gpx.ui.track.TrackMenu
 import dev.samuelq.gpx.ui.track.TrackNameDialog
 import dev.samuelq.gpx.ui.track.exportFileName
@@ -315,7 +305,6 @@ fun LibraryScreen(
                 val found = pluralStringResource(R.plurals.library_search_found, tracks.size, tracks.size)
                 Box(Modifier.semantics { liveRegion = LiveRegionMode.Polite; contentDescription = found })
             }
-            val palette = routePalette()
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
@@ -331,7 +320,6 @@ fun LibraryScreen(
                         modifier = Modifier.animateItem(),
                         track = track,
                         sizeBytes = sizes[track.id],
-                        palette = palette,
                         selected = track.id in selection,
                         selectionActive = selection.isNotEmpty(),
                         onOpen = {
@@ -424,7 +412,6 @@ private fun TrackRow(
     modifier: Modifier,
     track: TrackEntity,
     sizeBytes: Long?,
-    palette: List<Color>,
     selected: Boolean,
     selectionActive: Boolean,
     onOpen: () -> Unit,
@@ -507,7 +494,7 @@ private fun TrackRow(
                 // The row toggles, so it's one stop that says what's selected.
                 Checkbox(checked = selected, onCheckedChange = null)
             } else {
-                ColorDot(track.colorIndex, palette, onColor = onColor)
+                ColorDot(track.colorIndex, onColor)
             }
             Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {
@@ -544,62 +531,6 @@ private fun TrackRow(
         HorizontalDivider()
     }
 }
-
-/** The map line's hue; a tap picks another from the palette. Its touch target reaches 48dp. */
-@Composable
-private fun ColorDot(colorIndex: Int, palette: List<Color>, onColor: (Int) -> Unit) {
-    var open by remember { mutableStateOf(false) }
-    val label = stringResource(
-        R.string.library_color,
-        stringResource(RouteColorNames[colorIndex.mod(RouteColorNames.size)]),
-    )
-    Box {
-        Box(
-            Modifier
-                .size(DotSize)
-                .clip(CircleShape)
-                // Its colour even when hidden: it's the picker, and the switch says hidden.
-                .background(palette.slot(colorIndex))
-                .clickable(onClickLabel = stringResource(R.string.library_color_change)) { open = true }
-                .semantics { contentDescription = label }
-        )
-        DropdownMenu(open, onDismissRequest = { open = false }) {
-            // Seven 48dp targets need about 380dp; narrower windows get two even rows.
-            val windowWidth = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp() }
-            FlowRow(
-                modifier = Modifier.padding(horizontal = 8.dp),
-                maxItemsInEachRow = if (windowWidth >= 380.dp) RoutePickerOrder.size else 4,
-            ) {
-                RoutePickerOrder.forEach { index ->
-                    val color = palette[index]
-                    val isSelected = index == colorIndex.mod(palette.size)
-                    val label = stringResource(RouteColorNames[index])
-                    Box(
-                        Modifier
-                            .size(48.dp)
-                            .selectable(selected = isSelected, role = Role.RadioButton) {
-                                open = false
-                                if (!isSelected) onColor(index)
-                            }
-                            .semantics { contentDescription = label },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Box(
-                            Modifier.size(32.dp).clip(CircleShape).background(color),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            // Dark gold and pink are too pale for white.
-                            val tick = if (color.luminance() > 0.4f) Color.Black else Color.White
-                            if (isSelected) Icon(Icons.Default.Check, null, tint = tick)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-private val DotSize = 20.dp
 
 @Composable
 private fun SortMenu(order: TrackOrder, onSort: (TrackSort) -> Unit, onDescending: (Boolean) -> Unit) {

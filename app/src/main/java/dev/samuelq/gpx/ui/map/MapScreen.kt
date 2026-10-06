@@ -463,7 +463,7 @@ fun MapScreen(
     // Not the ends: each part needs two points.
     val splittable = screen.selectedIndex?.takeIf { focusedTrack != null && it in 1 until focusedTrack.profile.points.size - 1 }
     val actions = focusedTrack?.let { state.entity(it.id) }?.let { entity ->
-        remember(entity.id, entity.trackName, entity.displayName, entity.location, splittable, screen) {
+        remember(entity.id, entity.trackName, entity.displayName, entity.location, entity.colorIndex, splittable, screen) {
             TrackActions(
                 onRename = { screen.renamingId = entity.id },
                 onShare = {
@@ -488,6 +488,8 @@ fun MapScreen(
                 onTrim = { screen.startTrim(focusedTrack.profile.points.size) },
                 onSplit = splittable?.let { at -> { viewModel.split(entity.id, at) } },
                 onDuplicate = { viewModel.duplicate(entity.id) },
+                colorIndex = entity.colorIndex,
+                onColor = { viewModel.setColor(entity.id, it) },
             )
         }
     }

@@ -191,6 +191,10 @@ class MapViewModel(
         }
     }
 
+    fun setColor(id: Long, colorIndex: Int) {
+        viewModelScope.launch { repository.setColor(id, colorIndex) }
+    }
+
     private fun reload() {
         val ref = requested ?: return
         focusJob?.cancel()

@@ -94,6 +94,8 @@ class TrackActions(
     /** Null without a point selected to split at. */
     val onSplit: (() -> Unit)?,
     val onDuplicate: () -> Unit,
+    val colorIndex: Int,
+    val onColor: (Int) -> Unit,
 )
 
 /** A trim being set up on the sheet: [range] is the points kept, inclusive. */
@@ -496,8 +498,9 @@ private fun SheetTitle(
         modifier = modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(10.dp).clip(CircleShape).background(routeColor))
-        Spacer(Modifier.width(10.dp))
+        actions?.let { ColorDot(it.colorIndex, it.onColor) }
+            ?: Box(Modifier.size(ColorDotSize).clip(CircleShape).background(routeColor))
+        Spacer(Modifier.width(12.dp))
         Text(
             text = name,
             style = MaterialTheme.typography.titleMedium,
