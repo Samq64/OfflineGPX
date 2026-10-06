@@ -11,18 +11,22 @@ import java.io.File
 import java.io.FileWriter
 import java.time.Instant
 import java.util.Base64
+import java.util.zip.CRC32
 
 /**
  * Append-only recording log, one flushed line per fix, so a crash mid-ride stays
  * recoverable (a half-written GPX would not be).
  *
  * ```
- * <epochMillis>,<lat>,<lon>[,<ele>][,<accuracyMeters>]   a fix
- * -                                                       a segment break
- * W,<epochMillis>,<lat>,<lon>[,<ele>][,<base64 name>]     a waypoint
+ * #v2                                                          first: every line is checked
+ * <epochMillis>,<lat>,<lon>,[<ele>],[<accuracyMeters>]*<crc>   a fix
+ * -*<crc>                                                      a segment break
+ * W,<epochMillis>,<lat>,<lon>,[<ele>],[<base64 name>]*<crc>    a waypoint
  * ```
  *
- * Base64 keeps commas and newlines in names from breaking the format.
+ * The CRC-32 of the line before the `*` drops one a power cut tore or storage corrupted.
+ * Logs from before it have no header and are read by field count. Base64 keeps commas and
+ * newlines in names from breaking the format.
  */
 class RecordingWal private constructor(
     val file: File,
@@ -32,18 +36,10 @@ class RecordingWal private constructor(
     fun append(point: TrackPoint) {
         val elevation = point.elevation?.toString() ?: ""
         val accuracy = point.accuracyMeters?.toString() ?: ""
-        writer.write(
-            "${point.time?.toEpochMilli() ?: 0},${point.latitude},${point.longitude},$elevation,$accuracy"
-        )
-        writer.newLine()
-        writer.flush()
+        writeLine("${point.time?.toEpochMilli() ?: 0},${point.latitude},${point.longitude},$elevation,$accuracy")
     }
 
-    fun appendBreak() {
-        writer.write(BREAK)
-        writer.newLine()
-        writer.flush()
-    }
+    fun appendBreak() = writeLine(BREAK)
 
     fun appendWaypoint(waypoint: Waypoint) {
         val point = waypoint.point
@@ -51,10 +47,11 @@ class RecordingWal private constructor(
         val name = waypoint.name
             ?.let { Base64.getEncoder().encodeToString(it.toByteArray(Charsets.UTF_8)) }
             ?: ""
-        writer.write(
-            "$WAYPOINT,${point.time?.toEpochMilli() ?: 0},${point.latitude},${point.longitude}," +
-                "$elevation,$name"
-        )
+        writeLine("$WAYPOINT,${point.time?.toEpochMilli() ?: 0},${point.latitude},${point.longitude},$elevation,$name")
+    }
+
+    private fun writeLine(line: String) {
+        writer.write("$line$CHECK${checksum(line)}")
         writer.newLine()
         writer.flush()
     }
@@ -65,22 +62,48 @@ class RecordingWal private constructor(
         private const val BREAK = "-"
         private const val WAYPOINT = "W"
         private const val WAYPOINT_PREFIX = "$WAYPOINT,"
+        private const val HEADER = "#v2"
+        private const val CHECK = '*'
 
         /** Opens [file] for appending, never truncating. */
         fun open(file: File): RecordingWal {
             file.parentFile?.mkdirs()
-            return RecordingWal(file, FileWriter(file, true).buffered())
+            val fresh = file.length() == 0L
+            return RecordingWal(file, FileWriter(file, true).buffered()).apply {
+                if (fresh) {
+                    writer.write(HEADER)
+                    writer.newLine()
+                    writer.flush()
+                }
+            }
         }
 
-        /** Rebuilds a track from a log, dropping malformed (half-written) lines. */
+        private fun checksum(line: String): String =
+            "%08x".format(CRC32().apply { update(line.toByteArray(Charsets.UTF_8)) }.value)
+
+        /** The line without its checksum, or null if that doesn't match or is missing. */
+        private fun verified(line: String): String? {
+            val at = line.lastIndexOf(CHECK)
+            if (at < 0) return null
+            val content = line.substring(0, at)
+            return content.takeIf { line.substring(at + 1) == checksum(it) }
+        }
+
+        /** Rebuilds a track from a log, dropping torn, corrupt or malformed lines. */
         fun recover(file: File): Track? {
             if (!file.exists()) return null
 
             val points = TrackPointsBuilder()
             val waypoints = mutableListOf<Waypoint>()
 
+            var checked = false
             file.forEachLine { line ->
-                val text = line.trim()
+                val trimmed = line.trim()
+                if (trimmed == HEADER) {
+                    checked = true
+                    return@forEachLine
+                }
+                val text = if (checked) verified(trimmed) ?: return@forEachLine else trimmed
                 when {
                     text.isEmpty() -> Unit
                     text == BREAK -> points.startSegment()
@@ -95,7 +118,8 @@ class RecordingWal private constructor(
 
         private fun parsePoint(line: String): TrackPoint? {
             val parts = line.split(',')
-            if (parts.size < 3) return null
+            // Every format had a field after the longitude, so its comma shows it's whole.
+            if (parts.size < 4) return null
             val millis = parts[0].toLongOrNull() ?: return null
             val latitude = parts[1].toDoubleOrNull() ?: return null
             val longitude = parts[2].toDoubleOrNull() ?: return null
@@ -103,7 +127,7 @@ class RecordingWal private constructor(
             return TrackPoint(
                 latitude = latitude,
                 longitude = longitude,
-                elevation = parts.getOrNull(3)?.toDoubleOrNull(),
+                elevation = parts[3].toDoubleOrNull(),
                 time = millis.takeIf { it > 0 }?.let(Instant::ofEpochMilli),
                 accuracyMeters = parts.getOrNull(4)?.toDoubleOrNull(),
             )
@@ -111,19 +135,19 @@ class RecordingWal private constructor(
 
         private fun parseWaypoint(line: String): Waypoint? {
             val parts = line.split(',', limit = 6)
-            if (parts.size < 4) return null
+            if (parts.size < 6) return null
             val millis = parts[1].toLongOrNull() ?: return null
             val latitude = parts[2].toDoubleOrNull() ?: return null
             val longitude = parts[3].toDoubleOrNull() ?: return null
             if (!isValidCoordinate(latitude, longitude)) return null
-            val name = parts.getOrNull(5)?.takeIf(String::isNotEmpty)?.let {
+            val name = parts[5].takeIf(String::isNotEmpty)?.let {
                 runCatching { String(Base64.getDecoder().decode(it), Charsets.UTF_8) }.getOrNull()
             }
             return Waypoint(
                 TrackPoint(
                     latitude = latitude,
                     longitude = longitude,
-                    elevation = parts.getOrNull(4)?.toDoubleOrNull(),
+                    elevation = parts[4].toDoubleOrNull(),
                     time = millis.takeIf { it > 0 }?.let(Instant::ofEpochMilli),
                 ),
                 name,

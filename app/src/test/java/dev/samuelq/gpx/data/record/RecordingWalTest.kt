@@ -68,31 +68,32 @@ class RecordingWalTest {
         wal.close()
     }
 
-    /** What a crash mid-write or a stray edit leaves. */
+    /** A log from before checksums: fields are checked, so a line cut short is dropped. */
     @Test
-    fun `malformed lines are dropped and the rest kept`() {
-        val file = File(dir, "damaged.wal").apply {
+    fun `legacy lines are read, and malformed ones dropped`() {
+        val file = File(dir, "legacy.wal").apply {
             writeText(
                 listOf(
                     "1000,51.5,-0.1,,",
                     "",
                     "  ",
                     "2000,51.6", // too few fields
-                    "x,51.6,-0.1", // bad time
-                    "3000,north,-0.1", // bad latitude
-                    "3000,51.6,east", // bad longitude
-                    "3000,95.0,-0.1", // off the globe
+                    "x,51.6,-0.1,", // bad time
+                    "3000,north,-0.1,", // bad latitude
+                    "3000,51.6,east,", // bad longitude
+                    "3000,95.0,-0.1,", // off the globe
                     "4000,51.7,-0.3,abc,def", // bad optional fields are just absent
-                    "W,1000,51.5", // too few fields
-                    "W,x,51.5,-0.1",
-                    "W,1000,north,-0.1",
-                    "W,1000,51.5,east",
-                    "W,1000,51.5,200.0",
+                    "W,1000,51.5,-0.1,", // too few fields
+                    "W,x,51.5,-0.1,,",
+                    "W,1000,north,-0.1,,",
+                    "W,1000,51.5,east,,",
+                    "W,1000,51.5,200.0,,",
                     "W,1000,51.5,-0.1,,!!not base64!!",
                     "W,0,51.5,-0.1,10.0,",
-                    "4500,51.75,-0.35", // no optional fields at all
-                    "W,2000,51.6,-0.2", // nor for a waypoint
-                    "5000,51.8,-0.4,1", // half-written line, cut after the elevation
+                    "4500,51.75,-0.35,", // the oldest format, without accuracy
+                    "W,2000,51.6,-0.2,,",
+                    "5000,51.8,-0.4,1", // cut in the elevation: can't tell, so kept
+                    "6000,51.9,-0.4", // cut in the longitude
                 ).joinToString("\n")
             )
         }
@@ -112,6 +113,41 @@ class RecordingWalTest {
             ),
             track.waypoints,
         )
+    }
+
+    private fun writeThree(file: File) = RecordingWal.open(file).use { wal ->
+        wal.append(TrackPoint(51.5, -0.1, 12.5, at, 4.0))
+        wal.append(TrackPoint(51.6, -0.2, 13.5, at.plusSeconds(1), 4.0))
+        wal.append(TrackPoint(51.7, -0.3, 14.5, at.plusSeconds(2), 4.0))
+    }
+
+    @Test
+    fun `a last line cut short by a power cut is dropped`() {
+        val file = walFile()
+        writeThree(file)
+        // Every cut into the last line; without just its newline it's whole, so kept.
+        val whole = file.readText()
+        val lastStart = whole.dropLast(1).lastIndexOf('\n') + 1
+        for (end in lastStart + 1 until whole.length - 1) {
+            file.writeText(whole.substring(0, end))
+            val track = assertNotNull(RecordingWal.recover(file), "cut at $end")
+            assertEquals(2, track.points.size, "cut at $end")
+        }
+        file.writeText(whole)
+        assertEquals(3, RecordingWal.recover(file)?.points?.size)
+    }
+
+    @Test
+    fun `a corrupted line in the middle is dropped`() {
+        val file = walFile()
+        writeThree(file)
+        val lines = file.readLines().toMutableList()
+        // One digit of the latitude changed, as a bad sector might: still a valid number.
+        lines[2] = lines[2].replaceFirst("51.6", "51.9")
+        file.writeText(lines.joinToString("\n", postfix = "\n"))
+
+        val track = assertNotNull(RecordingWal.recover(file))
+        assertEquals(listOf(51.5, 51.7), (0 until track.points.size).map { track.points[it].latitude })
     }
 
     @Test
