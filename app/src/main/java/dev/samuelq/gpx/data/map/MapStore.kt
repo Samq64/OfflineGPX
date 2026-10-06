@@ -2,8 +2,11 @@ package dev.samuelq.gpx.data.map
 
 import android.content.Context
 import android.net.Uri
+import android.os.storage.StorageManager
+import androidx.core.content.getSystemService
 import dev.samuelq.gpx.data.copyInto
 import dev.samuelq.gpx.data.displayName
+import dev.samuelq.gpx.data.size
 import dev.samuelq.gpx.data.uniqueFile
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -19,6 +22,7 @@ import org.oscim.tiling.source.mapfile.header.SubFileParameter
 import org.oscim.tiling.source.mapfile.readMapFileHeader
 import java.io.File
 import java.io.IOException
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
 /** An offline basemap the user has imported, and what its header says about it. */
@@ -146,6 +150,10 @@ class MapStore(
             staging.listFiles()?.forEach { it.delete() }
 
             val resolver = appContext.contentResolver
+            // Before copying, so a map too big doesn't fill the disk first.
+            if (resolver.size(uri)?.let(::reserve) == false) {
+                return@withContext MapImportResult.Failed(MapImportError.NO_SPACE)
+            }
             val destination = uniqueFile(staging, resolver.displayName(uri), EXTENSION, fallback = "map")
             try {
                 if (!resolver.copyInto(uri, destination)) {
@@ -155,7 +163,7 @@ class MapStore(
             } catch (_: IOException) {
                 destination.delete()
                 // Out of space is named separately since it's the user's to fix.
-                val error = if (appContext.filesDir.usableSpace < LOW_SPACE_BYTES) {
+                val error = if (!hasRoomFor(LOW_SPACE_BYTES)) {
                     MapImportError.NO_SPACE
                 } else {
                     MapImportError.UNREADABLE
@@ -176,6 +184,28 @@ class MapStore(
             val overlapping = _maps.value.filter { it.duplicates(map) }
             if (overlapping.isEmpty()) install(map) else MapImportResult.Overlaps(map, overlapping)
         }
+
+    /** Whether [bytes] could be had on the maps' volume, counting cache the system would clear. */
+    private fun hasRoomFor(bytes: Long): Boolean = withStorage(default = true) { storage, volume ->
+        storage.getAllocatableBytes(volume) >= bytes
+    }
+
+    /** Has the system clear cache, if it must, to make room for [bytes]. False if it can't. */
+    private fun reserve(bytes: Long): Boolean = withStorage(default = false) { storage, volume ->
+        storage.getAllocatableBytes(volume) >= bytes && run {
+            storage.allocateBytes(volume, bytes)
+            true
+        }
+    }
+
+    private inline fun withStorage(default: Boolean, block: (StorageManager, UUID) -> Boolean): Boolean {
+        val storage = appContext.getSystemService<StorageManager>() ?: return default
+        return try {
+            block(storage, storage.getUuidForPath(directory))
+        } catch (_: IOException) {
+            default
+        }
+    }
 
     /** Keeps both; the renderer passes on repeated features once. */
     suspend fun confirmImport(overlaps: MapImportResult.Overlaps): MapImportResult =

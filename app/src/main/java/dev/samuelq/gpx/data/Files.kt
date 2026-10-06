@@ -18,6 +18,16 @@ internal fun ContentResolver.displayName(uri: Uri): String? = try {
     null
 }
 
+/** Its size in bytes, if the provider says. */
+internal fun ContentResolver.size(uri: Uri): Long? = try {
+    query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { cursor ->
+        if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getLong(0) else null
+    }
+} catch (e: Exception) {
+    Log.d("Files", "Could not query a size for $uri", e)
+    null
+}
+
 /** Copies [uri] into [destination]. False when no provider could open it. */
 internal fun ContentResolver.copyInto(uri: Uri, destination: File): Boolean =
     openInputStream(uri)?.use { input ->
