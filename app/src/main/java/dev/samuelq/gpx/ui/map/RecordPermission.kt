@@ -54,17 +54,18 @@ internal fun rememberLocationRequest(
         // False after a refusal means "don't ask again": the request returns without a dialog.
         val settled = activity != null &&
             !ActivityCompat.shouldShowRequestPermissionRationale(activity, Manifest.permission.ACCESS_FINE_LOCATION)
-        val openSettings = {
+        val appSettings = {
             context.startActivity(
                 Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
             )
-        }.takeIf { settled }
+        }
         when {
             // Precise only: GPS_PROVIDER needs it, and approximate is hundreds of metres off.
             granted[Manifest.permission.ACCESS_FINE_LOCATION] == true -> start()
+            // Always to settings: its precise switch is easier to find than a second request.
             granted[Manifest.permission.ACCESS_COARSE_LOCATION] == true ->
-                say(resources.getString(use.preciseRequired), openSettings)
-            else -> say(resources.getString(use.denied), openSettings)
+                say(resources.getString(use.preciseRequired), appSettings)
+            else -> say(resources.getString(use.denied), appSettings.takeIf { settled })
         }
     }
     return {

@@ -120,7 +120,7 @@
     <string name="map_location_outside">You\'re outside your tracks and maps.</string>
     <string name="map_my_location">My location</string>
     <string name="map_none_shown">No tracks shown</string>
-    <string name="map_precise_required">Showing where you are needs precise location.</string>
+    <string name="map_precise_required">Showing where you are uses GPS, which needs precise location.</string>
     <string name="map_scale">Map scale: %1$s</string>
     <string name="map_show_all">Show all tracks</string>
     <!-- How many of the imported tracks are currently drawn on the map, not the library's total. -->
@@ -148,7 +148,7 @@
     <string name="record_notification_active">Recording</string>
     <string name="record_notification_paused">Recording paused</string>
     <string name="record_pause">Pause</string>
-    <string name="record_precise_required">Recording needs precise location. Approximate is accurate to hundreds of metres.</string>
+    <string name="record_precise_required">Recording uses GPS, which needs precise location.</string>
     <string name="record_recovered_body">Started %1$s. The app closed before it was saved.</string>
     <string name="record_recovered_title">Unsaved recording</string>
     <string name="record_resume">Resume</string>
