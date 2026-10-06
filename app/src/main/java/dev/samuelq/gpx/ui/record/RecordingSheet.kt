@@ -56,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import dev.samuelq.gpx.R
 import dev.samuelq.gpx.core.analysis.TrackProfile
 import dev.samuelq.gpx.data.record.RecordingState
+import dev.samuelq.gpx.data.record.RecordingStatus
 import dev.samuelq.gpx.ui.format.Formatters
 import dev.samuelq.gpx.ui.format.LocalFormatters
 import dev.samuelq.gpx.ui.format.spokenDuration
@@ -121,19 +122,17 @@ private fun RecordingHeader(
         // Tells a cold start (settles soon) from being indoors (never will).
         val poorSignal = state.accuracyMeters?.takeIf { it > state.accuracyLimitMeters }
 
-        val status = when {
-            state.paused -> stringResource(R.string.record_notification_paused)
-            state.lastPoint != null -> stringResource(R.string.record_notification_active)
-
-            poorSignal != null -> stringResource(
-                R.string.record_weak_signal,
-                formatters.meters(poorSignal),
-            )
-
-            else -> stringResource(R.string.record_waiting_for_fix)
+        val waiting = state.status == RecordingStatus.WAITING
+        val status = when (state.status) {
+            RecordingStatus.PAUSED -> stringResource(R.string.record_notification_paused)
+            RecordingStatus.LOCATION_OFF -> stringResource(R.string.record_location_is_off)
+            RecordingStatus.RECORDING -> stringResource(R.string.record_notification_active)
+            RecordingStatus.WAITING -> poorSignal
+                ?.let { stringResource(R.string.record_weak_signal, formatters.meters(it)) }
+                ?: stringResource(R.string.record_waiting_for_fix)
         }
         // Announced on change, so without the accuracy, which changes with every fix.
-        val spokenStatus = if (poorSignal != null && state.lastPoint == null && !state.paused) {
+        val spokenStatus = if (poorSignal != null && waiting) {
             stringResource(R.string.record_weak_signal_spoken)
         } else {
             status
@@ -159,7 +158,7 @@ private fun RecordingHeader(
                     contentDescription = listOfNotNull(spokenStatus, waypointCount).joinToString(", ")
                 },
                 style = MaterialTheme.typography.labelLarge,
-                color = if (poorSignal != null && state.lastPoint == null) {
+                color = if ((poorSignal != null && waiting) || state.status == RecordingStatus.LOCATION_OFF) {
                     MaterialTheme.colorScheme.error
                 } else {
                     MaterialTheme.colorScheme.onSurfaceVariant

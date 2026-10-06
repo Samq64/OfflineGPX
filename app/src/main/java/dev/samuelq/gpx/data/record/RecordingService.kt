@@ -130,7 +130,7 @@ class RecordingService : Service() {
 
     private fun collectFixes(source: LocationSource) {
         collection = source
-            .fixes(onUnavailable = ::onLocationUnavailable)
+            .fixes(onAvailable = ::onLocationAvailable)
             .onEach(::onFix)
             .launchIn(scope)
     }
@@ -161,9 +161,16 @@ class RecordingService : Service() {
         notifications.remove()
     }
 
-    /** Keeps recording, but tells the user since it otherwise looks like standing still. */
-    private fun onLocationUnavailable() {
-        controller.emit(RecordingEvent.Failed(R.string.record_location_lost))
+    /** Keeps recording, but says so since it otherwise looks like standing still. On the main thread. */
+    private fun onLocationAvailable(available: Boolean) {
+        scope.launch {
+            val session = session ?: return@launch
+            if (session.locationOff == !available) return@launch
+            session.locationOff = !available
+            if (!available) controller.emit(RecordingEvent.Failed(R.string.record_location_lost))
+            publish()
+            notifications.update(notificationContent())
+        }
     }
 
     private fun onFix(fix: TrackPoint) {
@@ -238,6 +245,7 @@ class RecordingService : Service() {
         }
 
         session.resume()
+        session.locationOff = false
         collectFixes(source)
         publish()
         notifications.update(notificationContent())
@@ -296,7 +304,7 @@ class RecordingService : Service() {
     }
 
     private fun notificationContent() = NotificationContent(
-        paused = session?.paused == true,
+        status = session?.state()?.status ?: RecordingStatus.WAITING,
         timing = session?.timing == true,
         distanceMeters = session?.distanceMeters ?: 0.0,
         totalSeconds = session?.totalSeconds ?: 0.0,

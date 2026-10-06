@@ -232,4 +232,30 @@ class RecordingSessionTest {
         session.pause(origin.plusSeconds(21))
         assertNull(session.state().currentSpeedMps)
     }
+
+    @Test
+    fun `status waits for a fix, records, and says when location is off`() {
+        val session = session()
+        assertEquals(RecordingStatus.WAITING, session.state().status)
+        session.onFix(fix(0, 0.0, accuracy = 50.0))
+        assertEquals(RecordingStatus.WAITING, session.state().status)
+        session.onFix(fix(1, 0.0))
+        assertEquals(RecordingStatus.RECORDING, session.state().status)
+
+        session.locationOff = true
+        assertEquals(RecordingStatus.LOCATION_OFF, session.state().status)
+        session.locationOff = false
+        assertEquals(RecordingStatus.RECORDING, session.state().status)
+
+        session.locationOff = true
+        session.pause(origin.plusSeconds(2))
+        assertEquals(RecordingStatus.PAUSED, session.state().status)
+    }
+
+    @Test
+    fun `location off before the first fix is said too`() {
+        val session = session()
+        session.locationOff = true
+        assertEquals(RecordingStatus.LOCATION_OFF, session.state().status)
+    }
 }

@@ -48,6 +48,9 @@ internal class RecordingSession(
     private var pausedAt: Long? = null
     private var heldAt: Long? = null
 
+    /** Set by the service as the provider goes and comes back. */
+    var locationOff = false
+
     /** Stop was asked for; fixes wait on the answer. */
     val held: Boolean get() = heldAt != null
 
@@ -173,6 +176,7 @@ internal class RecordingSession(
         accuracyMeters = lastAccuracyMeters,
         accuracyLimitMeters = maxAccuracyMeters,
         waypoints = waypoints.toList(),
+        locationOff = locationOff,
     )
 
     private companion object {

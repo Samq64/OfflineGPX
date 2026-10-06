@@ -24,7 +24,7 @@ import dev.samuelq.gpx.ui.format.Formatters
 import dev.samuelq.gpx.ui.format.spokenDuration
 
 internal class NotificationContent(
-    val paused: Boolean,
+    val status: RecordingStatus,
     /** Elapsed time is counting, so the notification's chronometer can show it. */
     val timing: Boolean,
     val distanceMeters: Double,
@@ -38,7 +38,7 @@ internal class RecordingNotifications(private val service: Service) {
     private var shown: Shown? = null
 
     /** What a notification says, beyond the chronometer's own ticking. */
-    private data class Shown(val paused: Boolean, val timing: Boolean, val text: String)
+    private data class Shown(val status: RecordingStatus, val timing: Boolean, val text: String)
 
     /** False if the system refused: location permission gone, or started from the background. */
     fun startForeground(content: NotificationContent): Boolean {
@@ -77,12 +77,12 @@ internal class RecordingNotifications(private val service: Service) {
         val distance = Formatters(content.units).distance(content.distanceMeters)
         // The chronometer shows a running time, so only a stopped one is in the text.
         val text = if (content.timing) distance else "$distance${SEPARATOR}${Formatters.duration(content.totalSeconds)}"
-        return Shown(content.paused, content.timing, text)
+        return Shown(content.status, content.timing, text)
     }
 
     private fun build(content: NotificationContent): Notification {
         val open = activity(null)
-        val paused = content.paused
+        val paused = content.status == RecordingStatus.PAUSED
         val distance = Formatters(content.units).distance(content.distanceMeters)
         val text = if (content.timing) {
             distance
@@ -98,9 +98,14 @@ internal class RecordingNotifications(private val service: Service) {
 
         return NotificationCompat.Builder(service, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_monochrome)
+            // As the sheet says it.
             .setContentTitle(
                 service.getString(
-                    if (paused) R.string.record_notification_paused else R.string.record_notification_active
+                    when (content.status) {
+                        RecordingStatus.WAITING, RecordingStatus.RECORDING -> R.string.record_notification_active
+                        RecordingStatus.LOCATION_OFF -> R.string.record_location_is_off
+                        RecordingStatus.PAUSED -> R.string.record_notification_paused
+                    }
                 )
             )
             .setContentText(text)

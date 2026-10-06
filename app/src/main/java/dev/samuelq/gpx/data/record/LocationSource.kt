@@ -29,11 +29,12 @@ class LocationSource(context: Context) {
         get() = manager?.isProviderEnabled(LocationManager.GPS_PROVIDER) == true
 
     /**
-     * @param onUnavailable called when location is switched off; the flow stays open.
+     * @param onAvailable called with false when location is switched off and true when it's back;
+     *   the flow stays open throughout.
      * @throws SecurityException if the location permission is not held.
      */
     @SuppressLint("MissingPermission")
-    fun fixes(onUnavailable: () -> Unit): Flow<TrackPoint> = callbackFlow<Location> {
+    fun fixes(onAvailable: (Boolean) -> Unit): Flow<TrackPoint> = callbackFlow<Location> {
         val locationManager = manager
             ?: throw IllegalStateException("No LocationManager on this device")
 
@@ -43,7 +44,9 @@ class LocationSource(context: Context) {
                 trySend(location)
             }
 
-            override fun onProviderDisabled(provider: String) = onUnavailable()
+            override fun onProviderDisabled(provider: String) = onAvailable(false)
+
+            override fun onProviderEnabled(provider: String) = onAvailable(true)
         }
 
         locationManager.requestLocationUpdates(

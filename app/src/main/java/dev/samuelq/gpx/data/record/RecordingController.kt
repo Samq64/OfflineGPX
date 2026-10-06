@@ -30,8 +30,22 @@ sealed interface RecordingState {
         val accuracyLimitMeters: Double,
         /** Oldest first. */
         val waypoints: List<Waypoint>,
-    ) : RecordingState
+        /** Switched off mid-ride; recording resumes when it's back. */
+        val locationOff: Boolean,
+    ) : RecordingState {
+        /** Shared by the sheet and the notification, so they agree. */
+        val status: RecordingStatus
+            get() = when {
+                paused -> RecordingStatus.PAUSED
+                locationOff -> RecordingStatus.LOCATION_OFF
+                lastPoint != null -> RecordingStatus.RECORDING
+                else -> RecordingStatus.WAITING
+            }
+    }
 }
+
+/** Waiting covers a weak signal, which the sheet details from the accuracy. */
+enum class RecordingStatus { WAITING, RECORDING, LOCATION_OFF, PAUSED }
 
 /** Delivered once. */
 sealed interface RecordingEvent {

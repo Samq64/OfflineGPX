@@ -65,7 +65,7 @@ class LocationViewModel(
             } else {
                 flow<TrackPoint?> {
                     emit(null)
-                    emitAll(locationSource.fixes(onUnavailable = { stop(LocationStopped.OFF) }))
+                    emitAll(locationSource.fixes(onAvailable = { if (!it) stop(LocationStopped.OFF) }))
                 }.catch { if (it is SecurityException) stop(LocationStopped.DENIED) else throw it }
             }
         }
