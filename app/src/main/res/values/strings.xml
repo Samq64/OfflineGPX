@@ -263,4 +263,6 @@
     <string name="waypoint_action_note">Waypoint %1$d: %2$s</string>
     <string name="waypoint_action_time">Waypoint %1$d, %2$s</string>
     <string name="waypoint_action_time_note">Waypoint %1$d, %2$s: %3$s</string>
+    <!-- Distance into the track, then the time. -->
+    <string name="waypoint_distance_time">%1$s (%2$s)</string>
 </resources>

@@ -7,6 +7,7 @@ import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class TrackAnalyzerTest {
@@ -468,6 +469,15 @@ class TrackAnalyzerTest {
 
         val untimed = TrackAnalyzer.analyze(straightRun(count = 10, metersPerSecond = 10.0, timed = false))
         assertEquals(4, untimed.indexOf(TrackPoint(4 * 10.0 / metersPerDegreeLatitude, 8.0, time = start)))
+    }
+
+    @Test
+    fun `distanceTo is along the track to the nearest point`() {
+        val profile = TrackAnalyzer.analyze(straightRun(count = 10, metersPerSecond = 10.0))
+        val probe = TrackPoint(latitude = 0.0, longitude = 8.0, time = start.plusSeconds(7))
+        assertEquals(profile.distanceMeters[7].toDouble(), profile.distanceTo(probe))
+        assertEquals(70.0, profile.distanceTo(probe)!!, 1.0)
+        assertNull(TrackAnalyzer.analyze(TrackPoints.EMPTY).distanceTo(probe))
     }
 
 }

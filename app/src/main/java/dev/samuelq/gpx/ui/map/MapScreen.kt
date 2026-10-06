@@ -74,6 +74,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.samuelq.gpx.R
 import dev.samuelq.gpx.data.track.editableName
 import dev.samuelq.gpx.data.track.title
+import dev.samuelq.gpx.core.analysis.TrackProfile
 import dev.samuelq.gpx.core.model.Waypoint
 import dev.samuelq.gpx.data.record.RecordingController
 import dev.samuelq.gpx.data.record.RecordingState
@@ -495,14 +496,16 @@ fun MapScreen(
     // From a pin tap, or the sheet's screen reader actions.
     // A lambda, not a local fun: Compose keeps a `::` reference from the first composition,
     // still writing the state of a track no longer focused.
-    val selectWaypoint: (Waypoint) -> Unit = { waypoint ->
-        // Only the charted route's waypoints have a chart position.
-        val charted = if (isRecording) {
+    // Only the charted route's waypoints have a chart position.
+    val chartedFor: (Waypoint) -> TrackProfile? = { waypoint ->
+        if (isRecording) {
             live?.takeIf { waypoint in liveWaypoints }
         } else {
             focusedTrack?.takeIf { waypoint in it.track.waypoints }?.profile
         }
-        screen.selectWaypoint(waypoint, charted?.indexOf(waypoint.point)?.takeIf { it >= 0 })
+    }
+    val selectWaypoint: (Waypoint) -> Unit = { waypoint ->
+        screen.selectWaypoint(waypoint, chartedFor(waypoint)?.indexOf(waypoint.point)?.takeIf { it >= 0 })
     }
 
     val sheetBody: @Composable (SheetSubject, Dp, (Dp) -> Unit) -> Unit =
@@ -650,7 +653,10 @@ fun MapScreen(
                 )
 
                 screen.tappedWaypoint?.let { tapped ->
-                    WaypointTooltip(tapped, tipAt = { tappedWaypointAt.value })
+                    // The live profile lags while its charts are hidden, and would put a new waypoint at its old end.
+                    val charted = chartedFor(tapped)?.takeIf { !isRecording || it.points.size == trace.size }
+                    val distance = remember(tapped, charted) { charted?.distanceTo(tapped.point) }
+                    WaypointTooltip(tapped, distance, tipAt = { tappedWaypointAt.value })
                 }
 
                 val hasRoutes = overlays.isNotEmpty() || liveOverlay != null
