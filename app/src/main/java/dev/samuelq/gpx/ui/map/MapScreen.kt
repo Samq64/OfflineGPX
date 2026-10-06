@@ -158,7 +158,7 @@ fun MapScreen(
         else -> null
     }
     // A new subject drops the selection, and a new track the trim.
-    val screen = rememberMapScreenState(focusedTrack?.id, isRecording) { viewModel.focus(it) }
+    val screen = rememberMapScreenState(focusedTrack?.id, isRecording, viewModel.screenKept) { viewModel.focus(it) }
     // Read only by the tooltip's layout, so panning doesn't recompose this screen.
     val tappedWaypointAt = remember { mutableStateOf(Offset.Zero) }
     // Reported by the map, which keeps it.
@@ -184,42 +184,39 @@ fun MapScreen(
         onGranted = { recorder.start() },
         say = ::say,
     )
-    val startRecording = {
-        screen.centreOnRecording = true
-        requestRecording()
-    }
-    // Centred on the recording's first point.
-    val firstRecorded = trace.takeIf { isRecording && it.size > 0 }?.first()
-    LaunchedEffect(firstRecorded, screen.centreOnRecording) {
-        val at = firstRecorded?.takeIf { screen.centreOnRecording } ?: return@LaunchedEffect
-        if (mapController.centreOn(at) != CentreResult.NotLaidOut) screen.centreOnRecording = false
-    }
-
-    // On the latest point; before the first, on it once it comes.
-    fun recentreOnRecording() {
-        val last = trace.lastOrNull()
-        if (last == null) {
-            screen.centreOnRecording = true
-        } else if (mapController.centreOn(last) == CentreResult.OutOfBounds) {
-            say(resources.getString(R.string.map_location_outside))
-        }
-    }
-
     val showLocation = rememberLocationRequest(
         LocationUse.Show,
         isGpsEnabled = { location.isGpsEnabled },
         onGranted = {
             location.showLocation(true)
-            screen.centreOnFix = true
+            screen.follow()
         },
         say = ::say,
     )
-    LaunchedEffect(position, screen.centreOnFix) {
-        val at = position?.takeIf { screen.centreOnFix } ?: return@LaunchedEffect
-        when (mapController.centreOn(at)) {
-            CentreResult.Centred -> screen.centreOnFix = false
+    fun tapLocation() {
+        when (screen.tapLocation(locating)) {
+            LocationTap.Start -> showLocation()
+            LocationTap.Stop -> location.showLocation(false)
+            LocationTap.Follow, LocationTap.Nothing -> Unit
+        }
+    }
+    // Once per subject, so a recording's start and end are each seen once.
+    LaunchedEffect(screen) {
+        if (screen.recordingSeen()) location.showLocation(false)
+    }
+
+    // The puck while recording, else the dot. Each new one is centred; the first may zoom in.
+    val followed = when {
+        !screen.following -> null
+        isRecording -> trace.lastOrNull()
+        else -> position
+    }
+    LaunchedEffect(followed) {
+        val at = followed ?: return@LaunchedEffect
+        when (mapController.centreOn(at, zoomIn = screen.snapping)) {
+            CentreResult.Centred -> screen.centred()
             CentreResult.OutOfBounds -> {
-                screen.centreOnFix = false
+                screen.stopFollowing()
                 say(resources.getString(R.string.map_location_outside))
             }
             CentreResult.NotLaidOut -> Unit
@@ -269,6 +266,7 @@ fun MapScreen(
 
     LaunchedEffect(location) {
         location.stopped.collect { reason ->
+            screen.stopFollowing()
             when (reason) {
                 LocationStopped.OFF -> say(resources.getString(R.string.map_location_off)) { context.openLocationSettings() }
                 LocationStopped.DENIED -> say(resources.getString(R.string.map_location_denied))
@@ -649,6 +647,8 @@ fun MapScreen(
                     ),
                     onScaleChange = { metersPerPixel.doubleValue = it },
                     // Resume where the camera was left rather than re-fitting.
+                    followed = followed,
+                    onDrag = screen::stopFollowing,
                     initialCamera = viewModel.lastCamera,
                     onCameraChange = viewModel::rememberCamera,
                     onTooFarApartChange = { tooFarApart = it },
@@ -714,29 +714,24 @@ fun MapScreen(
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
                         if (isRecording) {
-                            // The puck is the position then, so this only brings it back into view.
+                            // The puck is the position then.
                             LocationButton(
-                                shown = true,
+                                following = screen.following,
                                 waiting = trace.size == 0,
-                                onToggle = { recentreOnRecording() },
+                                recording = true,
+                                onClick = ::tapLocation,
                             )
                         } else {
                             // Nothing to place the dot against without a track or a map.
                             if (hasContent) {
                                 LocationButton(
-                                    shown = locating,
+                                    following = screen.following,
                                     waiting = locating && position == null,
-                                    onToggle = { show ->
-                                        if (show) {
-                                            showLocation()
-                                        } else {
-                                            location.showLocation(false)
-                                            screen.centreOnFix = false
-                                        }
-                                    },
+                                    recording = false,
+                                    onClick = ::tapLocation,
                                 )
                             }
-                            RecordButton(onStart = startRecording)
+                            RecordButton(onStart = requestRecording)
                         }
                     }
                 }

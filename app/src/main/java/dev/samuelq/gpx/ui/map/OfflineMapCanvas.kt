@@ -46,6 +46,7 @@ import org.oscim.layers.marker.ItemizedLayer
 import org.oscim.layers.marker.MarkerInterface
 import org.oscim.layers.marker.MarkerSymbol
 import org.oscim.map.Map
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Routes over an offline basemap, or over nothing if none is imported. Each layer lives in
@@ -105,6 +106,10 @@ internal fun OfflineMapCanvas(
     panelWidth: Dp,
     basemapColors: BasemapColors,
     onScaleChange: (metersPerPixel: Double) -> Unit,
+    /** Kept centred through zooms while followed; centring on each new one is the caller's. */
+    followed: TrackPoint?,
+    /** A user's drag, which ends following; never a move the app makes. */
+    onDrag: () -> Unit,
     /** Cold-start camera, if remembered; takes priority over fitting to tracks or maps. */
     initialCamera: CameraSnapshot?,
     onCameraChange: (CameraSnapshot) -> Unit,
@@ -136,6 +141,9 @@ internal fun OfflineMapCanvas(
     val reportWaypointAt by rememberUpdatedState(onFollowedWaypointMove)
     val reportScale by rememberUpdatedState(onScaleChange)
     val reportCamera by rememberUpdatedState(onCameraChange)
+    val drag by rememberUpdatedState(onDrag)
+    // Plain, not state: a drag clears it at once, before the GL thread's next update reads it.
+    val followedNow = remember { AtomicReference<TrackPoint?>(null) }
 
     val tapReach = remember(density) { with(density) { TAP_REACH_DP.dp.toPx() } }
     val pinHeadRadius = remember(density) { with(density) { WaypointPinHeadRadius.toPx() } }
@@ -172,7 +180,12 @@ internal fun OfflineMapCanvas(
         layers.add(traceLayer.layer, LayerGroup.Trace.ordinal)
         listOf(belowPinsLayer, pinLayer, abovePinsLayer, onTopLayer)
             .forEach { layers.add(it, LayerGroup.Markers.ordinal) }
-        val taps = TapDetector(ViewConfiguration.get(context), map, doublingPx) { x, y ->
+        val taps = TapDetector(
+            ViewConfiguration.get(context), map, doublingPx,
+            onDrag = {
+                if (followedNow.getAndSet(null) != null) drag()
+            },
+        ) { x, y ->
             // Waypoints first: a pin sits on its own track's line and is the more specific hit.
             val waypointHit = pickWaypoint(
                 x, y, { map.screenPosition(it) }, currentWaypoints, pinHeadRadius, pinTipLength, pinMinHalf,
@@ -287,14 +300,6 @@ internal fun OfflineMapCanvas(
     fun currentClamp() = currentExtent?.including(framedView)
     val currentCover by rememberUpdatedState(cover)
 
-    // For the screen reader actions: pinching needs two fingers, and nothing else zooms out.
-    fun zoomBy(factor: Double): Boolean {
-        val position = map.mapPosition
-        val viewport = map.viewport()
-        position.setScale((position.scale * factor).coerceIn(viewport.minScale, viewport.maxScale))
-        map.moveTo(position, currentClamp(), currentCover)
-        return true
-    }
     // Tracks first, else the maps. Too far apart, the camera stays put and the screen says so.
     fun frameAll(): Boolean {
         val usable = viewSize?.usable(insets) ?: return false
@@ -309,14 +314,13 @@ internal fun OfflineMapCanvas(
         return true
     }
 
-    // Centred in the uncovered part, zooming in if too far out to place it. Admitted to the
+    // Centred in the uncovered part; with zoomIn, zooming in if too far out to place it. Admitted to the
     // clamp like a framed track, but only if some of the extent would show: a blank view
     // says nothing about where the user is.
-    fun centreOn(point: TrackPoint): CentreResult {
+    fun centreOn(point: TrackPoint, zoomIn: Boolean, camera: MapPosition = map.mapPosition): CentreResult {
         val size = viewSize?.takeIf { it.usable(insets) != null } ?: return CentreResult.NotLaidOut
-        val camera = map.mapPosition
         camera.setPosition(point.latitude, point.longitude)
-        camera.setScale(maxOf(camera.scale, LOCATE_SCALE).coerceAtMost(map.viewport().maxScale))
+        if (zoomIn) camera.setScale(maxOf(camera.scale, LOCATE_SCALE).coerceAtMost(map.viewport().maxScale))
         val mapSize = Tile.SIZE * camera.scale
         camera.x -= (insets.left - insets.right) / 2.0 / mapSize
         camera.y -= (insets.top - insets.bottom) / 2.0 / mapSize
@@ -328,10 +332,25 @@ internal fun OfflineMapCanvas(
         return CentreResult.Centred
     }
 
+    // For the screen reader actions: pinching needs two fingers, and nothing else zooms out.
+    fun zoomBy(factor: Double): Boolean {
+        val position = map.mapPosition
+        val viewport = map.viewport()
+        position.setScale((position.scale * factor).coerceIn(viewport.minScale, viewport.maxScale))
+        val followed = followedNow.get()
+        if (followed == null || centreOn(followed, zoomIn = false, position) != CentreResult.Centred) {
+            map.moveTo(position, currentClamp(), currentCover)
+        }
+        return true
+    }
+
     SideEffect {
         controller.zoomBy = ::zoomBy
         controller.showAll = ::frameAll
-        controller.centre = ::centreOn
+        controller.centre = { point, zoomIn -> centreOn(point, zoomIn) }
+        followedNow.set(followed)
+        // Zooms pivot on the view's centre then, so the followed point drifts least.
+        map.eventLayer.setFixOnCenter(followed != null)
     }
 
     // Also as screen reader actions, so a TalkBack or switch user needn't turn the buttons on.
@@ -354,7 +373,12 @@ internal fun OfflineMapCanvas(
         modifier = modifier.onSizeChanged { viewSize = it },
     )
     DisposableEffect(map) {
-        val listener = Map.UpdateListener { _, position ->
+        val listener = Map.UpdateListener { event, position ->
+            // Back onto the followed point after a pinch or a double tap's zoom, which pivot elsewhere.
+            val followed = followedNow.get()
+            if (followed != null && (event == Map.SCALE_EVENT || event == Map.ANIM_END || map.animator().isActive)) {
+                centreOn(followed, zoomIn = false, MapPosition().apply { copy(position) })
+            }
             reportScale(MercatorProjection.groundResolution(position))
             currentFollowedWaypoint?.let { reportWaypointAt(map.screenPosition(it.point, position)) }
             // Not before first framing: until then VTM sits at whole-world, and remembering that
@@ -483,13 +507,14 @@ private fun ItemizedLayer.show(items: List<MarkerInterface>) {
 class MapController {
     internal var zoomBy: (Double) -> Boolean = { false }
     internal var showAll: () -> Boolean = { false }
-    internal var centre: (TrackPoint) -> CentreResult = { CentreResult.NotLaidOut }
+    internal var centre: (TrackPoint, Boolean) -> CentreResult = { _, _ -> CentreResult.NotLaidOut }
 
     fun zoomIn() = zoomBy(2.0)
     fun zoomOut() = zoomBy(0.5)
     fun showAllTracks() = showAll()
 
-    fun centreOn(point: TrackPoint) = centre(point)
+    /** [zoomIn] to street level, if further out. */
+    fun centreOn(point: TrackPoint, zoomIn: Boolean) = centre(point, zoomIn)
 }
 
 enum class CentreResult { Centred, OutOfBounds, NotLaidOut }

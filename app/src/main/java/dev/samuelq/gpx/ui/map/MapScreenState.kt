@@ -30,8 +30,10 @@ class MapScreenState(
     class Kept {
         var renamingId by mutableStateOf<Long?>(null)
         var framing by mutableStateOf<TrackRef?>(null)
-        var centreOnFix by mutableStateOf(false)
-        var centreOnRecording by mutableStateOf(false)
+        var following by mutableStateOf(false)
+        var snapping by mutableStateOf(false)
+        /** Null until a subject is first seen, e.g. after process death mid-recording. */
+        var wasRecording: Boolean? = null
     }
 
     /** Into the charted route's points. */
@@ -49,11 +51,61 @@ class MapScreenState(
     /** Opened from the list or an intent, so framed once loaded; map taps never move the camera. */
     var framing by kept::framing
 
-    /** On the first fix after a tap; later ones move the dot, not the map. */
-    var centreOnFix by kept::centreOnFix
+    /** The camera keeps the position, or the recording's latest point, centred until a drag. */
+    val following: Boolean get() = kept.following
 
-    /** A ride starts where the user is, which may be nowhere near the view. */
-    var centreOnRecording by kept::centreOnRecording
+    /** The next centring may also zoom in: following was just asked for, maybe from far out. */
+    val snapping: Boolean get() = kept.snapping
+
+    /**
+     * The location button. Outside a recording, a tap while following is the only way to
+     * stop showing the position; during one, the puck is the recording, so it does nothing.
+     */
+    fun tapLocation(locating: Boolean): LocationTap = when {
+        following && recording -> LocationTap.Nothing
+        following -> {
+            stopFollowing()
+            LocationTap.Stop
+        }
+        recording || locating -> {
+            follow()
+            LocationTap.Follow
+        }
+        // The caller asks for location, then calls follow.
+        else -> LocationTap.Start
+    }
+
+    fun follow() {
+        kept.following = true
+        kept.snapping = true
+    }
+
+    /** By a drag, the position leaving every map, or location going off. */
+    fun stopFollowing() {
+        kept.following = false
+        kept.snapping = false
+    }
+
+    fun centred() {
+        kept.snapping = false
+    }
+
+    /**
+     * Seen once per subject. A recording that starts is followed; one that ends, however it
+     * ends, leaves following and location off: true then, for the caller to stop location.
+     */
+    fun recordingSeen(): Boolean {
+        val was = kept.wasRecording
+        kept.wasRecording = recording
+        when {
+            was == false && recording -> follow()
+            was == true && !recording -> {
+                stopFollowing()
+                return true
+            }
+        }
+        return false
+    }
 
     /** From the list or an intent. False while recording, which holds the sheet. */
     fun open(ref: TrackRef): Boolean {
@@ -115,10 +167,18 @@ class MapScreenState(
     fun finishTrim(): IntRange? = trim.value.also { trim.value = null }
 }
 
+/** What a tap on the location button asks of location. */
+enum class LocationTap { Start, Follow, Stop, Nothing }
+
+/** [kept] from the view model: following outlives leaving the screen and rotation, not the process. */
 @Composable
-fun rememberMapScreenState(focusedId: Long?, isRecording: Boolean, focus: (TrackRef?) -> Unit): MapScreenState {
+fun rememberMapScreenState(
+    focusedId: Long?,
+    isRecording: Boolean,
+    kept: MapScreenState.Kept,
+    focus: (TrackRef?) -> Unit,
+): MapScreenState {
     val currentFocus by rememberUpdatedState(focus)
-    val kept = remember { MapScreenState.Kept() }
     val trim = remember(focusedId) { mutableStateOf<IntRange?>(null) }
     return remember(focusedId, isRecording, trim) {
         MapScreenState(focusedId, isRecording, kept, trim) { currentFocus(it) }

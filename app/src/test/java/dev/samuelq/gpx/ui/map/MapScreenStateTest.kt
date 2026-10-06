@@ -145,14 +145,83 @@ class MapScreenStateTest {
 
     @Test
     fun `camera requests outlive a change of subject`() {
-        showing(7).centreOnFix = true
-        screen.centreOnRecording = true
+        showing(7).follow()
         screen.framing = TrackRef.Saved(7)
 
-        showing(null, recording = true)
-        assertTrue(screen.centreOnFix)
-        assertTrue(screen.centreOnRecording)
+        showing(8)
+        assertTrue(screen.following)
         assertTrue(screen.frames(7))
+    }
+
+    @Test
+    fun `a tap with location off asks for it, which then follows`() {
+        assertEquals(LocationTap.Start, showing(null).tapLocation(locating = false))
+        assertFalse(screen.following)
+        screen.follow()
+        assertTrue(screen.following)
+        assertTrue(screen.snapping)
+        screen.centred()
+        assertTrue(screen.following)
+        assertFalse(screen.snapping)
+    }
+
+    @Test
+    fun `a tap with the dot shown follows it`() {
+        assertEquals(LocationTap.Follow, showing(null).tapLocation(locating = true))
+        assertTrue(screen.following)
+        assertTrue(screen.snapping)
+    }
+
+    @Test
+    fun `a tap while following stops location, except while recording`() {
+        showing(null).follow()
+        assertEquals(LocationTap.Stop, screen.tapLocation(locating = true))
+        assertFalse(screen.following)
+
+        showing(null, recording = true).follow()
+        assertEquals(LocationTap.Nothing, screen.tapLocation(locating = false))
+        assertTrue(screen.following)
+    }
+
+    @Test
+    fun `a drag stops following, and a tap brings it back`() {
+        showing(null, recording = true).follow()
+        screen.centred()
+        screen.stopFollowing()
+        assertFalse(screen.following)
+        assertFalse(screen.snapping)
+        assertEquals(LocationTap.Follow, screen.tapLocation(locating = false))
+        assertTrue(screen.following)
+    }
+
+    @Test
+    fun `starting a recording follows it`() {
+        assertFalse(showing(null).recordingSeen())
+        assertFalse(screen.following)
+        assertFalse(showing(null, recording = true).recordingSeen())
+        assertTrue(screen.following)
+        assertTrue(screen.snapping)
+    }
+
+    @Test
+    fun `ending a recording turns following and location off, even if shown before`() {
+        showing(null).tapLocation(locating = true)
+        assertTrue(screen.following)
+        screen.recordingSeen()
+        showing(null, recording = true).recordingSeen()
+        screen.stopFollowing()
+        // Saved, so it opens: ended all the same.
+        assertTrue(showing(9).recordingSeen())
+        assertFalse(screen.following)
+        assertFalse(screen.snapping)
+        // Seen once.
+        assertFalse(screen.recordingSeen())
+    }
+
+    @Test
+    fun `a recording already running when first seen isn't a start`() {
+        assertFalse(showing(null, recording = true).recordingSeen())
+        assertFalse(screen.following)
     }
 
     @Test

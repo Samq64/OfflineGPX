@@ -31,11 +31,15 @@ internal enum class LayerGroup { Land, Tiles, Mask, Outline, Routes, Trace, Labe
  *
  * Holding the second tap and dragging zooms around it, down to zoom in, as in other map
  * apps: one-handed, and the only way out besides a pinch. [doublingPx] of drag doubles the scale.
+ *
+ * [onDrag] is a one-finger pan past the slop, once per gesture: what ends following, unlike
+ * a pinch or the app's own moves.
  */
 internal class TapDetector(
     config: ViewConfiguration,
     private val map: Map,
     private val doublingPx: Float,
+    private val onDrag: () -> Unit,
     private val onTap: (x: Float, y: Float) -> Unit,
 ) : Map.InputListener {
     private val slop = config.scaledTouchSlop.toFloat()
@@ -51,6 +55,9 @@ internal class TapDetector(
 
     private var scaling = false
     private var scaledY = 0f
+    // Set by a second finger; cleared by the next first one.
+    private var pinched = false
+    private var dragged = false
 
     // VTM passes a null event.
     override fun onInputEvent(e: Event?, motion: MotionEvent) {
@@ -60,6 +67,8 @@ internal class TapDetector(
                 downY = motion.y
                 downAt = motion.time
                 candidate = true
+                pinched = false
+                dragged = false
                 if (motion.time - lastTapAt <= ViewConfiguration.getDoubleTapTimeout() &&
                     hypot(downX - lastTapX, downY - lastTapY) <= doubleTapSlop
                 ) {
@@ -72,6 +81,10 @@ internal class TapDetector(
 
             MotionEvent.ACTION_MOVE -> {
                 if (hypot(motion.x - downX, motion.y - downY) > slop) candidate = false
+                if (!candidate && !scaling && !pinched && !dragged) {
+                    dragged = true
+                    onDrag()
+                }
                 if (scaling && !candidate) {
                     val factor = 2.0.pow(((motion.y - scaledY) / doublingPx).toDouble()).toFloat()
                     scaledY = motion.y
@@ -82,6 +95,7 @@ internal class TapDetector(
             }
 
             MotionEvent.ACTION_POINTER_DOWN, MotionEvent.ACTION_CANCEL -> {
+                pinched = true
                 candidate = false
                 endScaling()
             }

@@ -86,25 +86,33 @@ internal fun RecordButton(onStart: () -> Unit) {
     )
 }
 
-/** Toggles the position dot; [waiting] until its first fix. */
+/**
+ * Filled while [following], with the found-position icon once there's a fix; [waiting] until
+ * then. Says what a tap does: follow, or stop showing the position, which a recording can't.
+ */
 @Composable
-internal fun LocationButton(shown: Boolean, waiting: Boolean, onToggle: (Boolean) -> Unit) {
-    val label = stringResource(R.string.map_my_location)
+internal fun LocationButton(following: Boolean, waiting: Boolean, recording: Boolean, onClick: () -> Unit) {
+    val label = stringResource(
+        when {
+            !following -> R.string.map_follow_location
+            recording -> R.string.map_following_location
+            else -> R.string.map_stop_location
+        }
+    )
     val waitingLabel = stringResource(R.string.record_waiting_for_fix)
     Surface(
-        checked = shown,
-        onCheckedChange = onToggle,
+        onClick = onClick,
         modifier = Modifier.size(48.dp).semantics {
             contentDescription = label
             if (waiting) stateDescription = waitingLabel
         },
         shape = CircleShape,
-        color = if (shown) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+        color = if (following) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
         shadowElevation = 2.dp,
     ) {
         Box(contentAlignment = Alignment.Center) {
             Icon(
-                painterResource(if (shown && !waiting) R.drawable.ic_my_location else R.drawable.ic_location_searching),
+                painterResource(if (following && !waiting) R.drawable.ic_my_location else R.drawable.ic_location_searching),
                 contentDescription = null,
             )
         }

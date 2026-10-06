@@ -123,6 +123,9 @@ class MapViewModel(
     private var focusJob: Job? = null
 
     /** Outlives the map's composition, which doesn't survive navigating away. */
+    /** The screen's state that outlives leaving it; see [rememberMapScreenState]. */
+    val screenKept = MapScreenState.Kept()
+
     var lastCamera: CameraSnapshot? = null
         private set
 
