@@ -36,6 +36,8 @@ import androidx.compose.ui.unit.dp
 fun PointTooltip(
     anchorAt: () -> IntOffset,
     anchorSize: DpSize,
+    /** Kept within these rows if it fits, its caret still on the anchor; else it may overhang. */
+    within: IntRange? = null,
     content: @Composable () -> Unit,
 ) {
     // Surface-toned, not Material's inverse: that is a near-white block over a dark map.
@@ -43,6 +45,7 @@ fun PointTooltip(
     val border = MaterialTheme.colorScheme.outlineVariant
     // Written at placement, read at draw: moving sides redraws the caret without recomposing.
     val caretOnLeft = remember { mutableStateOf(true) }
+    val caretY = remember { mutableStateOf<Float?>(null) }
 
     Layout(
         modifier = Modifier.fillMaxSize(),
@@ -50,7 +53,7 @@ fun PointTooltip(
             Box(
                 Modifier
                     .drawWithCache {
-                        val path = bubblePath(size, caretOnLeft.value)
+                        val path = bubblePath(size, caretOnLeft.value, caretY.value)
                         val stroke = Stroke(BorderWidth.toPx())
                         onDrawBehind {
                             drawPath(path, fill)
@@ -87,16 +90,22 @@ fun PointTooltip(
             val onRight = right + bubble.width <= constraints.maxWidth || constraints.maxWidth - right >= at.x
             caretOnLeft.value = onRight
             val x = if (onRight) right else at.x - gap - bubble.width
-            bubble.place(x, (centre.y - bubble.height / 2f).toInt())
+            val centred = (centre.y - bubble.height / 2f).toInt()
+            val y = within?.takeIf { it.last - it.first >= bubble.height }
+                ?.let { centred.coerceIn(it.first, it.last - bubble.height) } ?: centred
+            caretY.value = (centre.y - y).takeIf { y != centred }
+            bubble.place(x, y)
         }
     }
 }
 
 /** One outline, so the border has no seam where the caret meets the bubble. */
-private fun CacheDrawScope.bubblePath(size: Size, caretOnLeft: Boolean): Path {
+/** The caret at [caretY] from the top, kept off the corners; mid-height if null. */
+private fun CacheDrawScope.bubblePath(size: Size, caretOnLeft: Boolean, caretY: Float?): Path {
     val depth = CaretDepth.toPx()
     val half = CaretHalfWidth.toPx()
-    val y = size.height / 2
+    val inner = Corner.toPx() + half
+    val y = caretY?.takeIf { size.height >= 2 * inner }?.coerceIn(inner, size.height - inner) ?: (size.height / 2)
     val bubble = Path().apply {
         addRoundRect(RoundRect(depth, 0f, size.width - depth, size.height, CornerRadius(Corner.toPx())))
     }

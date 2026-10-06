@@ -428,6 +428,8 @@ private fun ChartTooltip(
     PointTooltip(
         anchorAt = { IntOffset((x - half).roundToInt(), (y - half).roundToInt()) },
         anchorSize = DpSize((MarkerRadius + SurfaceRing) * 2, (MarkerRadius + SurfaceRing) * 2),
+        // Off the x-axis labels, which it would cover near the bottom.
+        within = plot.top.roundToInt()..plot.bottom.roundToInt(),
     ) {
         Text(
             text = buildAnnotatedString {
