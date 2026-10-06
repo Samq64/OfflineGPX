@@ -192,6 +192,16 @@ fun MapScreen(
         if (mapController.centreOn(at) != CentreResult.NotLaidOut) screen.centreOnRecording = false
     }
 
+    // On the latest point; before the first, on it once it comes.
+    fun recentreOnRecording() {
+        val last = trace.lastOrNull()
+        if (last == null) {
+            screen.centreOnRecording = true
+        } else if (mapController.centreOn(last) == CentreResult.OutOfBounds) {
+            say(resources.getString(R.string.map_location_outside))
+        }
+    }
+
     val showLocation = rememberLocationRequest(
         LocationUse.Show,
         isGpsEnabled = { location.isGpsEnabled },
@@ -687,13 +697,19 @@ fun MapScreen(
                         .padding(start = panelCover, bottom = sheetInset)
                         .onSizeChanged { controlsHeight = with(density) { it.height.toDp() } },
                 ) {
-                    // While recording, the puck shows the position.
-                    if (!isRecording) {
-                        Column(
-                            modifier = Modifier.fillMaxWidth().padding(16.dp),
-                            horizontalAlignment = Alignment.End,
-                            verticalArrangement = Arrangement.spacedBy(16.dp),
-                        ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        horizontalAlignment = Alignment.End,
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        if (isRecording) {
+                            // The puck is the position then, so this only brings it back into view.
+                            LocationButton(
+                                shown = true,
+                                waiting = trace.size == 0,
+                                onToggle = { recentreOnRecording() },
+                            )
+                        } else {
                             // Nothing to place the dot against without a track or a map.
                             if (hasContent) {
                                 LocationButton(
