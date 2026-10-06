@@ -55,6 +55,16 @@ class TrackAnalyzerTest {
     }
 
     @Test
+    fun `a track never moving has no moving speed`() {
+        // 0.15 m/s, about 0.3 mph: under the moving threshold throughout.
+        val profile = TrackAnalyzer.analyze(straightRun(count = 61, metersPerSecond = 0.15, secondsBetween = 10))
+
+        assertTrue(profile.stats.distanceMeters > 0.0)
+        assertEquals(0.0, profile.stats.movingDurationSeconds)
+        assertEquals(0.0, profile.stats.averageSpeedMps)
+    }
+
+    @Test
     fun `smooths away single-sample GPS jitter`() {
         // One point thrown 25 m off, the classic urban-canyon glitch.
         val step = 10.0 / metersPerDegreeLatitude
@@ -429,9 +439,10 @@ class TrackAnalyzerTest {
         assertTrue(profile.hasTime)
         assertEquals(1, profile.segmentStartIndices.size)
         assertEquals(start, profile.stats.startedAt)
-        // Too slow to count as moving, so the average falls back to the whole span.
+        // Too slow to count as moving, so no moving speed either: the sheet shows both.
+        assertTrue(profile.stats.distanceMeters > 0.0)
         assertEquals(0.0, profile.stats.movingDurationSeconds)
-        assertEquals(profile.stats.distanceMeters / 3600.0, profile.stats.averageSpeedMps, 1e-9)
+        assertEquals(0.0, profile.stats.averageSpeedMps)
     }
 
     @Test

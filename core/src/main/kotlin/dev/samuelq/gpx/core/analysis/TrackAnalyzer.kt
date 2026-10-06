@@ -105,7 +105,6 @@ object TrackAnalyzer {
 
         val totalDistance = if (size > 0) distance[size - 1].toDouble() else 0.0
         val totalDuration = if (hasTime && size > 0) elapsed[size - 1].toDouble() else 0.0
-        val averageBasis = if (movingSeconds > 0.0) movingSeconds else totalDuration
 
         val stats = TrackStats(
             startedAt = startedAt,
@@ -113,7 +112,7 @@ object TrackAnalyzer {
             distanceMeters = totalDistance,
             totalDurationSeconds = totalDuration,
             movingDurationSeconds = movingSeconds,
-            averageSpeedMps = if (averageBasis > 0.0) totalDistance / averageBasis else 0.0,
+            averageSpeedMps = if (movingSeconds > 0.0) totalDistance / movingSeconds else 0.0,
             ascentMeters = ascent,
             descentMeters = descent,
         )

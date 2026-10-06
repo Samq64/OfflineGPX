@@ -14,7 +14,7 @@ data class TrackStats(
     val totalDurationSeconds: Double,
     /** Time spent above [TrackAnalyzer.MOVING_SPEED_THRESHOLD_MPS]. */
     val movingDurationSeconds: Double,
-    /** Over moving time when there is any. */
+    /** Over moving time; zero without any, as the sheet shows it beside moving time. */
     val averageSpeedMps: Double,
     val ascentMeters: Double,
     val descentMeters: Double,
