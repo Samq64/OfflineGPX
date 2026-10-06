@@ -97,6 +97,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.samuelq.gpx.R
 import dev.samuelq.gpx.data.track.editableName
+import dev.samuelq.gpx.data.track.isTitledByStart
 import dev.samuelq.gpx.data.track.title
 import dev.samuelq.gpx.data.db.TrackEntity
 import dev.samuelq.gpx.data.settings.TrackOrder
@@ -446,9 +447,10 @@ private fun TrackRow(
     val deleteLabel = stringResource(R.string.library_delete)
 
     // Remembered: a DateTimeFormatter's first use loads locale data, janking the entry animation.
+    // Null for an unnamed recording: its title is already the date.
     val date = remember(track, formatters) {
         val recorded = track.startedAtEpochMillis ?: track.lastOpenedAtEpochMillis
-        formatters.dateTime(Instant.ofEpochMilli(recorded))
+        formatters.dateTime(Instant.ofEpochMilli(recorded)).takeUnless { track.isTitledByStart }
     }
     val summary = remember(track, sizeBytes, formatters) {
         listOfNotNull(
@@ -516,11 +518,13 @@ private fun TrackRow(
                     overflow = TextOverflow.Ellipsis,
                 )
                 // Wrapping, not cut: at large text sizes the ends are the time and size.
-                Text(
-                    text = date,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                date?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 Text(
                     text = summary,
                     style = MaterialTheme.typography.bodySmall,

@@ -57,6 +57,10 @@ object TrackFiles {
 val TrackEntity.title: String
     get() = trackName?.takeIf(String::isNotBlank) ?: TrackFiles.recordedAt(this) ?: displayName
 
+/** Unnamed and titled by when it was recorded, rather than by its filename. */
+val TrackEntity.isTitledByStart: Boolean
+    get() = trackName.isNullOrBlank() && TrackFiles.recordedAt(this) != null
+
 /** [title] without the `.gpx` extension, to edit. */
 val TrackEntity.editableName: String
     get() = trackName?.takeIf(String::isNotBlank) ?: TrackFiles.recordedAt(this)
