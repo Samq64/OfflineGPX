@@ -111,14 +111,13 @@ internal class TapDetector(
     }
 }
 
-/** One style per colour and width: VectorLayer batches consecutive same-style lines into one draw. */
+/** One style per colour: VectorLayer batches consecutive same-style lines into one draw. */
 internal class RouteStyles(density: Density) {
-    val width = with(density) { ROUTE_WIDTH_DP.dp.toPx() }
-    val focusedWidth = with(density) { FOCUSED_ROUTE_WIDTH_DP.dp.toPx() }
-    private val cache = HashMap<Pair<Int, Float>, Style>()
+    private val width = with(density) { ROUTE_WIDTH_DP.dp.toPx() }
+    private val cache = HashMap<Int, Style>()
 
     @Synchronized
-    fun of(color: Color, width: Float = this.width): Style = cache.getOrPut(color.toArgb() to width) {
+    fun of(color: Color): Style = cache.getOrPut(color.toArgb()) {
         Style.builder()
             .strokeColor(color.toArgb())
             .strokeWidth(width)
@@ -134,8 +133,8 @@ internal class RouteStyles(density: Density) {
  * One line per segment, never across a gap. Stacked in list order, the last on top.
  *
  * [focusedId]'s route is told apart by more than its colour, which repeats past six tracks
- * and is the only difference to some colour vision: it's drawn wider and on top, and the
- * rest are dimmed.
+ * and is the only difference to some colour vision: it's drawn on top and the rest are dimmed.
+ * Not wider, which would cover more of the map under it.
  */
 internal fun List<RouteOverlay>.toLines(styles: RouteStyles, focusedId: Long? = null): List<LineDrawable> {
     val out = ArrayList<LineDrawable>()
@@ -144,11 +143,7 @@ internal fun List<RouteOverlay>.toLines(styles: RouteStyles, focusedId: Long? = 
         val focused = focusing && route.trackId == focusedId
         // Within one priority VTM orders by spatial index, not insertion, so each route gets its own.
         val priority = if (focused) size else index
-        val style = when {
-            focused -> styles.of(route.color, styles.focusedWidth)
-            focusing -> styles.of(route.color.copy(alpha = UNFOCUSED_ALPHA))
-            else -> styles.of(route.color)
-        }
+        val style = styles.of(if (focusing && !focused) route.color.copy(alpha = UNFOCUSED_ALPHA) else route.color)
         route.forEachRun { from, to ->
             // A single position isn't a line; still drawn as the puck if it is live.
             if (to - from < 2) return@forEachRun
@@ -222,7 +217,6 @@ internal class LineLayer(map: Map) {
 }
 
 private const val ROUTE_WIDTH_DP = 3f
-private const val FOCUSED_ROUTE_WIDTH_DP = 5f
 private const val UNFOCUSED_ALPHA = 0.45f
 
 /** Settle time before an overlay checks it drew for the current camera. */
