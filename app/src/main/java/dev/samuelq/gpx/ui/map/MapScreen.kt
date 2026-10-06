@@ -241,6 +241,7 @@ fun MapScreen(
                     onUndo = { viewModel.show(message.id) },
                 )
                 MapMessage.EditFailed -> say(resources.getString(R.string.track_edit_failed))
+                MapMessage.Duplicated -> say(resources.getString(R.string.library_duplicated))
                 is MapMessage.Edited -> offerUndo(
                     resources.getString(
                         if (message.edit.added != null) R.string.track_split_done else R.string.track_trimmed,

@@ -163,8 +163,13 @@ fun LibraryScreen(
     LaunchedEffect(reveal, tracks) {
         val id = reveal ?: return@LaunchedEffect
         val index = tracks.indexOfFirst { it.id == id }.takeIf { it >= 0 } ?: return@LaunchedEffect
+        // Laid out isn't seen: the padding puts rows under the bar.
+        val info = listState.layoutInfo
+        val shown = info.visibleItemsInfo.firstOrNull { it.key == id }
+            ?.let { it.offset >= 0 && it.offset + it.size <= info.viewportEndOffset - info.afterContentPadding } == true
+        if (!shown) listState.animateScrollToItem(index)
+        // Only after: clearing it restarts this effect, which would cancel the scroll.
         reveal = null
-        if (listState.layoutInfo.visibleItemsInfo.none { it.key == id }) listState.animateScrollToItem(index)
     }
 
     fun delete(ids: Set<Long>) {
@@ -198,7 +203,10 @@ fun LibraryScreen(
         viewModel.events.collect { event ->
             when (event) {
                 is LibraryEvent.Open -> onOpenTrack(event.id)
-                is LibraryEvent.Duplicated -> reveal = event.id
+                is LibraryEvent.Duplicated -> {
+                    reveal = event.id
+                    say(resources.getString(R.string.library_duplicated))
+                }
                 LibraryEvent.ImportFailed -> say(resources.getString(R.string.library_import_failed))
                 is LibraryEvent.ImportedAll -> say(
                     allOrSome(event.imported, event.requested, R.plurals.library_imported_all, R.plurals.library_imported_some)

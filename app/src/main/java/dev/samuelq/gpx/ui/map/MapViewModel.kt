@@ -48,6 +48,8 @@ sealed interface MapMessage {
 
     data object EditFailed : MapMessage
 
+    data object Duplicated : MapMessage
+
     /** Undone with [MapViewModel.show]. [name] is the track's, for the message. */
     class Hidden(val id: Long, val name: String) : MapMessage
 
@@ -290,7 +292,10 @@ class MapViewModel(
     fun duplicate(id: Long) {
         viewModelScope.launch {
             repository.duplicate(id).fold(
-                onSuccess = { focus(TrackRef.Saved(it)) },
+                onSuccess = {
+                    focus(TrackRef.Saved(it))
+                    _messages.trySend(MapMessage.Duplicated)
+                },
                 onFailure = { _messages.trySend(MapMessage.EditFailed) },
             )
         }
