@@ -136,6 +136,17 @@ class MapScreenStateTest {
     }
 
     @Test
+    fun `opening a track stops following, except while recording`() {
+        showing(null).follow()
+        screen.open(TrackRef.Saved(7))
+        assertFalse(screen.following)
+
+        showing(null, recording = true).follow()
+        screen.open(TrackRef.Saved(7))
+        assertTrue(screen.following)
+    }
+
+    @Test
     fun `cancelling a trim drops it`() {
         showing(7).startTrim(10)
         screen.cancelTrim()

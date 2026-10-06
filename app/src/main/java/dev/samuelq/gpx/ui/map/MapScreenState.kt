@@ -110,6 +110,8 @@ class MapScreenState(
     /** From the list or an intent. False while recording, which holds the sheet. */
     fun open(ref: TrackRef): Boolean {
         if (recording) return false
+        // Else the next fix pulls the camera back off the track.
+        stopFollowing()
         framing = ref
         focus(ref)
         return true

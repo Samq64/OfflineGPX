@@ -362,7 +362,8 @@ internal fun OfflineMapCanvas(
         val ids = listOf(
             zoomIn to controller::zoomIn,
             zoomOut to controller::zoomOut,
-            showAll to controller::showAllTracks,
+            // Asked for, like a drag, so it ends following.
+            showAll to { drag(); controller.showAllTracks() },
         ).map { (label, act) -> ViewCompat.addAccessibilityAction(mapView, label) { _, _ -> act() } }
         onDispose { ids.forEach { ViewCompat.removeAccessibilityAction(mapView, it) } }
     }
