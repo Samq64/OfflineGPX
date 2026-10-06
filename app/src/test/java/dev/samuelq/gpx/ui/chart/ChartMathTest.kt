@@ -2,6 +2,11 @@ package dev.samuelq.gpx.ui.chart
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import kotlin.math.abs
+import kotlin.math.floor
+import kotlin.math.log10
+import kotlin.math.pow
+import kotlin.math.roundToInt
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -21,7 +26,7 @@ class ChartMathTest {
     }
 
     @Test
-    fun `a y scale spans exactly the data in five even ticks`() {
+    fun `a y scale ends on the data and ticks round values between`() {
         val series = ChartSeries(
             x = floatArrayOf(0f, 1f, 2f),
             y = floatArrayOf(12f, Float.NaN, 31f),
@@ -31,7 +36,21 @@ class ChartMathTest {
         val scale = series.yScale()
         assertEquals(12f, scale.min)
         assertEquals(31f, scale.max)
-        assertTicks(listOf(12f, 16.75f, 21.5f, 26.25f, 31f), scale.ticks.toList())
+        assertTicks(listOf(12f, 15f, 20f, 25f, 31f), scale.ticks.toList())
+        assertEquals(5f, scale.step)
+    }
+
+    @Test
+    fun `inner y ticks are round in display units and clear of the ends`() {
+        // 45.3 to 75.2 m in feet: 148.6 to 246.7, on a 25 ft step.
+        val feet = 3.280839895f
+        val series = ChartSeries(floatArrayOf(0f, 1f), floatArrayOf(45.3f, 75.2f), intArrayOf(0), Color.Red)
+        val scale = series.yScale(feet)
+        assertTicks(listOf(45.3f * feet, 175f, 200f, 225f, 75.2f * feet), scale.ticksIn(feet))
+        assertEquals(25f, scale.step * feet, 1e-3f)
+        // 50 and 60 are too near the ends to label beside them.
+        val near = ChartSeries(floatArrayOf(0f, 1f), floatArrayOf(48.9f, 61f), intArrayOf(0), Color.Red).yScale()
+        assertTicks(listOf(48.9f, 55f, 61f), near.ticks.toList())
     }
 
     @Test
@@ -51,12 +70,21 @@ class ChartMathTest {
     }
 
     @Test
-    fun `a y scale always has five ticks`() {
+    fun `a y scale always has its ends and a step of 1, 2, 2,5 or 5 times a power of ten`() {
         for ((lo, hi) in listOf(0f to 1f, 0f to 10f, 3f to 97f, 101.5f to 102.3f, -40f to 2500f, 19f to 21f)) {
             val series = ChartSeries(floatArrayOf(0f, 1f), floatArrayOf(lo, hi), intArrayOf(0), Color.Red)
             val scale = series.yScale(3.6f)
-            assertEquals(5, scale.ticks.size, "$lo..$hi: ${scale.ticks.toList()}")
-            assert(scale.min <= lo && scale.max >= hi) { "$lo..$hi: ${scale.ticks.toList()}" }
+            val ticks = scale.ticks.toList()
+            assertEquals(lo, ticks.first(), "$lo..$hi: $ticks")
+            assertEquals(hi, ticks.last(), "$lo..$hi: $ticks")
+            assert(ticks.size in 3..6) { "$lo..$hi: $ticks" }
+            val step = scale.step * 3.6f
+            val mantissa = step / 10f.pow(floor(log10(step)))
+            assert(listOf(1f, 2f, 2.5f, 5f).any { abs(it - mantissa) < 1e-3f }) { "$lo..$hi: step $step" }
+            ticks.drop(1).dropLast(1).forEach { tick ->
+                val inUnits = tick * 3.6f / step
+                assertEquals(inUnits.roundToInt().toFloat(), inUnits, 1e-2f, "$lo..$hi: $ticks")
+            }
         }
     }
 

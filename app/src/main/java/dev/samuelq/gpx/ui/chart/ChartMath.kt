@@ -24,11 +24,11 @@ class ChartSeries(
 }
 
 @Immutable
-class Scale(val min: Float, val max: Float, val ticks: FloatArray) {
+class Scale(val min: Float, val max: Float, val ticks: FloatArray, step: Float? = null) {
     val span: Float get() = (max - min).takeIf { it > 0f } ?: 1f
 
     /** Tick gap; labels coarser than this would print neighbouring ticks the same. */
-    val step: Float get() = if (ticks.size >= 2) ticks[1] - ticks[0] else span
+    val step: Float = step ?: if (ticks.size >= 2) ticks[1] - ticks[0] else span
 }
 
 /**
@@ -63,8 +63,11 @@ private inline fun axisScale(min: Float, max: Float, perUnit: Float, step: (Floa
     return Scale(min, max, ticks.toFloatArray())
 }
 
-/** 1-2-5 progression. */
-private fun niceStep(range: Float, targetTicks: Int): Float {
+/**
+ * 1-2-5 progression, with 2.5 too if [quarters]. Only from 25 up, where it needs no more
+ * decimals than its neighbours.
+ */
+private fun niceStep(range: Float, targetTicks: Int, quarters: Boolean = false): Float {
     if (range <= 0f || targetTicks <= 0) return 1f
     val rough = range / targetTicks
     val magnitude = 10.0.pow(floor(log10(rough.toDouble()))).toFloat()
@@ -72,6 +75,7 @@ private fun niceStep(range: Float, targetTicks: Int): Float {
     val factor = when {
         normalized <= 1f -> 1f
         normalized <= 2f -> 2f
+        quarters && magnitude >= 10f && normalized <= 2.5f -> 2.5f
         normalized <= 5f -> 5f
         else -> 10f
     }
@@ -107,23 +111,40 @@ fun ChartSeries.yScale(perUnit: Float = 1f, fromZero: Boolean = false): Scale {
         if (value < min) min = value
         if (value > max) max = value
     }
-    if (!min.isFinite() || !max.isFinite()) return evenTickScale(0f, 1f / perUnit)
+    if (!min.isFinite() || !max.isFinite()) return endTickScale(0f, 1f / perUnit, perUnit)
     if (max <= min) {
         val pad = if (abs(max) > 0f) abs(max) * 0.1f else 1f / perUnit
         // A zero floor stays put.
         if (!fromZero) min -= pad
         max += pad
     }
-    return evenTickScale(min, max)
+    return endTickScale(min, max, perUnit)
 }
 
-private const val Y_TICKS = 5
+/** Gaps between ticks the series is cut into, about. */
+private const val Y_INTERVALS = 4
 
-/** Evenly spaced, not round, ticks so the top of the plot is the peak itself. */
-private fun evenTickScale(min: Float, max: Float): Scale {
-    val step = (max - min) / (Y_TICKS - 1)
-    val ticks = FloatArray(Y_TICKS) { if (it == Y_TICKS - 1) max else min + it * step }
-    return Scale(min, max, ticks)
+/** An inner tick nearer an end than this many steps would crowd its label. */
+private const val END_CLEARANCE = 0.4f
+
+/**
+ * Ticks on [min] and [max] themselves, so the top of the plot is the peak, and on round values
+ * in display units between them.
+ */
+private fun endTickScale(min: Float, max: Float, perUnit: Float): Scale {
+    val lo = min * perUnit
+    val hi = max * perUnit
+    val step = niceStep(hi - lo, Y_INTERVALS, quarters = true)
+    val first = ceil(lo / step)
+    val inner = buildList {
+        var i = 0
+        while (true) {
+            val value = (first + i++) * step
+            if (value > hi - step * END_CLEARANCE) break
+            if (value >= lo + step * END_CLEARANCE) add(value / perUnit)
+        }
+    }
+    return Scale(min, max, (listOf(min) + inner + max).toFloatArray(), step / perUnit)
 }
 
 /**
