@@ -61,10 +61,13 @@ val TrackEntity.title: String
 val TrackEntity.isTitledByStart: Boolean
     get() = trackName.isNullOrBlank() && TrackFiles.recordedAt(this) != null
 
-/** [title] without the `.gpx` extension, to edit. */
+/** [title] without the `.gpx` extension, to name a part or copy after. */
+val TrackEntity.titleStem: String
+    get() = title.let { if (it.endsWith(".gpx", ignoreCase = true)) it.dropLast(4) else it }
+
+/** [titleStem] to rename from, but empty for a recording titled by its start: that's no name. */
 val TrackEntity.editableName: String
-    get() = trackName?.takeIf(String::isNotBlank) ?: TrackFiles.recordedAt(this)
-        ?: displayName.let { if (it.endsWith(".gpx", ignoreCase = true)) it.dropLast(4) else it }
+    get() = if (isTitledByStart) "" else titleStem
 
 /** A typed name, or null for blank so the caller falls back to its default. */
 internal fun String.asTrackName(): String? = trim().ifEmpty { null }

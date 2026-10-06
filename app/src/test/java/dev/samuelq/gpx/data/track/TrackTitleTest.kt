@@ -52,7 +52,8 @@ class TrackTitleTest {
     fun `an unnamed recording is titled by its start, whatever its file is called`() {
         for (file in listOf("2024-05-04T180000.gpx", "2024-05-04T180000 (2).gpx", "2024-05-04T180000 (copy).gpx", "Renamed-1.gpx")) {
             assertEquals("4 May 2024, 18:00", row("recordings/$file").title, file)
-            assertEquals("4 May 2024, 18:00", row("recordings/$file", trackName = " ").editableName, file)
+            assertEquals("4 May 2024, 18:00", row("recordings/$file", trackName = " ").titleStem, file)
+            assertEquals("", row("recordings/$file", trackName = " ").editableName, file)
         }
         // Without a start, the filename's stamp stands in.
         assertEquals("4 May 2024, 18:00", row("recordings/2024-05-04T180000 (2).gpx", startedAt = null).title)

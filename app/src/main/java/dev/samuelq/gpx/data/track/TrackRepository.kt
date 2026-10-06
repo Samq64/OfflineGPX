@@ -273,7 +273,7 @@ class TrackRepository(
 
     suspend fun setAllVisible(visible: Boolean) = dao.setAllVisible(visible)
 
-    suspend fun setColor(id: Long, colorIndex: Int) = dao.setColor(id, colorIndex.mod(TrackEntity.PALETTE_SIZE))
+    suspend fun setColor(id: Long, colorIndex: Int) = dao.setColor(id, colorIndex.mod(TrackEntity.NEUTRAL_SLOT))
 
     /** Hides [ids] until [undoDelete] or [commitDelete]. */
     fun deleteLater(ids: Collection<Long>) = pendingDelete.update { it + ids }
@@ -321,7 +321,7 @@ class TrackRepository(
             require(at in 1 until last) { "Can't split at $at" }
 
             val file = fileOf(entity)
-            val title = entity.editableName.trim()
+            val title = entity.titleStem.trim()
             val firstName = appContext.getString(R.string.split_part, title, 1)
             val secondName = appContext.getString(R.string.split_part, title, 2)
             val second = uniqueFile(file.parentFile!!, secondName, "gpx", fallback = "track")
@@ -348,7 +348,7 @@ class TrackRepository(
         runCatching {
             val entity = entity(id)
             val file = fileOf(entity)
-            val title = entity.editableName.trim()
+            val title = entity.titleStem.trim()
             val name = appContext.getString(R.string.duplicate_name, title)
             val copy = uniqueFile(file.parentFile!!, name, "gpx", fallback = "track")
             try {
