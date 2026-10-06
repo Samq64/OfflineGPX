@@ -10,10 +10,10 @@ import dev.samuelq.gpx.core.analysis.TrackProfile
 import dev.samuelq.gpx.core.model.Track
 import dev.samuelq.gpx.core.model.bounds
 import dev.samuelq.gpx.data.db.ColorUse
+import dev.samuelq.gpx.data.db.SummaryUpdate
 import dev.samuelq.gpx.data.db.TrackDao
 import dev.samuelq.gpx.data.db.TrackEntity
 import dev.samuelq.gpx.data.db.TrackSummary
-import dev.samuelq.gpx.data.gpx.GpxNameRewriter
 import dev.samuelq.gpx.data.gpx.GpxParseException
 import dev.samuelq.gpx.data.gpx.GpxParser
 import dev.samuelq.gpx.data.gpx.GpxTrimmer
@@ -24,9 +24,9 @@ import dev.samuelq.gpx.data.displayName
 import dev.samuelq.gpx.data.uniqueFile
 import dev.samuelq.gpx.data.sameBytes
 import dev.samuelq.gpx.data.uniqueName
+import dev.samuelq.gpx.data.writeAtomically
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -49,6 +49,8 @@ import java.util.Locale
 class TrackRepository(
     context: Context,
     private val dao: TrackDao,
+    /** Outlives any screen, so deletes and edits finish once asked for. */
+    private val scope: CoroutineScope,
 ) {
 
     private val parser = GpxParser()
@@ -57,9 +59,6 @@ class TrackRepository(
     private val io = Dispatchers.IO
 
     private val appContext = context.applicationContext
-
-    /** Never cancelled: the repository is a process-lifetime singleton. */
-    private val scope = CoroutineScope(SupervisorJob() + io)
 
     private val recordingsDir: File get() = TrackFiles.recordingsDir(appContext)
     private val importsDir: File get() = TrackFiles.importsDir(appContext)
@@ -158,7 +157,7 @@ class TrackRepository(
                 } else {
                     track
                 }
-                file.outputStream().use { writer.write(named, it) }
+                writeAtomically(file) { writer.write(named, it) }
 
                 dao.upsert(newEntity(file, file.name, named, profile)).also { cache.write(it, file, named) }
             }.recoverFailure()
@@ -220,7 +219,6 @@ class TrackRepository(
         return written
     }
 
-    /** Reads a track without indexing it, for VIEW/SEND intents whose URI grants are one-shot. */
     /** Like [open] but without touching the sort order, for drawing. */
     suspend fun geometry(id: Long): Result<LoadedTrack> = withContext(io) {
         runCatching { load(entity(id)) }.recoverFailure()
@@ -246,24 +244,12 @@ class TrackRepository(
     /** Renames a track; a blank [name] clears it, falling back to the filename. */
     suspend fun rename(id: Long, name: String): Result<Unit> = withContext(io) {
         runCatching {
-            val entity = entity(id)
             val trimmed = name.asTrackName()
-
-            // Written into the file since export is a byte copy. Via a temp file so a
-            // crash never truncates it.
-            val file = fileOf(entity)
-            val temp = File(file.parentFile, "${file.name}.tmp")
-            try {
-                if (GpxNameRewriter.rewrite(file, temp, trimmed)) {
-                    if (!temp.renameTo(file)) throw TrackLoadException.Unreadable("Could not rewrite ${file.name}")
-                    // The cache holds no name, so the rewrite leaves it current.
-                    cache.restamp(id, file)
-                }
-            } finally {
-                // No-op once renamed; cleans up on failure.
-                temp.delete()
-            }
-
+            // Written into the file since export is a byte copy.
+            val file = fileOf(entity(id))
+            writeAtomically(file) { output -> file.inputStream().use { trimmer.trim(it, output, name = trimmed.orEmpty()) } }
+            // The cache holds no name, so the rewrite leaves it current.
+            cache.restamp(id, file)
             dao.setTrackName(id, trimmed)
         }.recoverFailure()
     }
@@ -281,9 +267,9 @@ class TrackRepository(
 
     /** In the repository's scope, so it finishes even as the screen that asked goes away. */
     fun commitDelete(ids: Collection<Long>) {
-        scope.launch {
+        scope.launch(io) {
             val entities = dao.byIds(ids.toList())
-            ids.forEach { dao.delete(it) }
+            dao.delete(ids.toList())
             entities.forEach(::deleteFile)
             ids.forEach(cache::delete)
             pendingDelete.update { it - ids.toSet() }
@@ -303,7 +289,7 @@ class TrackRepository(
             val file = fileOf(entity)
             val backup = backUp(file, id)
             val track = rewrite(file, file, loaded, from..to, name = null)
-            dao.setSummary(summary(id, track, TrackAnalyzer.analyze(track)))
+            dao.setSummary(summaryUpdate(id, track, TrackAnalyzer.analyze(track)))
             TrackEdit(id, backup, entity, added = null)
         }.recoverFailure()
     }
@@ -336,7 +322,7 @@ class TrackRepository(
                 throw e
             }
             val firstTrack = rewrite(file, file, loaded, 0..at, name = firstName)
-            dao.setSummary(summary(id, firstTrack, TrackAnalyzer.analyze(firstTrack)))
+            dao.setSummary(summaryUpdate(id, firstTrack, TrackAnalyzer.analyze(firstTrack)))
             dao.setTrackName(id, firstName)
             TrackEdit(id, backup, entity, addedId)
         }.recoverFailure()
@@ -351,7 +337,7 @@ class TrackRepository(
             val name = appContext.getString(R.string.duplicate_name, title)
             val copy = uniqueFile(file.parentFile!!, name, "gpx", fallback = "track")
             try {
-                if (!GpxNameRewriter.rewrite(file, copy, name)) file.copyTo(copy, overwrite = true)
+                writeAtomically(copy) { output -> file.inputStream().use { trimmer.trim(it, output, name = name) } }
                 val row = entity.copy(
                     id = 0,
                     location = TrackFiles.location(appContext, copy),
@@ -373,12 +359,9 @@ class TrackRepository(
     /** Puts the file and row back as they were before [edit], removing anything it added. */
     suspend fun undoEdit(edit: TrackEdit): Result<Unit> = withContext(io) {
         runCatching {
-            val file = fileOf(edit.before)
-            val temp = File(file.parentFile, "${file.name}.tmp")
-            edit.backup.copyTo(temp, overwrite = true)
-            if (!temp.renameTo(file)) throw IOException("Could not restore ${file.name}")
+            writeAtomically(fileOf(edit.before)) { output -> edit.backup.inputStream().use { it.copyTo(output) } }
             // Only what the edit changed, so a recolour since survives the undo.
-            dao.setSummary(edit.before.summary)
+            dao.setSummary(SummaryUpdate(edit.id, edit.before.startedAtEpochMillis, edit.before.summary))
             dao.setTrackName(edit.id, edit.before.trackName)
             cache.delete(edit.id)
             edit.added?.let { added ->
@@ -393,7 +376,7 @@ class TrackRepository(
 
     /** The undo has lapsed. */
     fun commitEdit(edit: TrackEdit) {
-        scope.launch { edit.backup.delete() }
+        scope.launch(io) { edit.backup.delete() }
     }
 
     /**
@@ -402,11 +385,11 @@ class TrackRepository(
      * next launch.
      */
     fun summariseOlderRows() {
-        scope.launch {
+        scope.launch(io) {
             for (entity in dao.unsummarised()) {
                 runCatching {
                     val loaded = load(entity)
-                    dao.setSummary(summary(entity.id, loaded.track, loaded.profile))
+                    dao.setSummary(summaryUpdate(entity.id, loaded.track, loaded.profile))
                 }.onFailure { Log.d(TAG, "Could not summarise ${entity.displayName}", it) }
             }
         }
@@ -414,7 +397,7 @@ class TrackRepository(
 
     /** At launch: an undo from a previous process can no longer be taken. */
     fun purgeEdits() {
-        scope.launch { editsDir.listFiles().orEmpty().forEach(File::delete) }
+        scope.launch(io) { editsDir.listFiles().orEmpty().forEach(File::delete) }
     }
 
     private fun backUp(file: File, id: Long): File =
@@ -422,26 +405,16 @@ class TrackRepository(
 
     /**
      * Writes [source]'s points [keep], with the waypoints nearest them, to [destination], which
-     * may be [source]: via a temp file, so a crash never truncates it. Cached, and returned.
+     * may be [source]. Named in the file too, since export is a byte copy. Cached, and returned.
      */
     private fun rewrite(source: File, destination: File, loaded: LoadedTrack, keep: IntRange, name: String?): Track {
         val waypoints = loaded.track.waypoints.indices
             .filter { loaded.profile.indexOf(loaded.track.waypoints[it].point) in keep }
             .toSet()
-        val trimmed = File(destination.parentFile, "${destination.name}.trim")
-        val named = File(destination.parentFile, "${destination.name}.tmp")
-        try {
-            source.inputStream().buffered().use { input ->
-                trimmed.outputStream().buffered().use { output ->
-                    trimmer.trim(input, output, keepPoint = { it in keep }, keepWaypoint = { it in waypoints })
-                }
+        writeAtomically(destination) { output ->
+            source.inputStream().use { input ->
+                trimmer.trim(input, output, keepPoint = { it in keep }, keepWaypoint = { it in waypoints }, name = name)
             }
-            // Named in the file too, since export is a byte copy; the row has it if this can't.
-            val written = if (name != null && GpxNameRewriter.rewrite(trimmed, named, name)) named else trimmed
-            if (!written.renameTo(destination)) throw IOException("Could not write ${destination.name}")
-        } finally {
-            trimmed.delete()
-            named.delete()
         }
         val track = parse(destination.inputStream(), destination.name)
         loaded.id.takeIf { destination == source }?.let { cache.write(it, destination, track) }
@@ -451,38 +424,23 @@ class TrackRepository(
     private suspend fun entity(id: Long): TrackEntity =
         dao.byId(id) ?: throw TrackLoadException.Unreadable("No track with id $id")
 
-    private suspend fun newEntity(
-        file: File,
-        displayName: String,
-        track: Track,
-        profile: TrackProfile,
-    ) = TrackEntity(
+    private suspend fun newEntity(file: File, displayName: String, track: Track, profile: TrackProfile) = TrackEntity(
         colorIndex = leastUsedSlot(dao.colorUsage(), TrackEntity.NEUTRAL_SLOT),
         location = TrackFiles.location(appContext, file),
         displayName = displayName,
         trackName = track.name,
-        startedAtEpochMillis = null,
+        startedAtEpochMillis = profile.stats.startedAt?.toEpochMilli(),
         lastOpenedAtEpochMillis = System.currentTimeMillis(),
-        pointCount = 0,
-        distanceMeters = 0.0,
-        totalSeconds = 0.0,
-        movingSeconds = 0.0,
-        averageSpeedMps = 0.0,
-        ascentMeters = 0.0,
-        descentMeters = 0.0,
-        southLatitude = 0.0,
-        westLongitude = 0.0,
-        northLatitude = 0.0,
-        eastLongitude = 0.0,
-    ).summarising(track, profile)
+        summary = summaryOf(track, profile),
+    )
 
-    /** [track]'s stats and bounds, for row [id]. */
-    private fun summary(id: Long, track: Track, profile: TrackProfile): TrackSummary {
+    private fun summaryUpdate(id: Long, track: Track, profile: TrackProfile) =
+        SummaryUpdate(id, profile.stats.startedAt?.toEpochMilli(), summaryOf(track, profile))
+
+    private fun summaryOf(track: Track, profile: TrackProfile): TrackSummary {
         val stats = profile.stats
         val bounds = checkNotNull(track.points.bounds()) { "Summarising an empty track" }
         return TrackSummary(
-            id = id,
-            startedAtEpochMillis = stats.startedAt?.toEpochMilli(),
             pointCount = stats.pointCount,
             distanceMeters = stats.distanceMeters,
             totalSeconds = stats.totalDurationSeconds,
@@ -497,31 +455,6 @@ class TrackRepository(
         )
     }
 
-    private fun TrackEntity.summarising(track: Track, profile: TrackProfile): TrackEntity {
-        val summary = summary(id, track, profile)
-        return copy(
-            startedAtEpochMillis = summary.startedAtEpochMillis,
-            pointCount = summary.pointCount,
-            distanceMeters = summary.distanceMeters,
-            totalSeconds = summary.totalSeconds,
-            movingSeconds = summary.movingSeconds,
-            averageSpeedMps = summary.averageSpeedMps,
-            ascentMeters = summary.ascentMeters,
-            descentMeters = summary.descentMeters,
-            southLatitude = summary.southLatitude,
-            westLongitude = summary.westLongitude,
-            northLatitude = summary.northLatitude,
-            eastLongitude = summary.eastLongitude,
-        )
-    }
-
-    private val TrackEntity.summary: TrackSummary
-        get() = TrackSummary(
-            id, startedAtEpochMillis, pointCount, distanceMeters, totalSeconds, movingSeconds,
-            averageSpeedMps, ascentMeters, descentMeters, southLatitude, westLongitude, northLatitude, eastLongitude,
-        )
-
-    /** Reads and analyses [stream], closing it. */
     /** Reads [stream], closing it. */
     private fun parse(stream: InputStream, displayName: String): Track {
         val track: Track = stream.use(parser::parse)

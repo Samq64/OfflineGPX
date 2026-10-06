@@ -4,7 +4,10 @@ import android.content.ContentResolver
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.util.Log
+import androidx.core.util.AtomicFile
 import java.io.File
+import java.io.InputStream
+import java.io.OutputStream
 
 internal fun ContentResolver.displayName(uri: Uri): String? = try {
     query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
@@ -49,16 +52,49 @@ internal fun uniqueName(name: String?, extension: String, fallback: String, take
 private const val MAX_FILENAME_LENGTH = 80
 private val UNSAFE_FILENAME_CHARACTERS = Regex("""[\\/:*?"<>|]""")
 
+/** Replaces [file] only once [write] has finished and its bytes are synced, so a crash leaves the old one. */
+internal inline fun writeAtomically(file: File, write: (OutputStream) -> Unit) {
+    val atomic = AtomicFile(file)
+    val stream = atomic.startWrite()
+    try {
+        stream.buffered().let {
+            write(it)
+            it.flush()
+        }
+    } catch (e: Throwable) {
+        atomic.failWrite(stream)
+        throw e
+    }
+    atomic.finishWrite(stream)
+}
+
 /** Byte for byte, streamed; lengths first, so a mismatch is usually a stat. */
 internal fun sameBytes(a: File, b: File): Boolean {
     if (a.length() != b.length()) return false
-    a.inputStream().buffered().use { x ->
-        b.inputStream().buffered().use { y ->
+    a.inputStream().use { x ->
+        b.inputStream().use { y ->
+            val bufferX = ByteArray(CHUNK_BYTES)
+            val bufferY = ByteArray(CHUNK_BYTES)
             while (true) {
-                val byte = x.read()
-                if (byte != y.read()) return false
-                if (byte == -1) return true
+                val read = x.readChunk(bufferX)
+                if (read != y.readChunk(bufferY)) return false
+                if (read == 0) return true
+                // Past a short read, both still hold the previous chunk, which matched.
+                if (!bufferX.contentEquals(bufferY)) return false
             }
         }
     }
 }
+
+/** Fills [buffer] unless the stream ends first; the bytes read. */
+private fun InputStream.readChunk(buffer: ByteArray): Int {
+    var filled = 0
+    while (filled < buffer.size) {
+        val read = read(buffer, filled, buffer.size - filled)
+        if (read < 0) break
+        filled += read
+    }
+    return filled
+}
+
+private const val CHUNK_BYTES = 8 * 1024

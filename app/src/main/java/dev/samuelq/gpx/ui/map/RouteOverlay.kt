@@ -1,8 +1,6 @@
 package dev.samuelq.gpx.ui.map
 
 import androidx.compose.runtime.Immutable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import dev.samuelq.gpx.core.model.GeoBounds
 import dev.samuelq.gpx.core.model.TrackPoints

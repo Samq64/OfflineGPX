@@ -1,6 +1,7 @@
 package dev.samuelq.gpx.ui.library
 
 import dev.samuelq.gpx.data.db.TrackEntity
+import dev.samuelq.gpx.data.db.TrackSummary
 import dev.samuelq.gpx.data.settings.TrackOrder
 import dev.samuelq.gpx.data.settings.TrackSort
 import kotlin.test.Test
@@ -22,17 +23,7 @@ class TrackSortTest {
         trackName = trackName,
         startedAtEpochMillis = started,
         lastOpenedAtEpochMillis = opened,
-        pointCount = 2,
-        distanceMeters = meters,
-        totalSeconds = 0.0,
-        movingSeconds = 0.0,
-        averageSpeedMps = 0.0,
-        ascentMeters = 0.0,
-        descentMeters = 0.0,
-        southLatitude = 0.0,
-        westLongitude = 0.0,
-        northLatitude = 0.0,
-        eastLongitude = 0.0,
+        summary = TrackSummary(2, meters, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
     )
 
     private fun List<TrackEntity>.ids(sort: TrackSort) =

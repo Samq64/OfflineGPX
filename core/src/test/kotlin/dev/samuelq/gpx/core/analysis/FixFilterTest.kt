@@ -162,4 +162,33 @@ class FixFilterTest {
         assertTrue(measured in 1.2..1.6, "walked at $measured m/s, expected about 1.4")
         assertTrue(distance in 780.0..860.0, "walked $distance m, expected about 838")
     }
+
+    @Test
+    fun `an untimed stationary reading is not re-stamped`() {
+        val filter = FixFilter()
+        filter.pointFor(fix(0, 0.0).copy(time = null))
+
+        assertNull(filter.pointFor(fix(0, 1.0).copy(time = null)))
+        // Untimed movement can't be judged for speed, so any distance is accepted.
+        assertNotNull(filter.pointFor(fix(0, 10_000.0).copy(time = null)))
+    }
+
+    @Test
+    fun `a still reading after an untimed anchor is recorded at once`() {
+        val filter = FixFilter()
+        filter.pointFor(fix(0, 0.0).copy(time = null))
+
+        val still = assertNotNull(filter.pointFor(fix(1, 1.0)))
+        assertEquals(origin.plusSeconds(1), still.time)
+        assertEquals(51.5, still.latitude, 1e-9)
+    }
+
+    @Test
+    fun `a fix stamped no later than the anchor is judged on distance alone`() {
+        val filter = FixFilter()
+        filter.pointFor(fix(10, 0.0))
+
+        assertNotNull(filter.pointFor(fix(10, 1000.0)))
+        assertNotNull(filter.pointFor(fix(5, 2000.0)))
+    }
 }

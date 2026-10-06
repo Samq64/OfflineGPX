@@ -35,7 +35,9 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberBottomSheetScaffoldState
@@ -128,8 +130,6 @@ fun MapScreen(
     val density = LocalDensity.current
 
     val snackbarHostState = remember { SnackbarHostState() }
-    // By id: the prompt waits for the track to load, by which time the sheet may show another.
-    var renamingId by remember { mutableStateOf<Long?>(null) }
     // Never read here: that would recompose the screen every frame of a pan. ScaleBar reads it.
     val metersPerPixel = remember { mutableDoubleStateOf(0.0) }
 
@@ -155,64 +155,60 @@ fun MapScreen(
         focused != FocusedTrack.None -> SheetSubject.Track(focused)
         else -> null
     }
-    var selectedIndex by remember(focusedTrack?.id, isRecording) { mutableStateOf<Int?>(null) }
-    // The points a trim being set up keeps; null when not trimming.
-    var trimRange by remember(focusedTrack?.id) { mutableStateOf<IntRange?>(null) }
-    var tappedWaypoint by remember(focusedTrack?.id, isRecording) { mutableStateOf<Waypoint?>(null) }
+    // A new subject drops the selection, and a new track the trim.
+    val screen = rememberMapScreenState(focusedTrack?.id, isRecording) { viewModel.focus(it) }
     // Read only by the tooltip's layout, so panning doesn't recompose this screen.
     val tappedWaypointAt = remember { mutableStateOf(Offset.Zero) }
 
-    val renameFailed = stringResource(R.string.library_rename_failed)
-    val editFailed = stringResource(R.string.track_edit_failed)
-    val importFailed = stringResource(R.string.library_import_failed)
-    val stopToOpen = stringResource(R.string.record_stop_to_open)
-    val locationOff = stringResource(R.string.map_location_off)
-    val locationDenied = stringResource(R.string.map_location_denied)
-
-    val undo = stringResource(R.string.action_undo)
-
     // Replaces rather than queues: a stale answer to a tap is misleading. Replacing an undo
     // commits it.
-    fun say(message: String) = scope.launch {
+    fun say(message: String, openSettings: (() -> Unit)? = null) = scope.launch {
         snackbarHostState.currentSnackbarData?.dismiss()
-        snackbarHostState.showSnackbar(message)
+        val result = snackbarHostState.showSnackbar(
+            message,
+            actionLabel = openSettings?.let { resources.getString(R.string.action_settings) },
+            duration = if (openSettings == null) SnackbarDuration.Short else SnackbarDuration.Long,
+        )
+        if (result == SnackbarResult.ActionPerformed) openSettings?.invoke()
     }
 
     fun offerUndo(message: String, onUndo: () -> Unit, onCommit: () -> Unit = {}) = scope.launch {
-        snackbarHostState.showUndo(context, message, undo, onUndo, onCommit)
+        snackbarHostState.showUndo(context, message, resources.getString(R.string.action_undo), onUndo, onCommit)
     }
 
-    // A ride starts where the user is, which may be nowhere near the view; centred on its first point.
-    var centreOnRecording by remember { mutableStateOf(false) }
-    val requestRecording = rememberStartRecording(recorder, ::say)
+    val requestRecording = rememberLocationRequest(
+        LocationUse.Record,
+        isGpsEnabled = { recorder.isGpsEnabled },
+        onGranted = { recorder.start() },
+        say = ::say,
+    )
     val startRecording = {
-        centreOnRecording = true
+        screen.centreOnRecording = true
         requestRecording()
     }
+    // Centred on the recording's first point.
     val firstRecorded = trace.takeIf { isRecording && it.size > 0 }?.first()
-    LaunchedEffect(firstRecorded, centreOnRecording) {
-        val at = firstRecorded?.takeIf { centreOnRecording } ?: return@LaunchedEffect
-        if (mapController.centreOn(at) != CentreResult.NotLaidOut) centreOnRecording = false
+    LaunchedEffect(firstRecorded, screen.centreOnRecording) {
+        val at = firstRecorded?.takeIf { screen.centreOnRecording } ?: return@LaunchedEffect
+        if (mapController.centreOn(at) != CentreResult.NotLaidOut) screen.centreOnRecording = false
     }
 
-    // On the first fix after a tap; later ones move the dot, not the map.
-    var centreOnFix by remember { mutableStateOf(false) }
-    val showLocation = rememberShowLocation(
+    val showLocation = rememberLocationRequest(
+        LocationUse.Show,
         isGpsEnabled = { location.isGpsEnabled },
-        onShow = {
+        onGranted = {
             location.showLocation(true)
-            centreOnFix = true
+            screen.centreOnFix = true
         },
         say = ::say,
     )
-    val outside = stringResource(R.string.map_location_outside)
-    LaunchedEffect(position, centreOnFix) {
-        val at = position?.takeIf { centreOnFix } ?: return@LaunchedEffect
+    LaunchedEffect(position, screen.centreOnFix) {
+        val at = position?.takeIf { screen.centreOnFix } ?: return@LaunchedEffect
         when (mapController.centreOn(at)) {
-            CentreResult.Centred -> centreOnFix = false
+            CentreResult.Centred -> screen.centreOnFix = false
             CentreResult.OutOfBounds -> {
-                centreOnFix = false
-                say(outside)
+                screen.centreOnFix = false
+                say(resources.getString(R.string.map_location_outside))
             }
             CentreResult.NotLaidOut -> Unit
         }
@@ -221,21 +217,13 @@ fun MapScreen(
         derivedStateOf { (recording.value as? RecordingState.Active)?.waypoints.orEmpty() }
     }
 
-
-    // Tracks opened from the list or an intent are framed once loaded; map taps never move the camera.
-    var framing by remember { mutableStateOf<TrackRef?>(null) }
     LaunchedEffect(focused) {
-        if (focused is FocusedTrack.None || focused is FocusedTrack.Failed) framing = null
+        if (focused is FocusedTrack.None || focused is FocusedTrack.Failed) screen.framing = null
     }
 
     LaunchedEffect(pendingFocus) {
         pendingFocus?.let {
-            if (isRecording) {
-                say(stopToOpen)
-            } else {
-                framing = it
-                viewModel.focus(it)
-            }
+            if (!screen.open(it)) say(resources.getString(R.string.record_stop_to_open))
             onFocusConsumed()
         }
     }
@@ -247,13 +235,13 @@ fun MapScreen(
     LaunchedEffect(viewModel) {
         viewModel.messages.collect { message ->
             when (message) {
-                MapMessage.RenameFailed -> say(renameFailed)
-                MapMessage.ImportFailed -> say(importFailed)
+                MapMessage.RenameFailed -> say(resources.getString(R.string.library_rename_failed))
+                MapMessage.ImportFailed -> say(resources.getString(R.string.library_import_failed))
                 is MapMessage.Hidden -> offerUndo(
                     resources.getString(R.string.track_hidden, message.name),
                     onUndo = { viewModel.show(message.id) },
                 )
-                MapMessage.EditFailed -> say(editFailed)
+                MapMessage.EditFailed -> say(resources.getString(R.string.track_edit_failed))
                 is MapMessage.Edited -> offerUndo(
                     resources.getString(
                         if (message.edit.added != null) R.string.track_split_done else R.string.track_trimmed,
@@ -269,8 +257,8 @@ fun MapScreen(
     LaunchedEffect(location) {
         location.stopped.collect { reason ->
             when (reason) {
-                LocationStopped.OFF -> say(locationOff)
-                LocationStopped.DENIED -> say(locationDenied)
+                LocationStopped.OFF -> say(resources.getString(R.string.map_location_off))
+                LocationStopped.DENIED -> say(resources.getString(R.string.map_location_denied))
             }
         }
     }
@@ -296,9 +284,13 @@ fun MapScreen(
     val hasFocus = focused != FocusedTrack.None
     val hasSheet = subject != null
     // Kept while the sheet slides away, so it doesn't go blank first.
-    var lastSubject by remember { mutableStateOf<SheetSubject?>(null) }
-    LaunchedEffect(subject) { if (subject != null) lastSubject = subject }
-    val sheetSubject = subject ?: lastSubject.takeIf { sheetState.currentValue != SheetValue.Hidden }
+    val sheetSubject = rememberLastNonNull(subject)
+        .takeIf { subject != null || sheetState.currentValue != SheetValue.Hidden }
+    // Likewise the header, whose track is no longer focused.
+    val lastTitle = rememberLastNonNull(focusedTitle.takeIf { focusedTrack != null })
+    val lastColor = rememberLastNonNull(focusedColor.takeIf { focusedTrack != null })
+    val sheetTitle = if (subject == null) lastTitle.orEmpty() else focusedTitle
+    val sheetColor = if (subject == null) lastColor ?: focusedColor else focusedColor
 
     // Landscape uses a side panel; the sheet stays composed but hidden so rotation keeps the track.
     val windowSize = LocalWindowInfo.current.containerSize
@@ -310,7 +302,7 @@ fun MapScreen(
         if (hasSheet && !sidePanel) sheetState.partialExpand()
         else if (sheetState.currentValue != SheetValue.Hidden) sheetState.hide()
         // So a stale name prompt can't reappear when the track is reopened.
-        if (!hasFocus) renamingId = null
+        if (!hasFocus) screen.renamingId = null
     }
 
     // Swiping the sheet away clears focus. drop(1): the initial Hidden emission would clear a
@@ -332,12 +324,13 @@ fun MapScreen(
         }
     }
     // Declared after, so it's asked first: back leaves a trim before anything else.
-    BackHandler(enabled = trimRange != null) { trimRange = null }
+    BackHandler(enabled = screen.trimRange != null, onBack = screen::cancelTrim)
 
     // --- What the canvas draws, and how much room it has ---------------------------
 
     // The recording is kept out: it grows every few seconds and would rebuild every track.
     // Keyed on the focused id, not the track: a rebuilt overlay loses its measured extent.
+    val trimRange = screen.trimRange
     val overlays = remember(state.entities, state.geometry, focusedTrack?.id, focusedColor, palette, trimRange) {
         // Colour from the row, not its position, so it's stable across taps.
         val drawable = state.entities.mapNotNull { row ->
@@ -438,24 +431,17 @@ fun MapScreen(
         bottom = MapEdgePadding + controlsHeight + if (sidePanel) navigationBarInset else peekHeight,
     )
     val frameTrackId = focusedTrack?.id
-        ?.takeIf { id ->
-            when (val ref = framing) {
-                is TrackRef.Saved -> ref.id == id
-                // Imported as it opened, so its id wasn't known when asked for.
-                is TrackRef.Shared -> true
-                null -> false
-            }
-        }
+        ?.takeIf(screen::frames)
         // The peek is measured off the loaded sheet.
         ?.takeIf { sidePanel || peekContentHeight > 0.dp }
 
     // Null until a new import's row arrives.
     // Not the ends: each part needs two points.
-    val splittable = selectedIndex?.takeIf { focusedTrack != null && it in 1 until focusedTrack.profile.points.size - 1 }
+    val splittable = screen.selectedIndex?.takeIf { focusedTrack != null && it in 1 until focusedTrack.profile.points.size - 1 }
     val actions = focusedTrack?.let { state.entity(it.id) }?.let { entity ->
-        remember(entity.id, entity.displayName, entity.location, splittable) {
+        remember(entity.id, entity.displayName, entity.location, splittable, screen) {
             TrackActions(
-                onRename = { renamingId = entity.id },
+                onRename = { screen.renamingId = entity.id },
                 onShare = {
                     context.startActivity(
                         shareTrackIntent(context, entity.location, entity.trackName, entity.displayName)
@@ -475,10 +461,7 @@ fun MapScreen(
                         onCommit = { viewModel.commitDelete(entity.id) },
                     )
                 },
-                onTrim = {
-                    selectedIndex = null
-                    trimRange = 0..(focusedTrack.profile.points.size - 1)
-                },
+                onTrim = { screen.startTrim(focusedTrack.profile.points.size) },
                 onSplit = splittable?.let { at -> { viewModel.split(entity.id, at) } },
                 onDuplicate = { viewModel.duplicate(entity.id) },
             )
@@ -490,42 +473,40 @@ fun MapScreen(
     // A lambda, not a local fun: Compose keeps a `::` reference from the first composition,
     // still writing the state of a track no longer focused.
     val selectWaypoint: (Waypoint) -> Unit = { waypoint ->
-        tappedWaypoint = waypoint
         // Only the charted route's waypoints have a chart position.
         val charted = if (isRecording) {
             live?.takeIf { waypoint in liveWaypoints }
         } else {
             focusedTrack?.takeIf { waypoint in it.track.waypoints }?.profile
         }
-        charted?.indexOf(waypoint.point)?.takeIf { it >= 0 }?.let { selectedIndex = it }
+        screen.selectWaypoint(waypoint, charted?.indexOf(waypoint.point)?.takeIf { it >= 0 })
     }
 
-    val sheetBody: @Composable (SheetSubject, Dp, (() -> Unit)?, (Dp) -> Unit) -> Unit =
-        { current, maxHeight, onClose, onPeekHeightChange ->
+    val sheetBody: @Composable (SheetSubject, Dp, (Dp) -> Unit) -> Unit =
+        { current, maxHeight, onPeekHeightChange ->
             when (current) {
                 is SheetSubject.Track -> FocusedTrackContent(
                     focused = current.focused,
-                    title = focusedTitle,
-                    routeColor = focusedColor,
+                    title = sheetTitle,
+                    routeColor = sheetColor,
                     maxHeight = maxHeight,
-                    selectedIndex = selectedIndex,
-                    onSelectedIndexChange = { selectedIndex = it },
+                    selectedIndex = screen.selectedIndex,
+                    onSelectedIndexChange = { screen.selectedIndex = it },
                     preferTimeAxis = preferTimeAxis,
                     onAxisChange = { preferTimeAxis = it },
                     actions = actions,
                     onRetry = viewModel::retryFocus,
                     onDismiss = { viewModel.focus(null) },
-                    onClose = onClose,
                     onPeekHeightChange = onPeekHeightChange,
                     onSelectWaypoint = selectWaypoint,
                     trim = trimRange?.let { range ->
                         TrimControls(
                             range = range,
-                            onRangeChange = { trimRange = it },
-                            onCancel = { trimRange = null },
+                            onRangeChange = screen::setTrim,
+                            onCancel = screen::cancelTrim,
                             onSave = {
-                                focusedTrack?.let { viewModel.trim(it.id, range) }
-                                trimRange = null
+                                val kept = screen.finishTrim()
+                                if (kept != null && focusedTrack != null) viewModel.trim(focusedTrack.id, kept)
                             },
                         )
                     },
@@ -536,8 +517,8 @@ fun MapScreen(
                         state = active,
                         profile = live,
                         maxHeight = maxHeight,
-                        selectedIndex = selectedIndex,
-                        onSelectedIndexChange = { selectedIndex = it },
+                        selectedIndex = screen.selectedIndex,
+                        onSelectedIndexChange = { screen.selectedIndex = it },
                         useTimeAxis = preferTimeAxis,
                         onAxisChange = { preferTimeAxis = it },
                         onPeekHeightChange = onPeekHeightChange,
@@ -591,8 +572,7 @@ fun MapScreen(
                 if (sidePanel || sheetSubject == null) {
                     Spacer(Modifier.fillMaxWidth().height(TrackSheetPeekHeight))
                 } else {
-                    // Closable without a drag, as the side panel is.
-                    sheetBody(sheetSubject, sheetMaxHeight, { viewModel.focus(null) }) { peekContentHeight = it }
+                    sheetBody(sheetSubject, sheetMaxHeight) { peekContentHeight = it }
                 }
             },
         ) { padding ->
@@ -609,7 +589,7 @@ fun MapScreen(
                     contentDescription = stringResource(R.string.map_description),
                     controller = mapController,
                     focusedTrackId = if (isRecording) LIVE_TRACK_ID else focusedTrack?.id,
-                    selectedIndex = selectedIndex,
+                    selectedIndex = screen.selectedIndex,
                     markEnds = trimRange != null,
                     markerColor = when {
                         isRecording -> liveColor
@@ -622,38 +602,23 @@ fun MapScreen(
                     // Only the focused track's and the recording's.
                     trackWaypoints = focusedTrack?.track?.waypoints.orEmpty(),
                     liveWaypoints = liveWaypoints,
-                    onSelect = { trackId, index ->
-                        // An open note takes the first tap, so closing it never moves the marker.
-                        if (tappedWaypoint != null) tappedWaypoint = null
-                        // The slider sets a trim; a tap shouldn't drop it for another track.
-                        else if (trimRange != null) Unit
-                        else when (trackId) {
-                            LIVE_TRACK_ID, focusedTrack?.id -> selectedIndex = index
-                            // Not while recording, which holds the sheet.
-                            else -> if (!isRecording) viewModel.focus(TrackRef.Saved(trackId))
-                        }
-                    },
-                    onSelectNothing = {
-                        when {
-                            tappedWaypoint != null -> tappedWaypoint = null
-                            trimRange != null -> Unit
-                            isRecording -> selectedIndex = null
-                            else -> viewModel.focus(null)
-                        }
-                    },
+                    onSelect = screen::tapLine,
+                    onSelectNothing = screen::tapNothing,
                     onSelectWaypoint = selectWaypoint,
-                    followedWaypoint = tappedWaypoint,
+                    followedWaypoint = screen.tappedWaypoint,
                     onFollowedWaypointMove = { tappedWaypointAt.value = it },
                     contentPadding = canvasPadding,
                     frameTrackId = frameTrackId,
                     framePadding = framePadding,
-                    onFramed = { framing = null },
+                    onFramed = { screen.framing = null },
                     sheetHeight = sheetCover,
                     panelWidth = panelCover,
                     // Distinct from land so ground no file covers reads as empty.
-                    backgroundColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                    landColor = MaterialTheme.colorScheme.surfaceContainerLowest,
-                    labelColor = MaterialTheme.colorScheme.onSurface,
+                    basemapColors = BasemapColors(
+                        background = MaterialTheme.colorScheme.surfaceContainerLow,
+                        land = MaterialTheme.colorScheme.surfaceContainerLowest,
+                        label = MaterialTheme.colorScheme.onSurface,
+                    ),
                     onScaleChange = { metersPerPixel.doubleValue = it },
                     // Resume where the camera was left rather than re-fitting.
                     initialCamera = viewModel.lastCamera,
@@ -661,40 +626,35 @@ fun MapScreen(
                     modifier = Modifier.fillMaxSize(),
                 )
 
-                tappedWaypoint?.let { tapped ->
+                screen.tappedWaypoint?.let { tapped ->
                     WaypointTooltip(tapped, tipAt = { tappedWaypointAt.value })
                 }
 
-                // First run only; hidden-by-choice gets the hint below.
-                val mapIsEmpty = overlays.isEmpty() && liveOverlay == null &&
-                    !state.loading && basemaps.isEmpty() && state.totalCount == 0
-
-                val allHidden = overlays.isEmpty() && liveOverlay == null &&
-                    !state.loading && basemaps.isEmpty() && state.totalCount > 0
-
+                val hasRoutes = overlays.isNotEmpty() || liveOverlay != null
                 // Nothing to measure against without a basemap or route.
-                val hasContent = overlays.isNotEmpty() || liveOverlay != null || basemaps.isNotEmpty()
+                val hasContent = hasRoutes || basemaps.isNotEmpty()
 
                 when {
-                    overlays.isNotEmpty() || liveOverlay != null -> Unit
+                    hasRoutes -> Unit
 
                     state.loading -> Box(Modifier.fillMaxSize(), Alignment.Center) {
                         val loading = stringResource(R.string.map_loading)
                         LinearProgressIndicator(Modifier.padding(32.dp).semantics { contentDescription = loading })
                     }
 
-                    mapIsEmpty -> EmptyState(
+                    hasContent -> Unit
+
+                    // First run only; hidden-by-choice gets the hint.
+                    state.totalCount == 0 -> EmptyState(
                         onImportMap = onImportMap,
                         onImportTrack = { trackImporter.launch(arrayOf("*/*")) },
                         modifier = Modifier.fillMaxSize(),
                     )
 
-                    allHidden -> ShowTracksHint(
+                    else -> ShowTracksHint(
                         onClick = onOpenList,
                         modifier = Modifier.align(Alignment.Center),
                     )
-
-                    else -> Unit
                 }
 
                 if (hasContent && showZoomButtons) {
@@ -739,7 +699,7 @@ fun MapScreen(
                                             showLocation()
                                         } else {
                                             location.showLocation(false)
-                                            centreOnFix = false
+                                            screen.centreOnFix = false
                                         }
                                     },
                                 )
@@ -755,7 +715,7 @@ fun MapScreen(
                     width = panelWidth,
                     modifier = Modifier.align(Alignment.TopStart),
                 ) { shown ->
-                    sheetBody(shown, Dp.Unspecified, { viewModel.focus(null) }) {}
+                    sheetBody(shown, Dp.Unspecified) {}
                 }
 
                 // Here, not the scaffold's slot, which pins it to the bottom edge over the record
@@ -784,14 +744,14 @@ fun MapScreen(
     }
 
     // Only once loaded, which is what knows the name to offer.
-    focusedRow?.takeIf { it.id == renamingId }?.let { track ->
+    focusedRow?.takeIf { it.id == screen.renamingId }?.let { track ->
         TrackNameDialog(
             initialName = editableTrackName(track.trackName, track.displayName),
             // Prefilled, not a hint: dismissing keeps what's shown.
-            onDismiss = { renamingId = null },
+            onDismiss = { screen.renamingId = null },
             onConfirm = { name ->
                 viewModel.rename(track.id, name)
-                renamingId = null
+                screen.renamingId = null
             },
         )
     }
@@ -806,9 +766,6 @@ private sealed interface SheetSubject {
 
 /** The whole of a track being trimmed, dimmed under the part kept. */
 private const val TRIM_CUT_ID = Long.MIN_VALUE + 1
-
-/** Live recording layer id; it has no library row. */
-private const val LIVE_TRACK_ID = Long.MIN_VALUE
 
 private val MapEdgePadding = 24.dp
 

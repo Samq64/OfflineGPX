@@ -17,6 +17,7 @@ import org.oscim.tiling.TileDataSink
 import org.oscim.tiling.source.mapfile.MapFile
 import org.oscim.tiling.source.mapfile.MapFileTileSource
 import org.oscim.tiling.source.mapfile.MultiMapFileTileSource
+import org.oscim.tiling.source.mapfile.header.SubFileParameter
 import org.oscim.utils.geom.TileClipper
 import java.io.ByteArrayInputStream
 import java.io.IOException
@@ -44,18 +45,12 @@ internal class GeneratedRenderTheme(xml: String) : ThemeFile {
     override fun setMapsforgeTheme(value: Boolean) { mapsforgeTheme = value }
 }
 
-/** Whether VTM can read this file at all. Opened and closed again; the tile layer reopens it. */
-internal fun OfflineMap.opens(): Boolean = MapFileTileSource().run {
-    setMapFile(file.path)
-    open().isSuccess.also { close() }
-}
-
 /**
  * How far in the camera may go. From the deepest zoom the file stores, not the one it
  * advertises: published files keep z14 tiles and claim z21.
  */
 internal val OfflineMap.maxViewZoom: Int
-    get() = (header.baseZoom + OVERZOOM_ALLOWANCE).coerceAtMost(Viewport.MAX_ZOOM_LEVEL)
+    get() = (baseZoom + OVERZOOM_ALLOWANCE).coerceAtMost(Viewport.MAX_ZOOM_LEVEL)
 
 /**
  * The maps as one source, each file's data cut to its own box: low-zoom tiles carry towns
@@ -81,25 +76,25 @@ internal class ClippedMapSource(private val maps: List<OfflineMap>) : MultiMapFi
 
 /** One file as a loader thread reads it; each thread gets its own handles. */
 private class OpenedMap(val file: MapFile, val map: OfflineMap) {
-    val box = map.header.let { BoundingBox(it.minLatitude, it.minLongitude, it.maxLatitude, it.maxLongitude) }
+    val box: BoundingBox = map.bounds
 
-    private val indexes = HashMap<SubFile, TileIndex?>()
+    private val indexes = HashMap<SubFileParameter, TileIndex?>()
 
     /**
      * Whether the writer marked the tile under tile pixel [x], [y] all water. True when
      * unknown, which keeps the sea as drawn.
      */
     fun isWater(tile: Tile, x: Float, y: Float): Boolean {
-        val subFile = map.header.subFileFor(tile.zoomLevel.toInt()) ?: return true
+        val subFile = map.subFileFor(tile.zoomLevel.toInt())
         val index = indexes.getOrPut(subFile) {
             try {
-                TileIndex(map.file, map.header, subFile)
+                TileIndex(map.file, subFile)
             } catch (_: IOException) {
                 null
             }
         } ?: return true
         // Pixel to its tile at the sub-file's base zoom, which may be above or below this one.
-        val shift = subFile.baseZoom - tile.zoomLevel
+        val shift = subFile.baseZoomLevel - tile.zoomLevel
         val px = (tile.tileX * Tile.SIZE + x.toDouble()) / Tile.SIZE
         val py = (tile.tileY * Tile.SIZE + y.toDouble()) / Tile.SIZE
         val scale = 2.0.pow(shift)

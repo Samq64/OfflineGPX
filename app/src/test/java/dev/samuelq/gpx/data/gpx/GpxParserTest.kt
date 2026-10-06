@@ -186,4 +186,149 @@ class GpxParserTest {
 
         assertEquals(listOf("Summit", "Description", "Comment", null), track.waypoints.map { it.name })
     }
+
+    @Test
+    fun `reads a waypoint's elevation and time, skipping what it doesn't use`() {
+        val waypoint = parse(
+            """
+            <gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+              <wpt lat="1" lon="2"><ele>12.5</ele><time>2026-05-01T08:00:00Z</time><sym>Flag</sym></wpt>
+              <wpt lat="1"><name>No longitude</name></wpt>
+              <wpt lat="95" lon="2"><name>Off the globe</name></wpt>
+            </gpx>
+            """.trimIndent()
+        ).waypoints.single()
+
+        assertEquals(12.5, waypoint.point.elevation)
+        assertEquals(Instant.parse("2026-05-01T08:00:00Z"), waypoint.point.time)
+        assertNull(waypoint.name)
+    }
+
+    @Test
+    fun `the first track's name and description win, over the metadata's`() {
+        val track = parse(
+            """
+            <gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+              <metadata><name>Metadata</name><author>Someone</author></metadata>
+              <trk><name>First</name><desc>First desc</desc><type>ride</type><trkseg><trkpt lat="1" lon="1"/></trkseg></trk>
+              <trk><name>Second</name><desc>Second desc</desc><trkseg><trkpt lat="2" lon="2"/></trkseg></trk>
+              <rte><name>Route</name><rtept lat="3" lon="3"/></rte>
+              <extensions><x/></extensions>
+            </gpx>
+            """.trimIndent()
+        )
+
+        assertEquals("First", track.name)
+        assertEquals("First desc", track.description)
+        assertEquals(3, track.points.segmentCount)
+    }
+
+    @Test
+    fun `falls back to the metadata name, and skips a route's unreadable points`() {
+        val track = parse(
+            """
+            <gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+              <metadata><name>Metadata</name></metadata>
+              <rte><rtept lat="x" lon="3"/><rtept lat="4" lon="4"><extensions/></rtept></rte>
+            </gpx>
+            """.trimIndent()
+        )
+
+        assertEquals("Metadata", track.name)
+        assertEquals(1, track.points.size)
+    }
+
+    @Test
+    fun `an empty or unclosed element is read as absent`() {
+        val track = parse(
+            """
+            <gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1"><trk><name/><trkseg>
+              <trkpt lat="1" lon="1"><ele></ele><time/></trkpt>
+              <trkpt lat="2" lon="2"><ele>nope</ele></trkpt>
+            """.trimIndent()
+        )
+
+        assertNull(track.name)
+        assertEquals(2, track.points.size)
+        assertNull(track.points[0].elevation)
+        assertNull(track.points[0].time)
+        assertNull(track.points[1].elevation)
+    }
+
+    @Test
+    fun `malformed XML is a parse error, not a crash`() {
+        val error = assertFailsWith<GpxParseException> {
+            parse("""<gpx><trk><trkseg><trkpt lat="1" lon="1"></trkseg></trk></gpx>""")
+        }
+        assertTrue(error.message!!.startsWith("Malformed XML"))
+        assertFailsWith<GpxParseException> { parse("not xml at all") }
+    }
+
+    @Test
+    fun `a parser that can't start is a parse error`() {
+        val failing = GpxParser {
+            object : KXmlParser() {
+                override fun setInput(input: java.io.InputStream?, encoding: String?) =
+                    throw org.xmlpull.v1.XmlPullParserException("no input")
+            }
+        }
+        assertFailsWith<GpxParseException> { failing.parse("<gpx/>".byteInputStream()) }
+    }
+
+    @Test
+    fun `a lowercase z is still UTC`() {
+        assertEquals(Instant.parse("2026-05-01T08:00:00Z"), GpxParser.parseGpxTime("2026-05-01T08:00:00z"))
+    }
+
+    @Test
+    fun `a segment is capped, and later segments still read`() {
+        val cap = GpxParser.MAX_POINTS_PER_SEGMENT
+        val track = parser.parse(oversizedGpx(cap + 2))
+
+        assertEquals(2, track.points.segmentCount)
+        assertEquals(cap + 1, track.points.size)
+        assertEquals(cap, track.points.segmentStart(1))
+        assertEquals(50.0, track.points.latitude(cap))
+    }
+
+    @Test
+    fun `unknown children of a route or segment are skipped`() {
+        val track = parse(
+            """
+            <gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+              <rte><desc>Route</desc><rtept lat="1" lon="1"/></rte>
+              <trk><trkseg><trkpt lat="2" lon="2"/><trkpt lat="3"/><extensions><x/></extensions></trkseg></trk>
+            </gpx>
+            """.trimIndent()
+        )
+
+        assertEquals(2, track.points.size)
+        assertEquals(2, track.points.segmentCount)
+    }
+
+    @Test
+    fun `a file cut off inside an unknown element keeps what came before`() {
+        val track = parse("""<gpx><trk><trkseg><trkpt lat="1" lon="1"/></trkseg></trk><extensions><a><b>""")
+        assertEquals(1, track.points.size)
+    }
+}
+
+/** A `<trkseg>` of [count] points, then one more segment of one point at 50, 50; streamed. */
+internal fun oversizedGpx(count: Int): java.io.InputStream {
+    val head = """<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1"><trk><trkseg>""".toByteArray()
+    val point = """<trkpt lat="1" lon="1"/>""".toByteArray()
+    val tail = """</trkseg><trkseg><trkpt lat="50" lon="50"/></trkseg></trk></gpx>""".toByteArray()
+    val total = head.size.toLong() + point.size.toLong() * count + tail.size
+    return object : java.io.InputStream() {
+        var at = 0L
+        override fun read(): Int {
+            if (at >= total) return -1
+            val i = at++
+            return when {
+                i < head.size -> head[i.toInt()]
+                i < total - tail.size -> point[((i - head.size) % point.size).toInt()]
+                else -> tail[(i - (total - tail.size)).toInt()]
+            }.toInt() and 0xff
+        }
+    }.buffered(1 shl 16)
 }

@@ -22,8 +22,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -43,12 +41,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SearchBarDefaults
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TriStateCheckbox
@@ -96,7 +93,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.state.ToggleableState
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -152,31 +148,17 @@ fun LibraryScreen(
     BackHandler(enabled = searching) { closeSearch() }
     BackHandler(enabled = selection.isNotEmpty()) { viewModel.clearSelection() }
 
-    val importFailed = stringResource(R.string.library_import_failed)
-    val exportFailed = stringResource(R.string.library_export_failed)
-    val renameFailed = stringResource(R.string.library_rename_failed)
-    val duplicateFailed = stringResource(R.string.library_duplicate_failed)
     val context = LocalContext.current
-    // Not `context.resources`, which misses a locale change while the screen is up.
+    // Not stringResource: a long-lived collector would keep the old locale.
     val resources = LocalResources.current
     val layoutDirection = LocalLayoutDirection.current
-    val importedAll: (Int, Int) -> String = { imported, requested ->
-        if (imported == requested) {
-            resources.getQuantityString(R.plurals.library_imported_all, imported, imported)
-        } else {
-            resources.getString(R.string.library_imported_some, imported, requested)
-        }
-    }
-    val exportedAll: (Int, Int) -> String = { written, requested ->
-        if (written == requested) {
-            resources.getQuantityString(R.plurals.library_exported_all, written, written)
-        } else {
-            resources.getString(R.string.library_exported_some, written, requested)
-        }
-    }
+    // Plural on the total: "1 of 3 tracks".
+    fun allOrSome(done: Int, requested: Int, all: Int, some: Int) =
+        if (done == requested) resources.getQuantityString(all, done, done)
+        else resources.getQuantityString(some, requested, done, requested)
+
     var renaming by remember { mutableStateOf<TrackEntity?>(null) }
     val scope = rememberCoroutineScope()
-    val undo = stringResource(R.string.action_undo)
 
     // A track just changed or brought back, scrolled to once its row is in the list.
     var reveal by remember { mutableStateOf<Long?>(null) }
@@ -197,7 +179,7 @@ fun LibraryScreen(
                 message = ids.singleOrNull()?.let { id -> tracks.firstOrNull { it.id == id } }
                     ?.let { resources.getString(R.string.deleted_named, trackTitle(it.trackName, it.displayName)) }
                     ?: resources.getQuantityString(R.plurals.library_deleted, ids.size, ids.size),
-                undoLabel = undo,
+                undoLabel = resources.getString(R.string.action_undo),
                 onUndo = {
                     viewModel.undoDelete(ids)
                     reveal = ids.first()
@@ -217,20 +199,21 @@ fun LibraryScreen(
     ) { folder -> viewModel.finishExportAll(folder) }
 
     LaunchedEffect(viewModel) {
+        suspend fun say(message: String) = snackbarHostState.showSnackbar(message)
         viewModel.events.collect { event ->
             when (event) {
                 is LibraryEvent.Open -> onOpenTrack(event.id)
                 is LibraryEvent.Duplicated -> reveal = event.id
-                LibraryEvent.ImportFailed -> snackbarHostState.showSnackbar(importFailed)
-                is LibraryEvent.ImportedAll -> snackbarHostState.showSnackbar(
-                    importedAll(event.imported, event.requested)
+                LibraryEvent.ImportFailed -> say(resources.getString(R.string.library_import_failed))
+                is LibraryEvent.ImportedAll -> say(
+                    allOrSome(event.imported, event.requested, R.plurals.library_imported_all, R.plurals.library_imported_some)
                 )
-                LibraryEvent.ExportFailed -> snackbarHostState.showSnackbar(exportFailed)
-                is LibraryEvent.ExportedAll -> snackbarHostState.showSnackbar(
-                    exportedAll(event.written, event.requested)
+                LibraryEvent.ExportFailed -> say(resources.getString(R.string.library_export_failed))
+                is LibraryEvent.ExportedAll -> say(
+                    allOrSome(event.written, event.requested, R.plurals.library_exported_all, R.plurals.library_exported_some)
                 )
-                LibraryEvent.RenameFailed -> snackbarHostState.showSnackbar(renameFailed)
-                LibraryEvent.DuplicateFailed -> snackbarHostState.showSnackbar(duplicateFailed)
+                LibraryEvent.RenameFailed -> say(resources.getString(R.string.library_rename_failed))
+                LibraryEvent.DuplicateFailed -> say(resources.getString(R.string.library_duplicate_failed))
             }
         }
     }
@@ -276,42 +259,28 @@ fun LibraryScreen(
                         }
                     },
                     actions = {
+                        // Shown while loading so icons don't pop in during the slide. Import is in
+                        // the menu then: four icons wrapped the title on narrow screens.
                         if (loaded == null || tracks.isNotEmpty()) {
                             IconButton(onClick = { searching = true }) {
                                 Icon(Icons.Default.Search, stringResource(R.string.library_search))
                             }
-                        }
-                        if (loaded == null || tracks.isNotEmpty()) {
                             SortMenu(order, onSort = viewModel::setSort, onDescending = viewModel::setSortDescending)
-                        }
-                        // Shown while loading so icons don't pop in during the slide. Import is in
-                        // the menu then: four icons wrapped the title on narrow screens.
-                        if (loaded == null || tracks.isNotEmpty()) {
                             IconButton(onClick = { menuOpen = true }) {
                                 Icon(Icons.Default.MoreVert, stringResource(R.string.library_more))
                             }
                             DropdownMenu(menuOpen, onDismissRequest = { menuOpen = false }) {
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.library_import)) },
+                                @Composable
+                                fun Item(label: Int, onClick: () -> Unit) = DropdownMenuItem(
+                                    text = { Text(stringResource(label)) },
                                     onClick = {
                                         menuOpen = false
-                                        picker.launch(arrayOf("*/*"))
+                                        onClick()
                                     },
                                 )
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.library_show_all)) },
-                                    onClick = {
-                                        menuOpen = false
-                                        viewModel.setAllVisible(true)
-                                    },
-                                )
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.library_hide_all)) },
-                                    onClick = {
-                                        menuOpen = false
-                                        viewModel.setAllVisible(false)
-                                    },
-                                )
+                                Item(R.string.library_import) { picker.launch(arrayOf("*/*")) }
+                                Item(R.string.library_show_all) { viewModel.setAllVisible(true) }
+                                Item(R.string.library_hide_all) { viewModel.setAllVisible(false) }
                             }
                         }
                         // Empty, the page itself offers the import.
@@ -418,7 +387,7 @@ private fun SelectionBar(
         ),
         title = {
             Text(
-                stringResource(R.string.library_selected, count),
+                pluralStringResource(R.plurals.library_selected, count, count),
                 Modifier.semantics { liveRegion = LiveRegionMode.Polite },
             )
         },
@@ -689,7 +658,7 @@ private fun NoMatches(query: String, modifier: Modifier = Modifier) {
     }
 }
 
-/** Not Material's `SearchBar`, which expands for suggestions there are none of. */
+/** Material's input field in a plain bar: `SearchBar` itself expands for suggestions there are none of. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SearchBar(
@@ -706,21 +675,18 @@ private fun SearchBar(
     TopAppBar(
         windowInsets = BarInsets,
         title = {
-            TextField(
-                value = query,
-                onValueChange = onQueryChange,
-                placeholder = { Text(stringResource(R.string.library_search)) },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = { keyboard?.hide() }),
-                colors = TextFieldDefaults.colors(
+            SearchBarDefaults.InputField(
+                query = query,
+                onQueryChange = onQueryChange,
+                onSearch = { keyboard?.hide() },
+                expanded = false,
+                onExpandedChange = {},
+                placeholder = { Text(hint) },
+                colors = SearchBarDefaults.inputFieldColors(
                     focusedContainerColor = Color.Transparent,
                     unfocusedContainerColor = Color.Transparent,
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
                 ),
                 modifier = Modifier
-                    .fillMaxWidth()
                     .focusRequester(focusRequester)
                     .semantics { contentDescription = hint },
             )

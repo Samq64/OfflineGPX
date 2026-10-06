@@ -3,9 +3,8 @@ package dev.samuelq.gpx.ui.map
 import androidx.compose.ui.graphics.Color
 import dev.samuelq.gpx.core.model.TrackPoint
 import dev.samuelq.gpx.core.model.TrackPoints
-import dev.samuelq.gpx.data.map.OfflineMap
-import dev.samuelq.gpx.data.map.MapFileHeader
-import java.io.File
+import dev.samuelq.gpx.data.map.mapFile
+import dev.samuelq.gpx.data.map.offlineMap
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -25,18 +24,7 @@ class MapExtentTest {
         west: Double,
         north: Double,
         east: Double,
-    ) = OfflineMap(
-        file = File("test.map"),
-        header = MapFileHeader(
-            baseZoom = 14,
-            minLongitude = west,
-            minLatitude = south,
-            maxLongitude = east,
-            maxLatitude = north,
-            attribution = null,
-        ),
-        sizeBytes = 0,
-    )
+    ) = offlineMap(mapFile(south, west, north, east, baseZoom = 2))
 
     @Test
     fun `a route's box is the extremes of its positions`() {
@@ -101,5 +89,22 @@ class MapExtentTest {
         )
         assertEquals(51.5, extent.minLatitude)
         assertEquals(52.0, extent.maxLatitude)
+    }
+
+    @Test
+    fun `a loaded track's overlay draws its profile's points, with known bounds unmeasured`() {
+        val points = TrackPoints.of(listOf(TrackPoint(1.0, 1.0, null, null), TrackPoint(2.0, 2.0, null, null)))
+        val track = dev.samuelq.gpx.core.model.Track(name = null, points = points)
+        val loaded = dev.samuelq.gpx.data.track.LoadedTrack(
+            id = 9, displayName = "a.gpx", track = track,
+            profile = dev.samuelq.gpx.core.analysis.TrackAnalyzer.analyze(track),
+        )
+        val known = dev.samuelq.gpx.core.model.GeoBounds(0.0, 0.0, 5.0, 5.0)
+
+        val overlay = loaded.toOverlay(Color.Blue, known)
+        assertEquals(9L, overlay.trackId)
+        assertEquals(2, overlay.points.size)
+        assertEquals(known, overlay.bounds)
+        assertEquals(2.0, assertNotNull(loaded.toOverlay(Color.Blue).bounds).northLatitude)
     }
 }

@@ -388,27 +388,20 @@ private fun ScrubberLayer(
                 }
             },
     ) {
-        val index = selectedIndex ?: return@Canvas
-        if (index !in 0 until series.size) return@Canvas
-
         val plot = geometry.plotRect(size)
-        val x = plot.xFor(series.x[index], render.xScale)
-        if (x < plot.left - 1f || x > plot.right + 1f) return@Canvas
+        val point = render.scrubberAt(selectedIndex, plot) ?: return@Canvas
 
         drawLine(
             color = chartColors.axis,
-            start = Offset(x, plot.top),
-            end = Offset(x, plot.bottom),
+            start = Offset(point.x, plot.top),
+            end = Offset(point.x, plot.bottom),
             strokeWidth = GridWidth.toPx(),
         )
+        if (point.y.isNaN()) return@Canvas
 
-        val value = series.y[index]
-        if (value.isNaN()) return@Canvas
-
-        val y = plot.yFor(value, render.yScale)
         // Surface ring keeps the dot legible on the line.
-        drawCircle(ringColor, MarkerRadius.toPx() + SurfaceRing.toPx(), Offset(x, y))
-        drawCircle(series.color, MarkerRadius.toPx(), Offset(x, y))
+        drawCircle(ringColor, MarkerRadius.toPx() + SurfaceRing.toPx(), point)
+        drawCircle(series.color, MarkerRadius.toPx(), point)
     }
 }
 
@@ -424,15 +417,11 @@ private fun ChartTooltip(
 ) {
     val series = render.series
     val index = selectedIndex ?: return
-    if (index !in 0 until series.size) return
-    val value = series.y[index]
-    if (value.isNaN()) return
     if (boxSize.width <= 0 || boxSize.height <= 0) return
 
     val plot = remember(geometry, boxSize) { geometry.plotRect(boxSize.toSize()) }
-    val x = plot.xFor(series.x[index], render.xScale)
-    if (x < plot.left - 1f || x > plot.right + 1f) return
-    val y = plot.yFor(value, render.yScale)
+    val (x, y) = render.scrubberAt(index, plot)?.takeUnless { it.y.isNaN() } ?: return
+    val value = series.y[index]
 
     val density = LocalDensity.current
     val half = with(density) { (MarkerRadius + SurfaceRing).toPx() }
@@ -514,6 +503,14 @@ private fun Rect.xFor(value: Float, scale: Scale): Float =
 
 private fun Rect.yFor(value: Float, scale: Scale): Float =
     bottom - ((value - scale.min) / scale.span) * height
+
+/** Where the scrubber at [index] meets the line, null outside the plot; y is NaN in a gap. */
+private fun ChartRender.scrubberAt(index: Int?, plot: Rect): Offset? {
+    if (index == null || index !in 0 until series.size) return null
+    val x = plot.xFor(series.x[index], xScale)
+    if (x < plot.left - 1f || x > plot.right + 1f) return null
+    return Offset(x, plot.yFor(series.y[index], yScale))
+}
 
 private fun Rect.valueForX(px: Float, scale: Scale): Float =
     scale.min + ((px - left) / width) * scale.span

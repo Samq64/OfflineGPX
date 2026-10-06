@@ -45,7 +45,7 @@ sealed interface RecordingEvent {
 }
 
 /** Where the UI sends commands to [RecordingService] and observes what it publishes. */
-class RecordingController(context: Context) {
+class RecordingController(context: Context, private val locationSource: LocationSource) {
 
     private val appContext = context.applicationContext
 
@@ -78,7 +78,7 @@ class RecordingController(context: Context) {
     }
 
     /** Not cached: location can be toggled at any time. */
-    val isGpsEnabled: Boolean get() = LocationSource(appContext).isGpsEnabled
+    val isGpsEnabled: Boolean get() = locationSource.isGpsEnabled
 
     fun start() = send(RecordingService.ACTION_START)
     fun pause() = send(RecordingService.ACTION_PAUSE)

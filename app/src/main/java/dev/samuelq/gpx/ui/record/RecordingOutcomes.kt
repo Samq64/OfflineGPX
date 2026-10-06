@@ -4,7 +4,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalResources
-import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.samuelq.gpx.R
@@ -27,11 +26,10 @@ fun RecordingOutcomes(
 ) {
     // Not context.getString: a long-lived collector would keep the old locale.
     val resources = LocalResources.current
-    val discarded = stringResource(R.string.record_discarded)
-    val saveFailed = stringResource(R.string.record_save_failed)
     // By the name it would have been saved as; a blank one would have been the default.
     fun discardedNamed(name: String) =
-        if (name.isBlank()) discarded else resources.getString(R.string.record_discarded_named, name.trim())
+        if (name.isBlank()) resources.getString(R.string.record_discarded)
+        else resources.getString(R.string.record_discarded_named, name.trim())
 
     LaunchedEffect(recorder) {
         recorder.events.collect { event ->
@@ -43,7 +41,7 @@ fun RecordingOutcomes(
                         { recovery.restoreDiscarded(recording) },
                         { recovery.forgetDiscarded(recording) },
                     )
-                } ?: say(discarded)
+                } ?: say(resources.getString(R.string.record_discarded))
                 is RecordingEvent.Failed -> say(resources.getString(event.messageRes))
             }
         }
@@ -53,7 +51,7 @@ fun RecordingOutcomes(
         recovery.events.collect { event ->
             when (event) {
                 is RecoveryEvent.Saved -> onSaved(event.id)
-                RecoveryEvent.Failed -> say(saveFailed)
+                RecoveryEvent.Failed -> say(resources.getString(R.string.record_save_failed))
                 is RecoveryEvent.AbandonedDiscarded -> offerUndo(
                     discardedNamed(event.name.ifBlank { event.recording.defaultName }),
                     { recovery.restoreAbandoned(event.recording, event.name) },

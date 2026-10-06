@@ -12,6 +12,7 @@ class GpxApplication : Application() {
         super.onCreate()
 
         container = AppContainer(this)
+        container.warmSettings()
         container.claimAbandonedRecording()
         container.loadOfflineMaps()
         container.trackRepository.purgeEdits()

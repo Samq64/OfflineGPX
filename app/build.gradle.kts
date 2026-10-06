@@ -102,6 +102,9 @@ android {
         }
     }
 
+    // android.jar's stubs throw; defaults let code that logs on failure run in JVM tests.
+    testOptions.unitTests.isReturnDefaultValues = true
+
     // Skip the dependency-metadata blob Play would embed.
     dependenciesInfo {
         includeInApk = false

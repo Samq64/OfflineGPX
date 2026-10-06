@@ -22,11 +22,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -62,7 +59,6 @@ internal fun FocusedTrackContent(
     actions: TrackActions?,
     onRetry: () -> Unit,
     onDismiss: () -> Unit,
-    onClose: (() -> Unit)?,
     onPeekHeightChange: (Dp) -> Unit,
     onSelectWaypoint: (Waypoint) -> Unit,
     trim: TrimControls? = null,
@@ -85,7 +81,8 @@ internal fun FocusedTrackContent(
             useTimeAxis = preferTimeAxis && focused.track.profile.hasTime,
             onAxisChange = onAxisChange,
             onPeekHeightChange = onPeekHeightChange,
-            onClose = onClose,
+            // Closable without a drag, as the side panel is.
+            onClose = onDismiss,
             actions = actions,
             onSelectWaypoint = onSelectWaypoint,
             trim = trim,
@@ -102,8 +99,7 @@ internal fun <T : Any> SidePanel(
     modifier: Modifier = Modifier,
     content: @Composable (T) -> Unit,
 ) {
-    var shown by remember { mutableStateOf<T?>(null) }
-    LaunchedEffect(subject) { if (subject != null) shown = subject }
+    val shown = rememberLastNonNull(subject)
     val fromStart = if (LocalLayoutDirection.current == LayoutDirection.Ltr) -1 else 1
     AnimatedVisibility(
         visible = visible,
@@ -121,10 +117,23 @@ internal fun <T : Any> SidePanel(
                     .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Start))
                     .padding(top = 16.dp),
             ) {
-                (subject ?: shown)?.let { content(it) }
+                shown?.let { content(it) }
             }
         }
     }
+}
+
+/** [value], or while it's null the last value that wasn't: content kept while it animates away. */
+@Composable
+internal fun <T : Any> rememberLastNonNull(value: T?): T? {
+    val last = remember { LastValue<T>() }
+    // After commit: a discarded composition's value is never shown.
+    SideEffect { if (value != null) last.value = value }
+    return value ?: last.value
+}
+
+private class LastValue<T : Any> {
+    var value: T? = null
 }
 
 private val SidePanelCornerRadius = 28.dp

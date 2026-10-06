@@ -10,7 +10,6 @@ import dev.samuelq.gpx.data.track.asTrackName
 import dev.samuelq.gpx.data.track.defaultTrackName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -36,6 +35,8 @@ class DiscardedRecording internal constructor(internal val file: File, val name:
 class RecordingRecovery(
     context: Context,
     private val tracks: TrackRepository,
+    /** Outlives any screen, so deletes after an undo lapses still finish. */
+    private val scope: CoroutineScope,
 ) {
     private val io = Dispatchers.IO
     private val appContext = context.applicationContext
@@ -46,9 +47,6 @@ class RecordingRecovery(
 
     /** Two recoveries at once would both save the same claimed log. */
     private val lock = Mutex()
-
-    /** Deletes after an undo lapses finish even if the screen that asked goes away. */
-    private val scope = CoroutineScope(SupervisorJob() + io)
 
     /**
      * Moves an unsaved live log aside under a unique name. Returns whether the live log's
@@ -134,7 +132,7 @@ class RecordingRecovery(
     fun forget(recording: DiscardedRecording) = forget(recording.file)
 
     private fun forget(file: File) {
-        scope.launch { lock.withLock { file.delete() } }
+        scope.launch(io) { lock.withLock { file.delete() } }
     }
 
     /** At launch: an undo from a previous process can no longer be taken. */

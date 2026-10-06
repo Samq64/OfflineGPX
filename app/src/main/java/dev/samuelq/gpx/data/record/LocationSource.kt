@@ -3,12 +3,11 @@ package dev.samuelq.gpx.data.record
 import android.annotation.SuppressLint
 import android.content.Context
 import android.location.Location
-import android.location.LocationListener
 import android.location.LocationManager
-import android.os.Bundle
 import android.os.Looper
 import androidx.core.content.getSystemService
 import androidx.core.location.LocationCompat
+import androidx.core.location.LocationListenerCompat
 import androidx.core.location.altitude.AltitudeConverterCompat
 import dev.samuelq.gpx.core.model.TrackPoint
 import kotlinx.coroutines.Dispatchers
@@ -20,7 +19,7 @@ import kotlinx.coroutines.flow.map
 import java.io.IOException
 import java.time.Instant
 
-/** Raw `GPS_PROVIDER` fixes; not the fused provider, which needs Play Services. */
+/** Raw `GPS_PROVIDER` fixes; not the fused provider, which needs Play Services. Stateless, so shared. */
 class LocationSource(context: Context) {
 
     private val appContext = context.applicationContext
@@ -38,17 +37,13 @@ class LocationSource(context: Context) {
         val locationManager = manager
             ?: throw IllegalStateException("No LocationManager on this device")
 
-        val listener = object : LocationListener {
+        // Compat, which supplies the callbacks that are abstract below API 30.
+        val listener = object : LocationListenerCompat {
             override fun onLocationChanged(location: Location) {
                 trySend(location)
             }
 
-            // Required below API 30, else AbstractMethodError on some OEM builds.
-            override fun onProviderEnabled(provider: String) = Unit
             override fun onProviderDisabled(provider: String) = onUnavailable()
-
-            @Deprecated("Removed in API 29, still dispatched by some OEM builds")
-            override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) = Unit
         }
 
         locationManager.requestLocationUpdates(

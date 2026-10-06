@@ -51,6 +51,9 @@ internal class RecordingSession(
     /** Stop was asked for; fixes wait on the answer. */
     val held: Boolean get() = heldAt != null
 
+    /** [totalSeconds] is counting. */
+    val timing: Boolean get() = startedAt != null && pausedAt == null && heldAt == null
+
     /** Earlier pauses included, matching the saved track's `totalDurationSeconds`. */
     val totalSeconds: Double
         get() = startedAt?.let { ((listOfNotNull(pausedAt, heldAt).minOrNull() ?: clock()) - it) / 1000.0 } ?: 0.0

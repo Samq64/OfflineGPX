@@ -171,4 +171,65 @@ class RecordingSessionTest {
         session.pause(origin.plusSeconds(1))
         assertNull(session.hold(origin.plusSeconds(10)))
     }
+
+    @Test
+    fun `timing runs only between the first point and a pause or hold`() {
+        val session = session()
+        assertFalse(session.timing)
+        session.onFix(fix(0, 0.0))
+        assertTrue(session.timing)
+        session.hold(origin.plusSeconds(1))
+        assertFalse(session.timing)
+        session.release()
+        assertTrue(session.timing)
+        session.pause(origin.plusSeconds(2))
+        assertFalse(session.timing)
+        assertTrue(session.resume())
+        assertTrue(session.timing)
+        assertFalse(session.resume(), "already running")
+    }
+
+    @Test
+    fun `a fix without a time is ignored`() {
+        val session = session()
+        assertNull(session.onFix(fix(0, 0.0).copy(time = null)))
+        assertEquals(0, session.state().pointCount)
+        assertNull(session.state().accuracyMeters)
+    }
+
+    @Test
+    fun `holding twice keeps the first hold's time and closes the log once`() {
+        val session = session()
+        now = 0
+        session.onFix(fix(0, 0.0))
+        now = 10_000
+        assertNotNull(session.hold(origin.plusSeconds(10)))
+        now = 20_000
+        assertNull(session.hold(origin.plusSeconds(20)), "already held")
+        now = 30_000
+        assertEquals(10.0, session.totalSeconds)
+        assertEquals(2, session.state().pointCount)
+    }
+
+    @Test
+    fun `the log isn't closed at or before its last point`() {
+        val session = session()
+        session.onFix(fix(5, 0.0))
+        assertNull(session.pause(origin.plusSeconds(5)))
+        assertEquals(1, session.state().pointCount)
+    }
+
+    @Test
+    fun `nothing closes the log before the first point`() {
+        assertNull(session().hold(origin))
+    }
+
+    @Test
+    fun `speed shows once moving and clears on a pause`() {
+        val session = session()
+        for (s in 0L..20L) session.onFix(fix(s, s * 5.0))
+        assertEquals(5.0, assertNotNull(session.state().currentSpeedMps), 0.5)
+        session.pause(origin.plusSeconds(21))
+        assertNull(session.state().currentSpeedMps)
+    }
 }

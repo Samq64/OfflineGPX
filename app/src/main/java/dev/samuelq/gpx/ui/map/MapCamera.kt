@@ -2,14 +2,13 @@ package dev.samuelq.gpx.ui.map
 
 import dev.samuelq.gpx.core.model.TrackPoint
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.calculateEndPadding
-import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import dev.samuelq.gpx.data.map.OfflineMap
 import org.oscim.core.BoundingBox
+import org.oscim.core.Box
 import org.oscim.core.MapPosition
 import org.oscim.core.MercatorProjection
 import org.oscim.core.Tile
@@ -35,15 +34,20 @@ internal data class Insets(val left: Int, val top: Int, val right: Int, val bott
 
 internal fun PaddingValues.toInsets(density: Density, layoutDirection: LayoutDirection) = with(density) {
     Insets(
-        left = calculateStartPadding(layoutDirection).roundToPx(),
+        // Physical sides: VTM's view isn't mirrored, so start is the right in RTL.
+        left = calculateLeftPadding(layoutDirection).roundToPx(),
         top = calculateTopPadding().roundToPx(),
-        right = calculateEndPadding(layoutDirection).roundToPx(),
+        right = calculateRightPadding(layoutDirection).roundToPx(),
         bottom = calculateBottomPadding().roundToPx(),
     )
 }
 
 /** Where [point] sits on screen at [position]; valid since the map never rotates or tilts. */
-internal fun Map.screenPosition(point: TrackPoint, position: MapPosition = mapPosition): Offset {
+internal fun Map.screenPosition(point: TrackPoint, position: MapPosition = mapPosition): Offset =
+    screenPosition(point, position, width, height)
+
+/** [Map.screenPosition] for a [width] by [height] view; VTM's own map needs GL to construct. */
+internal fun screenPosition(point: TrackPoint, position: MapPosition, width: Int, height: Int): Offset {
     val mapSize = Tile.SIZE * position.scale
     val x = (MercatorProjection.longitudeToX(point.longitude) - position.x) * mapSize + width / 2.0
     val y = (MercatorProjection.latitudeToY(point.latitude) - position.y) * mapSize + height / 2.0
@@ -59,46 +63,20 @@ internal fun extentOf(
     liveRoute: RouteOverlay?,
     basemaps: List<OfflineMap>,
 ): BoundingBox? {
-    var south = Double.POSITIVE_INFINITY
-    var west = Double.POSITIVE_INFINITY
-    var north = Double.NEGATIVE_INFINITY
-    var east = Double.NEGATIVE_INFINITY
-    fun include(s: Double, w: Double, n: Double, e: Double) {
-        if (s < south) south = s
-        if (n > north) north = n
-        if (w < west) west = w
-        if (e > east) east = e
-    }
-
     // From each route's cached bounds, so a growing recording doesn't re-walk every position.
-    for (route in routes + listOfNotNull(liveRoute)) {
-        val b = route.bounds ?: continue
-        val latPad = (b.northLatitude - b.southLatitude) * TRACK_MARGIN
-        val lonPad = (b.eastLongitude - b.westLongitude) * TRACK_MARGIN
-        include(b.southLatitude - latPad, b.westLongitude - lonPad, b.northLatitude + latPad, b.eastLongitude + lonPad)
+    val tracks = (routes + listOfNotNull(liveRoute)).mapNotNull { route ->
+        route.bounds?.let {
+            BoundingBox(it.southLatitude, it.westLongitude, it.northLatitude, it.eastLongitude)
+                .extendMargin(TRACK_MARGIN_FACTOR)
+        }
     }
-    for (map in basemaps) {
-        val h = map.header
-        include(h.minLatitude, h.minLongitude, h.maxLatitude, h.maxLongitude)
-    }
-
-    if (!south.isFinite() || !north.isFinite() || !west.isFinite() || !east.isFinite()) return null
+    val extent = (tracks + basemaps.map { it.bounds }).reduceOrNull(BoundingBox::extendBoundingBox)
     // A single position isn't a box to fit.
-    if (north == south && east == west) return null
-
-    return BoundingBox(south, west, north, east)
+    return extent?.takeIf { it.latitudeSpan > 0 || it.longitudeSpan > 0 }
 }
 
-internal fun BoundingBox.including(other: BoundingBox?): BoundingBox = if (other == null) this else BoundingBox(
-    minOf(minLatitude, other.minLatitude),
-    minOf(minLongitude, other.minLongitude),
-    maxOf(maxLatitude, other.maxLatitude),
-    maxOf(maxLongitude, other.maxLongitude),
-)
-
-internal fun BoundingBox.overlaps(other: BoundingBox): Boolean =
-    minLatitude <= other.maxLatitude && other.minLatitude <= maxLatitude &&
-        minLongitude <= other.maxLongitude && other.minLongitude <= maxLongitude
+/** [this] widened to take in [other], if any. */
+internal fun BoundingBox.including(other: BoundingBox?): BoundingBox = other?.let(::extendBoundingBox) ?: this
 
 /** What a [size] view shows with the camera at [this]. */
 internal fun MapPosition.visibleBox(size: IntSize): BoundingBox {
@@ -113,20 +91,8 @@ internal fun MapPosition.visibleBox(size: IntSize): BoundingBox {
     )
 }
 
-/** A track's margin on each side, as a fraction of its own span. */
-private const val TRACK_MARGIN = 0.05
-
-/** Expanded by [fraction] of its span per side, so a pan clamp stops just past the data. */
-internal fun BoundingBox.padded(fraction: Double): BoundingBox {
-    val latitudePad = latitudeSpan * fraction
-    val longitudePad = longitudeSpan * fraction
-    return BoundingBox(
-        (minLatitude - latitudePad).coerceAtLeast(MercatorProjection.LATITUDE_MIN),
-        (minLongitude - longitudePad).coerceAtLeast(MercatorProjection.LONGITUDE_MIN),
-        (maxLatitude + latitudePad).coerceAtMost(MercatorProjection.LATITUDE_MAX),
-        (maxLongitude + longitudePad).coerceAtMost(MercatorProjection.LONGITUDE_MAX),
-    )
-}
+/** 5% of a track's span on each side, as VTM's total-span factor. */
+private const val TRACK_MARGIN_FACTOR = 1.1f
 
 /** The view's size minus whatever is floating over it, or null before it is laid out. */
 internal fun IntSize?.usable(insets: Insets): IntSize? {
@@ -171,8 +137,20 @@ internal fun Map.moveTo(target: MapPosition, extent: BoundingBox?, cover: Insets
 
 /** Sets VTM's limit for [position]'s scale and pulls [position] inside it. True if it moved. */
 private fun Map.constrain(position: MapPosition, extent: BoundingBox, cover: Insets): Boolean {
-    val mapSize = Tile.SIZE * position.scale
+    val limit = centreLimit(extent, cover, width, height, position.scale)
+    viewport().setMapLimit(limit.xmin, limit.ymin, limit.xmax, limit.ymax)
 
+    val x = position.x.coerceIn(limit.xmin, limit.xmax)
+    val y = position.y.coerceIn(limit.ymin, limit.ymax)
+    if (x == position.x && y == position.y) return false
+    position.x = x
+    position.y = y
+    return true
+}
+
+/** Where a [width] by [height] camera's centre may go at [scale], in map units. */
+internal fun centreLimit(extent: BoundingBox, cover: Insets, width: Int, height: Int, scale: Double): Box {
+    val mapSize = Tile.SIZE * scale
     val (minX, maxX) = centreRange(
         MercatorProjection.longitudeToX(extent.minLongitude),
         MercatorProjection.longitudeToX(extent.maxLongitude),
@@ -183,14 +161,7 @@ private fun Map.constrain(position: MapPosition, extent: BoundingBox, cover: Ins
         MercatorProjection.latitudeToY(extent.minLatitude),
         view = height, visibleStart = 0, visibleEnd = height - cover.bottom, mapSize,
     )
-    viewport().setMapLimit(minX, minY, maxX, maxY)
-
-    val x = position.x.coerceIn(minX, maxX)
-    val y = position.y.coerceIn(minY, maxY)
-    if (x == position.x && y == position.y) return false
-    position.x = x
-    position.y = y
-    return true
+    return Box(minX, minY, maxX, maxY)
 }
 
 /**
@@ -216,16 +187,23 @@ private fun centreRange(
 internal fun Map.nudgeIntoView(point: TrackPoint, insets: Insets, margin: Int) {
     if (width <= 0 || height <= 0) return
     val position = mapPosition
+    val (dx, dy) = nudge(screenPosition(point, position), width, height, insets, margin) ?: return
+    // Not animated: this follows a drag, and easing would lag the finger.
     val mapSize = Tile.SIZE * position.scale
-    val at = screenPosition(point, position)
+    position.x -= dx / mapSize
+    position.y -= dy / mapSize
+    setMapPosition(position)
+}
+
+/** Screen pixels to pan so [at] is inside the uncovered box less [margin], or null for none. */
+internal fun nudge(at: Offset, width: Int, height: Int, insets: Insets, margin: Int): Pair<Double, Double>? {
     val atX = at.x.toDouble()
     val atY = at.y.toDouble()
-
     val left = insets.left + margin
     val top = insets.top + margin
     val right = width - insets.right - margin
     val bottom = height - insets.bottom - margin
-    if (left >= right || top >= bottom) return
+    if (left >= right || top >= bottom) return null
 
     val dx = when {
         atX < left -> left - atX
@@ -237,10 +215,5 @@ internal fun Map.nudgeIntoView(point: TrackPoint, insets: Insets, margin: Int) {
         atY > bottom -> bottom - atY
         else -> 0.0
     }
-    if (dx == 0.0 && dy == 0.0) return
-
-    // Not animated: this follows a drag, and easing would lag the finger.
-    position.x -= dx / mapSize
-    position.y -= dy / mapSize
-    setMapPosition(position)
+    return if (dx == 0.0 && dy == 0.0) null else dx to dy
 }

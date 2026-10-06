@@ -6,6 +6,7 @@ import dev.samuelq.gpx.core.model.TrackPoint
 import dev.samuelq.gpx.core.model.TrackPoints
 import dev.samuelq.gpx.core.model.TrackPointsBuilder
 import dev.samuelq.gpx.core.model.Waypoint
+import dev.samuelq.gpx.data.writeAtomically
 import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream
 import java.io.File
@@ -39,10 +40,8 @@ internal class TrackCache(private val dir: File) {
     /** Best effort: a failed write just means parsing again next time. */
     fun write(id: Long, source: File, track: Track) {
         runCatching {
-            dir.mkdirs()
-            val temp = File(dir, "$id.tmp")
-            temp.writeBytes(encode(track, Stamp.of(source)))
-            if (!temp.renameTo(fileFor(id))) temp.delete()
+            val bytes = encode(track, Stamp.of(source))
+            writeAtomically(fileFor(id)) { it.write(bytes) }
         }.onFailure { Log.d(TAG, "Could not cache $id", it) }
     }
 
@@ -57,9 +56,7 @@ internal class TrackCache(private val dir: File) {
                 putLong(source.length())
                 putLong(source.lastModified())
             }
-            val temp = File(dir, "$id.tmp")
-            temp.writeBytes(bytes)
-            if (!temp.renameTo(file)) temp.delete()
+            writeAtomically(file) { it.write(bytes) }
         }.onFailure { file.delete() }
     }
 

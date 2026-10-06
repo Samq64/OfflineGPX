@@ -63,7 +63,17 @@ class RecordingService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action
         // Immediately: a START queued behind a save would miss the startForegroundService deadline.
-        if (action == ACTION_START) notifications.startForeground(notificationContent())
+        if (action == ACTION_START && !notifications.startForeground(notificationContent())) {
+            scope.launch {
+                commands.withLock {
+                    if (session == null) {
+                        controller.emit(RecordingEvent.Failed(R.string.record_location_denied))
+                        stopSelf(startId)
+                    }
+                }
+            }
+            return START_NOT_STICKY
+        }
         scope.launch {
             commands.withLock {
                 when (action) {
@@ -93,9 +103,12 @@ class RecordingService : Service() {
         )
 
         // Again: a preceding stop's finish() may have removed the first one.
-        notifications.startForeground(notificationContent())
+        if (!notifications.startForeground(notificationContent())) {
+            abandon(R.string.record_location_denied)
+            return
+        }
 
-        val source = LocationSource(this)
+        val source = container.locationSource
         // With location off, requestLocationUpdates succeeds but never calls back.
         if (!source.isGpsEnabled) {
             abandon(R.string.record_location_off)
@@ -157,6 +170,7 @@ class RecordingService : Service() {
         val session = session ?: return
         session.onFix(fix)?.let { point ->
             wal?.append(point)
+            notifications.update(notificationContent())
             if (session.traceDue) {
                 publishTrace(session)
                 // With the line, so the first fix flips the status as the puck appears.
@@ -171,11 +185,13 @@ class RecordingService : Service() {
         val session = session ?: return
         session.hold(Instant.now())?.let { wal?.append(it) }
         publish()
+        notifications.update(notificationContent())
     }
 
     private fun release() {
         session?.release()
         publish()
+        notifications.update(notificationContent())
     }
 
     private fun addWaypoint(name: String) {
@@ -190,7 +206,6 @@ class RecordingService : Service() {
             while (true) {
                 delay(TICK_INTERVAL_MILLIS)
                 publish()
-                notifications.update(notificationContent(), force = false)
             }
         }
     }
@@ -215,7 +230,7 @@ class RecordingService : Service() {
         val session = session ?: return
         if (!session.paused) return
 
-        val source = LocationSource(this)
+        val source = container.locationSource
         // Stay paused and say so rather than resuming into silence.
         if (!source.isGpsEnabled) {
             controller.emit(RecordingEvent.Failed(R.string.record_location_off))
@@ -282,6 +297,7 @@ class RecordingService : Service() {
 
     private fun notificationContent() = NotificationContent(
         paused = session?.paused == true,
+        timing = session?.timing == true,
         distanceMeters = session?.distanceMeters ?: 0.0,
         totalSeconds = session?.totalSeconds ?: 0.0,
         units = container.settingsRepository.settings.value.units,

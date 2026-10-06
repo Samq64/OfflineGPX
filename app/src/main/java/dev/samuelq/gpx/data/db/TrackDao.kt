@@ -26,7 +26,7 @@ interface TrackDao {
     suspend fun touch(id: Long, at: Long)
 
     @Update(entity = TrackEntity::class)
-    suspend fun setSummary(summary: TrackSummary)
+    suspend fun setSummary(summary: SummaryUpdate)
 
     /** Rows from before the summary was kept, still to be read. */
     @Query("SELECT * FROM tracks WHERE pointCount < 0")
@@ -37,6 +37,9 @@ interface TrackDao {
 
     @Query("DELETE FROM tracks WHERE id = :id")
     suspend fun delete(id: Long)
+
+    @Query("DELETE FROM tracks WHERE id IN (:ids)")
+    suspend fun delete(ids: List<Long>)
 
     @Query("SELECT * FROM tracks WHERE displayName = :displayName")
     suspend fun byDisplayName(displayName: String): List<TrackEntity>

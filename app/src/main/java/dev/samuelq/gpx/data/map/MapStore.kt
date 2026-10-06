@@ -7,13 +7,16 @@ import dev.samuelq.gpx.data.displayName
 import dev.samuelq.gpx.data.uniqueFile
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.oscim.core.BoundingBox
+import org.oscim.tiling.source.mapfile.header.MapFileHeader
+import org.oscim.tiling.source.mapfile.header.SubFileParameter
+import org.oscim.tiling.source.mapfile.readMapFileHeader
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
@@ -21,23 +24,55 @@ import java.util.concurrent.ConcurrentHashMap
 /** An offline basemap the user has imported, and what its header says about it. */
 class OfflineMap(
     val file: File,
-    val header: MapFileHeader,
+    /** VTM's own, so a listed map is one its tile source opens. */
+    private val header: MapFileHeader,
     val sizeBytes: Long,
 ) {
-    val attribution: String? get() = header.attribution
+    val bounds: BoundingBox get() = header.mapFileInfo.boundingBox
+
+    /** The comment carries the data credit; created-by is a fallback. */
+    val attribution: String?
+        get() = header.mapFileInfo.run { comment?.takeIf(String::isNotBlank) ?: createdBy?.takeIf(String::isNotBlank) }
 
     val displayName: String get() = file.nameWithoutExtension
 
+    /** The one read for a tile at [zoom], clamped to the file's range as the reader does. */
+    fun subFileFor(zoom: Int): SubFileParameter {
+        val clamped = header.getQueryZoomLevel(zoom.coerceIn(0, Byte.MAX_VALUE.toInt()).toByte())
+        return header.getSubFileParameter(clamped.toInt())
+    }
+
+    /** The one with the deepest stored tiles. */
+    val deepest: SubFileParameter get() = subFileFor(Byte.MAX_VALUE.toInt())
+
+    /** Where detail really stops: files claim more. */
+    val baseZoom: Int get() = deepest.baseZoomLevel.toInt()
+
+    internal fun movedTo(file: File) = OfflineMap(file, header, sizeBytes)
+
     /** Bounding-box overlap; true of most neighbours too, so see [duplicates]. */
     fun overlaps(other: OfflineMap): Boolean =
-        header.minLongitude < other.header.maxLongitude &&
-            other.header.minLongitude < header.maxLongitude &&
-            header.minLatitude < other.header.maxLatitude &&
-            other.header.minLatitude < header.maxLatitude
+        bounds.minLongitude < other.bounds.maxLongitude &&
+            other.bounds.minLongitude < bounds.maxLongitude &&
+            bounds.minLatitude < other.bounds.maxLatitude &&
+            other.bounds.minLatitude < bounds.maxLatitude
 
     /** Whether [other] covers the same place, not just a box that reaches over this one. */
     fun duplicates(other: OfflineMap): Boolean =
         overlaps(other) && (sharedData(this, other) ?: 1.0) >= DUPLICATE_SHARE
+
+    companion object {
+        /** Null unless a mapsforge map file VTM reads. Not a debug build, whose index has a signature. */
+        internal fun read(file: File): OfflineMap? {
+            val header = try {
+                readMapFileHeader(file)
+            } catch (_: IOException) {
+                null
+            }
+            if (header == null || header.mapFileInfo.debugFile) return null
+            return OfflineMap(file, header, file.length())
+        }
+    }
 }
 
 enum class MapImportError {
@@ -59,7 +94,11 @@ sealed interface MapImportResult {
 }
 
 /** Offline maps, copied into app-private storage since VTM's reader needs a seekable real path. */
-class MapStore(context: Context) {
+class MapStore(
+    context: Context,
+    /** Outlives Settings, so deletes after an undo lapses still finish. */
+    private val scope: CoroutineScope,
+) {
 
     private val appContext = context.applicationContext
 
@@ -78,9 +117,6 @@ class MapStore(context: Context) {
     /** Filenames deleted but still undoable; in memory, like pending track deletes. */
     private val pendingDelete = ConcurrentHashMap.newKeySet<String>()
 
-    /** Deletes after an undo lapses finish even if Settings has closed. */
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-
     /** Parsed headers, keyed by path and mtime so unchanged files aren't re-read each launch. */
     private val readMaps = ConcurrentHashMap<Key, OfflineMap>()
 
@@ -92,7 +128,7 @@ class MapStore(context: Context) {
 
         val keys = files.associateBy { Key(it.path, it.lastModified()) }
         val found = keys
-            .mapNotNull { (key, file) -> readMaps[key] ?: read(file)?.also { readMaps[key] = it } }
+            .mapNotNull { (key, file) -> readMaps[key] ?: OfflineMap.read(file)?.also { readMaps[key] = it } }
             .sortedByDescending { it.file.lastModified() }
 
         readMaps.keys.retainAll(keys.keys)
@@ -130,7 +166,7 @@ class MapStore(context: Context) {
                 return@withContext MapImportResult.Failed(MapImportError.UNREADABLE)
             }
 
-            val map = read(destination)
+            val map = OfflineMap.read(destination)
             if (map == null) {
                 destination.delete()
                 return@withContext MapImportResult.Failed(MapImportError.NOT_A_MAP_FILE)
@@ -146,7 +182,7 @@ class MapStore(context: Context) {
         withContext(Dispatchers.IO) { install(overlaps.staged) }
 
     fun cancelImport(overlaps: MapImportResult.Overlaps) {
-        scope.launch { overlaps.staged.file.delete() }
+        scope.launch(Dispatchers.IO) { overlaps.staged.file.delete() }
     }
 
     private suspend fun install(staged: OfflineMap): MapImportResult {
@@ -155,16 +191,10 @@ class MapStore(context: Context) {
             staged.file.delete()
             return MapImportResult.Failed(MapImportError.UNREADABLE)
         }
-        val map = OfflineMap(file = destination, header = staged.header, sizeBytes = staged.sizeBytes)
+        val map = staged.movedTo(destination)
         readMaps[Key(destination.path, destination.lastModified())] = map
         refresh()
         return MapImportResult.Imported(map)
-    }
-
-    /** Null if not a mapsforge map file. */
-    private fun read(file: File): OfflineMap? {
-        val header = MapFileHeader.read(file) ?: return null
-        return OfflineMap(file = file, header = header, sizeBytes = file.length())
     }
 
     /** Hides [map] until [undoDelete] or [commitDelete]. */
@@ -179,7 +209,7 @@ class MapStore(context: Context) {
     }
 
     fun commitDelete(map: OfflineMap) {
-        scope.launch {
+        scope.launch(Dispatchers.IO) {
             map.file.delete()
             pendingDelete -= map.file.name
             refresh()

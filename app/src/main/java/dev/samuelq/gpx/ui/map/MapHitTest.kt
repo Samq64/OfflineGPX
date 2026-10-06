@@ -1,6 +1,7 @@
 package dev.samuelq.gpx.ui.map
 
 import androidx.compose.ui.geometry.Offset
+import dev.samuelq.gpx.core.model.TrackPoint
 import dev.samuelq.gpx.core.model.Waypoint
 import org.oscim.core.MercatorProjection
 import org.oscim.core.Tile
@@ -13,7 +14,8 @@ import org.oscim.map.Map
 internal fun pickWaypoint(
     screenX: Float,
     screenY: Float,
-    map: Map,
+    /** Where a point is on screen. */
+    screenPosition: (TrackPoint) -> Offset,
     waypoints: List<Waypoint>,
     headRadiusPx: Float,
     tipLengthPx: Float,
@@ -27,7 +29,7 @@ internal fun pickWaypoint(
     var best: Waypoint? = null
     var bestDistance = Float.MAX_VALUE
     for (waypoint in waypoints) {
-        val tip = map.screenPosition(waypoint.point)
+        val tip = screenPosition(waypoint.point)
         val onIcon = kotlin.math.abs(tap.x - tip.x) <= halfWidth &&
             tap.y <= tip.y + padY && tap.y >= tip.y - height - padY
         if (!onIcon) continue
@@ -57,54 +59,58 @@ internal fun pick(
     // Screen pixels equal map pixels, since the map never rotates or tilts.
     val position = map.mapPosition
     val mapSize = Tile.SIZE * position.scale
-    val tapX = position.x * mapSize + (screenX - map.width / 2.0)
-    val tapY = position.y * mapSize + (screenY - map.height / 2.0)
+    return nearestOnRoutes(
+        tapX = position.x * mapSize + (screenX - map.width / 2.0),
+        tapY = position.y * mapSize + (screenY - map.height / 2.0),
+        mapSize = mapSize,
+        // The recording too, so a tap on it doesn't read as the bare map.
+        routes = routes + listOfNotNull(liveRoute),
+        reachPx = reachPx,
+    )
+}
 
+/** [pick] in map pixels, with the world [mapSize] across. */
+internal fun nearestOnRoutes(
+    tapX: Double,
+    tapY: Double,
+    mapSize: Double,
+    routes: List<RouteOverlay>,
+    reachPx: Float,
+): Pair<Long, Int>? {
     var bestTrack: Long? = null
     var bestIndex = 0
     var bestDistance = (reachPx * reachPx).toDouble()
 
-    // The recording too, so a tap on it doesn't read as the bare map.
-    for (route in (routes + listOfNotNull(liveRoute))) {
+    for (route in routes) {
         route.forEachRun { from, to ->
-            if (to <= from) return@forEachRun
-
             var previousX = 0.0
             var previousY = 0.0
             for (index in from until to) {
                 val x = MercatorProjection.longitudeToX(route.points.longitude(index)) * mapSize
                 val y = MercatorProjection.latitudeToY(route.points.latitude(index)) * mapSize
-
+                // A zero-length segment onto itself, so a lone position is measured as a point.
+                // A longer run's first segment covers the same point again.
                 if (index == from) {
-                    // A lone position is a point, not a line: measured to itself.
-                    if (to - from == 1) {
-                        val dx = x - tapX
-                        val dy = y - tapY
-                        val distance = dx * dx + dy * dy
-                        if (distance < bestDistance) {
-                            bestDistance = distance
-                            bestTrack = route.trackId
-                            bestIndex = index
-                        }
-                    }
+                    previousX = x
+                    previousY = y
+                }
+
+                val spanX = x - previousX
+                val spanY = y - previousY
+                val lengthSquared = spanX * spanX + spanY * spanY
+                val along = if (lengthSquared == 0.0) {
+                    0.0
                 } else {
-                    val spanX = x - previousX
-                    val spanY = y - previousY
-                    val lengthSquared = spanX * spanX + spanY * spanY
-                    val along = if (lengthSquared == 0.0) {
-                        0.0
-                    } else {
-                        (((tapX - previousX) * spanX + (tapY - previousY) * spanY) / lengthSquared)
-                            .coerceIn(0.0, 1.0)
-                    }
-                    val dx = previousX + along * spanX - tapX
-                    val dy = previousY + along * spanY - tapY
-                    val distance = dx * dx + dy * dy
-                    if (distance < bestDistance) {
-                        bestDistance = distance
-                        bestTrack = route.trackId
-                        bestIndex = if (along < 0.5) index - 1 else index
-                    }
+                    (((tapX - previousX) * spanX + (tapY - previousY) * spanY) / lengthSquared)
+                        .coerceIn(0.0, 1.0)
+                }
+                val dx = previousX + along * spanX - tapX
+                val dy = previousY + along * spanY - tapY
+                val distance = dx * dx + dy * dy
+                if (distance < bestDistance) {
+                    bestDistance = distance
+                    bestTrack = route.trackId
+                    bestIndex = if (along < 0.5 && index > from) index - 1 else index
                 }
                 previousX = x
                 previousY = y

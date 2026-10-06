@@ -7,7 +7,6 @@ import androidx.compose.ui.unit.dp
 import dev.samuelq.gpx.data.map.ClippedMapSource
 import dev.samuelq.gpx.data.map.GeneratedRenderTheme
 import dev.samuelq.gpx.data.map.OfflineMap
-import dev.samuelq.gpx.data.map.opens
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.oscim.layers.Layer
@@ -35,7 +34,7 @@ internal class Basemap(
 }
 
 /** The colours a basemap is drawn in, from the app theme. */
-internal class BasemapColors(val background: Color, val land: Color, val label: Color)
+internal data class BasemapColors(val background: Color, val land: Color, val label: Color)
 
 /**
  * Puts [maps] under the routes. [onAttached] hears each stage, so a build cancelled halfway
@@ -47,10 +46,9 @@ internal suspend fun Map.attachBasemap(
     density: Density,
     onAttached: (Basemap) -> Unit,
 ) {
-    // VTM fails the whole source if any file won't open, so a broken one is left out.
-    val (shown, theme) = withContext(Dispatchers.IO) {
-        val shown = maps.filter { it.opens() }
-        val theme = if (shown.isEmpty()) null else ThemeLoader.load(
+    // VTM fails the whole source if any file won't open, so MapStore lists only those whose header it reads.
+    val theme = withContext(Dispatchers.IO) {
+        if (maps.isEmpty()) null else ThemeLoader.load(
             GeneratedRenderTheme(
                 MapRenderTheme.xml(
                     land = colors.land,
@@ -60,7 +58,6 @@ internal suspend fun Map.attachBasemap(
                 )
             )
         )
-        shown to theme
     }
 
     // Land under the tiles, since the theme background is transparent (see MapRenderTheme).
@@ -80,7 +77,7 @@ internal suspend fun Map.attachBasemap(
             .fixed(true)
             .build()
     }
-    shown.forEach {
+    maps.forEach {
         land.add(boxDrawable(it, landStyle))
         outline.add(outlineDrawable(it, outlineStyle))
     }
@@ -93,7 +90,7 @@ internal suspend fun Map.attachBasemap(
         return
     }
 
-    val source = ClippedMapSource(shown)
+    val source = ClippedMapSource(maps)
     val tiles = OsmTileLayer(this, Viewport.MIN_ZOOM_LEVEL, Viewport.MAX_ZOOM_LEVEL)
     if (!tiles.setTileSource(source)) {
         source.close()
@@ -109,7 +106,7 @@ internal suspend fun Map.attachBasemap(
     layers().add(labels, LayerGroup.Labels.ordinal)
     layers().add(mask, LayerGroup.Mask.ordinal)
     onAttached(Basemap(land, outline, tiles, labels, mask, theme))
-    outsideDrawables(shown, colors.background).forEach { mask.add(it) }
+    outsideDrawables(maps, colors.background).forEach { mask.add(it) }
     mask.update()
     // Also clears to map-background-outside.
     setTheme(theme)
@@ -121,7 +118,7 @@ internal fun Map.detach(basemap: Basemap) {
 }
 
 private fun boxDrawable(map: OfflineMap, style: Style): RectangleDrawable {
-    val h = map.header
+    val h = map.bounds
     return RectangleDrawable(h.minLatitude, h.minLongitude, h.maxLatitude, h.maxLongitude, style)
 }
 
@@ -131,10 +128,10 @@ private fun outsideDrawables(maps: List<OfflineMap>, background: Color): List<Re
     // A few spans past the extent, not the whole world: world-sized rectangles sometimes didn't
     // draw, and the camera can't zoom out past the extent anyway.
     val extent = extentOf(emptyList(), null, maps) ?: return emptyList()
-    val outer = extent.padded(MASK_MARGIN_SPANS)
-    val latitudes = (maps.flatMap { listOf(it.header.minLatitude, it.header.maxLatitude) } +
+    val outer = extent.extendMargin(MASK_MARGIN_FACTOR)
+    val latitudes = (maps.flatMap { listOf(it.bounds.minLatitude, it.bounds.maxLatitude) } +
         listOf(outer.minLatitude, outer.maxLatitude)).distinct().sorted()
-    val longitudes = (maps.flatMap { listOf(it.header.minLongitude, it.header.maxLongitude) } +
+    val longitudes = (maps.flatMap { listOf(it.bounds.minLongitude, it.bounds.maxLongitude) } +
         listOf(outer.minLongitude, outer.maxLongitude)).distinct().sorted()
 
     val out = ArrayList<RectangleDrawable>()
@@ -142,7 +139,7 @@ private fun outsideDrawables(maps: List<OfflineMap>, background: Color): List<Re
         val midLatitude = (latitudes[i] + latitudes[i + 1]) / 2
         val midLongitude = (longitudes[j] + longitudes[j + 1]) / 2
         val covered = maps.any {
-            val h = it.header
+            val h = it.bounds
             midLatitude in h.minLatitude..h.maxLatitude && midLongitude in h.minLongitude..h.maxLongitude
         }
         if (!covered) out.add(RectangleDrawable(latitudes[i], longitudes[j], latitudes[i + 1], longitudes[j + 1], style))
@@ -151,7 +148,7 @@ private fun outsideDrawables(maps: List<OfflineMap>, background: Color): List<Re
 }
 
 private fun outlineDrawable(map: OfflineMap, style: Style): LineDrawable {
-    val h = map.header
+    val h = map.bounds
     return LineDrawable(
         doubleArrayOf(
             h.minLongitude, h.minLatitude,
@@ -166,8 +163,8 @@ private fun outlineDrawable(map: OfflineMap, style: Style): LineDrawable {
 
 private const val TRANSPARENT = 0
 
-/** How far past the maps the outside mask reaches, in spans of their extent. */
-private const val MASK_MARGIN_SPANS = 3.0
+/** Three spans of the maps' extent past each side, as VTM's total-span factor. */
+private const val MASK_MARGIN_FACTOR = 7f
 
 private const val COVERAGE_WIDTH_DP = 1.2f
 

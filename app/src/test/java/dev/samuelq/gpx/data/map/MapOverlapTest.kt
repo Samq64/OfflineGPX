@@ -1,38 +1,18 @@
 package dev.samuelq.gpx.data.map
 
-import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import java.io.RandomAccessFile
 
 /** Maps at zoom 2 over the whole world: a 4 by 4 tile index and nothing else. */
 class MapOverlapTest {
 
-    private fun map(tileBytes: List<Long>, baseZoom: Int = 2): OfflineMap {
-        val tiles = 1 shl (2 * baseZoom)
-        require(tileBytes.size == tiles)
-        val index = ByteArray(tiles * 5)
-        var offset = index.size.toLong()
-        tileBytes.forEachIndexed { i, bytes ->
-            for (b in 0 until 5) index[i * 5 + b] = (offset shr (8 * (4 - b))).toByte()
-            offset += bytes
-        }
-        val file = File.createTempFile("overlap", ".map").apply {
-            deleteOnExit()
-            writeBytes(index)
-        }
-        val header = MapFileHeader(
-            baseZoom = baseZoom,
-            minLongitude = -180.0,
-            minLatitude = -85.0,
-            maxLongitude = 180.0,
-            maxLatitude = 85.0,
-            attribution = null,
-            subFiles = listOf(SubFile(baseZoom, 0, baseZoom, start = 0, size = offset)),
-        )
-        return OfflineMap(file, header, offset)
-    }
+    private fun map(tileBytes: List<Long>, baseZoom: Int = 2) = offlineMap(
+        mapFile(south = -85.0, west = -180.0, north = 85.0, east = 180.0, baseZoom = baseZoom, tileBytes = tileBytes),
+    )
 
     /** Land and sea everywhere, and a region's real data on one side. */
     private fun region(heavyColumns: Set<Int>) =
@@ -68,12 +48,51 @@ class MapOverlapTest {
     }
 
     @Test
-    fun `tiles are numbered as mapsforge does`() {
-        assertEquals(0, longitudeToTile(-180.0, 2))
-        assertEquals(3, longitudeToTile(180.0, 2))
-        assertEquals(2, longitudeToTile(0.0, 2))
-        assertEquals(0, latitudeToTile(85.0, 2))
-        assertEquals(2, latitudeToTile(0.0, 2))
-        assertEquals(3, latitudeToTile(-85.0, 2))
+    fun `boxes that share no tile share nothing`() {
+        val west = offlineMap(mapFile(south = -10.0, west = -170.0, north = 10.0, east = -100.0, baseZoom = 2))
+        val east = offlineMap(mapFile(south = -10.0, west = 100.0, north = 10.0, east = 170.0, baseZoom = 2))
+        assertEquals(0.0, sharedData(west, east))
+        val north = offlineMap(mapFile(south = 70.0, west = -10.0, north = 80.0, east = 10.0, baseZoom = 2))
+        val south = offlineMap(mapFile(south = -80.0, west = -10.0, north = -70.0, east = 10.0, baseZoom = 2))
+        assertEquals(0.0, sharedData(north, south))
+    }
+
+    @Test
+    fun `maps with no data share nothing`() {
+        assertEquals(0.0, sharedData(map(List(16) { 0L }), map(List(16) { 0L })))
+    }
+
+    /** As when a map is deleted or cut short mid-comparison. */
+    @Test
+    fun `an unreadable index can't be compared`() {
+        val gone = region(setOf(0)).also { it.file.delete() }
+        assertNull(sharedData(region(setOf(0)), gone))
+        val cut = region(setOf(0)).also { RandomAccessFile(it.file, "rw").use { f -> f.setLength(200) } }
+        assertNull(sharedData(cut, region(setOf(0))))
+    }
+
+    @Test
+    fun `boxes overlap only if they cross on both axes`() {
+        fun box(south: Double, west: Double) =
+            offlineMap(mapFile(south = south, west = west, north = south + 1, east = west + 1, baseZoom = 8))
+        val centre = box(42.0, 1.0)
+        assertTrue(centre.overlaps(box(42.5, 1.5)))
+        assertFalse(centre.overlaps(box(42.0, 2.0)), "east, sharing an edge")
+        assertFalse(centre.overlaps(box(42.0, 0.0)), "west")
+        assertFalse(centre.overlaps(box(43.0, 1.0)), "north")
+        assertFalse(centre.overlaps(box(41.0, 1.0)), "south")
+        assertFalse(centre.duplicates(box(41.0, 1.0)))
+    }
+
+    @Test
+    fun `duplicates are overlapping maps sharing most data`() {
+        assertTrue(region(setOf(0, 1)).duplicates(region(setOf(0, 1))))
+        assertFalse(region(setOf(0, 1)).duplicates(region(setOf(2, 3))), "neighbours")
+    }
+
+    /** Overlapping, but at different base zooms: assumed the same place, so the user is asked. */
+    @Test
+    fun `an overlap that can't be measured counts as a duplicate`() {
+        assertTrue(region(setOf(0)).duplicates(offlineMap(mapFile(baseZoom = 14))))
     }
 }

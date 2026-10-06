@@ -1,9 +1,13 @@
 package dev.samuelq.gpx.ui.format
 
 import dev.samuelq.gpx.core.model.UnitSystem
+import java.time.Instant
+import java.time.ZoneId
+import java.time.ZoneOffset
 import java.util.Locale
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class FormattersTest {
 
@@ -100,5 +104,82 @@ class FormattersTest {
 
         val long = Formatters.durationAxisFor(4000f)
         assertEquals(listOf("0:00", "0:30", "1:00"), listOf(0f, 1800f, 3600f).map(long))
+    }
+
+    @Test
+    fun `dates use the given pattern in the given zone`() {
+        val formatters = Formatters(UnitSystem.METRIC, en, dateTimePattern = "d MMM yyyy HH:mm", timePattern = "HH:mm")
+        val at = Instant.parse("2026-05-01T23:30:00Z")
+        val zone = ZoneId.of("Europe/Berlin")
+
+        assertEquals("2 May 2026 01:30", formatters.dateTime(at, zone))
+        assertEquals("01:30", formatters.time(at, zone))
+        assertEquals(Formatters.EMPTY, formatters.dateTime(null))
+        assertEquals(Formatters.EMPTY, formatters.time(null))
+    }
+
+    @Test
+    fun `a pattern java_time can't read falls back to the locale's style`() {
+        val formatters = Formatters(UnitSystem.METRIC, en, dateTimePattern = "{bad", timePattern = "{bad")
+        val at = Instant.parse("2026-05-01T08:05:00Z")
+
+        assertEquals("08:05", formatters.time(at, ZoneOffset.UTC))
+        assertTrue("2026" in formatters.dateTime(at, ZoneOffset.UTC))
+    }
+
+    @Test
+    fun `display units per SI unit`() {
+        assertEquals(3.6f, metric.speedPerMps, 1e-6f)
+        assertEquals(2.2369363f, imperial.speedPerMps, 1e-6f)
+        assertEquals(1f, metric.elevationPerMeter)
+        assertEquals(3.2808399f, imperial.elevationPerMeter, 1e-6f)
+        assertEquals(0.001f, metric.distancePerMeter)
+        assertEquals(1f / 1609.344f, imperial.distancePerMeter, 1e-9f)
+    }
+
+    @Test
+    fun `sizes round up to kilobytes and counts group digits`() {
+        assertEquals("0 kB", Formatters.kilobytes(0, en))
+        assertEquals("1 kB", Formatters.kilobytes(1, en))
+        assertEquals("1,235 kB", Formatters.kilobytes(1_234_567, en))
+        assertEquals("12,345", Formatters.count(12_345, en))
+    }
+
+    @Test
+    fun `negative or missing durations read as nothing`() {
+        assertEquals(Formatters.EMPTY, Formatters.duration(-1.0))
+        assertEquals(Formatters.EMPTY, Formatters.durationAxis(Float.NaN))
+        assertEquals(Formatters.EMPTY, Formatters.durationAxis(-1f))
+        assertEquals("1:05", Formatters.durationAxis(3900f))
+        assertEquals("0:59", Formatters.durationAxis(59f))
+    }
+
+    @Test
+    fun `a zero step gets one decimal`() {
+        assertEquals("5.0 km", metric.distanceAxisFor(0f, en)(5000f))
+        assertEquals("36.0 km/h", metric.speedAxisFor(Float.NaN, en)(10f))
+    }
+
+    @Test
+    fun `without a locale, numbers follow the default one`() {
+        val previous = Locale.getDefault()
+        Locale.setDefault(Locale.GERMANY)
+        try {
+            assertEquals("1,20 km", Formatters.Metric.distance(1200.0))
+            assertEquals("36,0 km/h", metric.speed(10.0))
+            assertEquals("1.000 m", metric.meters(1000.0))
+            assertEquals("5,0 km", metric.distanceAxisFor(100f)(5000f))
+            assertEquals("36 km/h", metric.speedAxisFor(2.5f)(10f))
+            assertEquals("1.000 m", metric.elevationAxisFor(10f)(1000f))
+            assertEquals("1.235 kB", Formatters.kilobytes(1_234_567))
+            assertEquals("12.345", Formatters.count(12_345))
+        } finally {
+            Locale.setDefault(previous)
+        }
+    }
+
+    @Test
+    fun `tabular figures turn on the tnum feature`() {
+        assertEquals("tnum", androidx.compose.ui.text.TextStyle().tabularFigures().fontFeatureSettings)
     }
 }

@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.MaterialTheme
@@ -19,7 +18,7 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import dev.samuelq.gpx.R
 import dev.samuelq.gpx.core.analysis.TrackStats
@@ -45,25 +44,26 @@ fun StatRow(
         horizontalArrangement = Arrangement.spacedBy(24.dp),
         verticalArrangement = Arrangement.Center,
     ) {
-        stats.forEach { stat ->
-            // One stop, label first; apart, the value comes unlabelled.
-            val spoken = stringResource(R.string.stat_spoken, stat.label, stat.spoken)
-            Column(Modifier.clearAndSetSemantics { contentDescription = spoken }) {
-                Text(
-                    text = stat.value,
-                    style = MaterialTheme.typography.titleLarge.tabularFigures(),
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Clip,
-                )
-                Text(
-                    text = stat.label,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                )
-            }
-        }
+        stats.forEach { stat -> StatCell(stat, MaterialTheme.typography.titleLarge) }
+    }
+}
+
+/** Value over label, read as one stop label first; apart, the value comes unlabelled. */
+@Composable
+private fun StatCell(stat: Stat, valueStyle: TextStyle, modifier: Modifier = Modifier) {
+    val spoken = stringResource(R.string.stat_spoken, stat.label, stat.spoken)
+    Column(modifier.clearAndSetSemantics { contentDescription = spoken }) {
+        Text(
+            text = stat.value,
+            style = valueStyle.tabularFigures(),
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+        )
+        Text(
+            text = stat.label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
@@ -154,23 +154,7 @@ fun TrackDetails(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 maxItemsInEachRow = if (isLargeText()) 2 else details.size,
             ) {
-                details.forEach { stat ->
-                    // Value over label, like StatRow, and read as one like it.
-                    val spoken = stringResource(R.string.stat_spoken, stat.label, stat.spoken)
-                    Column(Modifier.weight(1f).clearAndSetSemantics { contentDescription = spoken }) {
-                        Text(
-                            text = stat.value,
-                            style = MaterialTheme.typography.bodyLarge.tabularFigures(),
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                        )
-                        Text(
-                            text = stat.label,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
+                details.forEach { stat -> StatCell(stat, MaterialTheme.typography.bodyLarge, Modifier.weight(1f)) }
             }
         }
     }

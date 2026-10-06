@@ -1,6 +1,7 @@
 package dev.samuelq.gpx.ui.chart
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -94,5 +95,136 @@ class ChartMathTest {
 
         val zoomedIn = zoomView(0f..100f, 0f..100f, anchor = 0.5f, zoom = 1000f, pan = 0f, maxZoom = 50f)
         assertEquals(2f, zoomedIn.endInclusive - zoomedIn.start, 1e-3f)
+    }
+
+    @Test
+    fun `ticks step 1, 2, 5 or 10 times a power of ten`() {
+        assertTicks(listOf(0f, 1f, 2f, 3f, 4f), axisScale(0f, 4f).ticks.toList())
+        assertTicks(listOf(0f, 5f, 10f, 15f), axisScale(0f, 16f).ticks.toList())
+        assertTicks(listOf(0f, 10f, 20f, 30f), axisScale(0f, 30f).ticks.toList())
+        // Inside the domain, not at its ends.
+        assertTicks(listOf(20f, 30f, 40f), axisScale(13f, 47f).ticks.toList())
+    }
+
+    @Test
+    fun `an empty or broken domain has no ticks`() {
+        for (scale in listOf(axisScale(5f, 5f), axisScale(5f, 1f), timeAxisScale(0f, 0f))) {
+            assertEquals(0, scale.ticks.size)
+            assertEquals(1f, scale.span)
+        }
+        val nan = axisScale(Float.NaN, Float.NaN)
+        assertEquals(0f, nan.min)
+        assertEquals(1f, nan.max)
+        val huge = axisScale(Float.MAX_VALUE, Float.POSITIVE_INFINITY)
+        assertEquals(Float.MAX_VALUE, huge.min)
+    }
+
+    @Test
+    fun `a scale's step is its tick gap, else its span`() {
+        assertEquals(10f, axisScale(0f, 30f).step)
+        assertEquals(4f, Scale(2f, 6f, floatArrayOf(3f)).step)
+    }
+
+    @Test
+    fun `time ticks past half a day are whole days`() {
+        val day = 86_400f
+        assertTicks(listOf(0f, day, 2 * day, 3 * day, 4 * day), timeAxisScale(0f, 4 * day).ticks.toList())
+        assertTicks(listOf(0f, 5f, 10f, 15f, 20f), timeAxisScale(0f, 20f).ticks.toList())
+    }
+
+    @Test
+    fun `a series with no values gets a unit scale`() {
+        val series = ChartSeries(floatArrayOf(0f, 1f), floatArrayOf(Float.NaN, Float.NaN), intArrayOf(0), Color.Red)
+        val scale = series.yScale(perUnit = 2f)
+        assertEquals(0f, scale.min)
+        assertEquals(0.5f, scale.max)
+        assertEquals(2, series.size)
+    }
+
+    @Test
+    fun `a flat series is padded both ways by a tenth`() {
+        val series = ChartSeries(floatArrayOf(0f, 1f), floatArrayOf(-50f, -50f), intArrayOf(0), Color.Red)
+        val scale = series.yScale()
+        assertEquals(-55f, scale.min)
+        assertEquals(-45f, scale.max)
+    }
+
+    @Test
+    fun `a pinch over an empty domain or by zero leaves the view`() {
+        assertEquals(10f..20f, zoomView(10f..20f, 5f..5f, anchor = 0.5f, zoom = 2f, pan = 0f))
+        assertEquals(10f..20f, zoomView(10f..20f, 0f..100f, anchor = 0.5f, zoom = 0f, pan = 0f))
+    }
+
+    @Test
+    fun `nearest index picks the closer neighbour, the earlier on a tie`() {
+        val xs = floatArrayOf(0f, 10f, 20f, 30f)
+        assertEquals(-1, nearestIndex(FloatArray(0), 5f))
+        assertEquals(0, nearestIndex(xs, -5f))
+        assertEquals(1, nearestIndex(xs, 12f))
+        assertEquals(2, nearestIndex(xs, 16f))
+        assertEquals(0, nearestIndex(xs, 5f))
+        assertEquals(3, nearestIndex(xs, 99f))
+    }
+
+    @Test
+    fun `a polyline keeps each column's first, extremes and last`() {
+        val line = RecordingPath()
+        PolylineBuilder(line.path).apply {
+            add(0.2f, 5f)
+            add(0.5f, 1f)
+            add(0.7f, 9f)
+            add(0.9f, 4f)
+            add(1.5f, 3f)
+            finish()
+        }
+
+        assertEquals(
+            listOf("M0,5", "L0,1", "L0,9", "L0,4", "L1,3", "L1,3"),
+            line.calls,
+        )
+    }
+
+    @Test
+    fun `a break starts a detached polyline and closes each area to the baseline`() {
+        val line = RecordingPath()
+        val area = RecordingPath()
+        PolylineBuilder(line.path, area.path, baselineY = 100f).apply {
+            add(0f, 10f)
+            add(1f, 20f)
+            breakLine()
+            breakLine()
+            add(5f, 30f)
+            finish()
+        }
+
+        assertEquals(listOf("M0,10", "L0,10", "L1,20", "L1,20", "M5,30", "L5,30"), line.calls)
+        assertEquals(
+            listOf("M0,10", "L0,10", "L1,20", "L1,20", "L1,100", "L0,100", "Z", "M5,30", "L5,30", "L5,100", "L5,100", "Z"),
+            area.calls,
+        )
+    }
+
+    @Test
+    fun `an area with nothing added stays empty`() {
+        val area = RecordingPath()
+        PolylineBuilder(RecordingPath().path, area.path).finish()
+        assertEquals(emptyList(), area.calls)
+    }
+
+    /** Compose's Path is an interface; this records the calls the builder makes. */
+    private class RecordingPath {
+        val calls = mutableListOf<String>()
+        val path = java.lang.reflect.Proxy.newProxyInstance(
+            Path::class.java.classLoader, arrayOf(Path::class.java),
+        ) { _, method, args ->
+            fun f(i: Int) = (args[i] as Float).let { if (it == it.toInt().toFloat()) it.toInt().toString() else it.toString() }
+            when (method.name) {
+                "moveTo" -> calls += "M${f(0)},${f(1)}"
+                "lineTo" -> calls += "L${f(0)},${f(1)}"
+                "close" -> calls += "Z"
+                else -> error("unexpected ${method.name}")
+            }
+            Unit
+        } as Path
     }
 }

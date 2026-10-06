@@ -2,6 +2,7 @@ package dev.samuelq.gpx.ui.settings
 
 import android.content.Context
 import android.content.Intent
+import android.icu.text.ListFormatter
 import android.os.PowerManager
 import android.provider.Settings as AndroidSettings
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -129,9 +130,8 @@ fun SettingsScreen(
         }
     }
 
-    val imported = stringResource(R.string.settings_maps_imported)
+    // Not stringResource: a long-lived collector would keep the old locale.
     val resources = LocalResources.current
-    val undo = stringResource(R.string.action_undo)
 
     // Undoable rather than confirmed: a mis-tap would cost re-fetching the file.
     fun deleteMap(map: OfflineMap) {
@@ -140,16 +140,12 @@ fun SettingsScreen(
             snackbarHostState.showUndo(
                 context = context,
                 message = resources.getString(R.string.deleted_named, map.displayName),
-                undoLabel = undo,
+                undoLabel = resources.getString(R.string.action_undo),
                 onUndo = { viewModel.undoDeleteMap(map) },
                 onCommit = { viewModel.commitDeleteMap(map) },
             )
         }
     }
-    val unreadable = stringResource(R.string.settings_maps_failed_unreadable)
-    val wrongFormat = stringResource(R.string.settings_maps_failed_format)
-    val noSpace = stringResource(R.string.settings_maps_failed_space)
-    val noBrowser = stringResource(R.string.settings_maps_no_browser)
 
     // The browser fetches it, so no INTERNET permission is needed.
     fun openUrl(url: String) {
@@ -163,13 +159,15 @@ fun SettingsScreen(
         viewModel.messages.collect { message ->
             snackbarHostState.currentSnackbarData?.dismiss()
             snackbarHostState.showSnackbar(
-                when (message) {
-                    SettingsMessage.MapImported -> imported
-                    SettingsMessage.MapUnreadable -> unreadable
-                    SettingsMessage.MapWrongFormat -> wrongFormat
-                    SettingsMessage.MapNoSpace -> noSpace
-                    SettingsMessage.NoBrowser -> noBrowser
-                }
+                resources.getString(
+                    when (message) {
+                        SettingsMessage.MapImported -> R.string.settings_maps_imported
+                        SettingsMessage.MapUnreadable -> R.string.settings_maps_failed_unreadable
+                        SettingsMessage.MapWrongFormat -> R.string.settings_maps_failed_format
+                        SettingsMessage.MapNoSpace -> R.string.settings_maps_failed_space
+                        SettingsMessage.NoBrowser -> R.string.settings_maps_no_browser
+                    }
+                )
             )
         }
     }
@@ -351,7 +349,7 @@ private fun MergeMapsDialog(
                     R.plurals.settings_maps_merge_body,
                     existing.size,
                     newMap,
-                    existing.joinToString { "“$it”" },
+                    ListFormatter.getInstance().format(existing.map { "“$it”" }),
                 )
             )
         },
@@ -514,6 +512,7 @@ private fun MapsSection(
     }
 }
 
+/** A row, not ListItem, for the reasons [SwitchSetting] gives. */
 @Composable
 private fun MapRow(
     map: OfflineMap,
@@ -619,7 +618,11 @@ private fun Setting(
     }
 }
 
-/** A [Setting] whose control is a switch, beside the text; the whole row toggles it. */
+/**
+ * A [Setting] whose control is a switch, beside the text; the whole row toggles it. A row, not
+ * ListItem: that insets 16dp against this screen's 20, and pins the switch to the top once the
+ * text wraps.
+ */
 @Composable
 private fun SwitchSetting(
     title: String,

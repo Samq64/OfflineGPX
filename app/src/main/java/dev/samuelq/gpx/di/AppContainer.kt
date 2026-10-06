@@ -22,23 +22,23 @@ class AppContainer(context: Context) {
 
     private val appContext = context.applicationContext
 
-    /** Outlives any screen: a recovery must finish even if the UI is gone. */
+    /** Outlives any screen: a recovery, delete or edit must finish even if the UI is gone. */
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     private val database by lazy { GpxDatabase.create(appContext) }
 
-    val trackRepository by lazy { TrackRepository(appContext, database.trackDao()) }
+    val trackRepository by lazy { TrackRepository(appContext, database.trackDao(), applicationScope) }
+
+    val locationSource = LocationSource(appContext)
 
     /** Held here so state outlives any screen during a ride. */
-    val recordingController = RecordingController(appContext)
+    val recordingController = RecordingController(appContext, locationSource)
 
-    val recordingRecovery by lazy { RecordingRecovery(appContext, trackRepository) }
+    val recordingRecovery by lazy { RecordingRecovery(appContext, trackRepository, applicationScope) }
 
     val settingsRepository by lazy { SettingsRepository(appContext) }
 
-    val mapStore by lazy { MapStore(appContext) }
-
-    val locationSource by lazy { LocationSource(appContext) }
+    val mapStore by lazy { MapStore(appContext, applicationScope) }
 
     /** Undispatched, so it holds the recovery lock before any recording can start. */
     fun claimAbandonedRecording() {
@@ -46,6 +46,11 @@ class AppContainer(context: Context) {
             recordingRecovery.claim()
             recordingRecovery.purgeDiscarded()
         }
+    }
+
+    /** Off the main thread, ahead of the first frame that reads them. */
+    fun warmSettings() {
+        applicationScope.launch(Dispatchers.IO) { settingsRepository }
     }
 
     /** Eager, since the map screen is shown first. */

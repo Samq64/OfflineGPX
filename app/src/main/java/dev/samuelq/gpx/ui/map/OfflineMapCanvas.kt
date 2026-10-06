@@ -27,9 +27,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.ViewCompat
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import dev.samuelq.gpx.R
 import dev.samuelq.gpx.core.model.TrackPoint
 import dev.samuelq.gpx.core.model.Waypoint
@@ -54,7 +52,7 @@ import org.oscim.map.Map
  * and the routes change every few seconds during a recording.
  */
 @Composable
-fun OfflineMapCanvas(
+internal fun OfflineMapCanvas(
     /** Drawn in this order, the last on top. */
     routes: List<RouteOverlay>,
     basemaps: List<OfflineMap>,
@@ -62,9 +60,9 @@ fun OfflineMapCanvas(
     controller: MapController,
     modifier: Modifier = Modifier,
     /**
-         * True while [routes] may still be missing tracks. Without it an empty first frame would
-         * frame the basemap and latch there.
-         */
+     * True while [routes] may still be missing tracks. Without it an empty first frame would
+     * frame the basemap and latch there.
+     */
     tracksLoading: Boolean,
     /** The recording, apart from [routes] so its growth rebuilds only its own geometry. */
     liveRoute: RouteOverlay?,
@@ -104,9 +102,7 @@ fun OfflineMapCanvas(
     sheetHeight: Dp,
     /** The same for the landscape side panel. */
     panelWidth: Dp,
-    backgroundColor: Color,
-    landColor: Color,
-    labelColor: Color,
+    basemapColors: BasemapColors,
     onScaleChange: (metersPerPixel: Double) -> Unit,
     /** Cold-start camera, if remembered; takes priority over fitting to tracks or maps. */
     initialCamera: CameraSnapshot?,
@@ -173,7 +169,7 @@ fun OfflineMapCanvas(
         val taps = TapDetector(ViewConfiguration.get(context), map, doublingPx) { x, y ->
             // Waypoints first: a pin sits on its own track's line and is the more specific hit.
             val waypointHit = pickWaypoint(
-                x, y, map, currentWaypoints, pinHeadRadius, pinTipLength, pinMinHalf,
+                x, y, { map.screenPosition(it) }, currentWaypoints, pinHeadRadius, pinTipLength, pinMinHalf,
                 onTop = currentFollowedWaypoint,
             )
             if (waypointHit != null) {
@@ -195,30 +191,12 @@ fun OfflineMapCanvas(
         followedWaypoint?.let { reportWaypointAt(map.screenPosition(it.point)) }
     }
 
-    DisposableEffect(map) {
-        val listener = Map.UpdateListener { _, position ->
-            reportScale(MercatorProjection.groundResolution(position))
-            currentFollowedWaypoint?.let { reportWaypointAt(map.screenPosition(it.point, position)) }
-            // Not before first framing: until then VTM sits at whole-world, and remembering that
-            // would feed back in as initialCamera.
-            if (hasFramed) {
-                reportCamera(CameraSnapshot(position.latitude, position.longitude, position.zoom))
-            }
-        }
-        map.events.bind(listener)
-        onDispose { map.events.unbind(listener) }
-    }
-
     // New files, colours or font scale need a new theme and data source; the only reason to
     // rebuild tiles. Font scale changes without recreating the activity.
-    LaunchedEffect(map, basemaps, backgroundColor, landColor, labelColor, density.fontScale) {
+    LaunchedEffect(map, basemaps, basemapColors, density.fontScale) {
         basemap?.let(map::detach)
         basemap = null
-        map.attachBasemap(
-            basemaps,
-            BasemapColors(background = backgroundColor, land = landColor, label = labelColor),
-            density,
-        ) { basemap = it }
+        map.attachBasemap(basemaps, basemapColors, density) { basemap = it }
     }
 
     val routeStyles = remember(density) { RouteStyles(density) }
@@ -238,8 +216,8 @@ fun OfflineMapCanvas(
     }
 
     // Per colour, not per selection: a new bitmap per scrub frame is a texture upload per frame.
-    val symbols = remember(markerColor, puckColor, landColor, density) {
-        MarkerSymbols(markerColor, puckColor, landColor, density)
+    val symbols = remember(markerColor, puckColor, basemapColors.land, density) {
+        MarkerSymbols(markerColor, puckColor, basemapColors.land, density)
     }
 
     LaunchedEffect(
@@ -267,12 +245,9 @@ fun OfflineMapCanvas(
         extentOf(routes, liveRoute, basemaps)
     }
 
-    LaunchedEffect(map, extent, basemaps) {
-        if (extent == null) return@LaunchedEffect
-        val viewport = map.viewport()
-
-        // Past a file's deepest zoom, magnification invents detail.
-        viewport.setMaxZoomLevel(basemaps.maxOfOrNull { it.maxViewZoom } ?: DEFAULT_MAX_ZOOM)
+    // Past a file's deepest zoom, magnification invents detail.
+    LaunchedEffect(map, basemaps) {
+        map.viewport().setMaxZoomLevel(basemaps.maxOfOrNull { it.maxViewZoom } ?: DEFAULT_MAX_ZOOM)
         map.updateMap(true)
     }
 
@@ -334,7 +309,7 @@ fun OfflineMapCanvas(
         camera.x -= (insets.left - insets.right) / 2.0 / mapSize
         camera.y -= (insets.top - insets.bottom) / 2.0 / mapSize
         val view = camera.visibleBox(size)
-        if (currentExtent?.overlaps(view) == false) return CentreResult.OutOfBounds
+        if (currentExtent?.intersects(view) == false) return CentreResult.OutOfBounds
         framedView = view
         map.moveTo(camera, currentClamp(), currentCover)
         return CentreResult.Centred
@@ -366,7 +341,14 @@ fun OfflineMapCanvas(
         modifier = modifier.onSizeChanged { viewSize = it },
     )
     DisposableEffect(map) {
-        val listener = Map.UpdateListener { _, _ ->
+        val listener = Map.UpdateListener { _, position ->
+            reportScale(MercatorProjection.groundResolution(position))
+            currentFollowedWaypoint?.let { reportWaypointAt(map.screenPosition(it.point, position)) }
+            // Not before first framing: until then VTM sits at whole-world, and remembering that
+            // would feed back in as initialCamera.
+            if (hasFramed) {
+                reportCamera(CameraSnapshot(position.latitude, position.longitude, position.zoom))
+            }
             currentClamp()?.let { map.keepInView(it, currentCover) }
         }
         map.events.bind(listener)
@@ -443,21 +425,11 @@ private fun routeFor(trackId: Long?, routes: List<RouteOverlay>, liveRoute: Rout
 private fun rememberMapViewWithLifecycle(): MapView {
     val context = LocalContext.current
     val mapView = remember { MapView(context) }
-    val lifecycle = LocalLifecycleOwner.current.lifecycle
-
-    DisposableEffect(lifecycle, mapView) {
-        val observer = LifecycleEventObserver { _, event ->
-            when (event) {
-                Lifecycle.Event.ON_RESUME -> mapView.onResume()
-                Lifecycle.Event.ON_PAUSE -> mapView.onPause()
-                else -> Unit
-            }
-        }
-        lifecycle.addObserver(observer)
-        onDispose {
-            lifecycle.removeObserver(observer)
-            mapView.onDestroy()
-        }
+    // Remembered first, so destroyed last, after the effects that unbind from it.
+    DisposableEffect(mapView) { onDispose { mapView.onDestroy() } }
+    LifecycleResumeEffect(mapView) {
+        mapView.onResume()
+        onPauseOrDispose { mapView.onPause() }
     }
     return mapView
 }

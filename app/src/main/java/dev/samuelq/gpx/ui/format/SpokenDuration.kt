@@ -1,6 +1,9 @@
 package dev.samuelq.gpx.ui.format
 
 import android.content.res.Resources
+import android.icu.text.MeasureFormat
+import android.icu.util.Measure
+import android.icu.util.MeasureUnit
 import dev.samuelq.gpx.R
 import kotlin.math.roundToLong
 
@@ -8,13 +11,15 @@ import kotlin.math.roundToLong
 fun Resources.spokenDuration(seconds: Double): String {
     if (seconds.isNaN() || seconds < 0) return getString(R.string.value_unknown)
     val total = seconds.roundToLong()
-    val hours = (total / 3600).toInt()
-    val minutes = ((total % 3600) / 60).toInt()
-    val secs = (total % 60).toInt()
-    return listOfNotNull(
-        hours.takeIf { it > 0 }?.let { getQuantityString(R.plurals.duration_hours, it, it) },
-        minutes.takeIf { it > 0 || hours > 0 }?.let { getQuantityString(R.plurals.duration_minutes, it, it) },
+    val hours = total / 3600
+    val minutes = (total % 3600) / 60
+    val secs = total % 60
+    val parts = listOfNotNull(
+        hours.takeIf { it > 0 }?.let { Measure(it, MeasureUnit.HOUR) },
+        minutes.takeIf { it > 0 || hours > 0 }?.let { Measure(it, MeasureUnit.MINUTE) },
         // Seconds matter under an hour, not past it.
-        secs.takeIf { hours == 0 }?.let { getQuantityString(R.plurals.duration_seconds, it, it) },
-    ).joinToString(" ")
+        secs.takeIf { hours == 0L }?.let { Measure(it, MeasureUnit.SECOND) },
+    )
+    return MeasureFormat.getInstance(configuration.locales[0], MeasureFormat.FormatWidth.WIDE)
+        .formatMeasures(*parts.toTypedArray())
 }

@@ -405,6 +405,60 @@ class TrackAnalyzerTest {
         }
         return Track(name = null, segments = listOf(TrackSegment(points)))
     }
+
+    @Test
+    fun `an empty track has zero stats`() {
+        val profile = TrackAnalyzer.analyze(TrackPoints.EMPTY)
+
+        assertFalse(profile.hasTime)
+        assertFalse(profile.hasElevation)
+        assertEquals(null, profile.stats.startedAt)
+        assertEquals(0, profile.stats.pointCount)
+        assertEquals(0.0, profile.stats.distanceMeters)
+        assertEquals(0.0, profile.stats.averageSpeedMps)
+        assertEquals(-1, profile.indexOf(TrackPoint(0.0, 0.0)))
+    }
+
+    @Test
+    fun `two timed points are too few to look for gaps`() {
+        val points = TrackPoints.of(
+            listOf(TrackPoint(0.0, 8.0, time = start), TrackPoint(0.001, 8.0, time = start.plusSeconds(3600))),
+        )
+        val profile = TrackAnalyzer.analyze(points)
+
+        assertTrue(profile.hasTime)
+        assertEquals(1, profile.segmentStartIndices.size)
+        assertEquals(start, profile.stats.startedAt)
+        // Too slow to count as moving, so the average falls back to the whole span.
+        assertEquals(0.0, profile.stats.movingDurationSeconds)
+        assertEquals(profile.stats.distanceMeters / 3600.0, profile.stats.averageSpeedMps, 1e-9)
+    }
+
+    @Test
+    fun `a segment without elevation stays unsmoothed`() {
+        val points = TrackPoints.of(
+            listOf(TrackPoint(0.0, 8.0, elevation = 100.0), TrackPoint(0.001, 8.0, elevation = 110.0)),
+            listOf(TrackPoint(0.002, 8.0), TrackPoint(0.003, 8.0)),
+        )
+        val profile = TrackAnalyzer.analyze(points)
+
+        assertTrue(profile.hasElevation)
+        assertTrue(profile.elevationMeters[2].isNaN())
+        assertEquals(10.0, profile.stats.ascentMeters, 1e-3)
+    }
+
+    @Test
+    fun `indexOf matches by time when timed, else by position`() {
+        val timed = TrackAnalyzer.analyze(straightRun(count = 10, metersPerSecond = 10.0))
+        // A round trip passes the same spot twice; the time picks the leg.
+        val probe = TrackPoint(latitude = 0.0, longitude = 8.0, time = start.plusSeconds(7))
+        assertEquals(7, timed.indexOf(probe))
+        assertEquals(0, timed.indexOf(probe.copy(time = null)))
+
+        val untimed = TrackAnalyzer.analyze(straightRun(count = 10, metersPerSecond = 10.0, timed = false))
+        assertEquals(4, untimed.indexOf(TrackPoint(4 * 10.0 / metersPerDegreeLatitude, 8.0, time = start)))
+    }
+
 }
 
 private fun TrackProfile.maxSpeed(): Double = speedMps.filterNot(Float::isNaN).max().toDouble()

@@ -301,9 +301,9 @@ private fun ProfileDetails(
     }
 
     // Time axis only: on a distance axis a stop is zero wide.
-    val gapFormat = stringResource(R.string.chart_gap)
-    val breakLabel: ((Float) -> String)? = remember(useTimeAxis, gapFormat) {
-        if (!useTimeAxis) null else { seconds -> gapFormat.format(Formatters.durationAxis(seconds)) }
+    val resources = LocalResources.current
+    val breakLabel: ((Float) -> String)? = remember(useTimeAxis, resources) {
+        if (!useTimeAxis) null else { seconds -> resources.getString(R.string.chart_gap, Formatters.durationAxis(seconds)) }
     }
 
     // While trimming, the whole track's details would read as the trimmed one's.
@@ -575,21 +575,16 @@ private fun AxisSelector(
     enabled: Boolean = true,
 ) {
     SingleChoiceSegmentedButtonRow(modifier.fillMaxWidth()) {
-        SegmentedButton(
-            selected = !useTimeAxis,
-            onClick = { onChange(false) },
-            enabled = enabled,
-            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-            modifier = Modifier.weight(1f),
-        ) { Text(stringResource(R.string.axis_distance)) }
-
-        SegmentedButton(
-            selected = useTimeAxis,
-            onClick = { onChange(true) },
-            enabled = enabled,
-            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-            modifier = Modifier.weight(1f),
-        ) { Text(stringResource(R.string.axis_time)) }
+        listOf(R.string.axis_distance, R.string.axis_time).forEachIndexed { index, label ->
+            val time = index == 1
+            SegmentedButton(
+                selected = useTimeAxis == time,
+                onClick = { onChange(time) },
+                enabled = enabled,
+                shape = SegmentedButtonDefaults.itemShape(index = index, count = 2),
+                modifier = Modifier.weight(1f),
+            ) { Text(stringResource(label)) }
+        }
     }
 }
 
@@ -673,10 +668,12 @@ private fun waypointActions(
             val note = waypoint.name?.trim()?.takeIf(String::isNotEmpty)?.let {
                 if (it.length > NOTE_LABEL_LENGTH) it.take(NOTE_LABEL_LENGTH).trimEnd() + "…" else it
             }
-            val label = buildString {
-                append(resources.getString(R.string.record_waypoint_title, i + 1))
-                time?.let { append(resources.getString(R.string.waypoint_action_time, it)) }
-                note?.let { append(resources.getString(R.string.waypoint_action_note, it)) }
+            val number = i + 1
+            val label = when {
+                time != null && note != null -> resources.getString(R.string.waypoint_action_time_note, number, time, note)
+                time != null -> resources.getString(R.string.waypoint_action_time, number, time)
+                note != null -> resources.getString(R.string.waypoint_action_note, number, note)
+                else -> resources.getString(R.string.record_waypoint_title, number)
             }
             CustomAccessibilityAction(label) { select(waypoint); true }
         }

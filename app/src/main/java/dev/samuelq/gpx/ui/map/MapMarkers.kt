@@ -15,10 +15,8 @@ import org.oscim.android.canvas.AndroidBitmap
 import org.oscim.core.GeoPoint
 import org.oscim.layers.marker.MarkerItem
 import org.oscim.layers.marker.MarkerSymbol
-import org.oscim.layers.vector.geometries.Style
 
-/** Marker bitmaps, built once per colour. */
-/** [hole] is the map's land colour, filling pin centres. */
+/** Marker bitmaps, built once per colour. [hole] is the map's land colour, filling pin centres. */
 internal class MarkerSymbols(marker: Color, puck: Color, hole: Color, density: Density) {
     val marker: MarkerSymbol
     val puck: MarkerSymbol
@@ -64,17 +62,8 @@ internal class MarkerSymbols(marker: Color, puck: Color, hole: Color, density: D
         val bitmap = createBitmap(size, size)
         val canvas = android.graphics.Canvas(bitmap)
         val centre = size / 2f
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-        if (halo != null) {
-            paint.color = halo.toArgb()
-            canvas.drawCircle(centre, centre, haloRadius, paint)
-        }
-        paint.color = fill.toArgb()
-        canvas.drawCircle(centre, centre, radius, paint)
-        paint.style = Paint.Style.STROKE
-        paint.strokeWidth = ringWidth
-        paint.color = ring.toArgb()
-        canvas.drawCircle(centre, centre, radius, paint)
+        if (halo != null) canvas.drawCircle(centre, centre, haloRadius, fillPaint(halo))
+        canvas.fillThenRing(fill, ring, ringWidth) { drawCircle(centre, centre, radius, it) }
         return MarkerSymbol(AndroidBitmap(bitmap), MarkerSymbol.HotspotPlace.CENTER, false)
     }
 
@@ -84,7 +73,6 @@ internal class MarkerSymbols(marker: Color, puck: Color, hole: Color, density: D
         val bitmap = createBitmap(size, size)
         val canvas = android.graphics.Canvas(bitmap)
         val c = size / 2f
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
         val path = android.graphics.Path().apply {
             moveTo(c, c - radius)
             lineTo(c + radius * 0.8f, c + radius * 0.8f)
@@ -92,13 +80,7 @@ internal class MarkerSymbols(marker: Color, puck: Color, hole: Color, density: D
             lineTo(c - radius * 0.8f, c + radius * 0.8f)
             close()
         }
-        paint.color = fill.toArgb()
-        canvas.drawPath(path, paint)
-        paint.style = Paint.Style.STROKE
-        paint.strokeJoin = Paint.Join.ROUND
-        paint.strokeWidth = ringWidth
-        paint.color = ring.toArgb()
-        canvas.drawPath(path, paint)
+        canvas.fillThenRing(fill, ring, ringWidth) { drawPath(path, it) }
         return MarkerSymbol(AndroidBitmap(bitmap), MarkerSymbol.HotspotPlace.CENTER, false)
     }
 
@@ -132,21 +114,30 @@ internal class MarkerSymbols(marker: Color, puck: Color, hole: Color, density: D
         val bitmap = createBitmap(width, height)
         val canvas = android.graphics.Canvas(bitmap)
         val path = teardropPath(cx, cy, radius, tipY)
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-        paint.color = fill.toArgb()
-        canvas.drawPath(path, paint)
-        paint.style = Paint.Style.STROKE
-        paint.strokeJoin = Paint.Join.ROUND
-        paint.strokeWidth = ringWidth
-        paint.color = ring.toArgb()
-        canvas.drawPath(path, paint)
+        canvas.fillThenRing(fill, ring, ringWidth) { drawPath(path, it) }
         // Land-coloured, not see-through: that showed the pin's own line, the fill's own tone.
         // Not white either, which glared in dark mode.
-        paint.style = Paint.Style.FILL
-        paint.color = hole.toArgb()
-        canvas.drawCircle(cx, cy, radius * PIN_HOLE_RATIO, paint)
+        canvas.drawCircle(cx, cy, radius * PIN_HOLE_RATIO, fillPaint(hole))
         return MarkerSymbol(AndroidBitmap(bitmap), MarkerSymbol.HotspotPlace.BOTTOM_CENTER, false)
     }
+}
+
+private fun fillPaint(color: Color) = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = color.toArgb() }
+
+/** [shape] filled, then outlined in [ring] with a round join. */
+private inline fun android.graphics.Canvas.fillThenRing(
+    fill: Color,
+    ring: Color,
+    ringWidth: Float,
+    shape: android.graphics.Canvas.(Paint) -> Unit,
+) {
+    val paint = fillPaint(fill)
+    shape(paint)
+    paint.style = Paint.Style.STROKE
+    paint.strokeJoin = Paint.Join.ROUND
+    paint.strokeWidth = ringWidth
+    paint.color = ring.toArgb()
+    shape(paint)
 }
 
 private fun teardropPath(cx: Float, cy: Float, radius: Float, tipY: Float): android.graphics.Path {

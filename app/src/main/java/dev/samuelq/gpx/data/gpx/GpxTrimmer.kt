@@ -8,30 +8,37 @@ import java.io.InputStream
 import java.io.OutputStream
 
 /**
- * Copies a GPX document keeping only some of its points and waypoints. Everything else passes
- * through: extensions, metadata, comments, other apps' data. [GpxWriter] would keep only what
- * the app reads.
+ * Copies a GPX document keeping only some of its points and waypoints, and optionally renaming
+ * its first track. Everything else passes through: extensions, metadata, comments, other apps'
+ * data. [GpxWriter] would keep only what the app reads.
  *
  * Points are counted as [GpxParser] reads them, so an index here is one in the parsed track.
- * Unreadable points and waypoints, which have no index, are dropped. A segment left with no
- * points goes too, as does `<metadata><bounds>`.
+ * When cutting, unreadable points and waypoints, which have no index, are dropped. A segment
+ * left with no points goes too, as does `<metadata><bounds>`.
  */
 class GpxTrimmer(
     private val newPullParser: () -> XmlPullParser = { XmlPullParserFactory.newInstance().newPullParser() },
     private val newSerializer: () -> XmlSerializer = { XmlPullParserFactory.newInstance().newSerializer() },
 ) {
 
+    /**
+     * @param keepPoint null keeps every point and the bounds.
+     * @param keepWaypoint null keeps every waypoint.
+     * @param name replaces the first `<trk>`'s name, or is added as its first child; blank
+     *   removes it, null leaves it.
+     */
     fun trim(
         input: InputStream,
         output: OutputStream,
-        keepPoint: (index: Int) -> Boolean,
-        keepWaypoint: (index: Int) -> Boolean,
+        keepPoint: ((index: Int) -> Boolean)? = null,
+        keepWaypoint: ((index: Int) -> Boolean)? = null,
+        name: String? = null,
     ) {
         val parser = newPullParser().apply {
             setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, true)
             setInput(input, null)
         }
-        Copy(parser, newSerializer().apply { setOutput(output, ENCODING) }, keepPoint, keepWaypoint).run()
+        Copy(parser, newSerializer().apply { setOutput(output, ENCODING) }, keepPoint, keepWaypoint, name).run()
     }
 
     /** A start tag held back until something inside it is kept. */
@@ -46,8 +53,10 @@ class GpxTrimmer(
     private class Copy(
         private val parser: XmlPullParser,
         private val xml: XmlSerializer,
-        private val keepPoint: (Int) -> Boolean,
-        private val keepWaypoint: (Int) -> Boolean,
+        private val keepPoint: ((Int) -> Boolean)?,
+        private val keepWaypoint: ((Int) -> Boolean)?,
+        /** Cleared once the first track has it. */
+        private var newName: String?,
     ) {
         private val path = ArrayList<String>()
         private var skipDepth = 0
@@ -58,6 +67,9 @@ class GpxTrimmer(
         private var pointIndex = 0
         private var segmentPoints = 0
         private var waypointIndex = 0
+        /** Inside the first `<trk>`, before its first child. */
+        private var nameDue = false
+        private var trackNamespace: String? = null
 
         fun run() {
             xml.startDocument(ENCODING, null)
@@ -85,11 +97,28 @@ class GpxTrimmer(
                 return
             }
             val name = parser.name
+            if (nameDue && path == TRK_PATH) {
+                nameDue = false
+                if (name == TAG_NAME) {
+                    // Replaced whole, so its old text and children go.
+                    writeName(capture())
+                    skipDepth = 1
+                    return
+                }
+                // Indented as the child it goes before.
+                if (!newName.isNullOrBlank()) {
+                    val indent = whitespace.toString()
+                    flushWhitespace()
+                    writeName()
+                    whitespace.append(indent)
+                }
+                newName = null
+            }
             val keep = when {
                 name == TAG_TRKPT && path == TRKSEG_PATH || name == TAG_RTEPT && path == RTE_PATH -> point()
-                name == TAG_WPT && path == ROOT_PATH -> readable() && keepWaypoint(waypointIndex++)
+                name == TAG_WPT && path == ROOT_PATH -> keepWaypoint == null || readable() && keepWaypoint(waypointIndex++)
                 // Wider than what's left; optional, so dropped rather than recomputed ahead of the points.
-                name == TAG_BOUNDS && path == METADATA_PATH -> false
+                name == TAG_BOUNDS && path == METADATA_PATH -> keepPoint == null
                 // Nothing but points is worth reopening an emptied segment for.
                 pendingSegment != null -> false
                 else -> true
@@ -111,9 +140,24 @@ class GpxTrimmer(
             }
             writeStart(capture())
             path += name
+            if (name == TAG_TRK && path == TRK_PATH && newName != null) {
+                nameDue = true
+                trackNamespace = parser.namespace.ifEmpty { null }
+            }
+        }
+
+        /** [newName] in place of [replaced], or new under the track's namespace; blank writes nothing. */
+        private fun writeName(replaced: StartTag? = null) {
+            val value = newName?.trim()?.xmlSafe()
+            newName = null
+            if (value.isNullOrEmpty()) return
+            val namespace = replaced?.namespace ?: trackNamespace
+            if (replaced != null) writeStart(replaced) else xml.startTag(namespace, TAG_NAME)
+            xml.text(value).endTag(namespace, TAG_NAME)
         }
 
         private fun point(): Boolean {
+            val keepPoint = keepPoint ?: return true
             if (!readable()) return false
             // Only a track segment is capped, as in the parser.
             if (path == TRKSEG_PATH && segmentPoints++ >= GpxParser.MAX_POINTS_PER_SEGMENT) return false
@@ -131,6 +175,10 @@ class GpxTrimmer(
             if (skipDepth > 0) {
                 skipDepth--
                 return
+            }
+            if (nameDue && path == TRK_PATH) {
+                nameDue = false
+                writeName(null)
             }
             path.removeAt(path.lastIndex)
             if (parser.name == TAG_TRKSEG && pendingSegment != null) {
@@ -196,6 +244,7 @@ class GpxTrimmer(
         const val TAG_RTEPT = "rtept"
         const val TAG_WPT = "wpt"
         const val TAG_BOUNDS = "bounds"
+        const val TAG_NAME = "name"
         const val ATTR_LAT = "lat"
         const val ATTR_LON = "lon"
 

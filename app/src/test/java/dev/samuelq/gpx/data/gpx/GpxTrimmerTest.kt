@@ -6,6 +6,7 @@ import java.io.ByteArrayOutputStream
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class GpxTrimmerTest {
@@ -90,5 +91,209 @@ class GpxTrimmerTest {
     fun `no blank lines are left where points were`() {
         val trimmed = trim(keepPoint = { it == 0 || it == 3 })
         assertFalse(Regex("\\n\\s*\\n").containsMatchIn(trimmed), trimmed)
+    }
+
+    @Test
+    fun `keeping every point keeps the bounds`() {
+        val out = ByteArrayOutputStream()
+        trimmer.trim(source.byteInputStream(), out)
+        assertTrue("<bounds" in out.toString(Charsets.UTF_8))
+    }
+
+    private fun rename(xml: String, name: String): String {
+        val out = ByteArrayOutputStream()
+        trimmer.trim(xml.byteInputStream(), out, name = name)
+        return out.toString(Charsets.UTF_8)
+    }
+
+    private fun nameOf(xml: String): String? = parser.parse(xml.byteInputStream()).name
+
+    private fun gpx(trackHeader: String) =
+        """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+          <metadata><name>Not the track name</name></metadata>
+          <trk>$trackHeader
+            <trkseg><trkpt lat="47.1" lon="8.5"/></trkseg>
+          </trk>
+        </gpx>
+        """.trimIndent()
+
+    @Test
+    fun `replaces a track's name, leaving the metadata's`() {
+        val out = rename(gpx("<name>Old name</name>"), "New name")
+        assertEquals("New name", nameOf(out))
+        assertTrue("<metadata><name>Not the track name</name></metadata>" in out, out)
+        assertFalse("Old name" in out, out)
+    }
+
+    @Test
+    fun `adds a name to a track with none, or an empty one`() {
+        assertEquals("Given a name", nameOf(rename(gpx(""), "Given a name")))
+        assertEquals("Filled in", nameOf(rename(gpx("<name/>"), "Filled in")))
+    }
+
+    @Test
+    fun `a blank name removes the track's`() {
+        val out = rename(source, " ")
+        assertFalse("Ride" in out, out)
+        // Falling back to the metadata's, as an unnamed track does.
+        assertEquals("Kept metadata", nameOf(out))
+    }
+
+    @Test
+    fun `names only the first track`() {
+        val out = rename(source.replace("</trk>", "</trk><trk><name>Lap</name><trkseg/></trk>"), "Renamed")
+        assertEquals("Renamed", nameOf(out))
+        assertTrue("<name>Lap</name>" in out, out)
+    }
+
+    @Test
+    fun `a name is escaped and kept whole`() {
+        assertEquals("Ben & Jerry <ride>", nameOf(rename(gpx("<name>Old</name>"), "Ben & Jerry <ride>")))
+        assertEquals("Ku-ring-gai · 秋の道", nameOf(rename(gpx("<name>Old</name>"), "Ku-ring-gai · 秋の道")))
+    }
+
+    @Test
+    fun `a prefixed document keeps its prefix`() {
+        val prefixed = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <g:gpx version="1.1" xmlns:g="http://www.topografix.com/GPX/1/1">
+              <g:trk>%s
+                <g:trkseg><g:trkpt lat="47.1" lon="8.5"/></g:trkseg>
+              </g:trk>
+            </g:gpx>
+        """.trimIndent()
+
+        val replaced = rename(prefixed.format("<g:name>Old</g:name>"), "Renamed")
+        assertEquals("Renamed", nameOf(replaced))
+        val added = rename(prefixed.format(""), "Renamed")
+        assertTrue("<g:name>Renamed</g:name>" in added, added)
+    }
+
+    @Test
+    fun `renaming keeps every point and waypoint`() {
+        val renamed = parser.parse(rename(source, "Renamed").byteInputStream())
+        val original = parser.parse(source.byteInputStream())
+        assertEquals(original.points.size, renamed.points.size)
+        assertEquals(original.waypoints, renamed.waypoints)
+        assertNull(Regex("\\n\\s*\\n").find(rename(gpx(""), "Named")))
+    }
+
+    @Test
+    fun `a track with no children still gets its name`() {
+        assertEquals("Named", nameOf(rename(gpx("").replace(Regex("<trk>[\\s\\S]*</trk>"), "<trk></trk>"), "Named")))
+        // A blank name for a childless track writes nothing.
+        assertFalse("<name>" in rename("<gpx><trk></trk></gpx>", ""))
+    }
+
+    @Test
+    fun `route points are cut by the same indices`() {
+        val route = """
+            <gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1"><rte>
+              <rtept lat="1" lon="1"/><rtept lon="2"/><rtept lat="3" lon="3"/>
+            </rte></gpx>
+        """.trimIndent()
+        val out = ByteArrayOutputStream()
+        trimmer.trim(route.byteInputStream(), out, keepPoint = { it == 1 })
+
+        val track = parser.parse(out.toString(Charsets.UTF_8).byteInputStream())
+        assertEquals(listOf(3.0), track.points.indices.map(track.points::latitude))
+    }
+
+    @Test
+    fun `CDATA, entities, comments and processing instructions pass through`() {
+        val doc = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <?xml-stylesheet href="style.xsl"?>
+            <gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+              <metadata><desc><![CDATA[<b>raw</b>]]> &amp; more</desc></metadata>
+              <?vendor data?>
+              <trk><trkseg><trkpt lat="1" lon="1"/><!-- gone --><?gone too?><![CDATA[gone]]><trkpt lat="2" lon="2"/></trkseg></trk>
+            </gpx>
+        """.trimIndent()
+        val out = ByteArrayOutputStream()
+        trimmer.trim(doc.byteInputStream(), out, keepPoint = { it == 1 })
+        val trimmed = out.toString(Charsets.UTF_8)
+
+        assertTrue("<![CDATA[<b>raw</b>]]>" in trimmed, trimmed)
+        assertTrue("&amp; more" in trimmed, trimmed)
+        assertTrue("<?vendor data?>" in trimmed, trimmed)
+        assertFalse("gone" in trimmed, trimmed)
+        assertEquals(1, parser.parse(trimmed.byteInputStream()).points.size)
+    }
+
+    @Test
+    fun `a doctype is dropped rather than copied`() {
+        val doc = """<?xml version="1.0"?><!DOCTYPE gpx><gpx version="1.1"><trk><trkseg><trkpt lat="1" lon="1"/></trkseg></trk></gpx>"""
+        val out = ByteArrayOutputStream()
+        trimmer.trim(doc.byteInputStream(), out)
+        val trimmed = out.toString(Charsets.UTF_8)
+
+        assertFalse("DOCTYPE" in trimmed, trimmed)
+        assertEquals(1, parser.parse(trimmed.byteInputStream()).points.size)
+    }
+
+    @Test
+    fun `waypoints alone can be cut, keeping every point and the bounds`() {
+        val out = ByteArrayOutputStream()
+        trimmer.trim(source.byteInputStream(), out, keepWaypoint = { it == 0 })
+        val trimmed = out.toString(Charsets.UTF_8)
+        val track = parser.parse(trimmed.byteInputStream())
+
+        assertEquals(listOf("Start"), track.waypoints.map { it.name })
+        assertEquals(parser.parse(source.byteInputStream()).points.size, track.points.size)
+        assertTrue("<bounds" in trimmed, trimmed)
+    }
+
+    @Test
+    fun `a capped segment's excess has no index, as in the parser`() {
+        val cap = GpxParser.MAX_POINTS_PER_SEGMENT
+        val asked = ArrayList<Int>()
+        trimmer.trim(oversizedGpx(cap + 2), java.io.OutputStream.nullOutputStream(), keepPoint = { asked += it; true })
+
+        // The segment's last two points are past the cap; the next segment's point follows on.
+        assertEquals(cap + 1, asked.size)
+        assertEquals(cap, asked.last())
+    }
+
+    @Test
+    fun `namespaced attributes such as the schema location survive`() {
+        val doc = """
+            <gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1"
+                 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                 xsi:schemaLocation="http://www.topografix.com/GPX/1/1 gpx.xsd">
+              <trk><trkseg><trkpt lat="1" lon="1"/><trkpt lat="2"/></trkseg></trk>
+            </gpx>
+        """.trimIndent()
+        val out = ByteArrayOutputStream()
+        trimmer.trim(doc.byteInputStream(), out, keepPoint = { true })
+        val trimmed = out.toString(Charsets.UTF_8)
+
+        assertTrue(Regex("""\w+:schemaLocation="http://www.topografix.com/GPX/1/1 gpx.xsd"""").containsMatchIn(trimmed), trimmed)
+        assertEquals(1, parser.parse(trimmed.byteInputStream()).points.size)
+    }
+
+    @Test
+    fun `a blank name adds nothing to a track without one`() {
+        val out = rename(gpx(""), " ")
+        assertEquals("Not the track name", nameOf(out))
+        assertEquals(1, Regex("<name>").findAll(out).count(), out)
+    }
+
+    @Test
+    fun `a cut segment takes its other children with it`() {
+        val doc = """
+            <gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1"><trk>
+              <trkseg><extensions><x>1</x></extensions><trkpt lat="1" lon="1"/></trkseg>
+              <trkseg><trkpt lat="2" lon="2"/></trkseg>
+            </trk></gpx>
+        """.trimIndent()
+        val out = ByteArrayOutputStream()
+        trimmer.trim(doc.byteInputStream(), out, keepPoint = { it == 1 })
+        val trimmed = out.toString(Charsets.UTF_8)
+
+        assertFalse("<x>" in trimmed, trimmed)
+        assertEquals(1, Regex("<trkseg").findAll(trimmed).count(), trimmed)
     }
 }
