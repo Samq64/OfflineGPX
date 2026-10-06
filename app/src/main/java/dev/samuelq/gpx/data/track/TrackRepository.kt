@@ -273,7 +273,7 @@ class TrackRepository(
 
     suspend fun setAllVisible(visible: Boolean) = dao.setAllVisible(visible)
 
-    suspend fun setColor(id: Long, colorIndex: Int) = dao.setColor(id, colorIndex.mod(TrackEntity.NEUTRAL_SLOT))
+    suspend fun setColor(id: Long, colorIndex: Int) = dao.setColor(id, colorIndex.mod(TrackEntity.PALETTE_SIZE))
 
     /** Hides [ids] until [undoDelete] or [commitDelete]. */
     fun deleteLater(ids: Collection<Long>) = pendingDelete.update { it + ids }
@@ -359,7 +359,7 @@ class TrackRepository(
                     displayName = copy.name,
                     trackName = name,
                     lastOpenedAtEpochMillis = System.currentTimeMillis(),
-                    colorIndex = leastUsedSlot(dao.colorUsage(), TrackEntity.NEUTRAL_SLOT),
+                    colorIndex = leastUsedSlot(dao.colorUsage(), TrackEntity.PALETTE_SIZE),
                     // Shown, even of a hidden track: a copy is made to be looked at.
                     visible = true,
                 )
@@ -441,7 +441,7 @@ class TrackRepository(
         dao.byId(id) ?: throw TrackLoadException.Unreadable("No track with id $id")
 
     private suspend fun newEntity(file: File, displayName: String, track: Track, profile: TrackProfile) = TrackEntity(
-        colorIndex = leastUsedSlot(dao.colorUsage(), TrackEntity.NEUTRAL_SLOT),
+        colorIndex = leastUsedSlot(dao.colorUsage(), TrackEntity.PALETTE_SIZE),
         location = TrackFiles.location(appContext, file),
         displayName = displayName,
         trackName = track.name,

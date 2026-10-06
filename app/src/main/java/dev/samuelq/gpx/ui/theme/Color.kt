@@ -96,44 +96,45 @@ internal val StaticDarkColors = darkColorScheme(
 )
 
 /**
- * Picked by search: at least 3:1 against map land (2:1 against water and vegetation), and
- * 25 CIEDE2000 apart from each other and [recordingColor] (12 under simulated CVD). Ordered
- * so the lowest slots are furthest apart. Plum and pink were redone to make room for the
- * grey: their old, duller shades turned grey under CVD. A grey would only fit seven.
+ * Picked by search for the hue each is named: at least 3:1 against map land (2:1 against water
+ * and vegetation), and apart from each other and [recordingColor] by 25 CIEDE2000 (12 under
+ * simulated CVD) in dark mode. Light mode gets 18 (7): a yellow dark enough for white land
+ * leaves orange little room beside the red. Slots keep the hue of the colour stored there
+ * before: blue became cyan, plum purple, violet blue, grey orange. Lower slots are assigned first.
  */
 private val RoutePaletteLight = listOf(
-    Color(0xFF1292C0),
-    Color(0xFF5D2E57),
-    Color(0xFF187C49),
-    Color(0xFF9D8519),
-    Color(0xFFFA177B),
-    Color(0xFF6B3CFB),
-    Color(0xFF807879),
+    Color(0xFF2A95B9),
+    Color(0xFF9765E9),
+    Color(0xFF098745),
+    Color(0xFFAA861B),
+    Color(0xFFE45191),
+    Color(0xFF3851A3),
+    Color(0xFFB15D08),
 ).also { check(it.size == TrackEntity.PALETTE_SIZE) }
 
 private val RoutePaletteDark = listOf(
-    Color(0xFF30C0F8),
-    Color(0xFFAE3B87),
-    Color(0xFF269E5F),
-    Color(0xFFD6BD5C),
-    Color(0xFFFE85A6),
-    Color(0xFF8472FE),
-    Color(0xFF746D6B),
+    Color(0xFF20EDFF),
+    Color(0xFF9321D4),
+    Color(0xFF28C67A),
+    Color(0xFFFCED54),
+    Color(0xFFFE499B),
+    Color(0xFF627FFE),
+    Color(0xFFEC9424),
 ).also { check(it.size == TrackEntity.PALETTE_SIZE) }
 
 /** Names for the slots, alike in both themes. */
 val RouteColorNames = listOf(
-    R.string.color_blue,
-    R.string.color_plum,
+    R.string.color_cyan,
+    R.string.color_purple,
     R.string.color_green,
-    R.string.color_gold,
+    R.string.color_yellow,
     R.string.color_pink,
-    R.string.color_violet,
-    R.string.color_grey,
+    R.string.color_blue,
+    R.string.color_orange,
 ).also { check(it.size == TrackEntity.PALETTE_SIZE) }
 
-/** Slots round the colour wheel, grey last; the slots' own order is for assigning. */
-val RoutePickerOrder = listOf(4, 3, 2, 0, 5, 1, 6)
+/** Slots round the colour wheel; the slots' own order is for assigning. */
+val RoutePickerOrder = listOf(4, 6, 3, 2, 0, 5, 1)
     .also { check(it.sorted() == (0 until TrackEntity.PALETTE_SIZE).toList()) }
 
 private val RecordingLight = Color(0xFFBA0D01)

@@ -43,7 +43,7 @@ app/ di/     AppContainer: manual wiring, no Hilt.
 - The render theme is generated at runtime in the mapsforge theme dialect, from the app's
   colours; it expects the tags of the v5 files at download.mapsforge.org. VTM widens lines
   1.4x per zoom above z12 and the theme divides that back out.
-- Data colours (charts, the six route colours, the recording red) are fixed, checked for
+- Data colours (charts, the seven route colours, the recording red) are fixed, checked for
   contrast against the map and separation under simulated colour blindness. Chrome follows
   Material You.
 - Analysis invariants: a `<trkseg>` break is lost signal, so distance, the speed window and

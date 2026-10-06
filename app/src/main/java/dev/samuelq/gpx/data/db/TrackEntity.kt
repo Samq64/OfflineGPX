@@ -50,9 +50,6 @@ data class TrackEntity(
 
     companion object {
         const val PALETTE_SIZE = 7
-
-        /** Grey, for tracks worth showing but not noticing; picked by hand, never assigned. */
-        const val NEUTRAL_SLOT = PALETTE_SIZE - 1
     }
 }
 

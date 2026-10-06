@@ -28,12 +28,12 @@
     <string name="chart_zoom_reset">Show whole track</string>
 
     <string name="color_blue">Blue</string>
-    <string name="color_gold">Gold</string>
+    <string name="color_cyan">Cyan</string>
     <string name="color_green">Green</string>
-    <string name="color_grey">Grey</string>
+    <string name="color_orange">Orange</string>
     <string name="color_pink">Pink</string>
-    <string name="color_plum">Plum</string>
-    <string name="color_violet">Violet</string>
+    <string name="color_purple">Purple</string>
+    <string name="color_yellow">Yellow</string>
 
     <!-- %1$s is a track or map name. -->
     <string name="deleted_named">Deleted “%1$s”.</string>
