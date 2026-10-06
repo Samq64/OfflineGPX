@@ -227,6 +227,19 @@ class MapStore(
         return MapImportResult.Imported(map)
     }
 
+    /** Copies [map] to a document the user created. False if it couldn't be written. */
+    suspend fun export(map: OfflineMap, uri: Uri): Boolean = withContext(Dispatchers.IO) {
+        try {
+            appContext.contentResolver.openOutputStream(uri, "wt")?.use { output ->
+                map.file.inputStream().use { it.copyTo(output) }
+            } != null
+        } catch (_: IOException) {
+            false
+        } catch (_: SecurityException) {
+            false
+        }
+    }
+
     /** Hides [map] until [undoDelete] or [commitDelete]. */
     fun deleteLater(map: OfflineMap) {
         pendingDelete += map.file.name

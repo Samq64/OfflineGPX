@@ -25,10 +25,12 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -131,6 +133,20 @@ fun SettingsScreen(
     // Not stringResource: a long-lived collector would keep the old locale.
     val resources = LocalResources.current
 
+    // By filename, saved, so the answer still finds its map after a recreation.
+    var exporting by rememberSaveable { mutableStateOf<String?>(null) }
+    val exporter = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/octet-stream")
+    ) { uri ->
+        val map = maps.firstOrNull { it.file.name == exporting }
+        exporting = null
+        map?.let { viewModel.exportMap(it, uri) }
+    }
+    fun exportMap(map: OfflineMap) {
+        exporting = map.file.name
+        exporter.launch(map.file.name)
+    }
+
     // Undoable rather than confirmed: a mis-tap would cost re-fetching the file.
     fun deleteMap(map: OfflineMap) {
         viewModel.deleteMap(map)
@@ -161,6 +177,8 @@ fun SettingsScreen(
                         SettingsMessage.MapUnreadable -> R.string.settings_maps_failed_unreadable
                         SettingsMessage.MapWrongFormat -> R.string.settings_maps_failed_format
                         SettingsMessage.MapNoSpace -> R.string.settings_maps_failed_space
+                        SettingsMessage.MapExported -> R.string.settings_maps_exported
+                        SettingsMessage.MapExportFailed -> R.string.settings_maps_export_failed
                         SettingsMessage.NoBrowser -> R.string.settings_maps_no_browser
                     }
                 )
@@ -212,6 +230,7 @@ fun SettingsScreen(
                 maps = maps,
                 importing = importing,
                 onImport = { importer.launch(MAP_MIME_TYPES) },
+                onExport = ::exportMap,
                 onDelete = ::deleteMap,
                 onOpenHelp = { openUrl(MAP_HELP_URL) },
             )
@@ -453,6 +472,7 @@ private fun MapsSection(
     maps: List<OfflineMap>,
     importing: Boolean,
     onImport: () -> Unit,
+    onExport: (OfflineMap) -> Unit,
     onDelete: (OfflineMap) -> Unit,
     onOpenHelp: () -> Unit,
 ) {
@@ -502,7 +522,7 @@ private fun MapsSection(
             )
         } else {
             maps.forEach { map ->
-                MapRow(map = map, onDelete = { onDelete(map) })
+                MapRow(map = map, onExport = { onExport(map) }, onDelete = { onDelete(map) })
             }
         }
     }
@@ -512,6 +532,7 @@ private fun MapsSection(
 @Composable
 private fun MapRow(
     map: OfflineMap,
+    onExport: () -> Unit,
     onDelete: () -> Unit,
 ) {
     val size = android.text.format.Formatter.formatShortFileSize(LocalContext.current, map.sizeBytes)
@@ -545,11 +566,30 @@ private fun MapRow(
             )
         }
 
-        IconButton(onClick = onDelete) {
-            Icon(
-                Icons.Default.Delete,
-                contentDescription = stringResource(R.string.settings_maps_delete_named, map.displayName),
-            )
+        Box {
+            var open by remember { mutableStateOf(false) }
+            IconButton(onClick = { open = true }) {
+                Icon(
+                    Icons.Default.MoreVert,
+                    contentDescription = stringResource(R.string.settings_maps_manage_named, map.displayName),
+                )
+            }
+            DropdownMenu(open, onDismissRequest = { open = false }) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.settings_maps_export)) },
+                    onClick = {
+                        open = false
+                        onExport()
+                    },
+                )
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.library_delete), color = MaterialTheme.colorScheme.error) },
+                    onClick = {
+                        open = false
+                        onDelete()
+                    },
+                )
+            }
         }
     }
 }

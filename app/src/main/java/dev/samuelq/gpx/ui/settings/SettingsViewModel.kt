@@ -26,6 +26,8 @@ enum class SettingsMessage {
     MapUnreadable,
     MapWrongFormat,
     MapNoSpace,
+    MapExported,
+    MapExportFailed,
     NoBrowser,
 }
 
@@ -96,6 +98,13 @@ class SettingsViewModel(
 
     /** Undoable until [commitDeleteMap]. */
     fun deleteMap(map: OfflineMap) = mapStore.deleteLater(map)
+
+    fun exportMap(map: OfflineMap, uri: Uri?) {
+        if (uri == null) return
+        viewModelScope.launch {
+            _messages.send(if (mapStore.export(map, uri)) SettingsMessage.MapExported else SettingsMessage.MapExportFailed)
+        }
+    }
 
     fun undoDeleteMap(map: OfflineMap) = mapStore.undoDelete(map)
 

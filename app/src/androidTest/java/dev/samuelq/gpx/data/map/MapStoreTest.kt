@@ -5,12 +5,15 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.samuelq.gpx.container
 import dev.samuelq.gpx.data.track.TrackFiles
 import dev.samuelq.gpx.targetContext
+import android.net.Uri
 import kotlinx.coroutines.runBlocking
+import org.oscim.tiling.source.mapfile.header.MapFileHeader
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertTrue
 
 @RunWith(AndroidJUnit4::class)
 class MapStoreTest {
@@ -26,6 +29,22 @@ class MapStoreTest {
             assertEquals(MapImportError.NOT_A_MAP_FILE, assertIs<MapImportResult.Failed>(result).error)
         } finally {
             file.delete()
+        }
+    }
+
+    @Test
+    fun exportCopiesTheFile() {
+        val dir = targetContext.cacheDir
+        val source = File(dir, "source-${System.nanoTime()}.map").apply { writeBytes(ByteArray(10_000) { it.toByte() }) }
+        // Longer, so a copy that didn't truncate would leave a tail.
+        val target = File(dir, "export-${System.nanoTime()}.map").apply { writeBytes(ByteArray(20_000)) }
+        try {
+            val map = OfflineMap(source, MapFileHeader(), source.length())
+            assertTrue(runBlocking { container.mapStore.export(map, Uri.fromFile(target)) })
+            assertTrue(source.readBytes().contentEquals(target.readBytes()))
+        } finally {
+            source.delete()
+            target.delete()
         }
     }
 }

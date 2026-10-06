@@ -179,14 +179,17 @@
     <string name="settings_battery">Battery optimisation</string>
     <string name="settings_battery_explanation">Some phones stop recordings in the background. Turn optimisation off for this app to keep them running.</string>
     <string name="settings_battery_open">Open battery settings</string>
-    <string name="settings_maps_delete_named">Delete %1$s</string>
     <string name="settings_maps_explanation">Manage .map file imports. Without one, tracks are drawn on a blank background.</string>
+    <string name="settings_maps_export">Export</string>
+    <string name="settings_maps_export_failed">Couldn\'t export that map.</string>
+    <string name="settings_maps_exported">Map exported.</string>
     <string name="settings_maps_failed_format">That isn\'t a supported map format.</string>
     <string name="settings_maps_failed_space">Not enough free space for that map.</string>
     <string name="settings_maps_failed_unreadable">Couldn\'t read that file.</string>
     <string name="settings_maps_import">Import map</string>
     <string name="settings_maps_imported">Map imported.</string>
     <string name="settings_maps_importing">Copying map…</string>
+    <string name="settings_maps_manage_named">Manage %1$s</string>
     <string name="settings_maps_merge">Merge</string>
     <!-- %1$s is the new map, %2$s a list of the maps covering the same area, each already quoted. -->
     <plurals name="settings_maps_merge_body">
