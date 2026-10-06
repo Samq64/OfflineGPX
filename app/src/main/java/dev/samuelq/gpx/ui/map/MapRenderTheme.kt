@@ -90,7 +90,7 @@ object MapRenderTheme {
         zoomedLine(
             selector = """<rule e="way" k="highway" v="residential|unclassified|living_street|service|pedestrian">""",
             stroke = land.shifted(0.30f, dark).css(),
-            stops = listOf(13 to 0.5f, 15 to 1.5f, 18 to 6f),
+            stops = MINOR_ROAD_STOPS,
         )
         zoomedLine(
             selector = """<rule e="way" k="highway" v="motorway|trunk|primary|secondary|tertiary|motorway_link|trunk_link|primary_link|secondary_link|tertiary_link">""",
@@ -111,10 +111,15 @@ object MapRenderTheme {
         zoomedLine(
             selector = """<rule e="way" k="highway" v="path|footway|cycleway|bridleway|track|steps">""",
             stroke = pathBrown(dark),
-            stops = listOf(13 to 0.5f, 15 to 1.2f, 18 to 4.5f),
+            stops = PATH_STOPS,
             dashes = "8,5",
         )
     }
+
+    internal val MINOR_ROAD_STOPS = listOf(13 to 0.5f, 15 to 1.5f, 18 to 6f)
+
+    /** Half a minor road's width close in, where a town's sidewalks otherwise crowd it out. */
+    internal val PATH_STOPS = listOf(13 to 0.4f, 15 to 1f, 18 to 3f)
 
     // --- Names -----------------------------------------------------------------------
 

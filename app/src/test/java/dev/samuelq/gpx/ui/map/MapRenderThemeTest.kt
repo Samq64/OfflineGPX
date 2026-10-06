@@ -99,6 +99,16 @@ class MapRenderThemeTest {
         )
     }
 
+    @Test
+    fun `a footpath is narrower than the smallest road at every zoom`() {
+        val roads = MapRenderTheme.perZoom(MapRenderTheme.MINOR_ROAD_STOPS).toMap()
+        MapRenderTheme.perZoom(MapRenderTheme.PATH_STOPS).forEach { (zoom, width) ->
+            val road = roads[zoom] ?: return@forEach
+            assert(width < road) { "z$zoom: path $width, road $road" }
+        }
+        kotlin.test.assertEquals(3f, MapRenderTheme.PATH_STOPS.last().second)
+    }
+
     /** VTM grows widths 1.4x per zoom above z12. */
     @Test
     fun `widths undo VTM's zoom growth`() {
