@@ -172,8 +172,8 @@
     <string name="record_weak_signal_spoken">Signal too weak to record. Try outdoors.</string>
 
     <string name="settings_about_libraries">Libraries</string>
-    <!-- %1$s is the version and commit, e.g. 0.1.0 (8c5759b). -->
-    <string name="settings_about_version">Version %1$s. GPL-3.0.</string>
+    <!-- %1$s is the app's name, %2$s the version and commit, e.g. 0.1.0 (8c5759b). -->
+    <string name="settings_about_version">%1$s v%2$s. GPL-3.0.</string>
     <string name="settings_accuracy">Accuracy limit</string>
     <string name="settings_accuracy_explanation">Fixes less certain than this are ignored. Lower it if the device wanders indoors, or increase it if points are not recorded in a wooded area.</string>
     <!-- Spoken for the slider: the value, then the default. -->

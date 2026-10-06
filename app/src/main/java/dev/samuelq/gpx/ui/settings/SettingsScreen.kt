@@ -315,11 +315,7 @@ fun SettingsScreen(
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
             SectionHeading(stringResource(R.string.settings_section_about))
 
-            Text(
-                text = stringResource(R.string.settings_about_version, VERSION),
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(horizontal = ScreenPadding, vertical = 8.dp),
-            )
+            VersionLine(onOpenCommit = { openUrl(COMMIT_URL + it) })
             Text(
                 text = stringResource(R.string.settings_about_libraries),
                 style = MaterialTheme.typography.titleSmall,
@@ -435,15 +431,35 @@ private val LIBRARIES = listOf(
     Library("Kotlin", "Apache-2.0", "https://kotlinlang.org"),
 )
 
-private val VERSION = BuildConfig.VERSION_NAME +
-    BuildConfig.GIT_HASH.takeIf { it.isNotEmpty() }?.let { " ($it)" }.orEmpty()
+private const val COMMIT_URL = "https://github.com/Samq64/offline-gpx-android/commit/"
+
+@Composable
+private fun linkStyles() = TextLinkStyles(
+    SpanStyle(color = MaterialTheme.colorScheme.primary, textDecoration = TextDecoration.Underline)
+)
+
+/** The commit hash, when the build has one, links to its source. */
+@Composable
+private fun VersionLine(onOpenCommit: (String) -> Unit) {
+    val hash = BuildConfig.GIT_HASH
+    val version = BuildConfig.VERSION_NAME + if (hash.isEmpty()) "" else " ($hash)"
+    val text = stringResource(R.string.settings_about_version, stringResource(R.string.app_name), version)
+    val link = linkStyles()
+    Text(
+        text = buildAnnotatedString {
+            append(text)
+            val at = if (hash.isEmpty()) -1 else text.indexOf(hash)
+            if (at >= 0) addLink(LinkAnnotation.Clickable(hash, link) { onOpenCommit(hash) }, at, at + hash.length)
+        },
+        style = MaterialTheme.typography.bodyMedium,
+        modifier = Modifier.padding(horizontal = ScreenPadding, vertical = 8.dp),
+    )
+}
 
 /** The name links to the project; the licence follows in brackets. */
 @Composable
 private fun LibraryLine(library: Library, onClick: () -> Unit) {
-    val link = TextLinkStyles(
-        SpanStyle(color = MaterialTheme.colorScheme.primary, textDecoration = TextDecoration.Underline)
-    )
+    val link = linkStyles()
     Text(
         text = buildAnnotatedString {
             withLink(LinkAnnotation.Clickable(library.name, link) { onClick() }) {
