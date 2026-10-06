@@ -1,8 +1,10 @@
 package dev.samuelq.gpx.ui
 
 import android.content.Intent
+import android.net.Uri
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
@@ -98,6 +100,31 @@ class AppFlowsTest {
         compose.waitUntil(5_000) {
             compose.onAllNodes(hasText(name), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
         }
+    }
+
+    @Test
+    fun undoSurvivesRecreation() {
+        val name = "Undone ${System.nanoTime()}"
+        val file = File(targetContext.cacheDir, "undo-${System.nanoTime()}.gpx").apply { writeText(sampleGpx(name = name)) }
+        val repository = container.trackRepository
+        val id = kotlinx.coroutines.runBlocking { repository.import(Uri.fromFile(file)).getOrThrow() }
+        file.delete()
+        launch()
+
+        compose.onNodeWithContentDescription(string(R.string.library_title)).performClick()
+        compose.waitUntil(5_000) {
+            compose.onAllNodes(hasContentDescription(targetContext.getString(R.string.track_manage_named, name)))
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithContentDescription(targetContext.getString(R.string.track_manage_named, name)).performClick()
+        compose.onNodeWithText(string(R.string.library_delete)).performClick()
+        // As a locale change does; the undo mustn't commit.
+        scenario!!.recreate()
+        compose.onNodeWithText(string(R.string.action_undo)).performClick()
+
+        compose.waitUntil(5_000) { kotlinx.coroutines.runBlocking { repository.tracks.first() }.any { it.id == id } }
+        repository.deleteLater(listOf(id))
+        repository.commitDelete(listOf(id))
     }
 
     @Test

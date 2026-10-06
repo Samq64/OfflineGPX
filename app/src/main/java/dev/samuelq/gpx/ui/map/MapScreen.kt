@@ -36,7 +36,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarDuration
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -78,7 +77,8 @@ import dev.samuelq.gpx.data.record.RecordingController
 import dev.samuelq.gpx.data.record.RecordingState
 import dev.samuelq.gpx.ui.record.RecordingSheet
 import dev.samuelq.gpx.ui.record.RecordingOutcomes
-import dev.samuelq.gpx.ui.showUndo
+import dev.samuelq.gpx.ui.makeWay
+import dev.samuelq.gpx.ui.rememberSnackbars
 import dev.samuelq.gpx.ui.theme.recordingColor
 import dev.samuelq.gpx.ui.theme.routePalette
 import dev.samuelq.gpx.ui.theme.slot
@@ -129,7 +129,8 @@ fun MapScreen(
     val liveColor = recordingColor()
     val density = LocalDensity.current
 
-    val snackbarHostState = remember { SnackbarHostState() }
+    val snackbars = rememberSnackbars()
+    val snackbarHostState = snackbars.host
     // Never read here: that would recompose the screen every frame of a pan. ScaleBar reads it.
     val metersPerPixel = remember { mutableDoubleStateOf(0.0) }
 
@@ -160,10 +161,9 @@ fun MapScreen(
     // Read only by the tooltip's layout, so panning doesn't recompose this screen.
     val tappedWaypointAt = remember { mutableStateOf(Offset.Zero) }
 
-    // Replaces rather than queues: a stale answer to a tap is misleading. Replacing an undo
-    // commits it.
+    // Replaces rather than queues: a stale answer to a tap is misleading. An undo comes back after.
     fun say(message: String, openSettings: (() -> Unit)? = null) = scope.launch {
-        snackbarHostState.currentSnackbarData?.dismiss()
+        snackbarHostState.makeWay()
         val result = snackbarHostState.showSnackbar(
             message,
             actionLabel = openSettings?.let { resources.getString(R.string.action_settings) },
@@ -172,9 +172,8 @@ fun MapScreen(
         if (result == SnackbarResult.ActionPerformed) openSettings?.invoke()
     }
 
-    fun offerUndo(message: String, onUndo: () -> Unit, onCommit: () -> Unit = {}) = scope.launch {
-        snackbarHostState.showUndo(context, message, resources.getString(R.string.action_undo), onUndo, onCommit)
-    }
+    fun offerUndo(message: String, onUndo: () -> Unit, onCommit: () -> Unit = {}) =
+        snackbars.offerUndo(context, message, resources.getString(R.string.action_undo), onUndo, onCommit)
 
     val requestRecording = rememberLocationRequest(
         LocationUse.Record,

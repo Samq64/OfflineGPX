@@ -40,7 +40,6 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -51,7 +50,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -91,9 +89,9 @@ import dev.samuelq.gpx.ui.format.LocalFormatters
 import dev.samuelq.gpx.ui.format.tabularFigures
 import dev.samuelq.gpx.ui.isLargeText
 import dev.samuelq.gpx.ui.readFirst
-import dev.samuelq.gpx.ui.showUndo
+import dev.samuelq.gpx.ui.makeWay
+import dev.samuelq.gpx.ui.rememberSnackbars
 import kotlin.math.roundToInt
-import kotlinx.coroutines.launch
 
 private val ScreenPadding = 20.dp
 
@@ -115,8 +113,8 @@ fun SettingsScreen(
     val overlapping by viewModel.overlapping.collectAsStateWithLifecycle()
     val formatters = LocalFormatters.current
     val context = LocalContext.current
-    val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
+    val snackbars = rememberSnackbars()
+    val snackbarHostState = snackbars.host
 
     val importer = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
@@ -136,15 +134,13 @@ fun SettingsScreen(
     // Undoable rather than confirmed: a mis-tap would cost re-fetching the file.
     fun deleteMap(map: OfflineMap) {
         viewModel.deleteMap(map)
-        scope.launch {
-            snackbarHostState.showUndo(
-                context = context,
-                message = resources.getString(R.string.deleted_named, map.displayName),
-                undoLabel = resources.getString(R.string.action_undo),
-                onUndo = { viewModel.undoDeleteMap(map) },
-                onCommit = { viewModel.commitDeleteMap(map) },
-            )
-        }
+        snackbars.offerUndo(
+            context = context,
+            message = resources.getString(R.string.deleted_named, map.displayName),
+            undoLabel = resources.getString(R.string.action_undo),
+            onUndo = { viewModel.undoDeleteMap(map) },
+            onCommit = { viewModel.commitDeleteMap(map) },
+        )
     }
 
     // The browser fetches it, so no INTERNET permission is needed.
@@ -157,7 +153,7 @@ fun SettingsScreen(
 
     LaunchedEffect(viewModel) {
         viewModel.messages.collect { message ->
-            snackbarHostState.currentSnackbarData?.dismiss()
+            snackbarHostState.makeWay()
             snackbarHostState.showSnackbar(
                 resources.getString(
                     when (message) {

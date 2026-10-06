@@ -43,7 +43,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SearchBarDefaults
 import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -54,7 +53,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -105,7 +103,7 @@ import dev.samuelq.gpx.ui.format.Formatters
 import dev.samuelq.gpx.ui.format.LocalFormatters
 import dev.samuelq.gpx.ui.isLargeText
 import dev.samuelq.gpx.ui.readFirst
-import dev.samuelq.gpx.ui.showUndo
+import dev.samuelq.gpx.ui.rememberSnackbars
 import dev.samuelq.gpx.ui.theme.routePalette
 import dev.samuelq.gpx.ui.theme.RouteColorNames
 import dev.samuelq.gpx.ui.theme.RoutePickerOrder
@@ -118,7 +116,6 @@ import dev.samuelq.gpx.ui.track.shareTrackIntent
 import dev.samuelq.gpx.ui.track.trackTitle
 import java.text.Collator
 import java.time.Instant
-import kotlinx.coroutines.launch
 
 
 /** Track management. Long-press starts a multi-selection. */
@@ -135,7 +132,8 @@ fun LibraryScreen(
     val selection by viewModel.selection.collectAsStateWithLifecycle()
     val query by viewModel.query.collectAsStateWithLifecycle()
     val order by viewModel.order.collectAsStateWithLifecycle()
-    val snackbarHostState = remember { SnackbarHostState() }
+    val snackbars = rememberSnackbars()
+    val snackbarHostState = snackbars.host
     var menuOpen by remember { mutableStateOf(false) }
     // Separate from a blank query: an open field starts empty.
     var searching by rememberSaveable { mutableStateOf(false) }
@@ -158,7 +156,6 @@ fun LibraryScreen(
         else resources.getQuantityString(some, requested, done, requested)
 
     var renaming by remember { mutableStateOf<TrackEntity?>(null) }
-    val scope = rememberCoroutineScope()
 
     // A track just changed or brought back, scrolled to once its row is in the list.
     var reveal by remember { mutableStateOf<Long?>(null) }
@@ -172,21 +169,19 @@ fun LibraryScreen(
 
     fun delete(ids: Set<Long>) {
         viewModel.delete(ids)
-        scope.launch {
-            snackbarHostState.showUndo(
-                context = context,
-                // Named when it's one; a count says enough for several.
-                message = ids.singleOrNull()?.let { id -> tracks.firstOrNull { it.id == id } }
-                    ?.let { resources.getString(R.string.deleted_named, trackTitle(it.trackName, it.displayName)) }
-                    ?: resources.getQuantityString(R.plurals.library_deleted, ids.size, ids.size),
-                undoLabel = resources.getString(R.string.action_undo),
-                onUndo = {
-                    viewModel.undoDelete(ids)
-                    reveal = ids.first()
-                },
-                onCommit = { viewModel.commitDelete(ids) },
-            )
-        }
+        snackbars.offerUndo(
+            context = context,
+            // Named when it's one; a count says enough for several.
+            message = ids.singleOrNull()?.let { id -> tracks.firstOrNull { it.id == id } }
+                ?.let { resources.getString(R.string.deleted_named, trackTitle(it.trackName, it.displayName)) }
+                ?: resources.getQuantityString(R.plurals.library_deleted, ids.size, ids.size),
+            undoLabel = resources.getString(R.string.action_undo),
+            onUndo = {
+                viewModel.undoDelete(ids)
+                reveal = ids.first()
+            },
+            onCommit = { viewModel.commitDelete(ids) },
+        )
     }
 
     val picker = rememberLauncherForActivityResult(
