@@ -300,7 +300,7 @@ class TrackRepository(
             require(at in 1 until last) { "Can't split at $at" }
 
             val file = fileOf(entity)
-            val title = entity.title
+            val title = entity.editableName.trim()
             val firstName = appContext.getString(R.string.split_part, title, 1)
             val secondName = appContext.getString(R.string.split_part, title, 2)
             val second = uniqueFile(file.parentFile!!, secondName, "gpx", fallback = "track")
@@ -327,7 +327,7 @@ class TrackRepository(
         runCatching {
             val entity = entity(id)
             val file = fileOf(entity)
-            val title = entity.title
+            val title = entity.editableName.trim()
             val name = appContext.getString(R.string.duplicate_name, title)
             val copy = uniqueFile(file.parentFile!!, name, "gpx", fallback = "track")
             try {
@@ -455,10 +455,6 @@ class TrackRepository(
         if (track.isEmpty) throw TrackLoadException.Empty("No track points in $displayName")
         return track
     }
-
-    /** As the list shows it, for the names an edit derives from it. */
-    private val TrackEntity.title: String
-        get() = (trackName ?: TrackFiles.recordedAt(displayName) ?: displayName.removeSuffix(".gpx")).trim()
 
     private fun fileOf(entity: TrackEntity) = TrackFiles.file(appContext, entity.location)
 

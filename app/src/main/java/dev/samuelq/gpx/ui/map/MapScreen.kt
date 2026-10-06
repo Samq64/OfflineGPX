@@ -72,6 +72,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.samuelq.gpx.R
+import dev.samuelq.gpx.data.track.editableName
+import dev.samuelq.gpx.data.track.title
 import dev.samuelq.gpx.core.model.Waypoint
 import dev.samuelq.gpx.data.record.RecordingController
 import dev.samuelq.gpx.data.record.RecordingState
@@ -88,7 +90,6 @@ import dev.samuelq.gpx.ui.track.TrimControls
 import dev.samuelq.gpx.ui.track.TrackNameDialog
 import dev.samuelq.gpx.ui.track.TrackRef
 import dev.samuelq.gpx.ui.track.TrackSheetPeekHeight
-import dev.samuelq.gpx.ui.track.editableTrackName
 import dev.samuelq.gpx.ui.track.trackTitle
 import dev.samuelq.gpx.ui.track.shareTrackIntent
 import kotlinx.coroutines.flow.drop
@@ -146,7 +147,7 @@ fun MapScreen(
     val focusedRow = focusedTrack?.let { state.entity(it.id) }
     val focusedColor = palette.slot(focusedRow?.colorIndex ?: 0)
     val focusedTitle = when {
-        focusedRow != null -> trackTitle(focusedRow.trackName, focusedRow.displayName)
+        focusedRow != null -> focusedRow.title
         focusedTrack != null -> trackTitle(focusedTrack.track.name, focusedTrack.displayName)
         else -> ""
     }
@@ -456,7 +457,7 @@ fun MapScreen(
                     viewModel.focus(null)
                     viewModel.delete(entity.id)
                     offerUndo(
-                        resources.getString(R.string.deleted_named, trackTitle(entity.trackName, entity.displayName)),
+                        resources.getString(R.string.deleted_named, entity.title),
                         onUndo = { viewModel.undoDelete(entity.id) },
                         onCommit = { viewModel.commitDelete(entity.id) },
                     )
@@ -746,7 +747,7 @@ fun MapScreen(
     // Only once loaded, which is what knows the name to offer.
     focusedRow?.takeIf { it.id == screen.renamingId }?.let { track ->
         TrackNameDialog(
-            initialName = editableTrackName(track.trackName, track.displayName),
+            initialName = track.editableName,
             // Prefilled, not a hint: dismissing keeps what's shown.
             onDismiss = { screen.renamingId = null },
             onConfirm = { name ->

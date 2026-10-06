@@ -9,12 +9,12 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import dev.samuelq.gpx.data.db.TrackEntity
+import dev.samuelq.gpx.data.track.title
 import dev.samuelq.gpx.data.settings.SettingsRepository
 import dev.samuelq.gpx.data.settings.TrackOrder
 import dev.samuelq.gpx.data.settings.TrackSort
 import dev.samuelq.gpx.data.track.TrackRepository
 import dev.samuelq.gpx.di.appContainer
-import dev.samuelq.gpx.ui.track.trackTitle
 import java.text.Collator
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
@@ -186,7 +186,7 @@ class LibraryViewModel(
 private fun TrackEntity.matches(query: String): Boolean {
     val needle = query.trim()
     if (needle.isEmpty()) return true
-    return trackTitle(trackName, displayName).contains(needle, ignoreCase = true) ||
+    return title.contains(needle, ignoreCase = true) ||
         displayName.contains(needle, ignoreCase = true)
 }
 
@@ -198,7 +198,7 @@ internal fun List<TrackEntity>.sortedFor(order: TrackOrder): List<TrackEntity> {
         TrackSort.LENGTH -> sortedByDescending { it.distanceMeters }
         TrackSort.NAME -> {
             val collator = Collator.getInstance()
-            sortedWith(compareBy(collator) { trackTitle(it.trackName, it.displayName) })
+            sortedWith(compareBy(collator) { it.title })
         }
     }
     return if (order.descending == order.sort.naturallyDescending) natural else natural.asReversed()

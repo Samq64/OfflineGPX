@@ -96,6 +96,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.samuelq.gpx.R
+import dev.samuelq.gpx.data.track.editableName
+import dev.samuelq.gpx.data.track.title
 import dev.samuelq.gpx.data.db.TrackEntity
 import dev.samuelq.gpx.data.settings.TrackOrder
 import dev.samuelq.gpx.data.settings.TrackSort
@@ -110,10 +112,8 @@ import dev.samuelq.gpx.ui.theme.RoutePickerOrder
 import dev.samuelq.gpx.ui.theme.slot
 import dev.samuelq.gpx.ui.track.TrackMenu
 import dev.samuelq.gpx.ui.track.TrackNameDialog
-import dev.samuelq.gpx.ui.track.editableTrackName
 import dev.samuelq.gpx.ui.track.exportFileName
 import dev.samuelq.gpx.ui.track.shareTrackIntent
-import dev.samuelq.gpx.ui.track.trackTitle
 import java.text.Collator
 import java.time.Instant
 
@@ -178,7 +178,7 @@ fun LibraryScreen(
             context = context,
             // Named when it's one; a count says enough for several.
             message = ids.singleOrNull()?.let { id -> tracks.firstOrNull { it.id == id } }
-                ?.let { resources.getString(R.string.deleted_named, trackTitle(it.trackName, it.displayName)) }
+                ?.let { resources.getString(R.string.deleted_named, it.title) }
                 ?: resources.getQuantityString(R.plurals.library_deleted, ids.size, ids.size),
             undoLabel = resources.getString(R.string.action_undo),
             onUndo = {
@@ -356,7 +356,7 @@ fun LibraryScreen(
 
     renaming?.let { track ->
         TrackNameDialog(
-            initialName = editableTrackName(track.trackName, track.displayName),
+            initialName = track.editableName,
             onDismiss = { renaming = null },
             onConfirm = { name ->
                 viewModel.rename(track.id, name)
@@ -434,7 +434,7 @@ private fun TrackRow(
     onDelete: () -> Unit,
 ) {
     val formatters = LocalFormatters.current
-    val title = trackTitle(track.trackName, track.displayName)
+    val title = track.title
     val showOnMap = stringResource(R.string.library_show_on_map, title)
     val openLabel = stringResource(R.string.library_open_on_map)
     val selectLabel = stringResource(R.string.library_select)

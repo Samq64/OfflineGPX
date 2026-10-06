@@ -24,6 +24,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.core.content.FileProvider
 import dev.samuelq.gpx.R
 import dev.samuelq.gpx.data.gpx.GPX_MIME_TYPE
+import dev.samuelq.gpx.data.db.TrackEntity
 import dev.samuelq.gpx.data.track.TrackFiles
 
 /** Opens with the name selected, so the first keystroke replaces it. */
@@ -66,13 +67,9 @@ fun TrackNameDialog(
     )
 }
 
-/** The track's own name, else an unnamed recording's start, else the file it arrived as. */
+/** Before a track's row arrives; see [TrackEntity.title] for after. */
 fun trackTitle(trackName: String?, displayName: String): String =
     trackName?.takeIf(String::isNotBlank) ?: TrackFiles.recordedAt(displayName) ?: displayName
-
-/** [trackTitle] without the `.gpx` extension. */
-fun editableTrackName(trackName: String?, displayName: String): String =
-    trackName?.takeIf(String::isNotBlank) ?: TrackFiles.recordedAt(displayName) ?: displayName.dropGpxSuffix()
 
 private fun String.dropGpxSuffix(): String =
     if (endsWith(GPX, ignoreCase = true)) dropLast(GPX.length) else this

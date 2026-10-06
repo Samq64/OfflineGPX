@@ -9,6 +9,7 @@ import dev.samuelq.gpx.core.analysis.TrackAnalyzer
 import dev.samuelq.gpx.core.analysis.TrackProfile
 import dev.samuelq.gpx.core.model.TrackPoints
 import dev.samuelq.gpx.data.db.TrackEntity
+import dev.samuelq.gpx.data.track.title
 import dev.samuelq.gpx.data.map.MapStore
 import dev.samuelq.gpx.data.map.OfflineMap
 import dev.samuelq.gpx.data.settings.SettingsRepository
@@ -20,7 +21,6 @@ import dev.samuelq.gpx.di.appContainer
 import dev.samuelq.gpx.ui.library.sortedFor
 import dev.samuelq.gpx.ui.track.FocusedTrack
 import dev.samuelq.gpx.ui.track.TrackRef
-import dev.samuelq.gpx.ui.track.trackTitle
 import dev.samuelq.gpx.ui.track.toTrackMessageRes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -246,7 +246,7 @@ class MapViewModel(
     }
 
     private fun nameOf(id: Long): String =
-        _state.value.entity(id)?.let { trackTitle(it.trackName, it.displayName) }.orEmpty()
+        _state.value.entity(id)?.title.orEmpty()
 
     fun show(id: Long) {
         viewModelScope.launch { repository.setVisible(id, true) }

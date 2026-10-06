@@ -3,14 +3,18 @@ package dev.samuelq.gpx.data.track
 import android.content.Context
 import dev.samuelq.gpx.data.db.TrackEntity
 import java.io.File
+import java.time.Instant
 import java.time.LocalDateTime
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
 
 /** App-private track directories; `res/xml/file_paths.xml` shares both. */
 object TrackFiles {
-    fun recordingsDir(context: Context): File = File(context.filesDir, "recordings").apply { mkdirs() }
+    private const val RECORDINGS = "recordings"
+
+    fun recordingsDir(context: Context): File = File(context.filesDir, RECORDINGS).apply { mkdirs() }
 
     fun importsDir(context: Context): File = File(context.filesDir, "imports").apply { mkdirs() }
 
@@ -30,11 +34,33 @@ object TrackFiles {
         runCatching { LocalDateTime.parse(it.groupValues[1], STAMP) }.getOrNull()
     }
 
-    /** [stampOf] in the default locale: what an unnamed recording is called. */
-    fun recordedAt(displayName: String): String? = stampOf(displayName)?.let {
-        DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT).withLocale(Locale.getDefault()).format(it)
+    /** [stampOf], formatted as [recordedAt] is. */
+    fun recordedAt(displayName: String): String? = stampOf(displayName)?.let(::localized)
+
+    /**
+     * When an app recording started, for its title while unnamed. From the row, so any
+     * filename does; the stamp only stands in for a row without a start.
+     */
+    fun recordedAt(entity: TrackEntity): String? {
+        if (entity.location.substringBefore('/') != RECORDINGS) return null
+        return entity.startedAtEpochMillis
+            ?.let { localized(LocalDateTime.ofInstant(Instant.ofEpochMilli(it), ZoneId.systemDefault())) }
+            ?: recordedAt(entity.displayName)
     }
+
+    /** The default locale is the app's: Android sets it from the app's locale too. */
+    private fun localized(at: LocalDateTime): String =
+        DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT).withLocale(Locale.getDefault()).format(at)
 }
+
+/** What a track is called: its name, else when a recording started, else the file it arrived as. */
+val TrackEntity.title: String
+    get() = trackName?.takeIf(String::isNotBlank) ?: TrackFiles.recordedAt(this) ?: displayName
+
+/** [title] without the `.gpx` extension, to edit. */
+val TrackEntity.editableName: String
+    get() = trackName?.takeIf(String::isNotBlank) ?: TrackFiles.recordedAt(this)
+        ?: displayName.let { if (it.endsWith(".gpx", ignoreCase = true)) it.dropLast(4) else it }
 
 /** A typed name, or null for blank so the caller falls back to its default. */
 internal fun String.asTrackName(): String? = trim().ifEmpty { null }
