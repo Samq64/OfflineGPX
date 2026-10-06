@@ -298,10 +298,23 @@ fun MapScreen(
     val sidePanel = windowSize.width > windowSize.height
     val currentSidePanel by rememberUpdatedState(sidePanel)
 
+    // Saved, so a rotation, which hides the sheet for the panel and back, or a recreation
+    // reopens it as it was. Not Hidden, which it passes through on the way.
+    var sheetWasExpanded by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(sheetState) {
+        snapshotFlow { sheetState.currentValue }.collect { value ->
+            if (!currentSidePanel && value != SheetValue.Hidden) sheetWasExpanded = value == SheetValue.Expanded
+        }
+    }
+
     LaunchedEffect(hasSheet, sidePanel) {
         // Guarded: hiding before layout asks for an anchor that doesn't exist.
-        if (hasSheet && !sidePanel) sheetState.partialExpand()
-        else if (sheetState.currentValue != SheetValue.Hidden) sheetState.hide()
+        if (hasSheet && !sidePanel) {
+            if (sheetWasExpanded) sheetState.expand() else sheetState.partialExpand()
+        } else if (sheetState.currentValue != SheetValue.Hidden) {
+            sheetState.hide()
+        }
+        if (!hasSheet) sheetWasExpanded = false
         // So a stale name prompt can't reappear when the track is reopened.
         if (!hasFocus) screen.renamingId = null
     }
