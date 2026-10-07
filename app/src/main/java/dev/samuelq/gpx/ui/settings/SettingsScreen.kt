@@ -391,6 +391,10 @@ private val LIBRARIES = listOf(
     Library("JTS", "EDL-1.0", "https://github.com/locationtech/jts"),
     Library("AndroidX", "Apache-2.0", "https://developer.android.com/jetpack/androidx"),
     Library("Kotlin", "Apache-2.0", "https://kotlinlang.org"),
+    // Bundled inside core-location-altitude.
+    Library("Protocol Buffers", "BSD-3-Clause", "https://github.com/protocolbuffers/protobuf"),
+    // Copied in as vector drawables.
+    Library("Material Symbols", "Apache-2.0", "https://github.com/google/material-design-icons"),
 )
 
 private const val REPO_URL = "https://github.com/Samq64/offline-gpx-android"
