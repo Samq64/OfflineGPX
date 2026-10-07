@@ -387,14 +387,14 @@ private val MarkerRadius = 2.dp
 private class Library(val name: String, val licence: String, val url: String)
 
 private val LIBRARIES = listOf(
-    Library("VTM", "LGPL-3.0", "https://github.com/mapsforge/vtm"),
-    Library("JTS", "EDL-1.0", "https://github.com/locationtech/jts"),
     Library("AndroidX", "Apache-2.0", "https://developer.android.com/jetpack/androidx"),
+    Library("JTS", "EDL-1.0", "https://github.com/locationtech/jts"),
     Library("Kotlin", "Apache-2.0", "https://kotlinlang.org"),
-    // Bundled inside core-location-altitude.
-    Library("Protocol Buffers", "BSD-3-Clause", "https://github.com/protocolbuffers/protobuf"),
     // Copied in as vector drawables.
     Library("Material Symbols", "Apache-2.0", "https://github.com/google/material-design-icons"),
+    // Bundled inside core-location-altitude.
+    Library("Protocol Buffers", "BSD-3-Clause", "https://github.com/protocolbuffers/protobuf"),
+    Library("VTM", "LGPL-3.0", "https://github.com/mapsforge/vtm"),
 )
 
 private const val REPO_URL = "https://github.com/Samq64/offline-gpx-android"
