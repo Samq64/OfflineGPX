@@ -1,10 +1,12 @@
 package dev.samuelq.gpx.ui.settings
 
 import android.net.Uri
+import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import dev.samuelq.gpx.R
 import dev.samuelq.gpx.core.model.UnitSystem
 import dev.samuelq.gpx.data.map.MapImportError
 import dev.samuelq.gpx.data.map.MapImportResult
@@ -21,14 +23,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 
-enum class SettingsMessage {
-    MapImported,
-    MapUnreadable,
-    MapWrongFormat,
-    MapNoSpace,
-    MapExported,
-    MapExportFailed,
-    NoBrowser,
+enum class SettingsMessage(@param:StringRes val text: Int) {
+    MapImported(R.string.settings_maps_imported),
+    MapUnreadable(R.string.settings_maps_failed_unreadable),
+    MapWrongFormat(R.string.settings_maps_failed_format),
+    MapNoSpace(R.string.settings_maps_failed_space),
+    MapExported(R.string.settings_maps_exported),
+    MapExportFailed(R.string.settings_maps_export_failed),
+    NoBrowser(R.string.settings_maps_no_browser),
 }
 
 class SettingsViewModel(private val repository: SettingsRepository, private val mapStore: MapStore) : ViewModel() {

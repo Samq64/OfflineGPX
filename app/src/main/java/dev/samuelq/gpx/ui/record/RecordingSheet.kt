@@ -37,10 +37,10 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.MotionDurationScale
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
@@ -136,15 +136,8 @@ private fun RecordingHeader(
         } else {
             status
         }
-        val waypointCount = if (state.waypoints.isNotEmpty()) {
-            pluralStringResource(
-                R.plurals.record_waypoints_logged,
-                state.waypoints.size,
-                state.waypoints.size,
-            )
-        } else {
-            null
-        }
+        val waypointCount = state.waypoints.size.takeIf { it > 0 }
+            ?.let { pluralStringResource(R.plurals.record_waypoints_logged, it, it) }
 
         // Like a track's title: what's happening, then the numbers, then controls.
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -190,17 +183,12 @@ private fun RecordingHeader(
 
             // Icon only, so flipping between the two can't change its width.
             FilledTonalIconButton(onClick = if (state.paused) onResume else onPause) {
-                if (state.paused) {
-                    Icon(
-                        painterResource(R.drawable.ic_play_arrow),
-                        contentDescription = stringResource(R.string.record_resume),
-                    )
-                } else {
-                    Icon(
-                        painterResource(R.drawable.ic_pause),
-                        contentDescription = stringResource(R.string.record_pause),
-                    )
-                }
+                Icon(
+                    painterResource(if (state.paused) R.drawable.ic_play_arrow else R.drawable.ic_pause),
+                    contentDescription = stringResource(
+                        if (state.paused) R.string.record_resume else R.string.record_pause,
+                    ),
+                )
             }
 
             Button(onClick = onStop) { Text(stringResource(R.string.record_stop)) }
@@ -268,7 +256,7 @@ private fun RecordingDot(paused: Boolean) {
         snapshotFlow { scale.scaleFactor > 0f }.collect { animate = it }
     }
     val transition = rememberInfiniteTransition(label = "recording")
-    val alpha by transition.animateFloat(
+    val pulse = transition.animateFloat(
         initialValue = 1f,
         targetValue = 0.25f,
         animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
@@ -278,15 +266,16 @@ private fun RecordingDot(paused: Boolean) {
     Box(
         Modifier
             .size(10.dp)
-            .alpha(
-                if (paused) {
+            // Read at draw time, so the pulse doesn't recompose every frame.
+            .graphicsLayer {
+                alpha = if (paused) {
                     0.35f
                 } else if (animate) {
-                    alpha
+                    pulse.value
                 } else {
                     1f
-                },
-            )
+                }
+            }
             .clip(CircleShape)
             .background(recordingColor()),
     )

@@ -254,7 +254,6 @@ fun LibraryScreen(
         snackbarHost = { SnackbarHost(snackbarHostState, Modifier.readFirst()) },
         topBar = {
             if (selection.isNotEmpty()) {
-                val chosen = tracks.filter { it.id in selection }
                 SelectionBar(
                     count = selection.size,
                     total = tracks.size,
@@ -265,7 +264,8 @@ fun LibraryScreen(
                     onShowOnly = { viewModel.changeVisibility(selection, BulkVisibility.SHOW_ONLY) },
                     onExport = {
                         viewModel.beginExportAll(
-                            chosen.associate { it.id to exportFileName(it.trackName, it.displayName) },
+                            tracks.filter { it.id in selection }
+                                .associate { it.id to exportFileName(it.trackName, it.displayName) },
                         )
                         folderExporter.launch(null)
                     },

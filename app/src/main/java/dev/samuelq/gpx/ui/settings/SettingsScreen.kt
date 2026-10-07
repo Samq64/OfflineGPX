@@ -174,19 +174,7 @@ fun SettingsScreen(
     LaunchedEffect(viewModel) {
         viewModel.messages.collect { message ->
             snackbarHostState.makeWay()
-            snackbarHostState.showSnackbar(
-                resources.getString(
-                    when (message) {
-                        SettingsMessage.MapImported -> R.string.settings_maps_imported
-                        SettingsMessage.MapUnreadable -> R.string.settings_maps_failed_unreadable
-                        SettingsMessage.MapWrongFormat -> R.string.settings_maps_failed_format
-                        SettingsMessage.MapNoSpace -> R.string.settings_maps_failed_space
-                        SettingsMessage.MapExported -> R.string.settings_maps_exported
-                        SettingsMessage.MapExportFailed -> R.string.settings_maps_export_failed
-                        SettingsMessage.NoBrowser -> R.string.settings_maps_no_browser
-                    },
-                ),
-            )
+            snackbarHostState.showSnackbar(resources.getString(message.text))
         }
     }
 

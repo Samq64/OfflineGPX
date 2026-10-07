@@ -41,6 +41,7 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
@@ -56,7 +57,6 @@ import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -230,7 +230,6 @@ fun ProfileChart(
             geometry = geometry,
             boxSize = boxSize,
             selectedIndex = selectedIndex,
-            style = MaterialTheme.typography.labelSmall.tabularFigures(),
             formatValue = formatValue,
             formatPosition = formatPosition,
         )
@@ -252,11 +251,14 @@ private fun StaticLayer(render: ChartRender, geometry: ChartGeometry, chartColor
     Box(
         Modifier
             .fillMaxSize()
+            // Its own layer, so redrawing the scrubber above doesn't re-record this.
+            .graphicsLayer()
             .drawWithCache {
                 val plot = geometry.plotRect(size)
                 val linePath = Path()
                 val areaPath = Path()
                 buildPaths(render.series, render.xScale, render.yScale, plot, linePath, areaPath)
+                val stroke = Stroke(width = LineWidth.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
 
                 onDrawBehind {
                     drawGrid(render.yScale, plot, chartColors.grid, GridWidth.toPx())
@@ -265,15 +267,7 @@ private fun StaticLayer(render: ChartRender, geometry: ChartGeometry, chartColor
                     clipRect(plot.left, plot.top - bleed, plot.right, plot.bottom) {
                         drawBreaks(render, plot, chartColors.label)
                         drawPath(areaPath, render.series.color.copy(alpha = AreaFillAlpha))
-                        drawPath(
-                            path = linePath,
-                            color = render.series.color,
-                            style = Stroke(
-                                width = LineWidth.toPx(),
-                                cap = StrokeCap.Round,
-                                join = StrokeJoin.Round,
-                            ),
-                        )
+                        drawPath(linePath, render.series.color, style = stroke)
                     }
 
                     drawLine(
@@ -297,14 +291,10 @@ private fun KeptLayer(render: ChartRender, geometry: ChartGeometry, kept: IntRan
     Canvas(Modifier.fillMaxSize()) {
         if (series.size == 0) return@Canvas
         val plot = geometry.plotRect(size)
-        val start = plot.xFor(
-            series.x[kept.first.coerceIn(0, series.size - 1)],
-            render.xScale,
-        ).coerceIn(plot.left, plot.right)
-        val end = plot.xFor(
-            series.x[kept.last.coerceIn(0, series.size - 1)],
-            render.xScale,
-        ).coerceIn(plot.left, plot.right)
+        fun xAt(i: Int) = plot.xFor(series.x[i.coerceIn(0, series.size - 1)], render.xScale)
+            .coerceIn(plot.left, plot.right)
+        val start = xAt(kept.first)
+        val end = xAt(kept.last)
         drawRect(scrim, Offset(plot.left, plot.top), Size(start - plot.left, plot.height))
         drawRect(scrim, Offset(end, plot.top), Size(plot.right - end, plot.height))
     }
@@ -419,15 +409,15 @@ private fun ChartTooltip(
     geometry: ChartGeometry,
     boxSize: IntSize,
     selectedIndex: Int?,
-    style: TextStyle,
     formatValue: (Float) -> String,
     formatPosition: (Float) -> String,
 ) {
+    val style = MaterialTheme.typography.labelSmall.tabularFigures()
     val series = render.series
     val index = selectedIndex ?: return
     if (boxSize.width <= 0 || boxSize.height <= 0) return
 
-    val plot = remember(geometry, boxSize) { geometry.plotRect(boxSize.toSize()) }
+    val plot = geometry.plotRect(boxSize.toSize())
     val (x, y) = render.scrubberAt(index, plot)?.takeUnless { it.y.isNaN() } ?: return
     val value = series.y[index]
 

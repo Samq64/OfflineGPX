@@ -320,19 +320,15 @@ private fun ProfileDetails(
                 modifier = Modifier.padding(horizontal = SheetPadding, vertical = 4.dp),
             )
         }
-    }
-
-    if (keptRange == null) {
-        Column(Modifier.padding(horizontal = SheetPadding, vertical = 4.dp)) {
-            TrackDetails(
-                stats = profile.stats,
-                hasTime = profile.hasTime,
-                hasElevation = profile.hasElevation,
-                // Only a recording overrides the count.
-                complete = pointCount != null,
-                pointCount = pointCount,
-            )
-        }
+        TrackDetails(
+            stats = profile.stats,
+            hasTime = profile.hasTime,
+            hasElevation = profile.hasElevation,
+            modifier = Modifier.padding(horizontal = SheetPadding, vertical = 4.dp),
+            // Only a recording overrides the count.
+            complete = pointCount != null,
+            pointCount = pointCount,
+        )
     }
 
     Spacer(Modifier.height(20.dp))
@@ -430,18 +426,13 @@ private fun ProfileDetails(
 @Composable
 private fun TrimHeader(title: String, profile: TrackProfile, trim: TrimControls, useTimeAxis: Boolean) {
     val formatters = LocalFormatters.current
-    val x = if (useTimeAxis && profile.hasTime) profile.elapsedSeconds else profile.distanceMeters
+    val timed = useTimeAxis && profile.hasTime
+    val x = if (timed) profile.elapsedSeconds else profile.distanceMeters
     val last = x.size - 1
     val first = trim.range.first
     val end = trim.range.last
     val format: (Float) -> String =
-        if (x ===
-            profile.elapsedSeconds
-        ) {
-            { v -> Formatters.duration(v.toDouble()) }
-        } else {
-            { v -> formatters.distance(v.toDouble()) }
-        }
+        if (timed) { v -> Formatters.duration(v.toDouble()) } else { v -> formatters.distance(v.toDouble()) }
 
     Column(
         modifier = Modifier.fillMaxWidth().padding(start = SheetPadding, end = 8.dp, bottom = 8.dp),
@@ -464,22 +455,19 @@ private fun TrimHeader(title: String, profile: TrackProfile, trim: TrimControls,
         }
 
         // From the cumulative series: a break adds nothing to either, so a difference is exact.
-        val kept = listOf(
-            Stat(
-                stringResource(R.string.axis_distance),
-                formatters.distance((profile.distanceMeters[end] - profile.distanceMeters[first]).toDouble()),
-            ),
-        ) + if (profile.hasTime) {
-            val seconds = (profile.elapsedSeconds[end] - profile.elapsedSeconds[first]).toDouble()
-            listOf(
-                Stat(
-                    stringResource(R.string.stat_elapsed),
-                    Formatters.duration(seconds),
-                    LocalResources.current.spokenDuration(seconds),
-                ),
-            )
-        } else {
-            emptyList()
+        val kept = buildList {
+            val meters = (profile.distanceMeters[end] - profile.distanceMeters[first]).toDouble()
+            add(Stat(stringResource(R.string.axis_distance), formatters.distance(meters)))
+            if (profile.hasTime) {
+                val seconds = (profile.elapsedSeconds[end] - profile.elapsedSeconds[first]).toDouble()
+                add(
+                    Stat(
+                        stringResource(R.string.stat_elapsed),
+                        Formatters.duration(seconds),
+                        LocalResources.current.spokenDuration(seconds),
+                    ),
+                )
+            }
         }
         StatRow(kept)
 
