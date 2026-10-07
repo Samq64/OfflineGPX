@@ -51,7 +51,6 @@ class SettingsViewModel(private val repository: SettingsRepository, private val 
     val messages: Flow<SettingsMessage> = _messages.receiveAsFlow()
 
     fun setUnits(units: UnitSystem) = repository.setUnits(units)
-    fun setMaxAccuracy(meters: Double) = repository.setMaxAccuracyMeters(meters)
 
     fun importMap(uri: Uri?) {
         if (uri == null) return

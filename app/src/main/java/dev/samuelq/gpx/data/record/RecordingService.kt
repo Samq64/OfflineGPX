@@ -96,11 +96,7 @@ class RecordingService : Service() {
 
     private suspend fun start() {
         if (session != null) return
-        val settings = container.settingsRepository.settings.value
-        session = RecordingSession(
-            maxAccuracyMeters = settings.maxAccuracyMeters,
-            clock = SystemClock::elapsedRealtime,
-        )
+        session = RecordingSession(clock = SystemClock::elapsedRealtime)
 
         // Again: a preceding stop's finish() may have removed the first one.
         if (!notifications.startForeground(notificationContent())) {

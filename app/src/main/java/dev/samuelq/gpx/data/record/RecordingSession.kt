@@ -17,8 +17,8 @@ import java.time.Instant
  *
  * @param clock monotonic milliseconds.
  */
-internal class RecordingSession(private val maxAccuracyMeters: Double, private val clock: () -> Long) {
-    private val filter = FixFilter(maxAccuracyMeters)
+internal class RecordingSession(private val clock: () -> Long) {
+    private val filter = FixFilter()
     private val speedWindow = SpeedWindow()
 
     var paused = false
@@ -172,7 +172,7 @@ internal class RecordingSession(private val maxAccuracyMeters: Double, private v
         lastPoint = lastPoint,
         currentSpeedMps = currentSpeedMps,
         accuracyMeters = lastAccuracyMeters,
-        accuracyLimitMeters = maxAccuracyMeters,
+        accuracyLimitMeters = FixFilter.MAX_ACCURACY_METERS,
         waypoints = waypoints.toList(),
         locationOff = locationOff,
     )

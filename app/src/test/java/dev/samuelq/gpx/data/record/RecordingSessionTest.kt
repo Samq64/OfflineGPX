@@ -1,5 +1,6 @@
 package dev.samuelq.gpx.data.record
 
+import dev.samuelq.gpx.core.analysis.FixFilter
 import dev.samuelq.gpx.core.model.TrackPoint
 import java.time.Instant
 import kotlin.test.Test
@@ -15,10 +16,7 @@ class RecordingSessionTest {
     private val origin = Instant.parse("2026-09-18T09:00:00Z")
     private var now = 0L
 
-    private fun session() = RecordingSession(
-        maxAccuracyMeters = 20.0,
-        clock = { now },
-    )
+    private fun session() = RecordingSession(clock = { now })
 
     private fun fix(second: Long, metersNorth: Double, accuracy: Double = 5.0) = TrackPoint(
         latitude = 51.5 + metersNorth / 111_320.0,
@@ -57,7 +55,7 @@ class RecordingSessionTest {
         assertNull(session.onFix(fix(0, 0.0, accuracy = 50.0)))
         val state = session.state()
         assertEquals(50.0, state.accuracyMeters)
-        assertEquals(20.0, state.accuracyLimitMeters)
+        assertEquals(FixFilter.MAX_ACCURACY_METERS, state.accuracyLimitMeters)
         assertNull(state.lastPoint)
     }
 

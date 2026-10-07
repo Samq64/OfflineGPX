@@ -258,38 +258,6 @@ fun SettingsScreen(
                 }
             }
 
-            // Committed on release, not per drag frame, to avoid a disk write each frame.
-            // No `steps`: ~95 discrete steps would draw a dotted track.
-            var accuracy by remember(settings.maxAccuracyMeters) {
-                mutableFloatStateOf(settings.maxAccuracyMeters.toFloat())
-            }
-            val accuracyTitle = stringResource(R.string.settings_accuracy)
-            // The slider alone reads as a bare percentage, and the dot not at all.
-            val accuracyState = stringResource(
-                R.string.settings_accuracy_state,
-                formatters.meters(accuracy.toDouble()),
-                formatters.meters(Settings.Defaults.maxAccuracyMeters),
-            )
-            Setting(
-                title = accuracyTitle,
-                explanation = stringResource(R.string.settings_accuracy_explanation),
-                value = formatters.meters(accuracy.toDouble()),
-            ) {
-                MarkedSlider(
-                    modifier = Modifier.semantics {
-                        contentDescription = accuracyTitle
-                        stateDescription = accuracyState
-                    },
-                    value = accuracy,
-                    onValueChange = { accuracy = it },
-                    onValueChangeFinished = {
-                        viewModel.setMaxAccuracy(accuracy.roundToInt().toDouble())
-                    },
-                    valueRange = Settings.ACCURACY_RANGE.toFloatRange(),
-                    marker = Settings.Defaults.maxAccuracyMeters.toFloat(),
-                )
-            }
-
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
             SectionHeading(stringResource(R.string.settings_section_about))
 
@@ -341,45 +309,6 @@ private fun MergeMapsDialog(newMap: String, existing: List<String>, onMerge: () 
         },
     )
 }
-
-/** A [Slider] with a dot at [marker], drawn in the colours of a step tick. */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun MarkedSlider(
-    value: Float,
-    onValueChange: (Float) -> Unit,
-    onValueChangeFinished: () -> Unit,
-    valueRange: ClosedFloatingPointRange<Float>,
-    marker: Float,
-    modifier: Modifier = Modifier,
-) {
-    val colors = SliderDefaults.colors()
-    val fraction = (marker - valueRange.start) / (valueRange.endInclusive - valueRange.start)
-    val markerColor = if (value >= marker) colors.activeTickColor else colors.inactiveTickColor
-    Slider(
-        value = value,
-        onValueChange = onValueChange,
-        onValueChangeFinished = onValueChangeFinished,
-        valueRange = valueRange,
-        colors = colors,
-        modifier = modifier,
-        track = { state ->
-            // The track spans the thumb's travel, so a fraction of its width lines up.
-            Box {
-                SliderDefaults.Track(sliderState = state, colors = colors)
-                Canvas(Modifier.matchParentSize()) {
-                    drawCircle(
-                        color = markerColor,
-                        radius = MarkerRadius.toPx(),
-                        center = Offset(size.width * fraction, center.y),
-                    )
-                }
-            }
-        },
-    )
-}
-
-private val MarkerRadius = 2.dp
 
 private class Library(val name: String, val licence: String, val url: String)
 
@@ -630,9 +559,6 @@ private val MAP_MIME_TYPES = arrayOf("application/octet-stream", "*/*")
 
 /** The published v5 files, by region down to states; the render theme expects their tags. */
 private const val MAP_HELP_URL = "https://download.mapsforge.org/maps/v5/"
-
-private fun ClosedFloatingPointRange<Double>.toFloatRange(): ClosedFloatingPointRange<Float> =
-    start.toFloat()..endInclusive.toFloat()
 
 @Composable
 private fun SectionHeading(text: String) {

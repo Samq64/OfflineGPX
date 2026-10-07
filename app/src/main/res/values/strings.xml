@@ -210,10 +210,7 @@
     <string name="settings_about_tagline">Record and manage GPX tracks without the internet permission.</string>
     <!-- %1$s is the version, e.g. 0.1.0; the commit follows it. -->
     <string name="settings_about_version">v%1$s</string>
-    <string name="settings_accuracy">Accuracy limit</string>
-    <string name="settings_accuracy_explanation">Fixes less certain than this are ignored. Increase it if points go missing under trees; lower it if the track wanders indoors.</string>
     <!-- Spoken for the slider: the value, then the default. -->
-    <string name="settings_accuracy_state">%1$s, default %2$s</string>
     <string name="settings_maps_explanation">Manage .map file imports. Without one, tracks are drawn on a blank background.</string>
     <string name="settings_maps_export">Export</string>
     <string name="settings_maps_export_failed">Couldn\'t export that map.</string>

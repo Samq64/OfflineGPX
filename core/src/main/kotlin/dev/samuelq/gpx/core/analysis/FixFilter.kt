@@ -6,16 +6,13 @@ import kotlin.math.max
 
 /**
  * Rejects GPS noise so a stationary phone doesn't record distance: a fix worse than
- * [maxAccuracyMeters] is dropped, and one within its own error circle (floored at
+ * [MAX_ACCURACY_METERS] is dropped, and one within its own error circle (floored at
  * [MIN_DISPLACEMENT_METERS]) hasn't moved.
  *
  * A still reading comes back as the last position re-stamped, once per
  * [stillIntervalSeconds], so a stop reads as speed decaying to zero rather than a gap.
  */
-public class FixFilter(
-    private val maxAccuracyMeters: Double = MAX_ACCURACY_METERS,
-    private val stillIntervalSeconds: Double = STILL_INTERVAL_SECONDS,
-) {
+public class FixFilter(private val stillIntervalSeconds: Double = STILL_INTERVAL_SECONDS) {
 
     private var lastAccepted: TrackPoint? = null
 
@@ -36,7 +33,7 @@ public class FixFilter(
     public fun pointFor(fix: TrackPoint): TrackPoint? {
         val accuracy = fix.accuracyMeters
 
-        if (accuracy != null && accuracy > maxAccuracyMeters) return null
+        if (accuracy != null && accuracy > MAX_ACCURACY_METERS) return null
 
         val at = fix.time
         val previous = lastAccepted

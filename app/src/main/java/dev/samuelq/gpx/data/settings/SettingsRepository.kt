@@ -3,25 +3,12 @@ package dev.samuelq.gpx.data.settings
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
-import dev.samuelq.gpx.core.analysis.FixFilter
 import dev.samuelq.gpx.core.model.UnitSystem
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-data class Settings(
-    val units: UnitSystem = UnitSystem.METRIC,
-
-    /** See [FixFilter]. */
-    val maxAccuracyMeters: Double = FixFilter.MAX_ACCURACY_METERS,
-) {
-    companion object {
-        val Defaults = Settings()
-
-        /** Deliberately wider than useful. */
-        val ACCURACY_RANGE = 5.0..100.0
-    }
-}
+data class Settings(val units: UnitSystem = UnitSystem.METRIC)
 
 /** The library's order, which the map stacks by too, the list's top drawn on top. */
 enum class TrackSort(
@@ -73,29 +60,21 @@ class SettingsRepository(context: Context) {
 
     fun setUnits(units: UnitSystem) = update { putString(KEY_UNITS, units.name) }
 
-    fun setMaxAccuracyMeters(meters: Double) = update { putFloat(KEY_ACCURACY, meters.toFloat()) }
-
     private inline fun update(crossinline edits: SharedPreferences.Editor.() -> Unit) {
         prefs.edit { edits() }
         _settings.value = read()
     }
 
-    private fun read(): Settings {
-        val defaults = Settings.Defaults
-        return Settings(
-            units = prefs.getString(KEY_UNITS, null)
-                ?.let { name -> UnitSystem.entries.firstOrNull { it.name == name } }
-                ?: defaults.units,
-            maxAccuracyMeters = prefs
-                .getFloat(KEY_ACCURACY, defaults.maxAccuracyMeters.toFloat()).toDouble(),
-        )
-    }
+    private fun read(): Settings = Settings(
+        units = prefs.getString(KEY_UNITS, null)
+            ?.let { name -> UnitSystem.entries.firstOrNull { it.name == name } }
+            ?: Settings().units,
+    )
 
     private companion object {
         const val FILE = "settings"
 
         const val KEY_UNITS = "units"
-        const val KEY_ACCURACY = "max_accuracy_meters"
         const val KEY_TRACK_SORT = "track_sort"
         const val KEY_TRACK_SORT_DESCENDING = "track_sort_descending"
     }
