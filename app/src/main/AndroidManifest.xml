@@ -45,6 +45,10 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!--
+              Android types .gpx as octet-stream, and a Downloads URI has no name to match, so
+              take any octet-stream; a file that isn't GPX gets the usual error.
+            -->
             <intent-filter android:label="@string/app_name">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -52,24 +56,21 @@
                 <data android:mimeType="application/gpx+xml" />
                 <data android:mimeType="application/xml" />
                 <data android:mimeType="text/xml" />
+                <data android:mimeType="application/octet-stream" />
             </intent-filter>
 
-            <!--
-              File managers send .gpx untyped, so match the extension. Not bare
-              octet-stream, which would claim every unrecognised file.
-            -->
+            <!-- A provider may type it otherwise; the name still says GPX. -->
             <intent-filter android:label="@string/app_name">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:scheme="content" />
                 <data android:host="*" />
                 <data android:mimeType="*/*" />
-                <data android:pathPattern=".*\\.gpx" />
-                <data android:pathPattern=".*\\..*\\.gpx" />
-                <data android:pathPattern=".*\\..*\\..*\\.gpx" />
+                <data android:pathSuffix=".gpx" />
+                <data android:pathSuffix=".GPX" />
             </intent-filter>
 
-            <!-- Bare octet-stream here: a share has no path to match .gpx against. -->
+            <!-- A share has no path to match .gpx against. -->
             <intent-filter android:label="@string/app_name">
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
