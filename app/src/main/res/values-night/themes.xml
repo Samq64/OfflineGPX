@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.GpxViewer" parent="@android:style/Theme.Material.NoActionBar">
+    <style name="Theme.OTrace" parent="@android:style/Theme.Material.NoActionBar">
         <item name="android:windowBackground">@color/window_background</item>
         <item name="android:windowLightStatusBar">false</item>
     </style>

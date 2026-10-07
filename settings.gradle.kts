@@ -25,5 +25,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "GpxViewer"
+rootProject.name = "OTrace"
 include(":app", ":core")

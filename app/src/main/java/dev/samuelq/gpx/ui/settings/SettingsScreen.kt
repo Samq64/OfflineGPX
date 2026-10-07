@@ -255,7 +255,7 @@ fun SettingsScreen(
     }
 }
 
-private const val REPO_URL = "https://github.com/Samq64/offline-gpx-android"
+private const val REPO_URL = "https://github.com/Samq64/OTrace"
 private const val COMMIT_URL = "$REPO_URL/commits/"
 private const val LICENCE_URL = "$REPO_URL/blob/master/LICENSE"
 private const val ISSUES_URL = "$REPO_URL/issues"
