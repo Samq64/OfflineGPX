@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Device transfer only, nothing to the cloud. backup_rules.xml mirrors this for 10-11. -->
+<!-- Device transfer only, nothing to the cloud. -->
 <data-extraction-rules>
     <cloud-backup>
         <exclude domain="root" />

@@ -186,7 +186,6 @@
     <string name="record_pause">Pause</string>
     <string name="record_precise_required">Recording uses GPS, which needs precise location.</string>
     <string name="record_battery_explanation">Disabling battery optimizations may help prevent this in the future.</string>
-    <string name="record_battery_open">Open battery settings</string>
     <string name="record_battery_open_app_info">Open app info</string>
     <!-- %1$s is the date, %2$s the time. -->
     <string name="record_recovered_body">The app was closed before the recording started on %1$s at %2$s was saved.</string>

@@ -5,7 +5,7 @@ agp = "9.4.1"
 kotlin = "2.4.20"
 
 compileSdk = "37"
-minSdk = "29"
+minSdk = "31"
 targetSdk = "37"
 
 # Compose 1.12+ requires compileSdk 37 / AGP 9.1.1+.

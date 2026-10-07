@@ -8,7 +8,6 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
-import android.os.Build
 import android.os.SystemClock
 import android.text.SpannableStringBuilder
 import android.text.Spanned
@@ -53,12 +52,7 @@ internal class RecordingNotifications(private val service: Service) {
         } catch (e: SecurityException) {
             Log.w(TAG, "Not allowed to record", e)
             return false
-        } catch (e: IllegalStateException) {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
-                e !is ForegroundServiceStartNotAllowedException
-            ) {
-                throw e
-            }
+        } catch (e: ForegroundServiceStartNotAllowedException) {
             Log.w(TAG, "Not allowed to record", e)
             return false
         }

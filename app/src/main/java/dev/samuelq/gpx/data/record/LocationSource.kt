@@ -3,11 +3,11 @@ package dev.samuelq.gpx.data.record
 import android.annotation.SuppressLint
 import android.content.Context
 import android.location.Location
+import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Looper
 import androidx.core.content.getSystemService
 import androidx.core.location.LocationCompat
-import androidx.core.location.LocationListenerCompat
 import androidx.core.location.altitude.AltitudeConverterCompat
 import dev.samuelq.gpx.core.model.TrackPoint
 import java.io.IOException
@@ -43,8 +43,7 @@ class LocationSource(
         val locationManager = manager
             ?: throw IllegalStateException("No LocationManager on this device")
 
-        // Compat, which supplies the callbacks that are abstract below API 30.
-        val listener = object : LocationListenerCompat {
+        val listener = object : LocationListener {
             override fun onLocationChanged(location: Location) {
                 trySend(location)
             }

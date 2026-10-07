@@ -2,7 +2,6 @@ package dev.samuelq.gpx.ui.record
 
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
 import androidx.compose.foundation.layout.Column
@@ -46,15 +45,7 @@ fun BatteryOptimisationHint(modifier: Modifier = Modifier) {
             // Aligns the label, not the ripple, with the text above.
             modifier = Modifier.offset(x = (-12).dp),
         ) {
-            Text(
-                stringResource(
-                    if (BatteryInAppInfo) {
-                        R.string.record_battery_open_app_info
-                    } else {
-                        R.string.record_battery_open
-                    },
-                ),
-            )
+            Text(stringResource(R.string.record_battery_open_app_info))
         }
     }
 }
@@ -63,20 +54,12 @@ private fun Context.isIgnoringBatteryOptimizations(): Boolean =
     getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(packageName)
 
 /**
- * From 12, app info has the app's own battery page, where Unrestricted is the exemption; its
- * name varies by skin but always says battery. Before, its battery entry leads to the list
- * anyway. Not a direct exemption request, which needs a permission Play restricts.
+ * App info has the app's own battery page, where Unrestricted is the exemption; its name varies
+ * by skin but always says battery. Not a direct exemption request, which needs a permission Play
+ * restricts.
  */
-private val BatteryInAppInfo = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-
-/** App info is also the fallback where an OEM drops the list. */
 private fun Context.openBatterySettings() {
-    val opened = !BatteryInAppInfo && runCatching {
-        startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
-    }.isSuccess
-    if (!opened) {
-        runCatching {
-            startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, "package:$packageName".toUri()))
-        }
+    runCatching {
+        startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, "package:$packageName".toUri()))
     }
 }

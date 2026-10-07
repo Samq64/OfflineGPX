@@ -43,7 +43,7 @@ the JDK it needs.
 ./gradlew test                   # unit tests, no device needed
 ```
 
-Android 10 or later.
+Android 12 or later.
 
 ## Known limitations
 
