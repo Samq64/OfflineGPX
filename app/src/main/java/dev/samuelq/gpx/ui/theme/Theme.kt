@@ -10,7 +10,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.platform.LocalContext
 
-val LocalChartColors = staticCompositionLocalOf { ChartColors.of(StaticLightColors, dark = false) }
+internal val LocalChartColors = staticCompositionLocalOf { ChartColors.of(StaticLightColors, dark = false) }
 
 @Composable
 fun GpxTheme(content: @Composable () -> Unit) {

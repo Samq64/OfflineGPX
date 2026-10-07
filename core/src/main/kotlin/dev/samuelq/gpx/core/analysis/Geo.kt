@@ -15,10 +15,15 @@ private const val EARTH_RADIUS_METERS = 6_371_008.8
  * Horizontal great-circle distance in metres. Haversine, not Vincenty: the spherical error
  * is far below GPS noise and it cannot fail to converge.
  */
-fun haversineMeters(from: TrackPoint, to: TrackPoint): Double =
+public fun haversineMeters(from: TrackPoint, to: TrackPoint): Double =
     haversineMeters(from.latitude, from.longitude, to.latitude, to.longitude)
 
-fun haversineMeters(fromLatitude: Double, fromLongitude: Double, toLatitude: Double, toLongitude: Double): Double {
+public fun haversineMeters(
+    fromLatitude: Double,
+    fromLongitude: Double,
+    toLatitude: Double,
+    toLongitude: Double,
+): Double {
     val lat1 = Math.toRadians(fromLatitude)
     val lat2 = Math.toRadians(toLatitude)
     val dLat = lat2 - lat1
@@ -32,7 +37,7 @@ fun haversineMeters(fromLatitude: Double, fromLongitude: Double, toLatitude: Dou
 }
 
 /** Initial great-circle bearing, in degrees clockwise from north, 0 until 360. */
-fun bearingDegrees(from: TrackPoint, to: TrackPoint): Double {
+public fun bearingDegrees(from: TrackPoint, to: TrackPoint): Double {
     val lat1 = Math.toRadians(from.latitude)
     val lat2 = Math.toRadians(to.latitude)
     val dLon = Math.toRadians(to.longitude - from.longitude)

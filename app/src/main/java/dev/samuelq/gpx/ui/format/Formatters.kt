@@ -187,7 +187,7 @@ class Formatters(
 }
 
 /** Static: units change so rarely that observing them isn't worth paying for. */
-val LocalFormatters = staticCompositionLocalOf { Formatters.Metric }
+internal val LocalFormatters = staticCompositionLocalOf { Formatters.Metric }
 
 /** Equal-width digits for numbers that redraw in place; gappy at large display sizes. */
 fun TextStyle.tabularFigures(): TextStyle = copy(fontFeatureSettings = "tnum")

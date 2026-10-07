@@ -28,7 +28,7 @@ class RecordingViewModel(private val controller: RecordingController, tracks: Tr
     val events: Flow<RecordingEvent> = controller.events
 
     /** For naming a recording as it's saved. */
-    val categories: StateFlow<CategoryChoice> =
+    internal val categories: StateFlow<CategoryChoice> =
         combine(tracks.categories, tracks.lastRecordingCategory) { all, last -> CategoryChoice(all, last.orEmpty()) }
             .stateIn(
                 viewModelScope,

@@ -12,7 +12,7 @@ import kotlin.math.max
  * A still reading comes back as the last position re-stamped, once per
  * [stillIntervalSeconds], so a stop reads as speed decaying to zero rather than a gap.
  */
-class FixFilter(
+public class FixFilter(
     private val maxAccuracyMeters: Double = MAX_ACCURACY_METERS,
     private val minDisplacementMeters: Double = MIN_DISPLACEMENT_METERS,
     private val stillIntervalSeconds: Double = STILL_INTERVAL_SECONDS,
@@ -24,13 +24,13 @@ class FixFilter(
     private var lastRecordedAt: Instant? = null
 
     /** Call on a pause or restart. */
-    fun reset() {
+    public fun reset() {
         lastAccepted = null
         lastRecordedAt = null
     }
 
     /** The point to record, or null. Not always [fix] itself. */
-    fun pointFor(fix: TrackPoint): TrackPoint? {
+    public fun pointFor(fix: TrackPoint): TrackPoint? {
         val accuracy = fix.accuracyMeters
 
         if (accuracy != null && accuracy > maxAccuracyMeters) return null
@@ -66,19 +66,19 @@ class FixFilter(
         return previous.copy(time = at)
     }
 
-    companion object {
-        const val MAX_ACCURACY_METERS = 25.0
+    public companion object {
+        public const val MAX_ACCURACY_METERS: Double = 25.0
 
-        const val MIN_DISPLACEMENT_METERS = 4.0
+        internal const val MIN_DISPLACEMENT_METERS = 4.0
 
         /** 180 km/h; faster is a provider artefact. */
-        const val MAX_PLAUSIBLE_SPEED_MPS = 50.0
+        internal const val MAX_PLAUSIBLE_SPEED_MPS = 50.0
 
         /**
          * Matches [TrackAnalyzer.SPEED_WINDOW_SECONDS] and stays under
          * [TrackAnalyzer.MIN_GAP_SECONDS] so a stop isn't read as a gap.
          */
-        const val STILL_INTERVAL_SECONDS = 10.0
+        internal const val STILL_INTERVAL_SECONDS = 10.0
 
         private fun secondsBetween(from: TrackPoint, to: TrackPoint): Double {
             val a = from.time ?: return 0.0

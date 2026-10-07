@@ -22,7 +22,7 @@ import kotlinx.coroutines.yield
  * A screen's snackbars, kept across activity recreation so a rotation or locale change doesn't
  * take an undo away. Its scope ends with the screen, which commits what's still offered.
  */
-class Snackbars : ViewModel() {
+internal class Snackbars : ViewModel() {
     val host = SnackbarHostState()
 
     /** See [showUndo]. With a screen reader on it waits: reaching Undo takes swipes. */
@@ -35,7 +35,7 @@ class Snackbars : ViewModel() {
 
 /** The screen's [Snackbars]: a view model lookup, so the same one across recreation. */
 @Composable
-fun screenSnackbars(): Snackbars = viewModel()
+internal fun screenSnackbars(): Snackbars = viewModel()
 
 /**
  * Shows [message] with Undo, then calls exactly one of [onUndo] or [onCommit]. A timeout, a

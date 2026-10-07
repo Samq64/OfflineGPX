@@ -15,6 +15,8 @@ java {
 }
 
 kotlin {
+    // What :app may use is declared, not whatever happened to be left public.
+    explicitApi()
     compilerOptions {
         jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
     }

@@ -1,7 +1,7 @@
 package dev.samuelq.gpx.core.model
 
 /** A latitude/longitude box, in degrees. Never crosses the antimeridian: tracks that do get the long way round. */
-data class GeoBounds(
+public data class GeoBounds(
     val southLatitude: Double,
     val westLongitude: Double,
     val northLatitude: Double,
@@ -9,7 +9,7 @@ data class GeoBounds(
 )
 
 /** Null for no points. */
-fun TrackPoints.bounds(): GeoBounds? {
+public fun TrackPoints.bounds(): GeoBounds? {
     if (size == 0) return null
     var south = Double.POSITIVE_INFINITY
     var west = Double.POSITIVE_INFINITY

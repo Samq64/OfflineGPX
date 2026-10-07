@@ -6,7 +6,7 @@ import java.time.Instant
 import kotlin.math.abs
 
 /** Whole-track summary, in SI units; the UI formats. */
-data class TrackStats(
+public data class TrackStats(
     val startedAt: Instant?,
     val pointCount: Int,
     val distanceMeters: Double,
@@ -24,27 +24,27 @@ data class TrackStats(
  * A track's chart series, precomputed as parallel primitive arrays indexed like [points].
  * Not a `data class`: array equality is O(n), and `remember` keys want identity.
  */
-class TrackProfile(
+public class TrackProfile(
     /** Cut at [segmentStartIndices], so gaps the clock shows are breaks here too. */
-    val points: TrackPoints,
-    val segmentStartIndices: IntArray,
+    public val points: TrackPoints,
+    public val segmentStartIndices: IntArray,
     /** All zeroes when [hasTime] is false. */
-    val elapsedSeconds: FloatArray,
+    public val elapsedSeconds: FloatArray,
     /** Cumulative; flat across segment boundaries. */
-    val distanceMeters: FloatArray,
+    public val distanceMeters: FloatArray,
     /** Smoothed; `NaN` throughout when [hasTime] is false. */
-    val speedMps: FloatArray,
+    public val speedMps: FloatArray,
     /** `NaN` where `<ele>` was missing. */
-    val elevationMeters: FloatArray,
-    val hasTime: Boolean,
-    val hasElevation: Boolean,
-    val stats: TrackStats,
+    public val elevationMeters: FloatArray,
+    public val hasTime: Boolean,
+    public val hasElevation: Boolean,
+    public val stats: TrackStats,
 ) {
     /**
      * Index nearest [point], or -1 if empty. By time when available, so a round trip picks
      * the right leg; by distance otherwise.
      */
-    fun indexOf(point: TrackPoint): Int {
+    public fun indexOf(point: TrackPoint): Int {
         val at = point.time?.toEpochMilli()
         var best = -1
         var bestScore = Double.MAX_VALUE
@@ -63,6 +63,6 @@ class TrackProfile(
     }
 
     /** Distance from the start to the point nearest [point], or null if empty. */
-    fun distanceTo(point: TrackPoint): Double? =
+    public fun distanceTo(point: TrackPoint): Double? =
         indexOf(point).takeIf { it >= 0 }?.let { distanceMeters[it].toDouble() }
 }

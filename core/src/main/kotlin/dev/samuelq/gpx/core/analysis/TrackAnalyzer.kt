@@ -7,31 +7,31 @@ import kotlin.math.abs
 import kotlin.math.max
 
 /** Turns raw [Track] geometry into the derived series the charts plot. Pure, no Android types. */
-object TrackAnalyzer {
+public object TrackAnalyzer {
 
     /** Centred window for speed; 1 Hz GPS noise makes per-sample speed useless. */
-    const val SPEED_WINDOW_SECONDS = 10.0
+    internal const val SPEED_WINDOW_SECONDS = 10.0
 
     /** Below this the time is excluded from moving time. */
-    const val MOVING_SPEED_THRESHOLD_MPS = 0.5
+    internal const val MOVING_SPEED_THRESHOLD_MPS = 0.5
 
     /** Hysteresis for ascent/descent; altitude wanders a metre or two at rest. */
-    const val ELEVATION_NOISE_THRESHOLD_METERS = 3.0
+    internal const val ELEVATION_NOISE_THRESHOLD_METERS = 3.0
 
     /** Half-width of the elevation moving average, by distance so sparse files aren't flattened. */
     private const val ELEVATION_SMOOTHING_METERS = 25.0
 
     /** A gap must exceed both this and [GAP_INTERVAL_MULTIPLE] median intervals to be a break. */
-    const val MIN_GAP_SECONDS = 30.0
+    public const val MIN_GAP_SECONDS: Double = 30.0
 
     /** Relative to the median interval, which the gaps themselves can't drag up like a mean. */
-    const val GAP_INTERVAL_MULTIPLE = 10.0
+    internal const val GAP_INTERVAL_MULTIPLE = 10.0
 
     /** @param minGapSeconds exposed for tests; not a setting, as it would re-cut stored stats. */
-    fun analyze(track: Track, minGapSeconds: Double = MIN_GAP_SECONDS): TrackProfile =
+    public fun analyze(track: Track, minGapSeconds: Double = MIN_GAP_SECONDS): TrackProfile =
         analyze(track.points, minGapSeconds)
 
-    fun analyze(points: TrackPoints, minGapSeconds: Double = MIN_GAP_SECONDS): TrackProfile {
+    public fun analyze(points: TrackPoints, minGapSeconds: Double = MIN_GAP_SECONDS): TrackProfile {
         val size = points.size
 
         // Partially timed files are treated as untimed rather than inventing speeds.

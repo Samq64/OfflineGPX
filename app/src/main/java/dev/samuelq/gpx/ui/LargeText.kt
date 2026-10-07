@@ -9,4 +9,4 @@ private const val LARGE_TEXT_SCALE = 1.3f
 
 @Composable
 @ReadOnlyComposable
-fun isLargeText(): Boolean = LocalDensity.current.fontScale >= LARGE_TEXT_SCALE
+internal fun isLargeText(): Boolean = LocalDensity.current.fontScale >= LARGE_TEXT_SCALE

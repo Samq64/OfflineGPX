@@ -38,11 +38,11 @@ import dev.samuelq.gpx.ui.track.CategoryField
 import dev.samuelq.gpx.ui.track.StatRow
 
 /** The categories in use, and the one a new recording gets unless changed: the last one's. */
-class CategoryChoice(val all: List<String>, val default: String)
+internal class CategoryChoice(val all: List<String>, val default: String)
 
 /** Stop's question. Dismissing it keeps recording. */
 @Composable
-fun StopRecordingDialog(
+internal fun StopRecordingDialog(
     state: RecordingState.Active,
     categories: CategoryChoice,
     onSave: (TrackLabel) -> Unit,
@@ -64,7 +64,7 @@ fun StopRecordingDialog(
 
 /** For a recording a crash left unsaved. Only its buttons close it. */
 @Composable
-fun RecoveredRecordingDialog(
+internal fun RecoveredRecordingDialog(
     recording: AbandonedRecording,
     categories: CategoryChoice,
     onSave: (TrackLabel) -> Unit,

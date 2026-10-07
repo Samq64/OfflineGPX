@@ -4,13 +4,13 @@ package dev.samuelq.gpx.core.analysis
  * Live speed over the same window as [TrackAnalyzer]. Fed every reading, including
  * filtered ones, so it decays to zero on a stop.
  */
-class SpeedWindow {
+public class SpeedWindow {
 
     private val times = ArrayDeque<Double>()
     private val distances = ArrayDeque<Double>()
 
     /** @param cumulativeMeters distance so far. */
-    fun add(seconds: Double, cumulativeMeters: Double) {
+    public fun add(seconds: Double, cumulativeMeters: Double) {
         // Providers sometimes replay a buffered fix.
         if (times.isNotEmpty() && seconds < times.last()) return
 
@@ -25,7 +25,7 @@ class SpeedWindow {
     }
 
     /** Null, not zero, while the window is too short to measure. */
-    val speedMps: Double?
+    public val speedMps: Double?
         get() {
             if (times.size < 2) return null
             val span = times.last() - times.first()
@@ -33,7 +33,7 @@ class SpeedWindow {
             return ((distances.last() - distances.first()) / span).coerceAtLeast(0.0)
         }
 
-    fun reset() {
+    public fun reset() {
         times.clear()
         distances.clear()
     }

@@ -21,7 +21,7 @@ import kotlinx.coroutines.flow.Flow
  * @param onDiscarded follows a recording thrown away, which leaves nothing to open.
  */
 @Composable
-fun RecordingOutcomes(
+internal fun RecordingOutcomes(
     events: Flow<RecordingEvent>,
     categories: CategoryChoice,
     /** With a Settings action when there's one to take. */

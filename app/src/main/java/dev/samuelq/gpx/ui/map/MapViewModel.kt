@@ -43,7 +43,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /** One-shot messages; the screen resolves the words. */
-sealed interface MapMessage {
+internal sealed interface MapMessage {
     data object RenameFailed : MapMessage
     data object ImportFailed : MapMessage
 
@@ -59,7 +59,7 @@ sealed interface MapMessage {
 }
 
 /** Visible tracks, with their geometry once it has been read off disk. */
-data class MapUiState(
+internal data class MapUiState(
     /** In the list's order, reversed so its top is drawn last, on top. */
     val entities: List<TrackEntity> = emptyList(),
     val geometry: Map<Long, LoadedTrack> = emptyMap(),
@@ -87,7 +87,7 @@ class MapViewModel(
     val basemaps: StateFlow<List<OfflineMap>> = mapStore.maps
 
     private val _state = MutableStateFlow(MapUiState())
-    val state: StateFlow<MapUiState> = _state.asStateFlow()
+    internal val state: StateFlow<MapUiState> = _state.asStateFlow()
 
     val trace: StateFlow<TrackPoints> = controller.trace
 
@@ -119,7 +119,7 @@ class MapViewModel(
 
     /** A channel, not state, so a rotation can't re-announce something. */
     private val _messages = Channel<MapMessage>(Channel.BUFFERED)
-    val messages: Flow<MapMessage> = _messages.receiveAsFlow()
+    internal val messages: Flow<MapMessage> = _messages.receiveAsFlow()
 
     private var requested: TrackRef? = null
     private var focusJob: Job? = null

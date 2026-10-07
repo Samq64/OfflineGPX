@@ -1,7 +1,7 @@
 package dev.samuelq.gpx.core.model
 
 /** Display only; everything stored and analysed stays SI. */
-enum class UnitSystem {
+public enum class UnitSystem {
     METRIC,
     IMPERIAL,
 }

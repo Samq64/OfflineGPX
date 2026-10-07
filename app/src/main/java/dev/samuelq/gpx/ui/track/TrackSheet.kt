@@ -547,7 +547,7 @@ private fun SheetTitle(
 
 /** Sized like the peek so the sheet does not jump open. */
 @Composable
-fun TrackSheetLoading(modifier: Modifier = Modifier) {
+internal fun TrackSheetLoading(modifier: Modifier = Modifier) {
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -562,7 +562,7 @@ fun TrackSheetLoading(modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun TrackSheetError(messageRes: Int, onRetry: () -> Unit, onClose: () -> Unit, modifier: Modifier = Modifier) {
+internal fun TrackSheetError(messageRes: Int, onRetry: () -> Unit, onClose: () -> Unit, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
             .fillMaxWidth()
