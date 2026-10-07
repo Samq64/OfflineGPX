@@ -130,28 +130,6 @@ internal fun MapPosition.centreIn(insets: Insets) {
 }
 
 /**
- * Whether fitting [extent] to [usable] leaves every one of [tracks] under [minPx] across: then
- * they're too far apart to show together, as specks. Never at the zoom cap, where the whole
- * extent is small rather than spread.
- */
-internal fun tooFarApart(
-    extent: BoundingBox,
-    tracks: List<BoundingBox>,
-    usable: IntSize,
-    maxScale: Double,
-    minPx: Float,
-): Boolean {
-    val scale = MapPosition().apply { setByBoundingBox(extent, usable.width, usable.height) }.scale
-    if (scale >= maxScale) return false
-    val mapSize = Tile.SIZE * scale
-    return tracks.none {
-        val width = MercatorProjection.longitudeToX(it.maxLongitude) - MercatorProjection.longitudeToX(it.minLongitude)
-        val height = MercatorProjection.latitudeToY(it.minLatitude) - MercatorProjection.latitudeToY(it.maxLatitude)
-        maxOf(width, height) * mapSize >= minPx
-    }
-}
-
-/**
  * Moves the camera the least it can so [extent]'s edges stay outside the screen's (or
  * [cover]'s), centred on an axis where it fits. The range is also VTM's map limit so drags
  * stop cleanly; this catches pinches, which change the scale it was worked out for.

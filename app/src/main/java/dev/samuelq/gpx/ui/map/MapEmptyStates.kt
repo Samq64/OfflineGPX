@@ -38,21 +38,6 @@ internal fun EmptyState(onImportMap: () -> Unit, onImportTrack: () -> Unit, modi
     }
 }
 
-/** In place of framing tracks so far apart they'd all be specks. */
-@Composable
-internal fun TooFarApartState(onOpenList: () -> Unit, modifier: Modifier = Modifier) {
-    EmptyPage(
-        title = stringResource(R.string.map_spread_title),
-        body = stringResource(R.string.map_spread_body),
-        // Over the map, so it mustn't take a drag meant for nothing.
-        modifier = modifier.pointerInput(Unit) {},
-    ) {
-        Button(onClick = onOpenList) {
-            Text(stringResource(R.string.map_spread_action))
-        }
-    }
-}
-
 /** Every track hidden on purpose and no basemap: just a way back to the list. */
 @Composable
 internal fun ShowTracksHint(onClick: () -> Unit, modifier: Modifier = Modifier) {

@@ -135,9 +135,6 @@
     <string name="map_empty_body">Start a recording, open a track or import a map to get started.</string>
     <string name="map_empty_title">Nothing to show</string>
     <string name="map_hidden_hint">Show a track from the list</string>
-    <string name="map_spread_title">Tracks too far apart</string>
-    <string name="map_spread_body">Together they\'d be specks. Open one from the list, or hide some.</string>
-    <string name="map_spread_action">Open tracks</string>
     <!-- Spoken only. -->
     <string name="map_loading">Loading tracks</string>
     <string name="map_location_denied">Showing where you are needs location access.</string>

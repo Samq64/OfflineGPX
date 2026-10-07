@@ -115,8 +115,6 @@ internal fun OfflineMapCanvas(
     /** Cold-start camera, if remembered; takes priority over fitting to tracks or maps. */
     initialCamera: CameraSnapshot?,
     onCameraChange: (CameraSnapshot) -> Unit,
-    /** True while framing every track was asked for but would leave them all specks; see [tooFarApart]. */
-    onTooFarApartChange: (Boolean) -> Unit,
 ) {
     val density = LocalDensity.current
     val context = LocalContext.current
@@ -128,8 +126,6 @@ internal fun OfflineMapCanvas(
     var basemap by remember { mutableStateOf<Basemap?>(null) }
     // Framed once: re-fitting on every route change would yank the map out from under a pan.
     var hasFramed by remember { mutableStateOf(false) }
-    // Kept so a rotation doesn't drop back to the specks.
-    var spread by rememberSaveable { mutableStateOf(false) }
     // From layout: first composition precedes it, and fitting to 0 x 0 zooms to the world.
     var viewSize by remember { mutableStateOf<IntSize?>(null) }
 
@@ -154,7 +150,6 @@ internal fun OfflineMapCanvas(
     // A 48dp target, the pin itself being narrower.
     val pinMinHalf = remember(density) { with(density) { 24.dp.toPx() } }
     val followMargin = remember(density) { with(density) { FOLLOW_MARGIN_DP.dp.roundToPx() } }
-    val speckPx = remember(density) { with(density) { SPECK_DP.dp.toPx() } }
 
     val insets = remember(contentPadding, layoutDirection, density) {
         contentPadding.toInsets(density, layoutDirection)
@@ -334,21 +329,18 @@ internal fun OfflineMapCanvas(
 
     fun frameTo(position: MapPosition, size: IntSize) {
         allowScale(position.scale)
-        spread = false
         framedView = position.visibleBox(size)
         map.moveTo(position, currentClamp(), currentCover)
     }
 
-    // Tracks first, else the maps. Too far apart, the camera stays put and the screen says so.
+    // Tracks first, else the maps. Far apart, they're framed as marks to zoom in on.
     fun frameAll(): Boolean {
         val size = viewSize ?: return false
         val usable = size.usable(insets) ?: return false
         val maxScale = map.viewport().maxScale
-        val tracks = extentOf(currentRoutes, currentLiveRoute, emptyList())
-        val boxes = (currentRoutes + listOfNotNull(currentLiveRoute)).mapNotNull { it.bounds?.toBoundingBox() }
-        spread = tracks != null && tooFarApart(tracks, boxes, usable, maxScale, speckPx)
-        if (spread) return true
-        val target = tracks ?: extentOf(emptyList(), null, basemaps) ?: return false
+        val target = extentOf(currentRoutes, currentLiveRoute, emptyList())
+            ?: extentOf(emptyList(), null, basemaps)
+            ?: return false
         // Replacing the last framed view, as a framed track does: one left from following a
         // recording elsewhere would stretch the clamp and pull this frame off centre.
         frameTo(fit(target, usable, insets, maxScale), size)
@@ -366,7 +358,6 @@ internal fun OfflineMapCanvas(
         camera.centreIn(insets)
         val view = camera.visibleBox(size)
         if (currentExtent?.intersects(view) == false) return CentreResult.OutOfBounds
-        spread = false
         framedView = view
         map.moveTo(camera, currentClamp(), currentCover)
         return CentreResult.Centred
@@ -448,13 +439,6 @@ internal fun OfflineMapCanvas(
         extentOf(routes, liveRoute, emptyList()) ?: extentOf(emptyList(), null, basemaps)
     }
 
-    val reportSpread by rememberUpdatedState(onTooFarApartChange)
-    LaunchedEffect(spread) { reportSpread(spread) }
-    // Hiding or adding tracks may bring them close enough to frame after all.
-    LaunchedEffect(routes, liveRoute, viewSize, insets) {
-        if (spread) frameAll()
-    }
-
     // Read once: the camera is republished as the map moves, so keying on it would restore
     // the map to its own current position.
     val rememberedCamera = remember { initialCamera }
@@ -520,9 +504,6 @@ private const val TAP_REACH_DP = 40f
 
 /** How far inside the uncovered box a scrubbed point is kept. */
 private const val FOLLOW_MARGIN_DP = 36f
-
-/** Across which every track framed together counts as a speck. */
-private const val SPECK_DP = 16f
 
 /** Street level, for finding yourself; 2^15. */
 private const val LOCATE_SCALE = 32768.0

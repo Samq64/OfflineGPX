@@ -173,8 +173,6 @@ fun MapScreen(
     val screen = rememberMapScreenState(focusedTrack?.id, isRecording, viewModel.screenKept) { viewModel.focus(it) }
     // Read only by the tooltip's layout, so panning doesn't recompose this screen.
     val tappedWaypointAt = remember { mutableStateOf(Offset.Zero) }
-    // Reported by the map, which keeps it.
-    var tooFarApart by remember { mutableStateOf(false) }
 
     fun say(message: String, openSettings: (() -> Unit)? = null) = scope.launch {
         snackbars.say(message, openSettings?.let { resources.getString(R.string.action_settings) }) {
@@ -724,7 +722,6 @@ fun MapScreen(
                     onDrag = screen::stopFollowing,
                     initialCamera = viewModel.lastCamera,
                     onCameraChange = { viewModel.lastCamera = it },
-                    onTooFarApartChange = { tooFarApart = it },
                     modifier = Modifier.fillMaxSize(),
                 )
 
@@ -740,8 +737,6 @@ fun MapScreen(
                 val hasContent = hasRoutes || basemaps.isNotEmpty()
 
                 when {
-                    hasRoutes && tooFarApart -> TooFarApartState(openList, Modifier.fillMaxSize())
-
                     hasRoutes -> Unit
 
                     state.loading -> Box(Modifier.fillMaxSize(), Alignment.Center) {
@@ -764,7 +759,7 @@ fun MapScreen(
                     )
                 }
 
-                if (hasContent && !(hasRoutes && tooFarApart)) {
+                if (hasContent) {
                     ScaleBar(
                         // The state, not its value: the bar re-reads it as the camera moves.
                         metersPerPixel = metersPerPixel,
