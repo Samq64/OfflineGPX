@@ -8,9 +8,9 @@ import dev.samuelq.gpx.data.db.TrackEntity
 private val Blue450 = Color(0xFF2A78D6)
 private val Blue400 = Color(0xFF3987E5)
 
-/** 3:1 on the light surfaces wallpapers give, as a chart mark needs. */
-private val Orange = Color(0xFFC9531F)
-private val OrangeDark = Color(0xFFD95926)
+/** 3:1 on any wallpaper's sheet surface, as a chart mark needs, and apart from the blue under CVD. */
+private val Green = Color(0xFF25852A)
+private val GreenDark = Color(0xFF52B848)
 
 /**
  * Picked by search for the hue each is named: at least 3:1 against map land (2:1 against water
@@ -78,7 +78,7 @@ data class ChartColors(val speed: Color, val elevation: Color, val grid: Color, 
     companion object {
         fun of(scheme: ColorScheme, dark: Boolean) = ChartColors(
             speed = if (dark) Blue400 else Blue450,
-            elevation = if (dark) OrangeDark else Orange,
+            elevation = if (dark) GreenDark else Green,
             grid = scheme.outlineVariant,
             axis = scheme.outline,
             label = scheme.onSurfaceVariant,
