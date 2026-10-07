@@ -3,14 +3,18 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- A track profile: the shape the app exists to draw. Kept inside the 72dp safe zone. -->
+    <!-- A track in the blue route colour turning at the junction, with the scrub dot in its white
+         ring as the map draws it. -->
     <path
-        android:pathData="M32,72 L46,54 L57,63 L76,37"
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="7"
+        android:pathData="M101.9,183.6 L54,52 L-77.6,99.9"
+        android:strokeColor="#3851A3"
+        android:strokeWidth="8.5"
         android:strokeLineCap="round"
         android:strokeLineJoin="round" />
     <path
-        android:pathData="M76,31 m-5.5,0 a5.5,5.5 0 1,0 11,0 a5.5,5.5 0 1,0 -11,0"
+        android:pathData="M60.8,70.8 m-11,0 a11,11 0 1,0 22,0 a11,11 0 1,0 -22,0"
         android:fillColor="#FFFFFF" />
+    <path
+        android:pathData="M60.8,70.8 m-7.5,0 a7.5,7.5 0 1,0 15.0,0 a7.5,7.5 0 1,0 -15.0,0"
+        android:fillColor="#3851A3" />
 </vector>
