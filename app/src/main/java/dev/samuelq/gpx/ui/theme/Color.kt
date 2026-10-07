@@ -4,6 +4,7 @@ import androidx.compose.material3.ColorScheme
 import androidx.compose.ui.graphics.Color
 import dev.samuelq.gpx.R
 import dev.samuelq.gpx.data.db.TrackEntity
+import dev.samuelq.gpx.data.track.RouteColors
 
 private val Blue450 = Color(0xFF2A78D6)
 private val Blue400 = Color(0xFF3987E5)
@@ -12,32 +13,9 @@ private val Blue400 = Color(0xFF3987E5)
 private val Green = Color(0xFF25852A)
 private val GreenDark = Color(0xFF52B848)
 
-/**
- * Picked by search for the hue each is named: at least 3:1 against map land (2:1 against water
- * and vegetation), and apart from each other and [recordingColor] by 25 CIEDE2000 (12 under
- * simulated CVD) in dark mode. Light mode gets 18 (7): a yellow dark enough for white land
- * leaves orange little room beside the red. Slots keep the hue of the colour stored there
- * before: blue became cyan, plum purple, violet blue, grey orange. Lower slots are assigned first.
- */
-private val RoutePaletteLight = listOf(
-    Color(0xFF2A95B9),
-    Color(0xFF9765E9),
-    Color(0xFF098745),
-    Color(0xFFAA861B),
-    Color(0xFFE45191),
-    Color(0xFF3851A3),
-    Color(0xFFB15D08),
-).also { check(it.size == TrackEntity.PALETTE_SIZE) }
+private val RoutePaletteLight = RouteColors.LIGHT.map { Color(it) }
 
-private val RoutePaletteDark = listOf(
-    Color(0xFF20EDFF),
-    Color(0xFF9321D4),
-    Color(0xFF28C67A),
-    Color(0xFFFCED54),
-    Color(0xFFFE499B),
-    Color(0xFF627FFE),
-    Color(0xFFEC9424),
-).also { check(it.size == TrackEntity.PALETTE_SIZE) }
+private val RoutePaletteDark = RouteColors.DARK.map { Color(it) }
 
 /** Names for the slots, alike in both themes. */
 val RouteColorNames = listOf(

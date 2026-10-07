@@ -30,6 +30,7 @@ import java.io.File
 import java.io.FileNotFoundException
 import java.io.IOException
 import java.io.InputStream
+import java.io.OutputStream
 import java.text.Collator
 import java.time.Instant
 import java.time.ZoneId
@@ -71,6 +72,9 @@ class TrackRepository(
 
     /** Files an edit replaced, until its undo lapses. Not the cache, which the system may clear. */
     private val editsDir: File get() = File(appContext.noBackupFilesDir, "edits").apply { mkdirs() }
+
+    /** Copies being shared; `res/xml/file_paths.xml` shares them. */
+    private val sharedDir: File get() = File(appContext.cacheDir, "shared")
 
     /**
      * Deleted but still undoable, so left out of every list. In memory only: if the process
@@ -119,7 +123,15 @@ class TrackRepository(
                 }
                 val track = parse(destination.inputStream(), displayName)
                 val category = categoryAsSpelt(track.type)
-                val id = dao.upsert(newEntity(destination, displayName, track, TrackAnalyzer.analyze(track), category))
+                val entity = newEntity(
+                    destination,
+                    displayName,
+                    track,
+                    TrackAnalyzer.analyze(track),
+                    category,
+                    colorIndex = track.lineColor?.let(RouteColors::slotOf),
+                )
+                val id = dao.upsert(entity)
                 cache.write(id, destination, track)
                 id
             } catch (e: Throwable) {
@@ -215,7 +227,7 @@ class TrackRepository(
 
         val written = try {
             appContext.contentResolver.openOutputStream(target)?.use { sink ->
-                fileOf(entity).inputStream().use { it.copyTo(sink) }
+                fileOf(entity).inputStream().use { writeOut(entity, it, sink) }
             } != null
         } catch (e: Exception) {
             Log.d(TAG, "Could not export ${entity.displayName}", e)
@@ -227,6 +239,29 @@ class TrackRepository(
         }
         return written
     }
+
+    /**
+     * A copy of the track's file to share, carrying its colour, or the file itself if the copy
+     * fails. Kept until the next launch, since the recipient may read it late.
+     */
+    suspend fun fileToShare(entity: TrackEntity): File = withContext(io) {
+        val file = fileOf(entity)
+        val dir = File(sharedDir, entity.id.toString())
+        val copy = File(dir, exportFileName(entity.trackName, entity.displayName))
+        runCancellable {
+            dir.deleteRecursively()
+            dir.mkdirs()
+            writeAtomically(copy) { output -> file.inputStream().use { writeOut(entity, it, output) } }
+            copy
+        }.getOrElse { e ->
+            Log.d(TAG, "Sharing ${entity.displayName} without its colour", e)
+            file
+        }
+    }
+
+    /** The stored file as it leaves the app: the colour lives in the row, so it goes in here. */
+    private fun writeOut(entity: TrackEntity, input: InputStream, output: OutputStream) =
+        trimmer.trim(input, output, color = RouteColors.rgb(entity.colorIndex))
 
     /** Like [open] but without touching the sort order, for drawing. */
     suspend fun geometry(id: Long): Result<LoadedTrack> = withContext(io) {
@@ -369,9 +404,12 @@ class TrackRepository(
         scope.launch(io) { edit.backup.delete() }
     }
 
-    /** At launch: an undo from a previous process can no longer be taken. */
-    fun purgeEdits() {
-        scope.launch(io) { editsDir.listFiles().orEmpty().forEach(File::delete) }
+    /** At launch: an undo from a previous process can no longer be taken, nor a share still be read. */
+    fun purgeAtLaunch() {
+        scope.launch(io) {
+            editsDir.listFiles().orEmpty().forEach(File::delete)
+            sharedDir.deleteRecursively()
+        }
     }
 
     private fun backUp(file: File, id: Long): File =
@@ -411,8 +449,9 @@ class TrackRepository(
         track: Track,
         profile: TrackProfile,
         category: String?,
+        colorIndex: Int? = null,
     ) = TrackEntity(
-        colorIndex = leastUsedSlot(dao.colorUsage(), TrackEntity.PALETTE_SIZE),
+        colorIndex = colorIndex ?: leastUsedSlot(dao.colorUsage(), TrackEntity.PALETTE_SIZE),
         location = TrackFiles.location(appContext, file),
         displayName = displayName,
         trackName = track.name,

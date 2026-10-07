@@ -9,8 +9,8 @@ import org.xmlpull.v1.XmlSerializer
 
 /**
  * Copies a GPX document keeping only some of its points and waypoints, and optionally renaming
- * its first track or setting its type. Everything else passes through: extensions, metadata, comments, other apps'
- * data. [GpxWriter] would keep only what the app reads.
+ * its first track or setting its type or colour. Everything else passes through: extensions, metadata, comments,
+ * other apps' data. [GpxWriter] would keep only what the app reads.
  *
  * Points are counted as [GpxParser] reads them, so an index here is one in the parsed track.
  * When cutting, unreadable points and waypoints, which have no index, are dropped. A segment
@@ -29,6 +29,8 @@ class GpxTrimmer(
      * @param name replaces the first `<trk>`'s name, or is added as its first child; blank
      *   removes it, null leaves it.
      * @param type the same for the first `<trk>`'s type, added where the schema orders it.
+     * @param color 0xRRGGBB for the first `<trk>`, written as gpx_style's and Garmin's. Any colour
+     *   extension already there goes, so none contradicts it; null leaves them.
      */
     fun trim(
         input: InputStream,
@@ -37,6 +39,7 @@ class GpxTrimmer(
         keepWaypoint: ((index: Int) -> Boolean)? = null,
         name: String? = null,
         type: String? = null,
+        color: Int? = null,
         countRoutes: Boolean = true,
     ) {
         val parser = newPullParser().apply {
@@ -52,6 +55,7 @@ class GpxTrimmer(
             keepWaypoint,
             name,
             type,
+            color,
             countRoutes,
         )
             .run()
@@ -94,6 +98,8 @@ class GpxTrimmer(
         private var newName: String?,
         /** Likewise. */
         private var newType: String?,
+        /** Likewise. */
+        private var newColor: Int?,
         private val countRoutes: Boolean,
     ) {
         private val path = ArrayList<String>()
@@ -114,6 +120,12 @@ class GpxTrimmer(
         /** Inside the first `<trk>`, before what follows its type. */
         private var typeDue = false
         private var trackNamespace: String? = null
+
+        /** Inside the first `<trk>`, dropping its colour extensions. */
+        private var recolouring = false
+
+        /** Inside the first `<trk>`, before [newColor] is written. */
+        private var colorDue = false
 
         fun run() {
             xml.startDocument(ENCODING, null)
@@ -160,6 +172,12 @@ class GpxTrimmer(
                 }
                 if (name == TAG_EXTENSIONS || name == TAG_TRKSEG) insertType()
             }
+            if (colorDue && path == TRK_PATH && name == TAG_TRKSEG) insert { writeColor(wrapped = true) }
+            if (recolouring && path == TRK_EXTENSIONS_PATH && GpxColors.isColorElement(parser.namespace, name)) {
+                whitespace.clear()
+                skipDepth = 1
+                return
+            }
             val keep = when {
                 (name == TAG_TRKPT && path == TRKSEG_PATH) || (name == TAG_RTEPT && path == RTE_PATH) -> point()
                 name == TAG_WPT && path == ROOT_PATH ->
@@ -190,6 +208,8 @@ class GpxTrimmer(
             if (name == TAG_TRK && path == TRK_PATH) {
                 nameDue = newName != null
                 typeDue = newType != null
+                recolouring = newColor != null
+                colorDue = recolouring
                 trackNamespace = parser.namespace.ifEmpty { null }
             }
         }
@@ -231,6 +251,27 @@ class GpxTrimmer(
             xml.text(text).endTag(namespace, tag)
         }
 
+        /** [newColor]'s extensions, in an `<extensions>` of the track's own if [wrapped]. */
+        private fun writeColor(wrapped: Boolean) {
+            val rgb = newColor ?: return
+            colorDue = false
+            newColor = null
+            if (wrapped) xml.startTag(trackNamespace, TAG_EXTENSIONS)
+            xml.setPrefix(STYLE_PREFIX, GpxColors.STYLE_NAMESPACE)
+            xml.startTag(GpxColors.STYLE_NAMESPACE, GpxColors.STYLE_LINE)
+            xml.startTag(GpxColors.STYLE_NAMESPACE, GpxColors.STYLE_COLOR)
+                .text(GpxColors.hex(rgb))
+                .endTag(GpxColors.STYLE_NAMESPACE, GpxColors.STYLE_COLOR)
+            xml.endTag(GpxColors.STYLE_NAMESPACE, GpxColors.STYLE_LINE)
+            xml.setPrefix(GARMIN_PREFIX, GpxColors.GARMIN_NAMESPACE)
+            xml.startTag(GpxColors.GARMIN_NAMESPACE, GpxColors.GARMIN_TRACK)
+            xml.startTag(GpxColors.GARMIN_NAMESPACE, GpxColors.GARMIN_COLOR)
+                .text(GpxColors.garminName(rgb))
+                .endTag(GpxColors.GARMIN_NAMESPACE, GpxColors.GARMIN_COLOR)
+            xml.endTag(GpxColors.GARMIN_NAMESPACE, GpxColors.GARMIN_TRACK)
+            if (wrapped) xml.endTag(trackNamespace, TAG_EXTENSIONS)
+        }
+
         private fun point(): Boolean {
             val keepPoint = keepPoint ?: return true
             if (path == RTE_PATH && !countRoutes) return true
@@ -247,9 +288,12 @@ class GpxTrimmer(
                 skipDepth--
                 return
             }
+            if (colorDue && path == TRK_EXTENSIONS_PATH) insert { writeColor(wrapped = false) }
             if (path == TRK_PATH) {
                 if (nameDue) insertName()
                 if (typeDue) insertType()
+                if (colorDue) insert { writeColor(wrapped = true) }
+                recolouring = false
             }
             path.removeAt(path.lastIndex)
             if (parser.name == TAG_TRKSEG && pendingSegment != null) {
@@ -333,11 +377,14 @@ class GpxTrimmer(
         const val TAG_EXTENSIONS = "extensions"
         const val ATTR_LAT = "lat"
         const val ATTR_LON = "lon"
+        const val STYLE_PREFIX = "gpx_style"
+        const val GARMIN_PREFIX = "gpxx"
 
         val ROOT_PATH = listOf("gpx")
         val METADATA_PATH = listOf("gpx", "metadata")
         val TRK_PATH = listOf("gpx", TAG_TRK)
         val TRKSEG_PATH = listOf("gpx", TAG_TRK, TAG_TRKSEG)
+        val TRK_EXTENSIONS_PATH = listOf("gpx", TAG_TRK, TAG_EXTENSIONS)
         val RTE_PATH = listOf("gpx", TAG_RTE)
     }
 }

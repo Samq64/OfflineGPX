@@ -56,6 +56,7 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
         var metadataName: String? = null
         var trackDescription: String? = null
         var trackType: String? = null
+        var lineColor: Int? = null
 
         forEachChild(parser) {
             when (parser.name) {
@@ -74,6 +75,7 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
                         TAG_NAME -> readLabel(parser).let { if (trackName == null) trackName = it }
                         TAG_DESC -> readLabel(parser).let { if (trackDescription == null) trackDescription = it }
                         TAG_TYPE -> readLabel(parser).let { if (trackType == null) trackType = it }
+                        TAG_EXTENSIONS -> readLineColor(parser).let { if (lineColor == null) lineColor = it }
 
                         TAG_TRKSEG -> readSegment(parser, points)
                         else -> skip(parser)
@@ -102,7 +104,47 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
             description = trackDescription,
             type = trackType,
             waypoints = waypoints,
+            lineColor = lineColor,
         )
+    }
+
+    /** From a `<trk><extensions>`, preferring gpx_style's exact RGB to OsmAnd's, then Garmin's named one. */
+    private fun readLineColor(parser: XmlPullParser): Int? {
+        var style: Int? = null
+        var osmAnd: Int? = null
+        var garmin: Int? = null
+        forEachChild(parser) {
+            val namespace = parser.namespace
+            when {
+                GpxColors.isStyle(namespace) && parser.name == GpxColors.STYLE_LINE -> forEachChild(parser) {
+                    if (parser.name ==
+                        GpxColors.STYLE_COLOR
+                    ) {
+                        style = GpxColors.parseHex(readText(parser))
+                    } else {
+                        skip(parser)
+                    }
+                }
+
+                namespace == GpxColors.GARMIN_NAMESPACE && parser.name == GpxColors.GARMIN_TRACK -> forEachChild(
+                    parser,
+                ) {
+                    if (parser.name ==
+                        GpxColors.GARMIN_COLOR
+                    ) {
+                        garmin = GpxColors.garminRgb(readText(parser))
+                    } else {
+                        skip(parser)
+                    }
+                }
+
+                GpxColors.isOsmAnd(namespace) && parser.name == GpxColors.OSMAND_COLOR ->
+                    osmAnd = GpxColors.parseHex(readText(parser))
+
+                else -> skip(parser)
+            }
+        }
+        return style ?: osmAnd ?: garmin
     }
 
     /** Null if lat/lon are unusable. */
@@ -238,6 +280,7 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
         private const val TAG_DESC = "desc"
         private const val TAG_TYPE = "type"
         private const val TAG_CMT = "cmt"
+        private const val TAG_EXTENSIONS = "extensions"
         private const val TAG_ELE = "ele"
         private const val TAG_TIME = "time"
         private const val ATTR_LAT = "lat"

@@ -508,7 +508,7 @@ fun MapScreen(
         remember(entity.id, entity.trackName, entity.displayName, entity.location, entity.colorIndex, screen) {
             TrackActions(
                 onRename = { screen.renamingId = entity.id },
-                onShare = { context.shareTrack(entity) },
+                onShare = { scope.launch { context.shareTrack(entity, viewModel.fileToShare(entity)) } },
                 onHide = {
                     viewModel.hide(entity.id)
                     viewModel.focus(null)

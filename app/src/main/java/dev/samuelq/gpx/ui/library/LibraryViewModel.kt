@@ -20,6 +20,7 @@ import dev.samuelq.gpx.data.track.TrackRepository
 import dev.samuelq.gpx.data.track.title
 import dev.samuelq.gpx.di.appContainer
 import dev.samuelq.gpx.ui.nav.LibraryRoute
+import java.io.File
 import java.text.Collator
 import java.util.Locale
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -192,6 +193,8 @@ class LibraryViewModel(
     fun setVisible(id: Long, visible: Boolean) {
         viewModelScope.launch { repository.setVisible(id, visible) }
     }
+
+    suspend fun fileToShare(track: TrackEntity): File = repository.fileToShare(track)
 
     fun setColor(id: Long, colorIndex: Int) {
         viewModelScope.launch { repository.setColor(id, colorIndex) }

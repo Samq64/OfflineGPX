@@ -21,8 +21,10 @@ See README.md for the source layout and the build, test, coverage and style comm
   stats and bounding box, and no geometry. Rows store paths relative to `filesDir` so a
   device transfer still resolves. Parsed points are cached in binary under `cacheDir`, which
   is regenerable and never backed up or shared. A saved track's name and colour come from
-  its row only. Files shared from other apps join the library; MainActivity is singleTask so
-  they reach the one instance.
+  its row only. The colour goes into a file only on its way out: export and share stream it
+  through `GpxTrimmer`, writing gpx_style's RGB and Garmin's nearest name. An import takes a
+  file's colour as the nearest slot by hue. Files shared from other apps join the library;
+  MainActivity is singleTask so they reach the one instance.
 - Trim rewrites a file with `GpxTrimmer`, which streams it through and keeps
   everything but the points cut; `GpxWriter` writes only what the app reads. The original
   waits under `noBackupFilesDir/edits` for the undo, and is purged at the next launch.

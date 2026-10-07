@@ -24,6 +24,7 @@ import dev.samuelq.gpx.ui.library.sortedFor
 import dev.samuelq.gpx.ui.track.FocusedTrack
 import dev.samuelq.gpx.ui.track.TrackRef
 import dev.samuelq.gpx.ui.track.toTrackMessageRes
+import java.io.File
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -193,6 +194,8 @@ class MapViewModel(
             }
         }
     }
+
+    suspend fun fileToShare(track: TrackEntity): File = repository.fileToShare(track)
 
     fun setColor(id: Long, colorIndex: Int) {
         viewModelScope.launch { repository.setColor(id, colorIndex) }

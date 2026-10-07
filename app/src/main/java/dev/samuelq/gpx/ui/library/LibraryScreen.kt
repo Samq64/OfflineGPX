@@ -54,6 +54,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -156,6 +157,7 @@ fun LibraryScreen(
     BackHandler(enabled = selection.isNotEmpty()) { viewModel.clearSelection() }
 
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     // Not stringResource: a long-lived collector would keep the old locale.
     val resources = LocalResources.current
     val layoutDirection = LocalLayoutDirection.current
@@ -387,7 +389,9 @@ fun LibraryScreen(
                                     onToggleSelected = { viewModel.toggleSelected(track.id) },
                                     onToggleVisible = { viewModel.setVisible(track.id, !track.visible) },
                                     onColor = { viewModel.setColor(track.id, it) },
-                                    onShare = { context.shareTrack(track) },
+                                    onShare = {
+                                        scope.launch { context.shareTrack(track, viewModel.fileToShare(track)) }
+                                    },
                                     onRename = { renaming = track },
                                     onDelete = { delete(setOf(track.id)) },
                                 )

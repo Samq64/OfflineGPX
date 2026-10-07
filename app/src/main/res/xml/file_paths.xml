@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Only the track directories (TrackFiles), not maps or anything else in files/. -->
+<!-- Only the track directories (TrackFiles) and copies being shared, not maps or anything else. -->
 <paths>
     <files-path name="recordings" path="recordings/" />
     <files-path name="imports" path="imports/" />
+    <cache-path name="shared" path="shared/" />
 </paths>
