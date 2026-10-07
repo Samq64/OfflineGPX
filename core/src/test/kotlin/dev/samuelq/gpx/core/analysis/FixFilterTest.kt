@@ -93,6 +93,26 @@ class FixFilterTest {
     }
 
     @Test
+    fun `travel too fast to believe is accepted once it keeps up`() {
+        val filter = FixFilter()
+        filter.pointFor(fix(0, 0.0))
+        // 70 m/s: each fix is implausible from the last one kept.
+        val kept = (1L..20L).filter { filter.pointFor(fix(it, it * 70.0)) != null }
+        assertEquals(listOf(10L, 20L), kept)
+    }
+
+    @Test
+    fun `a plausible fix ends a run of teleports`() {
+        val filter = FixFilter()
+        filter.pointFor(fix(0, 0.0))
+        for (second in 1L..30L) {
+            val far = second % 5 != 0L
+            val point = filter.pointFor(fix(second, if (far) 5_000.0 else second * 1.5))
+            if (far) assertNull(point)
+        }
+    }
+
+    @Test
     fun `reset forgets where here was`() {
         val filter = FixFilter()
         filter.pointFor(fix(0, 0.0, accuracy = 8.0))

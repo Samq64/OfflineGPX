@@ -22,10 +22,14 @@ public class FixFilter(
     /** Last time anything was returned, moved or still. */
     private var lastRecordedAt: Instant? = null
 
+    /** Implausible fixes in a row. */
+    private var implausible = 0
+
     /** Call on a pause or restart. */
     public fun reset() {
         lastAccepted = null
         lastRecordedAt = null
+        implausible = 0
     }
 
     /** The point to record, or null. Not always [fix] itself. */
@@ -45,8 +49,9 @@ public class FixFilter(
         val meters = haversineMeters(previous, fix)
         val seconds = secondsBetween(previous, fix)
 
-        // Usually a provider flipping to a cell-tower estimate kilometres away.
-        if (seconds > 0.0 && meters / seconds > MAX_PLAUSIBLE_SPEED_MPS) return null
+        // Usually a bad fix kilometres away. A run of them is real, such as a fast train, so that's accepted.
+        if (seconds > 0.0 && meters / seconds > MAX_PLAUSIBLE_SPEED_MPS && ++implausible < IMPLAUSIBLE_RUN) return null
+        implausible = 0
 
         if (meters >= max(MIN_DISPLACEMENT_METERS, accuracy ?: 0.0)) {
             lastAccepted = fix
@@ -70,8 +75,11 @@ public class FixFilter(
 
         internal const val MIN_DISPLACEMENT_METERS = 4.0
 
-        /** 180 km/h; faster is a provider artefact. */
+        /** 180 km/h; faster is a provider artefact unless it keeps up for [IMPLAUSIBLE_RUN] fixes. */
         internal const val MAX_PLAUSIBLE_SPEED_MPS = 50.0
+
+        /** About 10 s at the recording interval. */
+        internal const val IMPLAUSIBLE_RUN = 10
 
         /**
          * Matches [TrackAnalyzer.SPEED_WINDOW_SECONDS] and stays under
