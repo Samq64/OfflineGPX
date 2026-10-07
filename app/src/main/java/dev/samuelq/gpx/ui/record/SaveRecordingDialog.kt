@@ -1,17 +1,15 @@
 package dev.samuelq.gpx.ui.record
 
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.AlertDialogDefaults
-import androidx.compose.material3.BasicAlertDialog
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -23,7 +21,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.SpanStyle
@@ -122,10 +119,9 @@ fun RecoveredRecordingDialog(
 }
 
 /**
- * Discard alone at the start, Cancel and Save at the end, as far from Discard as they get.
- * A null [onDismiss] leaves only Save and Discard to close it.
+ * Discard, Cancel and Save, with Save at the end. A null [onDismiss] leaves only Save and
+ * Discard to close it.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SaveRecordingDialog(
     title: String,
@@ -142,70 +138,51 @@ private fun SaveRecordingDialog(
     var category by remember { mutableStateOf<String?>(null) }
     val label = { TrackLabel(name, category ?: categories.default) }
 
-    BasicAlertDialog(
+    AlertDialog(
         onDismissRequest = { onDismiss?.invoke() },
         properties = DialogProperties(
             dismissOnBackPress = onDismiss != null,
             dismissOnClickOutside = onDismiss != null,
         ),
-    ) {
-        Surface(
-            // A custom dialog isn't announced by name otherwise.
-            modifier = Modifier.semantics { paneTitle = title },
-            shape = AlertDialogDefaults.shape,
-            color = AlertDialogDefaults.containerColor,
-            tonalElevation = AlertDialogDefaults.TonalElevation,
-        ) {
-            Column(Modifier.padding(bottom = 12.dp)) {
-                Column(Modifier.padding(start = 24.dp, end = 24.dp, top = 24.dp)) {
-                    Text(
-                        title,
-                        style = MaterialTheme.typography.headlineSmall,
-                        modifier = Modifier.semantics {
-                            heading()
-                        },
-                    )
-                    Spacer(Modifier.height(16.dp))
-                    summary()
-                    Spacer(Modifier.height(16.dp))
-                    OutlinedTextField(
-                        value = name,
-                        onValueChange = { name = it },
-                        singleLine = true,
-                        label = { Text(stringResource(R.string.library_rename_label)) },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    CategoryField(
-                        initial = categories.default,
-                        onChange = { category = it },
-                        suggestions = categories.all,
-                    )
-                }
-                Spacer(Modifier.height(12.dp))
-                // Less inset than the content: the buttons' own padding lines their text up with it.
-                Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
-                    TextButton(onClick = { onDiscard(label()) }) {
-                        Text(
-                            text = stringResource(R.string.record_discard),
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    }
-                    Spacer(Modifier.weight(1f))
-                    if (onDismiss != null) {
-                        TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
-                    }
-                    // The distance says why to a sighted user; a screen reader hears only "disabled".
-                    val tooShort = stringResource(R.string.record_too_short)
-                    TextButton(
-                        onClick = { onSave(label()) },
-                        enabled = canSave,
-                        modifier = Modifier.semantics { if (!canSave) stateDescription = tooShort },
-                    ) {
-                        Text(stringResource(R.string.action_save))
-                    }
-                }
+        title = { Text(title, Modifier.semantics { heading() }) },
+        text = {
+            // Scrolls when the keyboard or large text leaves too little room.
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                summary()
+                Spacer(Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    singleLine = true,
+                    label = { Text(stringResource(R.string.library_rename_label)) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                CategoryField(
+                    initial = categories.default,
+                    onChange = { category = it },
+                    suggestions = categories.all,
+                )
             }
-        }
-    }
+        },
+        dismissButton = {
+            TextButton(onClick = { onDiscard(label()) }) {
+                Text(stringResource(R.string.record_discard), color = MaterialTheme.colorScheme.error)
+            }
+            if (onDismiss != null) {
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+            }
+        },
+        confirmButton = {
+            // The distance says why to a sighted user; a screen reader hears only "disabled".
+            val tooShort = stringResource(R.string.record_too_short)
+            TextButton(
+                onClick = { onSave(label()) },
+                enabled = canSave,
+                modifier = Modifier.semantics { if (!canSave) stateDescription = tooShort },
+            ) {
+                Text(stringResource(R.string.action_save))
+            }
+        },
+    )
 }
