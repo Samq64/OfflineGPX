@@ -1,8 +1,10 @@
 package dev.samuelq.gpx.ui.map
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -24,6 +26,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.tappableElement
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -34,6 +37,7 @@ import androidx.compose.material3.SheetValue
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberBottomSheetScaffoldState
@@ -54,6 +58,8 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -92,6 +98,7 @@ import dev.samuelq.gpx.ui.track.TrackSheetPeekHeight
 import dev.samuelq.gpx.ui.track.TrimControls
 import dev.samuelq.gpx.ui.track.shareTrackIntent
 import dev.samuelq.gpx.ui.track.trackTitle
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
@@ -348,13 +355,23 @@ fun MapScreen(
     }
 
     // Back collapses an expanded sheet before closing it. The recording's only collapses.
+    // Previewed as the gesture goes: the sheet or panel shrinks, and springs back if cancelled.
     val sheetExpanded = !sidePanel && sheetState.currentValue == SheetValue.Expanded
-    BackHandler(enabled = hasFocus || sheetExpanded) {
-        if (sheetExpanded) {
-            scope.launch { sheetState.partialExpand() }
-        } else {
-            viewModel.focus(null)
+    val backProgress = remember { Animatable(0f) }
+    val expandSheet: () -> Unit = { scope.launch { sheetState.expand() } }
+    val collapseSheet: () -> Unit = { scope.launch { sheetState.partialExpand() } }
+    PredictiveBackHandler(enabled = hasFocus || sheetExpanded) { events ->
+        // Read now: the sheet may have been dragged since the gesture's composition.
+        val collapsing = !currentSidePanel && sheetState.currentValue == SheetValue.Expanded
+        try {
+            events.collect { backProgress.snapTo(it.progress) }
+        } catch (e: CancellationException) {
+            scope.launch { backProgress.animateTo(0f) }
+            throw e
         }
+        // Released: the scale eases off as the sheet moves, so neither jumps.
+        scope.launch { backProgress.animateTo(0f) }
+        if (collapsing) sheetState.partialExpand() else viewModel.focus(null)
     }
     // Declared after, so it's asked first: back leaves a trim before anything else.
     BackHandler(enabled = screen.trimRange != null, onBack = screen::cancelTrim)
@@ -588,9 +605,10 @@ fun MapScreen(
             modifier = Modifier.onSizeChanged { scaffoldHeight = it.height },
             scaffoldState = scaffoldState,
             sheetPeekHeight = peekHeight,
-            sheetDragHandle = { CompactDragHandle() },
-            // A step off the map's background so the sheet's edge stays visible.
-            sheetContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+            // Drawn in sheetContent instead, so the back preview scales handle and surface as one.
+            sheetDragHandle = null,
+            sheetContainerColor = Color.Transparent,
+            sheetShadowElevation = 0.dp,
             topBar = {
                 TopAppBar(
                     title = {
@@ -620,11 +638,30 @@ fun MapScreen(
                 )
             },
             sheetContent = {
-                // Placeholder at peek height: shorter content leaves the scaffold nothing to anchor to.
-                if (sidePanel || sheetSubject == null) {
-                    Spacer(Modifier.fillMaxWidth().height(TrackSheetPeekHeight))
-                } else {
-                    sheetBody(sheetSubject, sheetMaxHeight) { peekContentHeight = it }
+                Surface(
+                    shape = BottomSheetDefaults.ExpandedShape,
+                    // A step off the map's background so the sheet's edge stays visible.
+                    color = MaterialTheme.colorScheme.surfaceContainer,
+                    shadowElevation = BottomSheetDefaults.Elevation,
+                    modifier = Modifier.predictiveBackScale(
+                        { if (sidePanel) 0f else backProgress.value },
+                        TransformOrigin(0.5f, 1f),
+                    ),
+                ) {
+                    Column {
+                        CompactDragHandle(
+                            onExpand = expandSheet
+                                .takeIf { sheetState.currentValue == SheetValue.PartiallyExpanded },
+                            onCollapse = collapseSheet
+                                .takeIf { sheetState.currentValue == SheetValue.Expanded },
+                        )
+                        // Placeholder at peek height: shorter content leaves the scaffold nothing to anchor to.
+                        if (sidePanel || sheetSubject == null) {
+                            Spacer(Modifier.fillMaxWidth().height(TrackSheetPeekHeight))
+                        } else {
+                            sheetBody(sheetSubject, sheetMaxHeight) { peekContentHeight = it }
+                        }
+                    }
                 }
             },
         ) { padding ->
@@ -769,6 +806,7 @@ fun MapScreen(
                     visible = sidePanel && hasSheet,
                     width = panelWidth,
                     modifier = Modifier.align(Alignment.TopStart),
+                    backProgress = { if (sidePanel) backProgress.value else 0f },
                 ) { shown ->
                     sheetBody(shown, Dp.Unspecified) {}
                 }

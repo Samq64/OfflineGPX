@@ -28,9 +28,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.collapse
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.expand
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
@@ -97,10 +101,13 @@ internal fun <T : Any> SidePanel(
     visible: Boolean,
     width: Dp,
     modifier: Modifier = Modifier,
+    /** How far a back gesture has gone, 0 to 1. */
+    backProgress: () -> Float = { 0f },
     content: @Composable (T) -> Unit,
 ) {
     val shown = rememberLastNonNull(subject)
-    val fromStart = if (LocalLayoutDirection.current == LayoutDirection.Ltr) -1 else 1
+    val ltr = LocalLayoutDirection.current == LayoutDirection.Ltr
+    val fromStart = if (ltr) -1 else 1
     AnimatedVisibility(
         visible = visible,
         enter = slideInHorizontally { fromStart * it },
@@ -110,7 +117,11 @@ internal fun <T : Any> SidePanel(
         Surface(
             color = MaterialTheme.colorScheme.surfaceContainer,
             shape = RoundedCornerShape(topEnd = SidePanelCornerRadius),
-            modifier = Modifier.fillMaxSize(),
+            // Shrinking toward the edge it slides out of.
+            modifier = Modifier.fillMaxSize().predictiveBackScale(
+                backProgress,
+                TransformOrigin(if (ltr) 0f else 1f, 0.5f),
+            ),
         ) {
             Box(
                 Modifier
@@ -138,16 +149,49 @@ private class LastValue<T : Any> {
 
 private val SidePanelCornerRadius = 28.dp
 
+/**
+ * Material's back preview for a sheet: up to 48dp narrower and 24dp shorter at full
+ * [progress], about [origin], so a release reads as it going away and a cancel as it staying.
+ */
+internal fun Modifier.predictiveBackScale(progress: () -> Float, origin: TransformOrigin): Modifier = graphicsLayer {
+    val fraction = progress()
+    if (fraction == 0f || size.width == 0f || size.height == 0f) return@graphicsLayer
+    scaleX = 1f - fraction * minOf(BackPreviewShrinkX.toPx(), size.width) / size.width
+    scaleY = 1f - fraction * minOf(BackPreviewShrinkY.toPx(), size.height) / size.height
+    transformOrigin = origin
+}
+
+private val BackPreviewShrinkX = 48.dp
+private val BackPreviewShrinkY = 24.dp
+
 /** The handle's own height, counted into the measured peek. */
 internal val DragHandleHeight = 20.dp
 
-/** Half the Material handle, which spends 44 of 48dp on padding; the whole sheet drags anyway. */
+/**
+ * Half the Material handle, which spends 44 of 48dp on padding; the whole sheet drags anyway.
+ * In the sheet's content rather than the scaffold's slot, so a back preview scales it with the
+ * sheet; the expand and collapse the slot would add are added here instead.
+ */
 @Composable
-internal fun CompactDragHandle() {
-    // Named like Material's; the scaffold adds expand and collapse to it.
+internal fun CompactDragHandle(onExpand: (() -> Unit)?, onCollapse: (() -> Unit)?) {
+    // Named like Material's.
     val description = stringResource(R.string.sheet_drag_handle)
     Box(
-        Modifier.fillMaxWidth().height(DragHandleHeight).semantics { contentDescription = description },
+        Modifier.fillMaxWidth().height(DragHandleHeight).semantics {
+            contentDescription = description
+            onExpand?.let {
+                expand {
+                    it()
+                    true
+                }
+            }
+            onCollapse?.let {
+                collapse {
+                    it()
+                    true
+                }
+            }
+        },
         contentAlignment = Alignment.Center,
     ) {
         Box(
