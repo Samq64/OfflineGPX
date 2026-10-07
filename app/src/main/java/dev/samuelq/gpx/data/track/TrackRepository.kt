@@ -104,7 +104,7 @@ class TrackRepository(
     suspend fun import(uri: Uri, reuseIdentical: Boolean = false): Result<Long> = withContext(io) {
         runCancellable {
             val displayName = displayNameOf(uri)
-            val destination = uniqueFile(importsDir, displayName, "gpx", fallback = "track")
+            val destination = uniqueFile(importsDir, displayName, "gpx", fallback = "trace")
 
             // Deleted again on any failure, so nothing unindexed is left behind.
             try {
@@ -184,7 +184,7 @@ class TrackRepository(
 
             // Per track, so a failure halfway still reports the ones written.
             names.count { (id, name) ->
-                val unique = uniqueName(name, "gpx", fallback = "track") { it.lowercase(Locale.ROOT) in taken }
+                val unique = uniqueName(name, "gpx", fallback = "trace") { it.lowercase(Locale.ROOT) in taken }
                 taken += unique.lowercase(Locale.ROOT)
                 runCancellable { writeExport(folder, id, unique) }.getOrDefault(false)
             }
@@ -290,7 +290,7 @@ class TrackRepository(
     private suspend fun moveTo(id: Long, file: File, name: String) {
         val dir = file.parentFile ?: return
         val target =
-            File(dir, uniqueName(name, "gpx", fallback = "track") { it != file.name && File(dir, it).exists() })
+            File(dir, uniqueName(name, "gpx", fallback = "trace") { it != file.name && File(dir, it).exists() })
         if (target == file || !file.renameTo(target)) return
         try {
             dao.setLocation(id, TrackFiles.location(appContext, target))
@@ -474,7 +474,7 @@ class TrackRepository(
 
     private fun displayNameOf(uri: Uri): String = appContext.contentResolver.displayName(uri)
         ?: uri.lastPathSegment?.substringAfterLast('/')
-        ?: "track.gpx"
+        ?: "trace.gpx"
 
     private companion object {
         const val TAG = "TrackRepository"

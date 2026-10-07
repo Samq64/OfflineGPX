@@ -1,4 +1,4 @@
-# Offline GPX
+# O-Trace
 
 A GPX recorder and viewer for Android that never goes online. Record a ride or a walk, or
 import a `.gpx` file, and see it on an offline map with speed and elevation charts.
@@ -8,7 +8,7 @@ import a `.gpx` file, and see it on an offline map with speed and elevation char
 - **Record** rides and walks with GPS: pause, drop waypoints with a note, and pick up a
   recording that was cut short by a crash or a flat battery.
 - **Import** `.gpx` files, and export, share, rename or delete them, with undo.
-- **Map** your tracks over an offline vector map you import, in light or dark.
+- **Map** your traces over an offline vector map you import, in light or dark.
 - **Charts** of speed and elevation, by distance or time. Drag along one and the point
   moves on the map too.
 - Metric or imperial units.
@@ -23,7 +23,7 @@ dependency ever tries to add one. There's no account, no analytics and no cloud 
 | Precise location, foreground service | Recording. Asked for when you first tap Record, never at launch. |
 | Notifications | The recording notification. Recording still works without it. |
 
-Tracks and maps are copied into the app's own storage when you import them, so no storage
+Traces and maps are copied into the app's own storage when you import them, so no storage
 permission is needed. A device-to-device transfer brings your library, maps and settings to
 a new phone.
 
@@ -31,7 +31,7 @@ a new phone.
 
 Maps are [mapsforge](https://github.com/mapsforge/mapsforge) `.map` files. In the app, go
 to **Settings → Get maps** to open the published files at `download.mapsforge.org`, download
-the region you want, then **Import map**. Without one, tracks are drawn on a plain background.
+the region you want, then **Import map**. Without one, traces are drawn on a plain background.
 
 ## Building
 
@@ -50,7 +50,7 @@ Android 12 or later.
 - GPX only: no FIT, TCX or KML.
 - Heart rate, cadence and power in GPX extensions aren't read.
 - The charts can't be read with TalkBack yet.
-- It's a track recorder and viewer, not a maps app: no routing, search or turn-by-turn.
+- It's a trace recorder and viewer, not a maps app: no routing, search or turn-by-turn.
 
 ## License
 
