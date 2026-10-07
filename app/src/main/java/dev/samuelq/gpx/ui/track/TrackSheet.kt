@@ -91,8 +91,6 @@ class TrackActions(
     val onHide: () -> Unit,
     val onDelete: () -> Unit,
     val onTrim: () -> Unit,
-    /** Null without a point selected to split at. */
-    val onSplit: (() -> Unit)?,
     val onDuplicate: () -> Unit,
     val colorIndex: Int,
     val onColor: (Int) -> Unit,
@@ -512,7 +510,7 @@ private fun SheetTitle(
         actions?.let {
             TrackMenu(
                 it.onRename, it.onShare, it.onHide, it.onDelete,
-                onTrim = it.onTrim, onSplit = it.onSplit, showSplit = true, onDuplicate = it.onDuplicate,
+                onTrim = it.onTrim, onDuplicate = it.onDuplicate,
             )
         }
         onClose?.let {

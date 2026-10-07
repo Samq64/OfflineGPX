@@ -198,7 +198,6 @@ class TrackRepositoryTest {
         val original = fileOf(id).readBytes()
 
         val edit = runBlocking { repository.trim(id, 5, 14).getOrThrow() }
-        assertNull(edit.added)
         assertEquals(10, row(id).summary.pointCount)
         assertEquals(10, loaded(id).track.points.size)
         // The waypoint by point 15 is outside what's kept.
@@ -221,42 +220,6 @@ class TrackRepositoryTest {
             assertIs<IllegalArgumentException>(repository.trim(id, 0, 20).exceptionOrNull())
         }
         assertContentEquals(original, fileOf(id).readBytes())
-    }
-
-    @Test
-    fun splitAndUndo() {
-        val id = importSample()
-        val original = fileOf(id).readBytes()
-
-        val edit = runBlocking { repository.split(id, 10).getOrThrow() }
-        val added = assertNotNull(edit.added)
-
-        assertEquals("Test ride (cut 1)", row(id).trackName)
-        assertEquals("Test ride (cut 1)", parsed(id).name)
-        assertEquals(11, loaded(id).track.points.size)
-        assertTrue(loaded(id).track.waypoints.isEmpty())
-
-        assertEquals("Test ride (cut 2)", row(added).trackName)
-        assertEquals("Test ride (cut 2)", parsed(added).name)
-        assertEquals(10, loaded(added).track.points.size)
-        assertEquals(1, loaded(added).track.waypoints.size)
-        val addedFile = fileOf(added)
-
-        runBlocking { repository.undoEdit(edit).getOrThrow() }
-        assertContentEquals(original, fileOf(id).readBytes())
-        assertEquals("Test ride", row(id).trackName)
-        assertNull(runBlocking { dao.byId(added) })
-        assertFalse(addedFile.exists())
-    }
-
-    @Test
-    fun splitRejectsEnds() {
-        val id = importSample()
-        runBlocking {
-            assertIs<IllegalArgumentException>(repository.split(id, 0).exceptionOrNull())
-            assertIs<IllegalArgumentException>(repository.split(id, 19).exceptionOrNull())
-        }
-        assertEquals(1, runBlocking { repository.tracks.first() }.size)
     }
 
     @Test

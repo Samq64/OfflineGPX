@@ -35,7 +35,7 @@ app/ di/     AppContainer: manual wiring, no Hilt.
   they reach the one instance.
 - Schema changes need a migration: installs exist. 1 to 2 added the stats columns with
   defaults, and `pointCount` -1 marks a row that `summariseOlderRows` reads at launch.
-- Trim and split rewrite a file with `GpxTrimmer`, which streams it through and keeps
+- Trim rewrites a file with `GpxTrimmer`, which streams it through and keeps
   everything but the points cut; `GpxWriter` writes only what the app reads. The original
   waits under `noBackupFilesDir/edits` for the undo, and is purged at the next launch.
   A recording appends to a line-per-fix WAL and becomes GPX on stop, so a crash leaves a

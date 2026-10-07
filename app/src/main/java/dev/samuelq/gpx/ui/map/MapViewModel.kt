@@ -53,7 +53,7 @@ sealed interface MapMessage {
     /** Undone with [MapViewModel.show]. [name] is the track's, for the message. */
     class Hidden(val id: Long, val name: String) : MapMessage
 
-    /** A trim or split of [name], undone with [MapViewModel.undoEdit], else [MapViewModel.commitEdit]. */
+    /** A trim of [name], undone with [MapViewModel.undoEdit], else [MapViewModel.commitEdit]. */
     class Edited(val edit: TrackEdit, val name: String) : MapMessage
 }
 
@@ -269,11 +269,7 @@ class MapViewModel(
     /** Keeps points [range], inclusive. */
     fun trim(id: Long, range: IntRange) = edit(id) { repository.trim(id, range.first, range.last) }
 
-    /** At point [at], which both parts share. */
-    fun split(id: Long, at: Int) = edit(id) { repository.split(id, at) }
-
     private fun edit(id: Long, run: suspend () -> Result<TrackEdit>) {
-        // Before it changes: a split renames the track.
         val name = nameOf(id)
         viewModelScope.launch {
             run().fold(

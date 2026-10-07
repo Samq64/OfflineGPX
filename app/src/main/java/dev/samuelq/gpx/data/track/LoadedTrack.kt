@@ -29,11 +29,9 @@ sealed class TrackLoadException(message: String, cause: Throwable? = null) : Exc
     class Empty(message: String) : TrackLoadException(message)
 }
 
-/** What undoing a trim or split needs: the replaced file and row, and any track it added. */
+/** What undoing a trim needs: the replaced file and row. */
 class TrackEdit internal constructor(
     val id: Long,
     internal val backup: File,
     internal val before: TrackEntity,
-    /** The split's second part. */
-    val added: Long?,
 )

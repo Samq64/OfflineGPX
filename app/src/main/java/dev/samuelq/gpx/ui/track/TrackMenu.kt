@@ -30,15 +30,12 @@ fun TrackMenu(
     trackTitle: String? = null,
     /** On the map only, where the charts to trim against are. */
     onTrim: (() -> Unit)? = null,
-    /** Listed when [showSplit], greyed out while null: it splits at the selected point. */
-    onSplit: (() -> Unit)? = null,
-    showSplit: Boolean = false,
     onDuplicate: (() -> Unit)? = null,
 ) {
     var open by remember { mutableStateOf(false) }
 
     @Composable
-    fun Item(@StringRes text: Int, action: () -> Unit, error: Boolean = false, enabled: Boolean = true) = DropdownMenuItem(
+    fun Item(@StringRes text: Int, action: () -> Unit, error: Boolean = false) = DropdownMenuItem(
         text = {
             Text(
                 text = stringResource(text),
@@ -49,7 +46,6 @@ fun TrackMenu(
             open = false
             action()
         },
-        enabled = enabled,
     )
 
     Box {
@@ -65,8 +61,7 @@ fun TrackMenu(
             // The map's own first, apart from what the list's menu has too.
             onHide?.let { Item(R.string.track_hide, it) }
             onTrim?.let { Item(R.string.track_trim, it) }
-            if (showSplit) Item(R.string.track_split, onSplit ?: {}, enabled = onSplit != null)
-            if (onHide != null || onTrim != null || showSplit) HorizontalDivider()
+            if (onHide != null || onTrim != null) HorizontalDivider()
             Item(R.string.library_rename, onRename)
             Item(R.string.library_share, onShare)
             onDuplicate?.let { Item(R.string.library_duplicate, it) }

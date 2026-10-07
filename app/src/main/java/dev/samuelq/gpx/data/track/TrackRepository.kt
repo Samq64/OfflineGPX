@@ -303,43 +303,9 @@ class TrackRepository(
 
             val file = fileOf(entity)
             val backup = backUp(file, id)
-            val track = rewrite(file, file, loaded, from..to, name = null)
+            val track = rewrite(file, loaded, from..to)
             dao.setSummary(summaryUpdate(id, track, TrackAnalyzer.analyze(track)))
-            TrackEdit(id, backup, entity, added = null)
-        }.recoverFailure()
-    }
-
-    /**
-     * Splits at point [at], which ends the first part and starts the second. The first stays
-     * this track, named "(cut 1)"; the second is a new one, "(cut 2)". Undone like [trim].
-     */
-    suspend fun split(id: Long, at: Int): Result<TrackEdit> = withContext(io) {
-        runCatching {
-            val entity = entity(id)
-            val loaded = load(entity)
-            val last = loaded.track.points.size - 1
-            require(at in 1 until last) { "Can't split at $at" }
-
-            val file = fileOf(entity)
-            val title = entity.titleStem.trim()
-            val firstName = appContext.getString(R.string.split_part, title, 1)
-            val secondName = appContext.getString(R.string.split_part, title, 2)
-            val second = uniqueFile(file.parentFile!!, secondName, "gpx", fallback = "track")
-            val backup = backUp(file, id)
-
-            // The second from the untouched original, before the first overwrites it.
-            val secondTrack = rewrite(file, second, loaded, at..last, name = secondName)
-            val addedId = try {
-                dao.upsert(newEntity(second, second.name, secondTrack, TrackAnalyzer.analyze(secondTrack)))
-                    .also { cache.write(it, second, secondTrack) }
-            } catch (e: Throwable) {
-                second.delete()
-                throw e
-            }
-            val firstTrack = rewrite(file, file, loaded, 0..at, name = firstName)
-            dao.setSummary(summaryUpdate(id, firstTrack, TrackAnalyzer.analyze(firstTrack)))
-            dao.setTrackName(id, firstName)
-            TrackEdit(id, backup, entity, addedId)
+            TrackEdit(id, backup, entity)
         }.recoverFailure()
     }
 
@@ -371,7 +337,7 @@ class TrackRepository(
         }.recoverFailure()
     }
 
-    /** Puts the file and row back as they were before [edit], removing anything it added. */
+    /** Puts the file and row back as they were before [edit]. */
     suspend fun undoEdit(edit: TrackEdit): Result<Unit> = withContext(io) {
         runCatching {
             // Where it is now: a rename since moves the file.
@@ -380,11 +346,6 @@ class TrackRepository(
             dao.setSummary(SummaryUpdate(edit.id, edit.before.startedAtEpochMillis, edit.before.summary))
             dao.setTrackName(edit.id, edit.before.trackName)
             cache.delete(edit.id)
-            edit.added?.let { added ->
-                dao.byId(added)?.let(::deleteFile)
-                dao.delete(added)
-                cache.delete(added)
-            }
             edit.backup.delete()
             Unit
         }.recoverFailure()
@@ -419,21 +380,18 @@ class TrackRepository(
     private fun backUp(file: File, id: Long): File =
         File(editsDir, "$id-${System.currentTimeMillis()}.gpx").also { file.copyTo(it, overwrite = true) }
 
-    /**
-     * Writes [source]'s points [keep], with the waypoints nearest them, to [destination], which
-     * may be [source]. Named in the file too, since export is a byte copy. Cached, and returned.
-     */
-    private fun rewrite(source: File, destination: File, loaded: LoadedTrack, keep: IntRange, name: String?): Track {
+    /** Rewrites [file] to its points [keep], with the waypoints nearest them. Cached, and returned. */
+    private fun rewrite(file: File, loaded: LoadedTrack, keep: IntRange): Track {
         val waypoints = loaded.track.waypoints.indices
             .filter { loaded.profile.indexOf(loaded.track.waypoints[it].point) in keep }
             .toSet()
-        writeAtomically(destination) { output ->
-            source.inputStream().use { input ->
-                trimmer.trim(input, output, keepPoint = { it in keep }, keepWaypoint = { it in waypoints }, name = name)
+        writeAtomically(file) { output ->
+            file.inputStream().use { input ->
+                trimmer.trim(input, output, keepPoint = { it in keep }, keepWaypoint = { it in waypoints })
             }
         }
-        val track = parse(destination.inputStream(), destination.name)
-        loaded.id.takeIf { destination == source }?.let { cache.write(it, destination, track) }
+        val track = parse(file.inputStream(), file.name)
+        cache.write(loaded.id, file, track)
         return track
     }
 

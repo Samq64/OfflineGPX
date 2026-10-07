@@ -253,10 +253,7 @@ fun MapScreen(
                 MapMessage.EditFailed -> say(resources.getString(R.string.track_edit_failed))
                 MapMessage.Duplicated -> say(resources.getString(R.string.library_duplicated))
                 is MapMessage.Edited -> offerUndo(
-                    resources.getString(
-                        if (message.edit.added != null) R.string.track_split_done else R.string.track_trimmed,
-                        message.name,
-                    ),
+                    resources.getString(R.string.track_trimmed, message.name),
                     onUndo = { viewModel.undoEdit(message.edit) },
                     onCommit = { viewModel.commitEdit(message.edit) },
                 )
@@ -460,10 +457,8 @@ fun MapScreen(
         ?.takeIf { sidePanel || peekContentHeight > 0.dp }
 
     // Null until a new import's row arrives.
-    // Not the ends: each part needs two points.
-    val splittable = screen.selectedIndex?.takeIf { focusedTrack != null && it in 1 until focusedTrack.profile.points.size - 1 }
     val actions = focusedTrack?.let { state.entity(it.id) }?.let { entity ->
-        remember(entity.id, entity.trackName, entity.displayName, entity.location, entity.colorIndex, splittable, screen) {
+        remember(entity.id, entity.trackName, entity.displayName, entity.location, entity.colorIndex, screen) {
             TrackActions(
                 onRename = { screen.renamingId = entity.id },
                 onShare = {
@@ -486,7 +481,6 @@ fun MapScreen(
                     )
                 },
                 onTrim = { screen.startTrim(focusedTrack.profile.points.size) },
-                onSplit = splittable?.let { at -> { viewModel.split(entity.id, at) } },
                 onDuplicate = { viewModel.duplicate(entity.id) },
                 colorIndex = entity.colorIndex,
                 onColor = { viewModel.setColor(entity.id, it) },
