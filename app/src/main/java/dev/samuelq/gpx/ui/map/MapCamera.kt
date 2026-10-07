@@ -118,12 +118,15 @@ internal fun fit(target: BoundingBox, usable: IntSize, insets: Insets, maxScale:
     val position = MapPosition().apply { setByBoundingBox(target, usable.width, usable.height) }
     // Capped here rather than by VTM, so the offset below is worked out at the scale it lands at.
     position.setScale(minOf(position.scale, maxScale))
-    val mapSize = Tile.SIZE * position.scale
-    val offsetX = (insets.left - insets.right) / 2.0
-    val offsetY = (insets.top - insets.bottom) / 2.0
-    position.x -= offsetX / mapSize
-    position.y -= offsetY / mapSize
+    position.centreIn(insets)
     return position
+}
+
+/** Moves the centre from the screen's to the uncovered part's, at the current scale. */
+internal fun MapPosition.centreIn(insets: Insets) {
+    val mapSize = Tile.SIZE * scale
+    x -= (insets.left - insets.right) / 2.0 / mapSize
+    y -= (insets.top - insets.bottom) / 2.0 / mapSize
 }
 
 /**

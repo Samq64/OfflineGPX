@@ -325,13 +325,19 @@ internal fun OfflineMapCanvas(
     }
     // The clamp admits the last framed view, or a track at the extent's edge couldn't be centred.
     var framedView by remember { mutableStateOf<BoundingBox?>(null) }
-    val clampExtent = remember(extent, framedView) { extent?.including(framedView) }
     val currentExtent by rememberUpdatedState(extent)
 
     // Read fresh, not via recomposition: a framing move's own update must already see its view.
     fun currentClamp() = currentExtent?.including(framedView)
     val currentCover by rememberUpdatedState(cover)
     val currentInsets by rememberUpdatedState(insets)
+
+    fun frameTo(position: MapPosition, size: IntSize) {
+        allowScale(position.scale)
+        spread = false
+        framedView = position.visibleBox(size)
+        map.moveTo(position, currentClamp(), currentCover)
+    }
 
     // Tracks first, else the maps. Too far apart, the camera stays put and the screen says so.
     fun frameAll(): Boolean {
@@ -343,12 +349,9 @@ internal fun OfflineMapCanvas(
         spread = tracks != null && tooFarApart(tracks, boxes, usable, maxScale, speckPx)
         if (spread) return true
         val target = tracks ?: extentOf(emptyList(), null, basemaps) ?: return false
-        val position = fit(target, usable, insets, maxScale)
-        allowScale(position.scale)
         // Replacing the last framed view, as a framed track does: one left from following a
         // recording elsewhere would stretch the clamp and pull this frame off centre.
-        framedView = position.visibleBox(size)
-        map.moveTo(position, currentClamp(), currentCover)
+        frameTo(fit(target, usable, insets, maxScale), size)
         hasFramed = true
         return true
     }
@@ -360,9 +363,7 @@ internal fun OfflineMapCanvas(
         val size = viewSize?.takeIf { it.usable(insets) != null } ?: return CentreResult.NotLaidOut
         camera.setPosition(point.latitude, point.longitude)
         if (zoomIn) camera.setScale(maxOf(camera.scale, LOCATE_SCALE).coerceAtMost(map.viewport().maxScale))
-        val mapSize = Tile.SIZE * camera.scale
-        camera.x -= (insets.left - insets.right) / 2.0 / mapSize
-        camera.y -= (insets.top - insets.bottom) / 2.0 / mapSize
+        camera.centreIn(insets)
         val view = camera.visibleBox(size)
         if (currentExtent?.intersects(view) == false) return CentreResult.OutOfBounds
         spread = false
@@ -437,7 +438,7 @@ internal fun OfflineMapCanvas(
     }
     // Fresh too: launched for a new extent, it can run after a centring in the same frame
     // widened the clamp, and would pull the camera back to the old one.
-    LaunchedEffect(map, clampExtent, viewSize, cover) {
+    LaunchedEffect(map, extent, framedView, viewSize, cover) {
         currentClamp()?.let { map.keepInView(it, cover) }
     }
 
@@ -483,12 +484,7 @@ internal fun OfflineMapCanvas(
         val usable = size.usable(frameInsets) ?: return@LaunchedEffect
         // Null for a single point, which is left where the camera already is.
         extentOf(listOf(route), null, emptyList())?.let { target ->
-            val position = fit(target, usable, frameInsets, map.viewport().maxScale)
-            allowScale(position.scale)
-            val view = position.visibleBox(size)
-            spread = false
-            framedView = view
-            map.moveTo(position, currentClamp(), currentCover)
+            frameTo(fit(target, usable, frameInsets, map.viewport().maxScale), size)
         }
         hasFramed = true
         framed()

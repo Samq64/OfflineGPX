@@ -69,9 +69,6 @@ internal data class MapUiState(
     /** Every row, visible or not; the sheet's actions are about the row. */
     val all: List<TrackEntity> = emptyList(),
 ) {
-    /** Distinguishes "no tracks at all" from "all of them are hidden". */
-    val totalCount: Int get() = all.size
-
     fun entity(id: Long): TrackEntity? = all.firstOrNull { it.id == id }
 }
 
@@ -135,11 +132,6 @@ class MapViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     var lastCamera: CameraSnapshot? = null
-        private set
-
-    fun rememberCamera(camera: CameraSnapshot) {
-        lastCamera = camera
-    }
 
     init {
         // `update` at every writer: a non-atomic read-modify-write lost renames during geometry loads.

@@ -40,59 +40,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import dev.samuelq.gpx.R
-import dev.samuelq.gpx.core.model.Waypoint
-import dev.samuelq.gpx.ui.track.FocusedTrack
-import dev.samuelq.gpx.ui.track.TrackActions
-import dev.samuelq.gpx.ui.track.TrackSheet
-import dev.samuelq.gpx.ui.track.TrackSheetError
-import dev.samuelq.gpx.ui.track.TrackSheetLoading
-import dev.samuelq.gpx.ui.track.TrimControls
-
-/** A focused track's details, however far it has loaded. Nothing for [FocusedTrack.None]. */
-@Composable
-internal fun FocusedTrackContent(
-    focused: FocusedTrack,
-    /** The ready track's, from its row when it has one. */
-    title: String,
-    routeColor: Color,
-    maxHeight: Dp,
-    selectedIndex: Int?,
-    onSelectedIndexChange: (Int?) -> Unit,
-    preferTimeAxis: Boolean,
-    onAxisChange: (Boolean) -> Unit,
-    actions: TrackActions?,
-    onRetry: () -> Unit,
-    onDismiss: () -> Unit,
-    onPeekHeightChange: (Dp) -> Unit,
-    onSelectWaypoint: (Waypoint) -> Unit,
-    trim: TrimControls? = null,
-) {
-    when (focused) {
-        FocusedTrack.None -> Unit
-        FocusedTrack.Loading -> TrackSheetLoading()
-        is FocusedTrack.Failed -> TrackSheetError(
-            messageRes = focused.messageRes,
-            onRetry = onRetry,
-            onClose = onDismiss,
-        )
-        is FocusedTrack.Ready -> TrackSheet(
-            loaded = focused.track,
-            title = title,
-            routeColor = routeColor,
-            maxHeight = maxHeight,
-            selectedIndex = selectedIndex,
-            onSelectedIndexChange = onSelectedIndexChange,
-            useTimeAxis = preferTimeAxis && focused.track.profile.hasTime,
-            onAxisChange = onAxisChange,
-            onPeekHeightChange = onPeekHeightChange,
-            // Closable without a drag, as the side panel is.
-            onClose = onDismiss,
-            actions = actions,
-            onSelectWaypoint = onSelectWaypoint,
-            trim = trim,
-        )
-    }
-}
 
 /** The landscape side panel. Keeps the last [subject] while sliding away rather than emptying first. */
 @Composable

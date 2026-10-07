@@ -94,6 +94,9 @@ import dev.samuelq.gpx.ui.track.FocusedTrack
 import dev.samuelq.gpx.ui.track.TrackActions
 import dev.samuelq.gpx.ui.track.TrackNameDialog
 import dev.samuelq.gpx.ui.track.TrackRef
+import dev.samuelq.gpx.ui.track.TrackSheet
+import dev.samuelq.gpx.ui.track.TrackSheetError
+import dev.samuelq.gpx.ui.track.TrackSheetLoading
 import dev.samuelq.gpx.ui.track.TrackSheetPeekHeight
 import dev.samuelq.gpx.ui.track.TrimControls
 import dev.samuelq.gpx.ui.track.shareTrackIntent
@@ -561,32 +564,41 @@ fun MapScreen(
     val sheetBody: @Composable (SheetSubject, Dp, (Dp) -> Unit) -> Unit =
         { current, maxHeight, onPeekHeightChange ->
             when (current) {
-                is SheetSubject.Track -> FocusedTrackContent(
-                    focused = current.focused,
-                    title = sheetTitle,
-                    routeColor = sheetColor,
-                    maxHeight = maxHeight,
-                    selectedIndex = screen.selectedIndex,
-                    onSelectedIndexChange = { screen.selectedIndex = it },
-                    preferTimeAxis = preferTimeAxis,
-                    onAxisChange = { preferTimeAxis = it },
-                    actions = actions,
-                    onRetry = viewModel::retryFocus,
-                    onDismiss = { viewModel.focus(null) },
-                    onPeekHeightChange = onPeekHeightChange,
-                    onSelectWaypoint = selectWaypoint,
-                    trim = trimRange?.let { range ->
-                        TrimControls(
-                            range = range,
-                            onRangeChange = screen::setTrim,
-                            onCancel = screen::cancelTrim,
-                            onSave = {
-                                val kept = screen.finishTrim()
-                                if (kept != null && focusedTrack != null) viewModel.trim(focusedTrack.id, kept)
-                            },
-                        )
-                    },
-                )
+                is SheetSubject.Track -> when (val focused = current.focused) {
+                    FocusedTrack.None -> Unit
+                    FocusedTrack.Loading -> TrackSheetLoading()
+                    is FocusedTrack.Failed -> TrackSheetError(
+                        messageRes = focused.messageRes,
+                        onRetry = viewModel::retryFocus,
+                        onClose = { viewModel.focus(null) },
+                    )
+                    is FocusedTrack.Ready -> TrackSheet(
+                        loaded = focused.track,
+                        title = sheetTitle,
+                        routeColor = sheetColor,
+                        maxHeight = maxHeight,
+                        selectedIndex = screen.selectedIndex,
+                        onSelectedIndexChange = { screen.selectedIndex = it },
+                        useTimeAxis = preferTimeAxis && focused.track.profile.hasTime,
+                        onAxisChange = { preferTimeAxis = it },
+                        onPeekHeightChange = onPeekHeightChange,
+                        // Closable without a drag, as the side panel is.
+                        onClose = { viewModel.focus(null) },
+                        actions = actions,
+                        onSelectWaypoint = selectWaypoint,
+                        trim = trimRange?.let { range ->
+                            TrimControls(
+                                range = range,
+                                onRangeChange = screen::setTrim,
+                                onCancel = screen::cancelTrim,
+                                onSave = {
+                                    val kept = screen.finishTrim()
+                                    if (kept != null && focusedTrack != null) viewModel.trim(focusedTrack.id, kept)
+                                },
+                            )
+                        },
+                    )
+                }
                 // Idle while the side panel slides away after a stop.
                 SheetSubject.Recording -> (recording.value as? RecordingState.Active)?.let { active ->
                     RecordingSheet(
@@ -621,7 +633,7 @@ fun MapScreen(
                     title = {
                         Text(
                             when {
-                                state.totalCount == 0 -> stringResource(R.string.app_name)
+                                state.all.isEmpty() -> stringResource(R.string.app_name)
                                 state.entities.isEmpty() -> stringResource(R.string.map_none_shown)
                                 else -> pluralStringResource(
                                     R.plurals.map_shown,
@@ -720,7 +732,7 @@ fun MapScreen(
                     followed = followed,
                     onDrag = screen::stopFollowing,
                     initialCamera = viewModel.lastCamera,
-                    onCameraChange = viewModel::rememberCamera,
+                    onCameraChange = { viewModel.lastCamera = it },
                     onTooFarApartChange = { tooFarApart = it },
                     modifier = Modifier.fillMaxSize(),
                 )
@@ -749,7 +761,7 @@ fun MapScreen(
                     hasContent -> Unit
 
                     // First run only; hidden-by-choice gets the hint.
-                    state.totalCount == 0 -> EmptyState(
+                    state.all.isEmpty() -> EmptyState(
                         onImportMap = onImportMap,
                         onImportTrack = { trackImporter.launch(arrayOf("*/*")) },
                         modifier = Modifier.fillMaxSize(),
@@ -786,26 +798,17 @@ fun MapScreen(
                         horizontalAlignment = Alignment.End,
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
-                        if (isRecording) {
-                            // The puck is the position then.
+                        // Nothing to place the dot against without a track or a map, unless recording.
+                        if (isRecording || hasContent) {
                             LocationButton(
                                 following = screen.following,
-                                waiting = trace.size == 0,
-                                recording = true,
+                                // The puck is the position while recording.
+                                waiting = if (isRecording) trace.size == 0 else locating && position == null,
+                                recording = isRecording,
                                 onClick = ::tapLocation,
                             )
-                        } else {
-                            // Nothing to place the dot against without a track or a map.
-                            if (hasContent) {
-                                LocationButton(
-                                    following = screen.following,
-                                    waiting = locating && position == null,
-                                    recording = false,
-                                    onClick = ::tapLocation,
-                                )
-                            }
-                            RecordButton(onStart = requestRecording)
                         }
+                        if (!isRecording) RecordButton(onStart = requestRecording)
                     }
                 }
 

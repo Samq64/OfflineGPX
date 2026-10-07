@@ -23,8 +23,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
 import dev.samuelq.gpx.R
 
 /** The system's location switch. Not every build has the screen. */
@@ -55,6 +53,10 @@ internal enum class LocationUse(
         R.string.map_precise_required,
         false,
     ),
+    ;
+
+    /** Only 13+ has the permission to ask for. */
+    val asksNotifications: Boolean get() = withNotifications && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
 }
 
 /**
@@ -88,7 +90,7 @@ internal class LocationRequest(
 @Composable
 internal fun LocationRationale(request: LocationRequest) {
     if (!request.explaining) return
-    val notifications = request.use.withNotifications && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+    val notifications = request.use.asksNotifications
     AlertDialog(
         onDismissRequest = request::dismiss,
         title = { Text(stringResource(R.string.location_why_title)) },
@@ -130,7 +132,7 @@ internal fun rememberLocationRequest(
     ) { granted ->
         // False after a refusal means "don't ask again": the request returns without a dialog.
         val settled = activity != null &&
-            !ActivityCompat.shouldShowRequestPermissionRationale(activity, Manifest.permission.ACCESS_FINE_LOCATION)
+            !activity.shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_FINE_LOCATION)
         val appSettings = {
             context.startActivity(
                 Intent(
@@ -149,17 +151,14 @@ internal fun rememberLocationRequest(
         }
     }
     val granted = {
-        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
-            PackageManager.PERMISSION_GRANTED
+        context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
     }
     val ask = {
         // Coarse with fine, because fine alone is ignored.
         val wanted = buildList {
             add(Manifest.permission.ACCESS_FINE_LOCATION)
             add(Manifest.permission.ACCESS_COARSE_LOCATION)
-            if (use.withNotifications && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                add(Manifest.permission.POST_NOTIFICATIONS)
-            }
+            if (use.asksNotifications) add(Manifest.permission.POST_NOTIFICATIONS)
         }
         permissions.launch(wanted.toTypedArray())
     }
