@@ -12,6 +12,7 @@ import androidx.core.location.altitude.AltitudeConverterCompat
 import dev.samuelq.gpx.core.model.TrackPoint
 import java.io.IOException
 import java.time.Instant
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -20,7 +21,11 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 
 /** Raw `GPS_PROVIDER` fixes; not the fused provider, which needs Play Services. Stateless, so shared. */
-class LocationSource(context: Context) {
+class LocationSource(
+    context: Context,
+    /** For the geoid model's disk reads; a parameter so tests can substitute one. */
+    private val io: CoroutineDispatcher = Dispatchers.IO,
+) {
 
     private val appContext = context.applicationContext
     private val manager = appContext.getSystemService<LocationManager>()
@@ -63,7 +68,7 @@ class LocationSource(context: Context) {
     }
         .map { it.toTrackPoint(elevation = elevationOf(it)) }
         // The conversion may read the geoid model from disk.
-        .flowOn(Dispatchers.IO)
+        .flowOn(io)
 
     /**
      * GPS altitude is above the WGS84 ellipsoid, up to ~100 m from sea level. Converted with a

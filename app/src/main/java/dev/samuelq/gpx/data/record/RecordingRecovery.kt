@@ -11,6 +11,7 @@ import dev.samuelq.gpx.data.track.TrackRepository
 import dev.samuelq.gpx.data.track.asTrackName
 import java.io.File
 import java.io.IOException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -33,8 +34,9 @@ class RecordingRecovery(
     private val tracks: TrackRepository,
     /** Outlives any screen, so deletes after an undo lapses still finish. */
     private val scope: CoroutineScope,
+    /** For file and database work; a parameter so tests can substitute one. */
+    private val io: CoroutineDispatcher = Dispatchers.IO,
 ) {
-    private val io = Dispatchers.IO
     private val appContext = context.applicationContext
 
     // no_backup: a ride in progress on the old phone isn't a crash on the new one.

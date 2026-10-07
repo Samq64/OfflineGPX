@@ -12,6 +12,7 @@ import java.io.File
 import java.io.IOException
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -100,6 +101,8 @@ class MapStore(
     context: Context,
     /** Outlives Settings, so deletes after an undo lapses still finish. */
     private val scope: CoroutineScope,
+    /** For file and database work; a parameter so tests can substitute one. */
+    private val io: CoroutineDispatcher = Dispatchers.IO,
 ) {
 
     private val appContext = context.applicationContext
@@ -124,7 +127,7 @@ class MapStore(
 
     private data class Key(val path: String, val modifiedAt: Long)
 
-    suspend fun refresh() = withContext(Dispatchers.IO) {
+    suspend fun refresh() = withContext(io) {
         val files = directory.listFiles().orEmpty()
             .filter { it.isFile && it.extension.equals(EXTENSION, ignoreCase = true) }
 
@@ -142,7 +145,7 @@ class MapStore(
      * Copies [uri] into staging and validates the copy, deleting it on failure. Validated
      * after copying since SAF doesn't promise a second open returns the same bytes.
      */
-    suspend fun import(uri: Uri): MapImportResult = withContext(Dispatchers.IO) {
+    suspend fun import(uri: Uri): MapImportResult = withContext(io) {
         // Only one import is ever pending, so anything here is a leftover.
         staging.listFiles()?.forEach { it.delete() }
 
@@ -206,10 +209,10 @@ class MapStore(
 
     /** Keeps both; the renderer passes on repeated features once. */
     suspend fun confirmImport(overlaps: MapImportResult.Overlaps): MapImportResult =
-        withContext(Dispatchers.IO) { install(overlaps.staged) }
+        withContext(io) { install(overlaps.staged) }
 
     fun cancelImport(overlaps: MapImportResult.Overlaps) {
-        scope.launch(Dispatchers.IO) { overlaps.staged.file.delete() }
+        scope.launch(io) { overlaps.staged.file.delete() }
     }
 
     private suspend fun install(staged: OfflineMap): MapImportResult {
@@ -225,7 +228,7 @@ class MapStore(
     }
 
     /** Copies [map] to a document the user created. False if it couldn't be written. */
-    suspend fun export(map: OfflineMap, uri: Uri): Boolean = withContext(Dispatchers.IO) {
+    suspend fun export(map: OfflineMap, uri: Uri): Boolean = withContext(io) {
         try {
             appContext.contentResolver.openOutputStream(uri, "wt")?.use { output ->
                 map.file.inputStream().use { it.copyTo(output) }
@@ -249,7 +252,7 @@ class MapStore(
     }
 
     fun commitDelete(map: OfflineMap) {
-        scope.launch(Dispatchers.IO) {
+        scope.launch(io) {
             map.file.delete()
             pendingDelete -= map.file.name
             refresh()

@@ -22,6 +22,7 @@ import dev.samuelq.gpx.ui.library.sortedFor
 import dev.samuelq.gpx.ui.track.FocusedTrack
 import dev.samuelq.gpx.ui.track.TrackRef
 import dev.samuelq.gpx.ui.track.toTrackMessageRes
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -79,6 +80,8 @@ class MapViewModel(
     controller: RecordingController,
     mapStore: MapStore,
     settings: SettingsRepository,
+    /** For analysing the recording; a parameter so tests can substitute one. */
+    analysis: CoroutineDispatcher = Dispatchers.Default,
 ) : ViewModel() {
 
     val basemaps: StateFlow<List<OfflineMap>> = mapStore.maps
@@ -108,7 +111,7 @@ class MapViewModel(
                 else -> last
             }
         }
-        .flowOn(Dispatchers.Default)
+        .flowOn(analysis)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     private val _focused = MutableStateFlow<FocusedTrack>(FocusedTrack.None)

@@ -181,6 +181,7 @@ dependencies {
 
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.kxml2)
+    testImplementation(libs.kotlinx.coroutines.test)
 
     androidTestImplementation(libs.kotlin.test.junit)
     androidTestImplementation(libs.androidx.test.runner)

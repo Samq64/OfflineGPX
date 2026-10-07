@@ -5,7 +5,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.yield
 import org.junit.Test
 
@@ -30,7 +30,7 @@ class UndoSnackbarTest {
     }
 
     @Test
-    fun `undo restores`() = runBlocking {
+    fun `undo restores`() = runTest {
         val undo = offer()
         assertEquals("Deleted", shown())
         host.currentSnackbarData!!.performAction()
@@ -38,8 +38,9 @@ class UndoSnackbarTest {
         assertEquals("undo Deleted", outcome)
     }
 
+    // The host's timeout is a dismissal, so this stands for it too.
     @Test
-    fun `a timeout commits`() = runBlocking {
+    fun `a dismissal or timeout commits`() = runTest {
         val undo = offer()
         assertEquals("Deleted", shown())
         host.currentSnackbarData!!.dismiss()
@@ -48,7 +49,7 @@ class UndoSnackbarTest {
     }
 
     @Test
-    fun `a newer message defers rather than commits`() = runBlocking {
+    fun `a newer message defers rather than commits`() = runTest {
         val undo = offer()
         assertEquals("Deleted", shown())
         val other = launch {
@@ -67,7 +68,7 @@ class UndoSnackbarTest {
     }
 
     @Test
-    fun `a newer undo commits the older`() = runBlocking {
+    fun `a newer undo commits the older`() = runTest {
         val first = offer("First")
         assertEquals("First", shown())
         val second = offer("Second")
@@ -80,7 +81,7 @@ class UndoSnackbarTest {
     }
 
     @Test
-    fun `cancelling commits`() = runBlocking {
+    fun `cancelling commits`() = runTest {
         val undo = offer()
         assertEquals("Deleted", shown())
         undo.cancel()

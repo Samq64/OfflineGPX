@@ -34,6 +34,7 @@ import java.text.Collator
 import java.time.Instant
 import java.time.ZoneId
 import java.util.Locale
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -52,12 +53,13 @@ class TrackRepository(
     private val dao: TrackDao,
     /** Outlives any screen, so deletes and edits finish once asked for. */
     private val scope: CoroutineScope,
+    /** For file and database work; a parameter so tests can substitute one. */
+    private val io: CoroutineDispatcher = Dispatchers.IO,
 ) {
 
     private val parser = GpxParser()
     private val writer = GpxWriter()
     private val trimmer = GpxTrimmer()
-    private val io = Dispatchers.IO
 
     private val appContext = context.applicationContext
 
