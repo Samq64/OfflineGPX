@@ -316,7 +316,9 @@ class RecordingService : Service() {
 
     override fun onDestroy() {
         scope.cancel()
-        // Queued behind whatever the recorder is running, so it can't land mid-append.
+        // Not in scope, which is cancelled, nor blocking, as this is the main thread. On the
+        // recorder, so it queues behind an append still running. Lost if the process dies
+        // first, which costs nothing: every line is already flushed.
         CoroutineScope(recorder).launch { wal?.let { runCatching(it::close) } }
         super.onDestroy()
     }

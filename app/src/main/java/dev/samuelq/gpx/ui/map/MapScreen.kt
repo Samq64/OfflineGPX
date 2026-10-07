@@ -112,8 +112,9 @@ fun MapScreen(
 ) {
     val mapController = remember { MapController() }
     val context = LocalContext.current
-    // Not context.getString: a long-lived collector would keep the old locale.
-    val resources = LocalResources.current
+    // Not context.getString, and through state: the long-lived collectors below, and the
+    // say and offerUndo they captured, read the current configuration's.
+    val resources by rememberUpdatedState(LocalResources.current)
     val scope = rememberCoroutineScope()
     val state by viewModel.state.collectAsStateWithLifecycle()
     val trace by viewModel.trace.collectAsStateWithLifecycle()

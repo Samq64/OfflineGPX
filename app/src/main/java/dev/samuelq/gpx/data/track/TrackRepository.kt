@@ -357,7 +357,7 @@ class TrackRepository(
             val file = fileOf(entity)
             val title = entity.titleStem.trim()
             val name = appContext.getString(R.string.duplicate_name, title)
-            val copy = uniqueFile(file.parentFile!!, name, "gpx", fallback = "track")
+            val copy = uniqueFile(checkNotNull(file.parentFile), name, "gpx", fallback = "track")
             try {
                 writeAtomically(copy) { output -> file.inputStream().use { trimmer.trim(it, output, name = name) } }
                 val row = entity.copy(

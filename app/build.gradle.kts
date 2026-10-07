@@ -151,6 +151,10 @@ configurations.configureEach {
     exclude(group = "com.caverock", module = "androidsvg")
 }
 
+composeCompiler {
+    stabilityConfigurationFiles.add(layout.projectDirectory.file("compose-stability.conf"))
+}
+
 dependencies {
     implementation(project(":core"))
     implementation(libs.androidx.core)
