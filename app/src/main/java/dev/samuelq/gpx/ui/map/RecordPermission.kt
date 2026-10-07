@@ -153,7 +153,7 @@ internal fun rememberLocationRequest(
             PackageManager.PERMISSION_GRANTED
     }
     val ask = {
-        // Coarse with fine, because Android 12+ ignores fine alone.
+        // Coarse with fine, because fine alone is ignored.
         val wanted = buildList {
             add(Manifest.permission.ACCESS_FINE_LOCATION)
             add(Manifest.permission.ACCESS_COARSE_LOCATION)

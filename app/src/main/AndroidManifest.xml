@@ -6,7 +6,7 @@
     <!--
       Files are picked through SAF and copied in, so no storage permission.
       Recording only, requested on first record:
-        ACCESS_COARSE_LOCATION  Android 12+ ignores a fine request without it; recording
+        ACCESS_COARSE_LOCATION  a fine request is ignored without it; recording
                                 refuses an approximate-only grant.
         POST_NOTIFICATIONS      optional; recording works if refused.
     -->

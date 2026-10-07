@@ -1,9 +1,9 @@
 package dev.samuelq.gpx.data.record
 
 import android.Manifest
-import android.location.Criteria
 import android.location.Location
 import android.location.LocationManager
+import android.location.provider.ProviderProperties
 import android.os.Build
 import android.os.SystemClock
 import androidx.core.content.getSystemService
@@ -58,10 +58,15 @@ class RecordingServiceTest {
     fun setUp() {
         shell("appops set ${targetContext.packageName} android:mock_location allow")
         shell("settings put secure location_mode 3")
-        @Suppress("DEPRECATION")
         manager.addTestProvider(
-            LocationManager.GPS_PROVIDER, false, false, false, false, true, true, true,
-            Criteria.POWER_LOW, Criteria.ACCURACY_FINE,
+            LocationManager.GPS_PROVIDER,
+            ProviderProperties.Builder()
+                .setHasAltitudeSupport(true)
+                .setHasSpeedSupport(true)
+                .setHasBearingSupport(true)
+                .setPowerUsage(ProviderProperties.POWER_USAGE_LOW)
+                .setAccuracy(ProviderProperties.ACCURACY_FINE)
+                .build(),
         )
         manager.setTestProviderEnabled(LocationManager.GPS_PROVIDER, true)
         scenario = ActivityScenario.launch(MainActivity::class.java)

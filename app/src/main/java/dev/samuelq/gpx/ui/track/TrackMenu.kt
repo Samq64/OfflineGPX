@@ -27,11 +27,11 @@ fun TrackMenu(
     onShare: () -> Unit,
     onHide: (() -> Unit)?,
     onDelete: () -> Unit,
+    modifier: Modifier = Modifier,
     trackTitle: String? = null,
     /** On the map only, where the charts to trim against are. */
     onTrim: (() -> Unit)? = null,
     onDuplicate: (() -> Unit)? = null,
-    modifier: Modifier = Modifier,
 ) {
     var open by remember { mutableStateOf(false) }
 
