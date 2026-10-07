@@ -1,18 +1,8 @@
-This is a GPX viewer and recorder for Android written in Kotlin and Compose with no INTERNET permission. Vector based `.map` files are imported manually by the user. Keep the app lean in terms of libraries and permissions. Keep code comments concise. When an emulator is available specify it every time to avoid accidentally touching physical devices. Don't worry about cleaning up its state. Resetting the emulator's app data is also fine.
+# O-Trace
 
-## Layout
+A GPX recorder and manager for Android written in Kotlin and Compose with no INTERNET permission. Vector based `.map` files are imported manually by the user. Try to avoid unnecessary app permissions and large (1MB+) libraries. Keep code comments concise. When an emulator is available specify it every time to avoid touching physical devices. The emulator's app state does not matter.
 
-```
-core/        JVM Gradle module, so no Android: model (Track, TrackPoints columns,
-             TrackPoint for single points), analysis (FixFilter, SpeedWindow,
-             TrackAnalyzer -> TrackProfile).
-app/ data/   gpx (streaming parser/writer/trimmer), db (Room), map (MapStore, .map headers, VTM
-             tile source), record (LocationSource, RecordingWal, RecordingService/
-             Controller/Recovery), settings, track (TrackRepository, TrackCache).
-app/ ui/     map (MapScreen, VTM canvas, layers, generated render theme), track (sheet),
-             chart (hand-rolled Canvas charts), library, record, settings, format, theme, nav.
-app/ di/     AppContainer: manual wiring, no Hilt.
-```
+See README.md for the source layout and the build, test, coverage and style commands.
 
 ## Constraints
 
@@ -33,8 +23,6 @@ app/ di/     AppContainer: manual wiring, no Hilt.
   is regenerable and never backed up or shared. A saved track's name and colour come from
   its row only. Files shared from other apps join the library; MainActivity is singleTask so
   they reach the one instance.
-- No backwards compatibility for now: the schema is version 1 with no migrations, and the
-  WAL has one format. `category` mirrors the first `<trk><type>`; null is uncategorised.
 - Trim rewrites a file with `GpxTrimmer`, which streams it through and keeps
   everything but the points cut; `GpxWriter` writes only what the app reads. The original
   waits under `noBackupFilesDir/edits` for the undo, and is purged at the next launch.
@@ -55,7 +43,7 @@ app/ di/     AppContainer: manual wiring, no Hilt.
 
 ## Tests
 
-`./gradlew test` runs JVM unit tests. `GpxParser` takes its `XmlPullParser` as a parameter
-so tests can use kxml2; android.jar's xmlpull classes are stubs.
-`./gradlew coverageVerification` writes JVM coverage to `app/build/reports/coverage` and enforces per-file minimums.
-`./gradlew ktlintCheck` checks style per `.editorconfig` (Android style, but 120 columns); `ktlintFormat` fixes most of it.
+`GpxParser` takes its `XmlPullParser` as a parameter so tests can use kxml2; android.jar's
+xmlpull classes are stubs.
+`connectedDebugAndroidTest` runs on every attached device, so prefix it with
+`ANDROID_SERIAL=<emulator>`.

@@ -1,70 +1,79 @@
 # O-Trace
 
-A GPX recorder and viewer for Android that never goes online. Record a ride or a walk, or
-import a `.gpx` file, and see it on an offline map with speed and elevation charts.
+Record and manage GPX tracks (traces) without the `INTERNET` permission. Supports optional [Mapsforge](https://download.mapsforge.org) compatible files.
 
 ## Features
 
-- **Record** rides and walks with GPS: pause, drop waypoints with a note, and pick up a
-  recording that was cut short by a crash or a flat battery.
-- **Import** `.gpx` files, and export, share, rename or delete them, with undo.
-- **Map** your traces over an offline vector map you import, in light or dark.
-- **Charts** of speed and elevation, by distance or time. Drag along one and the point
-  moves on the map too.
-- Metric or imperial units.
+- Record with support for waypoints, pausing and chart stats on the fly
+- Import and export traces as `.gpx` files
+- Speed and elevation charts with zoom support
+- Switch between viewing charts by distance or time
+- Trace trimming
+- Sort, filter and categorize traces
+- Bulk operation on traces
+- Multiple maps at once and traces on unmapped areas
+- 7 trace colours
 
-## Privacy
+## Non-features
 
-The app has no internet permission, so it can't go online at all, and the build fails if a
-dependency ever tries to add one. There's no account, no analytics and no cloud backup.
-
-| Permission | Why |
-|---|---|
-| Precise location, foreground service | Recording. Asked for when you first tap Record, never at launch. |
-| Notifications | The recording notification. Recording still works without it. |
-
-Traces and maps are copied into the app's own storage when you import them, so no storage
-permission is needed. A device-to-device transfer brings your library, maps and settings to
-a new phone.
-
-## Getting a map
-
-Maps are [mapsforge](https://github.com/mapsforge/mapsforge) `.map` files. In the app, go
-to **Settings → Get maps** to open the published files at `download.mapsforge.org`, download
-the region you want, then **Import map**. Without one, traces are drawn on a plain background.
+- Anything requiring internet access
+- External device integration
+- Map routing or searching
 
 ## Building
 
-Needs the Android SDK (`sdk.dir` in `local.properties`, or `ANDROID_HOME`). Gradle fetches
-the JDK it needs.
+Needs the Android SDK (`sdk.dir` in `local.properties`, or `ANDROID_HOME`) and any JDK 17+
+to start Gradle, which then fetches the JDK 25 it builds with. Runs on Android 12 or later.
 
 ```sh
 ./gradlew :app:assembleDebug     # app/build/outputs/apk/debug/app-debug.apk
-./gradlew test                   # unit tests, no device needed
+./gradlew :app:assembleRelease   # app/build/outputs/apk/release/app-release-unsigned.apk
 ```
 
-Android 12 or later.
+The release build is minified but unsigned; sign it with your own key:
 
-## Known limitations
+```sh
+apksigner sign --ks release.jks --out app-release.apk \
+    app/build/outputs/apk/release/app-release-unsigned.apk
+```
 
-- GPX only: no FIT, TCX or KML.
-- Heart rate, cadence and power in GPX extensions aren't read.
-- The charts can't be read with TalkBack yet.
-- It's a trace recorder and viewer, not a maps app: no routing, search or turn-by-turn.
+The build fails if any dependency adds a network permission to the merged manifest
+(`CheckNoNetworkPermissions` in `app/build.gradle.kts`).
+
+## Testing
+
+```sh
+./gradlew test                  # JVM unit tests for :core and :app, no device needed
+./gradlew coverageVerification  # coverage report in app/build/reports/coverage, with per-file minimums
+./gradlew ktlintCheck           # style per .editorconfig; ktlintFormat fixes most of it
+./gradlew check                 # all of the above, plus Android lint
+```
+
+Instrumented tests in `app/src/androidTest` need a connected device or emulator:
+
+```sh
+./gradlew :app:connectedDebugAndroidTest
+```
+
+## Source layout
+
+```
+core/        JVM Gradle module, so no Android: model (Track, TrackPoints columns,
+             TrackPoint for single points), analysis (FixFilter, SpeedWindow,
+             TrackAnalyzer -> TrackProfile).
+app/ data/   gpx (streaming parser/writer/trimmer), db (Room), map (MapStore, .map headers, VTM
+             tile source), record (LocationSource, RecordingWal, RecordingService/
+             Controller/Recovery), settings, track (TrackRepository, TrackCache).
+app/ ui/     map (MapScreen, VTM canvas, layers, generated render theme), track (sheet),
+             chart (hand-rolled Canvas charts), library, record, settings, format, theme, nav.
+app/ di/     AppContainer: manual wiring, no Hilt.
+```
 
 ## License
 
-Copyright (C) 2026 Samq64
+O-Trace is licensed under the GPLv3. See [LICENSE](LICENSE) for details.
 
-This program is free software: you can redistribute it and/or modify it under the terms of
-the GNU General Public License as published by the Free Software Foundation, either version 3
-of the License, or (at your option) any later version. It is distributed in the hope that it
-will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See [LICENSE](LICENSE) for the full text.
-
-Dependencies keep their own licences: AndroidX (Compose, Room, navigation included), the
-Kotlin libraries and their other transitive dependencies are Apache 2.0; VTM is LGPL 3.0;
-JTS (via `vtm-jts`) is EPL 2.0 or EDL 1.0. All are compatible with the GPL.
+Bundled libraries are credited within the app at Settings > Libraries
 
 `app/src/test/resources/andorra-fragment.map` is cut from a mapsforge extract of
 OpenStreetMap data, © OpenStreetMap contributors, available under the
