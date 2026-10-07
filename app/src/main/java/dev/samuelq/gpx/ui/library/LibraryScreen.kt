@@ -48,9 +48,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.TopSearchBar
 import androidx.compose.material3.TriStateCheckbox
-import androidx.compose.material3.rememberSearchBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -266,7 +264,7 @@ fun LibraryScreen(
                     onDelete = { delete(selection) },
                 )
             } else if (searching) {
-                LibrarySearchBar(
+                SearchBar(
                     query = query,
                     onQueryChange = viewModel::search,
                     onClose = ::closeSearch,
@@ -805,20 +803,19 @@ private fun NoMatches(query: String, modifier: Modifier = Modifier) {
     }
 }
 
-/** Material's top search bar, never expanded: the list below is the results. */
+/** Material's input field in a plain bar: `SearchBar` itself expands for suggestions there are none of. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun LibrarySearchBar(query: String, onQueryChange: (String) -> Unit, onClose: () -> Unit) {
+private fun SearchBar(query: String, onQueryChange: (String) -> Unit, onClose: () -> Unit) {
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
     val keyboard = LocalSoftwareKeyboardController.current
     // The placeholder goes once there's text, and with it the field's only name.
     val hint = stringResource(R.string.library_search)
 
-    TopSearchBar(
-        state = rememberSearchBarState(),
+    TopAppBar(
         windowInsets = BarInsets,
-        inputField = {
+        title = {
             SearchBarDefaults.InputField(
                 query = query,
                 onQueryChange = onQueryChange,
@@ -826,20 +823,22 @@ private fun LibrarySearchBar(query: String, onQueryChange: (String) -> Unit, onC
                 expanded = false,
                 onExpandedChange = {},
                 placeholder = { Text(hint) },
-                leadingIcon = {
-                    BackButton(onClose, stringResource(R.string.library_search_close))
-                },
-                trailingIcon = {
-                    if (query.isNotEmpty()) {
-                        IconButton(onClick = { onQueryChange("") }) {
-                            Icon(painterResource(R.drawable.ic_close), stringResource(R.string.library_search_clear))
-                        }
-                    }
-                },
+                colors = SearchBarDefaults.inputFieldColors(
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = Color.Transparent,
+                ),
                 modifier = Modifier
                     .focusRequester(focusRequester)
                     .semantics { contentDescription = hint },
             )
+        },
+        navigationIcon = { BackButton(onClose, stringResource(R.string.library_search_close)) },
+        actions = {
+            if (query.isNotEmpty()) {
+                IconButton(onClick = { onQueryChange("") }) {
+                    Icon(painterResource(R.drawable.ic_close), stringResource(R.string.library_search_clear))
+                }
+            }
         },
     )
 }
