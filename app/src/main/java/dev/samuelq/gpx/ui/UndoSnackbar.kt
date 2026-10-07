@@ -33,8 +33,9 @@ class Snackbars : ViewModel() {
     }
 }
 
+/** The screen's [Snackbars]: a view model lookup, so the same one across recreation. */
 @Composable
-fun rememberSnackbars(): Snackbars = viewModel()
+fun screenSnackbars(): Snackbars = viewModel()
 
 /**
  * Shows [message] with Undo, then calls exactly one of [onUndo] or [onCommit]. A timeout, a

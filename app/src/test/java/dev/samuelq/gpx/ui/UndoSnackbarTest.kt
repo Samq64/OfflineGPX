@@ -15,10 +15,13 @@ class UndoSnackbarTest {
     private var outcome: String? = null
 
     private fun CoroutineScope.offer(message: String = "Deleted") = launch {
-        host.showUndo(message, "Undo", indefinite = false, onUndo = { outcome = "undo $message" }, onCommit = {
-            outcome =
-                "commit $message"
-        })
+        host.showUndo(
+            message,
+            "Undo",
+            indefinite = false,
+            onUndo = { outcome = "undo $message" },
+            onCommit = { outcome = "commit $message" },
+        )
     }
 
     private suspend fun shown(): String? {
@@ -27,7 +30,7 @@ class UndoSnackbarTest {
     }
 
     @Test
-    fun undoRestores() = runBlocking {
+    fun `undo restores`() = runBlocking {
         val undo = offer()
         assertEquals("Deleted", shown())
         host.currentSnackbarData!!.performAction()
@@ -36,7 +39,7 @@ class UndoSnackbarTest {
     }
 
     @Test
-    fun timeoutCommits() = runBlocking {
+    fun `a timeout commits`() = runBlocking {
         val undo = offer()
         assertEquals("Deleted", shown())
         host.currentSnackbarData!!.dismiss()
@@ -45,7 +48,7 @@ class UndoSnackbarTest {
     }
 
     @Test
-    fun newerMessageDefersRatherThanCommits() = runBlocking {
+    fun `a newer message defers rather than commits`() = runBlocking {
         val undo = offer()
         assertEquals("Deleted", shown())
         val other = launch {
@@ -64,7 +67,7 @@ class UndoSnackbarTest {
     }
 
     @Test
-    fun newerUndoCommitsOlder() = runBlocking {
+    fun `a newer undo commits the older`() = runBlocking {
         val first = offer("First")
         assertEquals("First", shown())
         val second = offer("Second")
@@ -77,7 +80,7 @@ class UndoSnackbarTest {
     }
 
     @Test
-    fun cancellingCommits() = runBlocking {
+    fun `cancelling commits`() = runBlocking {
         val undo = offer()
         assertEquals("Deleted", shown())
         undo.cancel()

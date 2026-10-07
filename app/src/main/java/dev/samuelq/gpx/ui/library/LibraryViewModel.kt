@@ -32,6 +32,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 sealed interface LibraryEvent {
@@ -131,7 +132,7 @@ class LibraryViewModel(
     val events: Flow<LibraryEvent> = _events.receiveAsFlow()
 
     fun toggleSelected(id: Long) {
-        _selection.value = _selection.value.let { if (id in it) it - id else it + id }
+        _selection.update { if (id in it) it - id else it + id }
     }
 
     fun clearSelection() {
@@ -144,7 +145,7 @@ class LibraryViewModel(
 
     /** Adds or removes [ids], as a category's checkbox does. */
     fun setSelected(ids: Collection<Long>, selected: Boolean) {
-        _selection.value = if (selected) _selection.value + ids else _selection.value - ids.toSet()
+        _selection.update { if (selected) it + ids else it - ids.toSet() }
     }
 
     fun import(uris: List<Uri>) {

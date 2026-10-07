@@ -95,7 +95,7 @@ import dev.samuelq.gpx.ui.format.tabularFigures
 import dev.samuelq.gpx.ui.isLargeText
 import dev.samuelq.gpx.ui.makeWay
 import dev.samuelq.gpx.ui.readFirst
-import dev.samuelq.gpx.ui.rememberSnackbars
+import dev.samuelq.gpx.ui.screenSnackbars
 import kotlin.math.roundToInt
 
 private val ScreenPadding = 20.dp
@@ -118,7 +118,7 @@ fun SettingsScreen(
     val overlapping by viewModel.overlapping.collectAsStateWithLifecycle()
     val formatters = LocalFormatters.current
     val context = LocalContext.current
-    val snackbars = rememberSnackbars()
+    val snackbars = screenSnackbars()
     val snackbarHostState = snackbars.host
 
     val importer = rememberLauncherForActivityResult(

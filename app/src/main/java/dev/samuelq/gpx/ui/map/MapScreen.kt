@@ -73,14 +73,14 @@ import dev.samuelq.gpx.R
 import dev.samuelq.gpx.core.analysis.TrackProfile
 import dev.samuelq.gpx.core.model.GeoBounds
 import dev.samuelq.gpx.core.model.Waypoint
-import dev.samuelq.gpx.data.record.RecordingController
 import dev.samuelq.gpx.data.record.RecordingState
 import dev.samuelq.gpx.data.track.editableName
 import dev.samuelq.gpx.data.track.title
 import dev.samuelq.gpx.ui.makeWay
 import dev.samuelq.gpx.ui.record.RecordingOutcomes
 import dev.samuelq.gpx.ui.record.RecordingSheet
-import dev.samuelq.gpx.ui.rememberSnackbars
+import dev.samuelq.gpx.ui.record.RecordingViewModel
+import dev.samuelq.gpx.ui.screenSnackbars
 import dev.samuelq.gpx.ui.theme.recordingColor
 import dev.samuelq.gpx.ui.theme.routePalette
 import dev.samuelq.gpx.ui.theme.slot
@@ -106,8 +106,8 @@ fun MapScreen(
     onOpenSettings: () -> Unit,
     /** Straight to the file picker; the import itself, with its merge prompt, lives in settings. */
     onImportMap: () -> Unit,
-    recorder: RecordingController,
     viewModel: MapViewModel = viewModel(factory = MapViewModel.Factory),
+    recorder: RecordingViewModel = viewModel(factory = RecordingViewModel.Factory),
     location: LocationViewModel = viewModel(factory = LocationViewModel.Factory),
 ) {
     val mapController = remember { MapController() }
@@ -130,7 +130,7 @@ fun MapScreen(
     val liveColor = recordingColor()
     val density = LocalDensity.current
 
-    val snackbars = rememberSnackbars()
+    val snackbars = screenSnackbars()
     val snackbarHostState = snackbars.host
     // Never read here: that would recompose the screen every frame of a pan. ScaleBar reads it.
     val metersPerPixel = remember { mutableDoubleStateOf(0.0) }
@@ -277,8 +277,10 @@ fun MapScreen(
     }
 
     var showAllAfterRecording by remember { mutableStateOf(false) }
+    val categories by recorder.categories.collectAsStateWithLifecycle()
     RecordingOutcomes(
-        recorder = recorder,
+        events = recorder.events,
+        categories = categories,
         say = ::say,
         offerUndo = { message, onUndo, onCommit -> offerUndo(message, onUndo, onCommit) },
         onSaved = { viewModel.focus(TrackRef.Saved(it)) },

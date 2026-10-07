@@ -28,26 +28,17 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.samuelq.gpx.R
 import dev.samuelq.gpx.data.record.AbandonedRecording
 import dev.samuelq.gpx.data.record.RecordingRecovery
 import dev.samuelq.gpx.data.record.RecordingState
 import dev.samuelq.gpx.data.track.TrackLabel
-import dev.samuelq.gpx.data.track.TrackRepository
 import dev.samuelq.gpx.ui.format.LocalFormatters
 import dev.samuelq.gpx.ui.track.CategoryField
 import dev.samuelq.gpx.ui.track.StatRow
 
 /** The categories in use, and the one a new recording gets unless changed: the last one's. */
 class CategoryChoice(val all: List<String>, val default: String)
-
-@Composable
-fun rememberCategoryChoice(tracks: TrackRepository): CategoryChoice {
-    val all by tracks.categories.collectAsStateWithLifecycle(emptyList())
-    val last by tracks.lastRecordingCategory.collectAsStateWithLifecycle(null)
-    return remember(all, last) { CategoryChoice(all, last.orEmpty()) }
-}
 
 /** Stop's question. Dismissing it keeps recording. */
 @Composable

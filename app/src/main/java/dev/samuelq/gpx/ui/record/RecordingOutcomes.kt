@@ -3,15 +3,15 @@ package dev.samuelq.gpx.ui.record
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import dev.samuelq.gpx.GpxApplication
 import dev.samuelq.gpx.R
-import dev.samuelq.gpx.data.record.RecordingController
 import dev.samuelq.gpx.data.record.RecordingEvent
 import dev.samuelq.gpx.ui.map.openLocationSettings
+import kotlinx.coroutines.flow.Flow
 
 /**
  * What becomes of a recording: saved, discarded with an undo, failed, or left by a crash and
@@ -22,7 +22,8 @@ import dev.samuelq.gpx.ui.map.openLocationSettings
  */
 @Composable
 fun RecordingOutcomes(
-    recorder: RecordingController,
+    events: Flow<RecordingEvent>,
+    categories: CategoryChoice,
     /** With a Settings action when there's one to take. */
     say: (message: String, openSettings: (() -> Unit)?) -> Unit,
     offerUndo: (message: String, onUndo: () -> Unit, onCommit: () -> Unit) -> Unit,
@@ -33,7 +34,11 @@ fun RecordingOutcomes(
     // Not context.getString: a long-lived collector would keep the old locale.
     val resources = LocalResources.current
     val context = LocalContext.current
-    val container = (context.applicationContext as GpxApplication).container
+    // The collectors outlive compositions, so they call the latest of each.
+    val currentSay by rememberUpdatedState(say)
+    val currentOfferUndo by rememberUpdatedState(offerUndo)
+    val currentOnSaved by rememberUpdatedState(onSaved)
+    val currentOnDiscarded by rememberUpdatedState(onDiscarded)
 
     // By the name it would have been saved as, if any.
     fun discardedNamed(name: String) = if (name.isBlank()) {
@@ -42,21 +47,21 @@ fun RecordingOutcomes(
         resources.getString(R.string.record_discarded_named, name.trim())
     }
 
-    LaunchedEffect(recorder) {
-        recorder.events.collect { event ->
+    LaunchedEffect(events) {
+        events.collect { event ->
             when (event) {
-                is RecordingEvent.Saved -> onSaved(event.id)
+                is RecordingEvent.Saved -> currentOnSaved(event.id)
                 is RecordingEvent.Discarded -> {
-                    onDiscarded()
+                    currentOnDiscarded()
                     event.recording?.let { recording ->
-                        offerUndo(
+                        currentOfferUndo(
                             discardedNamed(recording.label.name),
                             { recovery.restoreDiscarded(recording) },
                             { recovery.forgetDiscarded(recording) },
                         )
-                    } ?: say(resources.getString(R.string.record_discarded), null)
+                    } ?: currentSay(resources.getString(R.string.record_discarded), null)
                 }
-                is RecordingEvent.Failed -> say(
+                is RecordingEvent.Failed -> currentSay(
                     resources.getString(event.messageRes),
                     { context.openLocationSettings() }.takeIf { event.messageRes == R.string.record_location_off },
                 )
@@ -67,9 +72,9 @@ fun RecordingOutcomes(
     LaunchedEffect(recovery) {
         recovery.events.collect { event ->
             when (event) {
-                is RecoveryEvent.Saved -> onSaved(event.id)
-                RecoveryEvent.Failed -> say(resources.getString(R.string.record_save_failed), null)
-                is RecoveryEvent.AbandonedDiscarded -> offerUndo(
+                is RecoveryEvent.Saved -> currentOnSaved(event.id)
+                RecoveryEvent.Failed -> currentSay(resources.getString(R.string.record_save_failed), null)
+                is RecoveryEvent.AbandonedDiscarded -> currentOfferUndo(
                     discardedNamed(event.label.name),
                     { recovery.restoreAbandoned(event.recording, event.label) },
                     { recovery.forgetAbandoned(event.recording) },
@@ -82,7 +87,7 @@ fun RecordingOutcomes(
     abandoned?.let { recording ->
         RecoveredRecordingDialog(
             recording = recording,
-            categories = rememberCategoryChoice(container.trackRepository),
+            categories = categories,
             onSave = recovery::saveAbandoned,
             onDiscard = recovery::discardAbandoned,
         )

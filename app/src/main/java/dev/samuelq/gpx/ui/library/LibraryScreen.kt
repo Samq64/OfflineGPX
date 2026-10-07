@@ -100,7 +100,7 @@ import dev.samuelq.gpx.ui.format.spokenDuration
 import dev.samuelq.gpx.ui.format.spokenKilobytes
 import dev.samuelq.gpx.ui.isLargeText
 import dev.samuelq.gpx.ui.readFirst
-import dev.samuelq.gpx.ui.rememberSnackbars
+import dev.samuelq.gpx.ui.screenSnackbars
 import dev.samuelq.gpx.ui.track.ColorDot
 import dev.samuelq.gpx.ui.track.TrackMenu
 import dev.samuelq.gpx.ui.track.TrackNameDialog
@@ -139,7 +139,7 @@ fun LibraryScreen(
     val shownOnly by viewModel.shownOnly.collectAsStateWithLifecycle()
     val filtered = query.isNotBlank() || inArea || shownOnly
     val selection by viewModel.selection.collectAsStateWithLifecycle()
-    val snackbars = rememberSnackbars()
+    val snackbars = screenSnackbars()
     val snackbarHostState = snackbars.host
     // Separate from a blank query: an open field starts empty.
     var searching by rememberSaveable { mutableStateOf(false) }

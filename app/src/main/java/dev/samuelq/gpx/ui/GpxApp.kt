@@ -7,19 +7,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.dropUnlessResumed
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
-import dev.samuelq.gpx.GpxApplication
-import dev.samuelq.gpx.data.record.RecordingController
 import dev.samuelq.gpx.data.record.RecordingState
-import dev.samuelq.gpx.data.track.TrackRepository
 import dev.samuelq.gpx.ui.format.LocalFormatters
 import dev.samuelq.gpx.ui.format.rememberSystemFormatters
 import dev.samuelq.gpx.ui.library.LibraryScreen
@@ -27,17 +24,18 @@ import dev.samuelq.gpx.ui.map.MapScreen
 import dev.samuelq.gpx.ui.nav.LibraryRoute
 import dev.samuelq.gpx.ui.nav.MapRoute
 import dev.samuelq.gpx.ui.nav.SettingsRoute
+import dev.samuelq.gpx.ui.record.RecordingViewModel
 import dev.samuelq.gpx.ui.record.StopRecordingDialog
-import dev.samuelq.gpx.ui.record.rememberCategoryChoice
 import dev.samuelq.gpx.ui.settings.SettingsScreen
+import dev.samuelq.gpx.ui.settings.SettingsViewModel
 import dev.samuelq.gpx.ui.track.TrackRef
 
 /** A track is a selection on the map, not a destination. */
 @Composable
 fun GpxApp(incomingTrack: Uri?, onIncomingTrackHandled: () -> Unit) {
     val navController = rememberNavController()
-    val container = (LocalContext.current.applicationContext as GpxApplication).container
-    val settings by container.settingsRepository.settings.collectAsStateWithLifecycle()
+    val settings by viewModel<SettingsViewModel>(factory = SettingsViewModel.Factory).settings
+        .collectAsStateWithLifecycle()
 
     // Remembered: the charts key their labels on this instance.
     val formatters = rememberSystemFormatters(settings.units)
@@ -70,7 +68,6 @@ fun GpxApp(incomingTrack: Uri?, onIncomingTrackHandled: () -> Unit) {
                     onOpenList = { area -> navController.open(LibraryRoute(area)) },
                     onOpenSettings = { navController.open(SettingsRoute()) },
                     onImportMap = { navController.open(SettingsRoute(importMap = true)) },
-                    recorder = container.recordingController,
                 )
             }
 
@@ -91,20 +88,21 @@ fun GpxApp(incomingTrack: Uri?, onIncomingTrackHandled: () -> Unit) {
         }
 
         // Here, not on the map, so the notification's Stop is answered over any screen.
-        StopRecordingPrompt(container.recordingController, container.trackRepository)
+        StopRecordingPrompt()
     }
 }
 
 /** Its own scope: the recording's state changes every second and would redo the whole app. */
 @Composable
-private fun StopRecordingPrompt(recorder: RecordingController, tracks: TrackRepository) {
+private fun StopRecordingPrompt(recorder: RecordingViewModel = viewModel(factory = RecordingViewModel.Factory)) {
     val stopRequested by recorder.stopRequested.collectAsStateWithLifecycle()
     if (!stopRequested) return
     val recording by recorder.state.collectAsStateWithLifecycle()
+    val categories by recorder.categories.collectAsStateWithLifecycle()
     (recording as? RecordingState.Active)?.let { active ->
         StopRecordingDialog(
             state = active,
-            categories = rememberCategoryChoice(tracks),
+            categories = categories,
             onSave = recorder::stop,
             onDiscard = recorder::discard,
             onDismiss = recorder::cancelStop,
