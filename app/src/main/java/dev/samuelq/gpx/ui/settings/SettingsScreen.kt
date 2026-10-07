@@ -95,6 +95,7 @@ import dev.samuelq.gpx.ui.format.tabularFigures
 import dev.samuelq.gpx.ui.isLargeText
 import dev.samuelq.gpx.ui.makeWay
 import dev.samuelq.gpx.ui.readFirst
+import dev.samuelq.gpx.ui.readableWidth
 import dev.samuelq.gpx.ui.screenSnackbars
 import kotlin.math.roundToInt
 
@@ -223,6 +224,8 @@ fun SettingsScreen(
                 .fillMaxSize()
                 .padding(top = padding.calculateTopPadding())
                 .verticalScroll(rememberScrollState())
+                // Inside the scroll, so the margins of a large screen still scroll it.
+                .readableWidth()
                 // Inside the scroll, so the end scrolls clear of the navigation bar from behind it.
                 .padding(
                     start = padding.calculateStartPadding(layoutDirection),

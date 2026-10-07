@@ -310,9 +310,11 @@ fun MapScreen(
     val sheetTitle = if (subject == null) lastTitle.orEmpty() else focusedTitle
     val sheetColor = if (subject == null) lastColor ?: focusedColor else focusedColor
 
-    // Landscape uses a side panel; the sheet stays composed but hidden so rotation keeps the track.
+    // Landscape, or any window Material calls expanded, uses a side panel; the sheet stays
+    // composed but hidden so rotation keeps the track.
     val windowSize = LocalWindowInfo.current.containerSize
-    val sidePanel = windowSize.width > windowSize.height
+    val sidePanel = windowSize.width > windowSize.height ||
+        with(density) { windowSize.width.toDp() } >= ExpandedWidth
     val currentSidePanel by rememberUpdatedState(sidePanel)
 
     // Saved, so a rotation, which hides the sheet for the panel and back, or a recreation
@@ -822,3 +824,6 @@ private const val SheetMaxHeightFraction = 0.72f
 private val SidePanelMinWidth = 400.dp
 
 private const val SidePanelWindowFraction = 1f / 3
+
+/** Material's expanded window width class begins here. */
+private val ExpandedWidth = 840.dp

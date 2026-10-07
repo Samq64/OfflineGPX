@@ -100,6 +100,7 @@ import dev.samuelq.gpx.ui.format.spokenDuration
 import dev.samuelq.gpx.ui.format.spokenKilobytes
 import dev.samuelq.gpx.ui.isLargeText
 import dev.samuelq.gpx.ui.readFirst
+import dev.samuelq.gpx.ui.readableWidth
 import dev.samuelq.gpx.ui.screenSnackbars
 import dev.samuelq.gpx.ui.track.ColorDot
 import dev.samuelq.gpx.ui.track.TrackMenu
@@ -317,7 +318,8 @@ fun LibraryScreen(
                 modifier = Modifier.fillMaxSize().padding(padding),
             )
 
-            else -> Column(Modifier.fillMaxSize().padding(top = padding.calculateTopPadding())) {
+            // Narrowed on a large screen, where a full-width row strays far from its switch.
+            else -> Column(Modifier.fillMaxSize().padding(top = padding.calculateTopPadding()).readableWidth()) {
                 val sides = Modifier.padding(
                     start = padding.calculateStartPadding(layoutDirection),
                     end = padding.calculateEndPadding(layoutDirection),
