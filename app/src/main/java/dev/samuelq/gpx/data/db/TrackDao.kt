@@ -2,6 +2,7 @@ package dev.samuelq.gpx.data.db
 
 import androidx.room.Dao
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Update
 import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
@@ -35,6 +36,12 @@ interface TrackDao {
     @Query("UPDATE tracks SET trackName = :name WHERE id = :id")
     suspend fun setTrackName(id: Long, name: String?)
 
+    @Query("SELECT DISTINCT category FROM tracks WHERE category IS NOT NULL AND id != :except")
+    suspend fun categories(except: Long = 0): List<String>
+
+    @Query("UPDATE tracks SET category = :category WHERE id = :id")
+    suspend fun setCategory(id: Long, category: String?)
+
     @Query("UPDATE tracks SET location = :location WHERE id = :id")
     suspend fun setLocation(id: Long, location: String)
 
@@ -56,8 +63,19 @@ interface TrackDao {
     @Query("UPDATE tracks SET colorIndex = :colorIndex WHERE id = :id")
     suspend fun setColor(id: Long, colorIndex: Int)
 
-    @Query("UPDATE tracks SET visible = :visible")
-    suspend fun setAllVisible(visible: Boolean)
+    @Query("UPDATE tracks SET visible = :visible WHERE id IN (:ids)")
+    suspend fun setVisible(ids: List<Long>, visible: Boolean)
+
+    /** Puts back what [setVisible] or [showOnly] changed, in one write. */
+    @Transaction
+    suspend fun setVisibility(shown: List<Long>, hidden: List<Long>) {
+        setVisible(shown, true)
+        setVisible(hidden, false)
+    }
+
+    /** Shows [ids] and hides every other track. */
+    @Query("UPDATE tracks SET visible = id IN (:ids)")
+    suspend fun showOnly(ids: List<Long>)
 }
 
 /** For picking the next palette slot. */

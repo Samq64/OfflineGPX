@@ -6,6 +6,7 @@ import dev.samuelq.gpx.core.analysis.TrackAnalyzer
 import dev.samuelq.gpx.core.analysis.TrackProfile
 import dev.samuelq.gpx.core.model.Track
 import dev.samuelq.gpx.data.track.TrackRepository
+import dev.samuelq.gpx.data.track.TrackLabel
 import dev.samuelq.gpx.data.track.asTrackName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -24,7 +25,7 @@ class AbandonedRecording(
 )
 
 /** A ride discarded moments ago, kept on disk until its undo lapses. */
-class DiscardedRecording internal constructor(internal val file: File, val name: String)
+class DiscardedRecording internal constructor(internal val file: File, val label: TrackLabel)
 
 /**
  * The live recording log, plus rides never cleanly stopped: those are claimed out of the
@@ -90,10 +91,9 @@ class RecordingRecovery(
         return AbandonedRecording(claimed, track, profile)
     }
 
-    /** A blank [name] leaves it unnamed. */
-    suspend fun save(recording: AbandonedRecording, name: String): Result<Long> = lock.withLock {
-        val named = recording.track.copy(name = name.asTrackName())
-        tracks.saveRecording(named, recording.profile).onSuccess {
+    /** A blank name leaves it unnamed. */
+    suspend fun save(recording: AbandonedRecording, label: TrackLabel): Result<Long> = lock.withLock {
+        tracks.saveRecording(recording.track.labelled(label), recording.profile).onSuccess {
             withContext(io) { recording.file.delete() }
         }
     }
@@ -105,13 +105,13 @@ class RecordingRecovery(
      * Moves the closed live log out of the next recording's way, for [restore] to save if the
      * discard is undone. Null if it isn't worth saving or couldn't be moved; it's deleted then.
      */
-    suspend fun setAside(log: File, name: String): DiscardedRecording? =
+    suspend fun setAside(log: File, label: TrackLabel): DiscardedRecording? =
         lock.withLock {
             withContext(io) {
                 val aside = File(dir, "$DISCARD_PREFIX${System.currentTimeMillis()}.wal")
                 val profile = RecordingWal.recover(log)?.let(TrackAnalyzer::analyze)
                 if (profile != null && isSaveable(profile) && log.renameTo(aside)) {
-                    DiscardedRecording(aside, name)
+                    DiscardedRecording(aside, label)
                 } else {
                     log.delete()
                     null
@@ -124,7 +124,7 @@ class RecordingRecovery(
         val read = runCatching { withContext(io) { read(recording.file) } }
             .getOrElse { return Result.failure(it) }
             ?: return Result.failure(IOException("Nothing left in ${recording.file.name}"))
-        return save(read, recording.name)
+        return save(read, recording.label)
     }
 
     fun forget(recording: DiscardedRecording) = forget(recording.file)
@@ -155,3 +155,6 @@ class RecordingRecovery(
         fun isSaveable(distanceMeters: Double) = distanceMeters >= MIN_SAVEABLE_DISTANCE_METERS
     }
 }
+
+/** As [label] names and categorises it; blank leaves either out. */
+internal fun Track.labelled(label: TrackLabel) = copy(name = label.name.asTrackName(), type = label.category.asTrackName())

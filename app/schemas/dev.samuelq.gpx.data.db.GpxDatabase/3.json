@@ -1,0 +1,162 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 3,
+    "identityHash": "a622a587e4924f684f8c8d19a3326d4e",
+    "entities": [
+      {
+        "tableName": "tracks",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `location` TEXT NOT NULL, `displayName` TEXT NOT NULL, `trackName` TEXT, `startedAtEpochMillis` INTEGER, `lastOpenedAtEpochMillis` INTEGER NOT NULL, `visible` INTEGER NOT NULL, `colorIndex` INTEGER NOT NULL, `category` TEXT, `pointCount` INTEGER NOT NULL DEFAULT -1, `distanceMeters` REAL NOT NULL, `totalSeconds` REAL NOT NULL, `movingSeconds` REAL NOT NULL DEFAULT 0, `averageSpeedMps` REAL NOT NULL DEFAULT 0, `ascentMeters` REAL NOT NULL DEFAULT 0, `descentMeters` REAL NOT NULL DEFAULT 0, `southLatitude` REAL NOT NULL DEFAULT 0, `westLongitude` REAL NOT NULL DEFAULT 0, `northLatitude` REAL NOT NULL DEFAULT 0, `eastLongitude` REAL NOT NULL DEFAULT 0)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "location",
+            "columnName": "location",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "displayName",
+            "columnName": "displayName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "trackName",
+            "columnName": "trackName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "startedAtEpochMillis",
+            "columnName": "startedAtEpochMillis",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "lastOpenedAtEpochMillis",
+            "columnName": "lastOpenedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "visible",
+            "columnName": "visible",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "colorIndex",
+            "columnName": "colorIndex",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "category",
+            "columnName": "category",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "summary.pointCount",
+            "columnName": "pointCount",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "-1"
+          },
+          {
+            "fieldPath": "summary.distanceMeters",
+            "columnName": "distanceMeters",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "summary.totalSeconds",
+            "columnName": "totalSeconds",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "summary.movingSeconds",
+            "columnName": "movingSeconds",
+            "affinity": "REAL",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "summary.averageSpeedMps",
+            "columnName": "averageSpeedMps",
+            "affinity": "REAL",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "summary.ascentMeters",
+            "columnName": "ascentMeters",
+            "affinity": "REAL",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "summary.descentMeters",
+            "columnName": "descentMeters",
+            "affinity": "REAL",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "summary.southLatitude",
+            "columnName": "southLatitude",
+            "affinity": "REAL",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "summary.westLongitude",
+            "columnName": "westLongitude",
+            "affinity": "REAL",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "summary.northLatitude",
+            "columnName": "northLatitude",
+            "affinity": "REAL",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "summary.eastLongitude",
+            "columnName": "eastLongitude",
+            "affinity": "REAL",
+            "notNull": true,
+            "defaultValue": "0"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_tracks_location",
+            "unique": true,
+            "columnNames": [
+              "location"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_tracks_location` ON `${TABLE_NAME}` (`location`)"
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'a622a587e4924f684f8c8d19a3326d4e')"
+    ]
+  }
+}

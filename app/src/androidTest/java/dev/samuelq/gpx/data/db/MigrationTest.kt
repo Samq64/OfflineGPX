@@ -56,6 +56,25 @@ class MigrationTest {
     }
 
     @Test
+    fun version2RowsComeUncategorised() {
+        helper.createDatabase(DB, 2).use { db ->
+            db.execSQL(
+                """INSERT INTO tracks (id, location, displayName, trackName, startedAtEpochMillis,
+                   lastOpenedAtEpochMillis, visible, colorIndex, pointCount, distanceMeters, totalSeconds)
+                   VALUES (8, 'recordings/b.gpx', 'b.gpx', NULL, 1000, 2000, 1, 2, 5, 10.0, 60.0)"""
+            )
+        }
+        // Validates the migrated schema against 3.json.
+        helper.runMigrationsAndValidate(DB, 3, true).use { db ->
+            db.query("SELECT category, pointCount FROM tracks WHERE id = 8").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertTrue(cursor.isNull(0))
+                assertEquals(5, cursor.getInt(1))
+            }
+        }
+    }
+
+    @Test
     fun emptyVersion1Migrates() {
         helper.createDatabase(DB, 1).close()
         helper.runMigrationsAndValidate(DB, 2, true).use { db ->

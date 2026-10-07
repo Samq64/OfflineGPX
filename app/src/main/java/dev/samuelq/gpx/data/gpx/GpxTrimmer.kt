@@ -9,7 +9,7 @@ import java.io.OutputStream
 
 /**
  * Copies a GPX document keeping only some of its points and waypoints, and optionally renaming
- * its first track. Everything else passes through: extensions, metadata, comments, other apps'
+ * its first track or setting its type. Everything else passes through: extensions, metadata, comments, other apps'
  * data. [GpxWriter] would keep only what the app reads.
  *
  * Points are counted as [GpxParser] reads them, so an index here is one in the parsed track.
@@ -26,6 +26,7 @@ class GpxTrimmer(
      * @param keepWaypoint null keeps every waypoint.
      * @param name replaces the first `<trk>`'s name, or is added as its first child; blank
      *   removes it, null leaves it.
+     * @param type the same for the first `<trk>`'s type, added where the schema orders it.
      */
     fun trim(
         input: InputStream,
@@ -33,12 +34,13 @@ class GpxTrimmer(
         keepPoint: ((index: Int) -> Boolean)? = null,
         keepWaypoint: ((index: Int) -> Boolean)? = null,
         name: String? = null,
+        type: String? = null,
     ) {
         val parser = newPullParser().apply {
             setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, true)
             setInput(input, null)
         }
-        Copy(parser, newSerializer().apply { setOutput(output, ENCODING) }, keepPoint, keepWaypoint, name).run()
+        Copy(parser, newSerializer().apply { setOutput(output, ENCODING) }, keepPoint, keepWaypoint, name, type).run()
     }
 
     /** A start tag held back until something inside it is kept. */
@@ -57,6 +59,8 @@ class GpxTrimmer(
         private val keepWaypoint: ((Int) -> Boolean)?,
         /** Cleared once the first track has it. */
         private var newName: String?,
+        /** Likewise. */
+        private var newType: String?,
     ) {
         private val path = ArrayList<String>()
         private var skipDepth = 0
@@ -69,6 +73,8 @@ class GpxTrimmer(
         private var waypointIndex = 0
         /** Inside the first `<trk>`, before its first child. */
         private var nameDue = false
+        /** Inside the first `<trk>`, before what follows its type. */
+        private var typeDue = false
         private var trackNamespace: String? = null
 
         fun run() {
@@ -105,14 +111,16 @@ class GpxTrimmer(
                     skipDepth = 1
                     return
                 }
-                // Indented as the child it goes before.
-                if (!newName.isNullOrBlank()) {
-                    val indent = whitespace.toString()
-                    flushWhitespace()
-                    writeName()
-                    whitespace.append(indent)
+                insertName()
+            }
+            if (typeDue && path == TRK_PATH) {
+                if (name == TAG_TYPE) {
+                    typeDue = false
+                    writeType(capture())
+                    skipDepth = 1
+                    return
                 }
-                newName = null
+                if (name == TAG_EXTENSIONS || name == TAG_TRKSEG) insertType()
             }
             val keep = when {
                 name == TAG_TRKPT && path == TRKSEG_PATH || name == TAG_RTEPT && path == RTE_PATH -> point()
@@ -140,20 +148,48 @@ class GpxTrimmer(
             }
             writeStart(capture())
             path += name
-            if (name == TAG_TRK && path == TRK_PATH && newName != null) {
-                nameDue = true
+            if (name == TAG_TRK && path == TRK_PATH) {
+                nameDue = newName != null
+                typeDue = newType != null
                 trackNamespace = parser.namespace.ifEmpty { null }
             }
         }
 
-        /** [newName] in place of [replaced], or new under the track's namespace; blank writes nothing. */
+        private fun insertName() {
+            nameDue = false
+            insert { writeName() }
+        }
+
+        private fun insertType() {
+            typeDue = false
+            insert { writeType() }
+        }
+
+        /** Indented as the child or end tag it goes before. */
+        private inline fun insert(write: () -> Unit) {
+            val indent = whitespace.toString()
+            flushWhitespace()
+            write()
+            whitespace.append(indent)
+        }
+
         private fun writeName(replaced: StartTag? = null) {
-            val value = newName?.trim()?.xmlSafe()
+            writeLabel(TAG_NAME, newName, replaced)
             newName = null
-            if (value.isNullOrEmpty()) return
+        }
+
+        private fun writeType(replaced: StartTag? = null) {
+            writeLabel(TAG_TYPE, newType, replaced)
+            newType = null
+        }
+
+        /** [value] in place of [replaced], or new under the track's namespace; blank writes nothing. */
+        private fun writeLabel(tag: String, value: String?, replaced: StartTag?) {
+            val text = value?.trim()?.xmlSafe()
+            if (text.isNullOrEmpty()) return
             val namespace = replaced?.namespace ?: trackNamespace
-            if (replaced != null) writeStart(replaced) else xml.startTag(namespace, TAG_NAME)
-            xml.text(value).endTag(namespace, TAG_NAME)
+            if (replaced != null) writeStart(replaced) else xml.startTag(namespace, tag)
+            xml.text(text).endTag(namespace, tag)
         }
 
         private fun point(): Boolean {
@@ -176,9 +212,9 @@ class GpxTrimmer(
                 skipDepth--
                 return
             }
-            if (nameDue && path == TRK_PATH) {
-                nameDue = false
-                writeName(null)
+            if (path == TRK_PATH) {
+                if (nameDue) insertName()
+                if (typeDue) insertType()
             }
             path.removeAt(path.lastIndex)
             if (parser.name == TAG_TRKSEG && pendingSegment != null) {
@@ -245,6 +281,8 @@ class GpxTrimmer(
         const val TAG_WPT = "wpt"
         const val TAG_BOUNDS = "bounds"
         const val TAG_NAME = "name"
+        const val TAG_TYPE = "type"
+        const val TAG_EXTENSIONS = "extensions"
         const val ATTR_LAT = "lat"
         const val ATTR_LON = "lon"
 

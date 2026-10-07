@@ -40,6 +40,7 @@ import java.io.File
 import java.io.InputStream
 import java.io.FileNotFoundException
 import java.io.IOException
+import java.text.Collator
 import java.time.Instant
 import java.time.ZoneId
 import java.util.Locale
@@ -79,6 +80,17 @@ class TrackRepository(
         combine(dao.observeByRecent(), pendingDelete) { all, pending -> all.filter { it.id !in pending } }
             .shareIn(scope, SharingStarted.WhileSubscribed(SHARE_GRACE_MILLIS), replay = 1)
 
+    /** Every category in use, alphabetical, to suggest; one spelling of each. */
+    val categories: Flow<List<String>> = tracks.map { all ->
+        val collator = Collator.getInstance()
+        all.mapNotNull { it.category }.distinctBy { it.lowercase(Locale.ROOT) }.sortedWith(collator)
+    }
+
+    /** The latest recording's, which the next one is offered. */
+    val lastRecordingCategory: Flow<String?> = tracks.map { all ->
+        all.filter(TrackFiles::isRecording).maxByOrNull(TrackEntity::id)?.category
+    }
+
     /**
      * Copies [uri] into app-private storage and indexes it. Returns the row id.
      *
@@ -103,7 +115,8 @@ class TrackRepository(
                     }
                 }
                 val track = parse(destination.inputStream(), displayName)
-                val id = dao.upsert(newEntity(destination, displayName, track, TrackAnalyzer.analyze(track)))
+                val category = categoryAsSpelt(track.type)
+                val id = dao.upsert(newEntity(destination, displayName, track, TrackAnalyzer.analyze(track), category))
                 cache.write(id, destination, track)
                 id
             } catch (e: Throwable) {
@@ -141,6 +154,7 @@ class TrackRepository(
         withContext(io) {
             runCatching {
                 val profile = analyzed ?: TrackAnalyzer.analyze(track)
+                val typed = track.copy(type = categoryAsSpelt(track.type))
                 val startedAt = profile.stats.startedAt ?: Instant.now()
                 // Numbered if taken: local time repeats an hour when the clocks go back.
                 val file = uniqueFile(
@@ -151,9 +165,9 @@ class TrackRepository(
                 )
 
                 // Unnamed unless given one: it's titled by when it started.
-                writeAtomically(file) { writer.write(track, it) }
+                writeAtomically(file) { writer.write(typed, it) }
 
-                dao.upsert(newEntity(file, file.name, track, profile)).also { cache.write(it, file, track) }
+                dao.upsert(newEntity(file, file.name, typed, profile, typed.type)).also { cache.write(it, file, typed) }
             }.recoverFailure()
         }
 
@@ -236,20 +250,30 @@ class TrackRepository(
     suspend fun touch(id: Long) = dao.touch(id, System.currentTimeMillis())
 
     /**
-     * Renames a track and its file; a blank [name] clears it, and the file goes back to the
-     * name it arrived as.
+     * Renames a track and its file, and sets its category; null leaves either as it is. A
+     * blank [name] clears it, and the file goes back to the name it arrived as; a blank
+     * [category] makes it uncategorised.
      */
-    suspend fun rename(id: Long, name: String): Result<Unit> = withContext(io) {
+    suspend fun rename(id: Long, name: String?, category: String? = null): Result<Unit> = withContext(io) {
         runCatching {
-            val trimmed = name.asTrackName()
+            if (name == null && category == null) return@runCatching
+            val newName = name?.asTrackName()
+            val newCategory = categoryAsSpelt(category, except = id)
             val entity = entity(id)
             // Written into the file since export is a byte copy.
             val file = fileOf(entity)
-            writeAtomically(file) { output -> file.inputStream().use { trimmer.trim(it, output, name = trimmed.orEmpty()) } }
-            // The cache holds no name, so the rewrite leaves it current.
+            writeAtomically(file) { output ->
+                file.inputStream().use {
+                    trimmer.trim(it, output, name = name?.let { newName.orEmpty() }, type = category?.let { newCategory.orEmpty() })
+                }
+            }
+            // The cache holds neither, so the rewrite leaves it current.
             cache.restamp(id, file)
-            dao.setTrackName(id, trimmed)
-            moveTo(id, file, trimmed ?: entity.displayName)
+            if (category != null) dao.setCategory(id, newCategory)
+            if (name != null) {
+                dao.setTrackName(id, newName)
+                moveTo(id, file, newName ?: entity.displayName)
+            }
         }.recoverFailure()
     }
 
@@ -271,7 +295,15 @@ class TrackRepository(
 
     suspend fun setVisible(id: Long, visible: Boolean) = dao.setVisible(id, visible)
 
-    suspend fun setAllVisible(visible: Boolean) = dao.setAllVisible(visible)
+    suspend fun setVisible(ids: Collection<Long>, visible: Boolean) = dao.setVisible(ids.toList(), visible)
+
+    suspend fun showOnly(ids: Collection<Long>) = dao.showOnly(ids.toList())
+
+    /** Each track's visibility as in [visible], as an undo puts it back. */
+    suspend fun restoreVisibility(visible: Map<Long, Boolean>) {
+        val (shown, hidden) = visible.entries.partition { it.value }
+        dao.setVisibility(shown.map { it.key }, hidden.map { it.key })
+    }
 
     suspend fun setColor(id: Long, colorIndex: Int) = dao.setColor(id, colorIndex.mod(TrackEntity.PALETTE_SIZE))
 
@@ -395,10 +427,16 @@ class TrackRepository(
         return track
     }
 
+    /** [category] trimmed, in the spelling another track already gives it: categories ignore case. */
+    private suspend fun categoryAsSpelt(category: String?, except: Long = 0): String? {
+        val trimmed = category?.asTrackName() ?: return null
+        return dao.categories(except).firstOrNull { it.equals(trimmed, ignoreCase = true) } ?: trimmed
+    }
+
     private suspend fun entity(id: Long): TrackEntity =
         dao.byId(id) ?: throw TrackLoadException.Unreadable("No track with id $id")
 
-    private suspend fun newEntity(file: File, displayName: String, track: Track, profile: TrackProfile) = TrackEntity(
+    private suspend fun newEntity(file: File, displayName: String, track: Track, profile: TrackProfile, category: String?) = TrackEntity(
         colorIndex = leastUsedSlot(dao.colorUsage(), TrackEntity.PALETTE_SIZE),
         location = TrackFiles.location(appContext, file),
         displayName = displayName,
@@ -406,6 +444,7 @@ class TrackRepository(
         startedAtEpochMillis = profile.stats.startedAt?.toEpochMilli(),
         lastOpenedAtEpochMillis = System.currentTimeMillis(),
         summary = summaryOf(track, profile),
+        category = category,
     )
 
     private fun summaryUpdate(id: Long, track: Track, profile: TrackProfile) =

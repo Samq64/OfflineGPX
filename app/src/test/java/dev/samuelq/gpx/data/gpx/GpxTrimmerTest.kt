@@ -108,6 +108,14 @@ class GpxTrimmerTest {
 
     private fun nameOf(xml: String): String? = parser.parse(xml.byteInputStream()).name
 
+    private fun retype(xml: String, type: String, name: String? = null): String {
+        val out = ByteArrayOutputStream()
+        trimmer.trim(xml.byteInputStream(), out, name = name, type = type)
+        return out.toString(Charsets.UTF_8)
+    }
+
+    private fun typeOf(xml: String): String? = parser.parse(xml.byteInputStream()).type
+
     private fun gpx(trackHeader: String) =
         """
         <?xml version="1.0" encoding="UTF-8"?>
@@ -118,6 +126,46 @@ class GpxTrimmerTest {
           </trk>
         </gpx>
         """.trimIndent()
+
+    @Test
+    fun `replaces a track's type`() {
+        val out = retype(gpx("<name>Ride</name><type>running</type>"), "Commute")
+        assertEquals("Commute", typeOf(out))
+        assertFalse("running" in out, out)
+        assertEquals("Ride", nameOf(out))
+    }
+
+    @Test
+    fun `adds a type where the schema orders it, before extensions and segments`() {
+        val out = retype(source, "Commute")
+        assertEquals("Commute", typeOf(out))
+        assertTrue(out.indexOf("<type>") in out.indexOf("a comment")..out.indexOf("<trkseg>"), out)
+
+        val beforeExtensions = retype(gpx("<name>Ride</name><extensions/>"), "Commute")
+        assertTrue(beforeExtensions.indexOf("<type>") < beforeExtensions.indexOf("<extensions"), beforeExtensions)
+        assertNull(Regex("\\n\\s*\\n").find(retype(gpx(""), "Commute")))
+    }
+
+    @Test
+    fun `a name and type go in together, in order`() {
+        val out = retype(gpx(""), "Commute", name = "Ride")
+        assertEquals("Ride", nameOf(out))
+        assertEquals("Commute", typeOf(out))
+        assertTrue(out.indexOf("<name>") < out.indexOf("<type>"), out)
+    }
+
+    @Test
+    fun `a blank type removes the track's, and a track with no children still gets one`() {
+        assertNull(typeOf(retype(gpx("<type>running</type>"), " ")))
+        assertEquals("Commute", typeOf(retype("<gpx><trk></trk></gpx>", "Commute")))
+    }
+
+    @Test
+    fun `types only the first track`() {
+        val out = retype(source.replace("</trk>", "</trk><trk><type>Lap</type><trkseg/></trk>"), "Commute")
+        assertEquals("Commute", typeOf(out))
+        assertTrue("<type>Lap</type>" in out, out)
+    }
 
     @Test
     fun `replaces a track's name, leaving the metadata's`() {

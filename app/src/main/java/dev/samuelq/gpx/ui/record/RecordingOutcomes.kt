@@ -7,6 +7,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import dev.samuelq.gpx.GpxApplication
 import dev.samuelq.gpx.R
 import dev.samuelq.gpx.data.record.RecordingController
 import dev.samuelq.gpx.data.record.RecordingEvent
@@ -30,6 +31,7 @@ fun RecordingOutcomes(
     // Not context.getString: a long-lived collector would keep the old locale.
     val resources = LocalResources.current
     val context = LocalContext.current
+    val container = (context.applicationContext as GpxApplication).container
     // By the name it would have been saved as, if any.
     fun discardedNamed(name: String) =
         if (name.isBlank()) resources.getString(R.string.record_discarded)
@@ -41,7 +43,7 @@ fun RecordingOutcomes(
                 is RecordingEvent.Saved -> onSaved(event.id)
                 is RecordingEvent.Discarded -> event.recording?.let { recording ->
                     offerUndo(
-                        discardedNamed(recording.name),
+                        discardedNamed(recording.label.name),
                         { recovery.restoreDiscarded(recording) },
                         { recovery.forgetDiscarded(recording) },
                     )
@@ -60,8 +62,8 @@ fun RecordingOutcomes(
                 is RecoveryEvent.Saved -> onSaved(event.id)
                 RecoveryEvent.Failed -> say(resources.getString(R.string.record_save_failed), null)
                 is RecoveryEvent.AbandonedDiscarded -> offerUndo(
-                    discardedNamed(event.name),
-                    { recovery.restoreAbandoned(event.recording, event.name) },
+                    discardedNamed(event.label.name),
+                    { recovery.restoreAbandoned(event.recording, event.label) },
                     { recovery.forgetAbandoned(event.recording) },
                 )
             }
@@ -72,6 +74,7 @@ fun RecordingOutcomes(
     abandoned?.let { recording ->
         RecoveredRecordingDialog(
             recording = recording,
+            categories = rememberCategoryChoice(container.trackRepository),
             onSave = recovery::saveAbandoned,
             onDiscard = recovery::discardAbandoned,
         )

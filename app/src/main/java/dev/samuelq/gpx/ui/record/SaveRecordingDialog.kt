@@ -31,20 +31,35 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.samuelq.gpx.R
 import dev.samuelq.gpx.data.record.AbandonedRecording
 import dev.samuelq.gpx.data.record.RecordingRecovery
 import dev.samuelq.gpx.data.record.RecordingState
+import dev.samuelq.gpx.data.track.TrackLabel
+import dev.samuelq.gpx.data.track.TrackRepository
 import dev.samuelq.gpx.ui.format.LocalFormatters
+import dev.samuelq.gpx.ui.track.CategoryField
 import dev.samuelq.gpx.ui.track.StatRow
+
+/** The categories in use, and the one a new recording gets unless changed: the last one's. */
+class CategoryChoice(val all: List<String>, val default: String)
+
+@Composable
+fun rememberCategoryChoice(tracks: TrackRepository): CategoryChoice {
+    val all by tracks.categories.collectAsStateWithLifecycle(emptyList())
+    val last by tracks.lastRecordingCategory.collectAsStateWithLifecycle(null)
+    return remember(all, last) { CategoryChoice(all, last.orEmpty()) }
+}
 
 /** Stop's question. Dismissing it keeps recording. */
 @Composable
 fun StopRecordingDialog(
     state: RecordingState.Active,
-    onSave: (name: String) -> Unit,
-    /** The name in the field, for an undo to save it as. */
-    onDiscard: (name: String) -> Unit,
+    categories: CategoryChoice,
+    onSave: (TrackLabel) -> Unit,
+    /** What's in the fields, for an undo to save it as. */
+    onDiscard: (TrackLabel) -> Unit,
     onDismiss: () -> Unit,
 ) {
     SaveRecordingDialog(
@@ -52,6 +67,7 @@ fun StopRecordingDialog(
         // The distance says why Save is off, so no separate "too short" message.
         summary = { StatRow(recordingStats(state.distanceMeters, state.totalSeconds)) },
         canSave = RecordingRecovery.isSaveable(state.distanceMeters),
+        categories = categories,
         onSave = onSave,
         onDiscard = onDiscard,
         onDismiss = onDismiss,
@@ -62,8 +78,9 @@ fun StopRecordingDialog(
 @Composable
 fun RecoveredRecordingDialog(
     recording: AbandonedRecording,
-    onSave: (name: String) -> Unit,
-    onDiscard: (name: String) -> Unit,
+    categories: CategoryChoice,
+    onSave: (TrackLabel) -> Unit,
+    onDiscard: (TrackLabel) -> Unit,
 ) {
     val stats = recording.profile.stats
     // Keyed, so the next recording on offer doesn't inherit this one's edits.
@@ -90,6 +107,7 @@ fun RecoveredRecordingDialog(
                 }
             },
             canSave = true,
+            categories = categories,
             onSave = onSave,
             onDiscard = onDiscard,
             onDismiss = null,
@@ -107,12 +125,16 @@ private fun SaveRecordingDialog(
     title: String,
     summary: @Composable () -> Unit,
     canSave: Boolean,
-    onSave: (name: String) -> Unit,
-    onDiscard: (name: String) -> Unit,
+    categories: CategoryChoice,
+    onSave: (TrackLabel) -> Unit,
+    onDiscard: (TrackLabel) -> Unit,
     onDismiss: (() -> Unit)?,
 ) {
     // Optional, so not auto-focused: a keyboard would hide the map.
     var name by remember { mutableStateOf("") }
+    // Typed, else the default, which may arrive after the dialog opens.
+    var category by remember { mutableStateOf<String?>(null) }
+    val label = { TrackLabel(name, category ?: categories.default) }
 
     BasicAlertDialog(
         onDismissRequest = { onDismiss?.invoke() },
@@ -141,11 +163,17 @@ private fun SaveRecordingDialog(
                         label = { Text(stringResource(R.string.library_rename_label)) },
                         modifier = Modifier.fillMaxWidth(),
                     )
+                    Spacer(Modifier.height(8.dp))
+                    CategoryField(
+                        initial = categories.default,
+                        onChange = { category = it },
+                        suggestions = categories.all,
+                    )
                 }
                 Spacer(Modifier.height(12.dp))
                 // Less inset than the content: the buttons' own padding lines their text up with it.
                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
-                    TextButton(onClick = { onDiscard(name) }) {
+                    TextButton(onClick = { onDiscard(label()) }) {
                         Text(
                             text = stringResource(R.string.record_discard),
                             color = MaterialTheme.colorScheme.error,
@@ -158,7 +186,7 @@ private fun SaveRecordingDialog(
                     // The distance says why to a sighted user; a screen reader hears only "disabled".
                     val tooShort = stringResource(R.string.record_too_short)
                     TextButton(
-                        onClick = { onSave(name) },
+                        onClick = { onSave(label()) },
                         enabled = canSave,
                         modifier = Modifier.semantics { if (!canSave) stateDescription = tooShort },
                     ) {

@@ -35,6 +35,9 @@ data class TrackEntity(
 
     /** Its columns come last, as version 2 added them; the start time predates it. */
     @Embedded val summary: TrackSummary,
+
+    /** Null is uncategorised; version 3 added it. */
+    val category: String? = null,
 ) {
     /** Whether the summary has been read off the file; rows from before it was kept start without. */
     val summarised: Boolean get() = summary.pointCount >= 0

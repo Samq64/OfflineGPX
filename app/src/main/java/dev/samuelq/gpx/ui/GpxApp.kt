@@ -19,6 +19,7 @@ import androidx.navigation.toRoute
 import dev.samuelq.gpx.GpxApplication
 import dev.samuelq.gpx.data.record.RecordingController
 import dev.samuelq.gpx.data.record.RecordingState
+import dev.samuelq.gpx.data.track.TrackRepository
 import dev.samuelq.gpx.ui.format.rememberSystemFormatters
 import dev.samuelq.gpx.ui.format.LocalFormatters
 import dev.samuelq.gpx.ui.library.LibraryScreen
@@ -27,6 +28,7 @@ import dev.samuelq.gpx.ui.nav.LibraryRoute
 import dev.samuelq.gpx.ui.nav.MapRoute
 import dev.samuelq.gpx.ui.nav.SettingsRoute
 import dev.samuelq.gpx.ui.record.StopRecordingDialog
+import dev.samuelq.gpx.ui.record.rememberCategoryChoice
 import dev.samuelq.gpx.ui.settings.SettingsScreen
 import dev.samuelq.gpx.ui.track.TrackRef
 
@@ -69,7 +71,7 @@ fun GpxApp(
                 MapScreen(
                     pendingFocus = pending?.let(FocusRequest::decode),
                     onFocusConsumed = { entry.savedStateHandle[FocusRequest.KEY] = null },
-                    onOpenList = { navController.open(LibraryRoute) },
+                    onOpenList = { area -> navController.open(LibraryRoute(area)) },
                     onOpenSettings = { navController.open(SettingsRoute()) },
                     onImportMap = { navController.open(SettingsRoute(importMap = true)) },
                     recorder = container.recordingController,
@@ -93,19 +95,20 @@ fun GpxApp(
         }
 
         // Here, not on the map, so the notification's Stop is answered over any screen.
-        StopRecordingPrompt(container.recordingController)
+        StopRecordingPrompt(container.recordingController, container.trackRepository)
     }
 }
 
 /** Its own scope: the recording's state changes every second and would redo the whole app. */
 @Composable
-private fun StopRecordingPrompt(recorder: RecordingController) {
+private fun StopRecordingPrompt(recorder: RecordingController, tracks: TrackRepository) {
     val stopRequested by recorder.stopRequested.collectAsStateWithLifecycle()
     if (!stopRequested) return
     val recording by recorder.state.collectAsStateWithLifecycle()
     (recording as? RecordingState.Active)?.let { active ->
         StopRecordingDialog(
             state = active,
+            categories = rememberCategoryChoice(tracks),
             onSave = recorder::stop,
             onDiscard = recorder::discard,
             onDismiss = recorder::cancelStop,

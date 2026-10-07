@@ -57,6 +57,7 @@ class GpxWriter(private val newSerializer: () -> XmlSerializer = DEFAULT_SERIALI
 
         xml.startTag(NAMESPACE, "trk")
         track.name?.takeIf(String::isNotBlank)?.let { xml.textTag("name", it) }
+        track.type?.takeIf(String::isNotBlank)?.let { xml.textTag("type", it) }
 
         for (segment in 0 until points.segmentCount) {
             xml.startTag(NAMESPACE, "trkseg")

@@ -1,11 +1,13 @@
 package dev.samuelq.gpx.ui.library
 
+import android.content.res.Resources
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.selection.triStateToggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,20 +20,21 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -85,6 +88,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -119,15 +123,30 @@ fun LibraryScreen(
     onBack: () -> Unit,
     viewModel: LibraryViewModel = viewModel(factory = LibraryViewModel.Factory),
 ) {
-    val loaded by viewModel.tracks.collectAsStateWithLifecycle()
-    val sizes by viewModel.sizes.collectAsStateWithLifecycle()
-    val tracks = loaded.orEmpty()
-    val selection by viewModel.selection.collectAsStateWithLifecycle()
     val query by viewModel.query.collectAsStateWithLifecycle()
     val order by viewModel.order.collectAsStateWithLifecycle()
+    val loaded by viewModel.listing.collectAsStateWithLifecycle()
+    val sizes by viewModel.sizes.collectAsStateWithLifecycle()
+    val tracks = loaded?.tracks.orEmpty()
+    val sections = remember(tracks) { tracks.sections() }
+    // Not for a library no one has sorted yet.
+    val headed = sections.any { it.category != null }
+    // Where each track's row is, counting the headers before it.
+    val rowIndex = remember(sections, headed) {
+        buildMap {
+            var index = 0
+            sections.forEach { section ->
+                if (headed) index++
+                section.tracks.forEach { put(it.id, index++) }
+            }
+        }
+    }
+    val inArea by viewModel.inArea.collectAsStateWithLifecycle()
+    val shownOnly by viewModel.shownOnly.collectAsStateWithLifecycle()
+    val filtered = query.isNotBlank() || inArea || shownOnly
+    val selection by viewModel.selection.collectAsStateWithLifecycle()
     val snackbars = rememberSnackbars()
     val snackbarHostState = snackbars.host
-    var menuOpen by remember { mutableStateOf(false) }
     // Separate from a blank query: an open field starts empty.
     var searching by rememberSaveable { mutableStateOf(false) }
 
@@ -153,9 +172,9 @@ fun LibraryScreen(
     // A track just changed or brought back, scrolled to once its row is in the list.
     var reveal by remember { mutableStateOf<Long?>(null) }
     val listState = rememberLazyListState()
-    LaunchedEffect(reveal, tracks) {
+    LaunchedEffect(reveal, rowIndex) {
         val id = reveal ?: return@LaunchedEffect
-        val index = tracks.indexOfFirst { it.id == id }.takeIf { it >= 0 } ?: return@LaunchedEffect
+        val index = rowIndex[id] ?: return@LaunchedEffect
         // Laid out isn't seen: the padding puts rows under the bar.
         val info = listState.layoutInfo
         val shown = info.visibleItemsInfo.firstOrNull { it.key == id }
@@ -210,6 +229,13 @@ fun LibraryScreen(
                 )
                 LibraryEvent.RenameFailed -> say(resources.getString(R.string.library_rename_failed))
                 LibraryEvent.DuplicateFailed -> say(resources.getString(R.string.library_duplicate_failed))
+                is LibraryEvent.VisibilityChanged -> snackbars.offerUndo(
+                    context = context,
+                    message = visibilityMessage(resources, event),
+                    undoLabel = resources.getString(R.string.action_undo),
+                    onUndo = { viewModel.restoreVisibility(event.before) },
+                    onCommit = {},
+                )
             }
         }
     }
@@ -220,13 +246,16 @@ fun LibraryScreen(
         snackbarHost = { SnackbarHost(snackbarHostState, Modifier.readFirst()) },
         topBar = {
             if (selection.isNotEmpty()) {
+                val chosen = tracks.filter { it.id in selection }
                 SelectionBar(
                     count = selection.size,
                     total = tracks.size,
                     onClose = viewModel::clearSelection,
                     onSelectAll = { viewModel.selectAll(tracks.map(TrackEntity::id)) },
+                    onShow = { viewModel.changeVisibility(selection, BulkVisibility.SHOW) },
+                    onHide = { viewModel.changeVisibility(selection, BulkVisibility.HIDE) },
+                    onShowOnly = { viewModel.changeVisibility(selection, BulkVisibility.SHOW_ONLY) },
                     onExport = {
-                        val chosen = tracks.filter { it.id in selection }
                         viewModel.beginExportAll(
                             chosen.associate { it.id to exportFileName(it.trackName, it.displayName) }
                         )
@@ -255,28 +284,14 @@ fun LibraryScreen(
                         }
                     },
                     actions = {
-                        // Shown while loading so icons don't pop in during the slide. Import is in
-                        // the menu then: four icons wrapped the title on narrow screens.
-                        if (loaded == null || tracks.isNotEmpty()) {
+                        // Shown while loading so icons don't pop in during the slide.
+                        if (loaded.let { it == null || it.total > 0 }) {
                             IconButton(onClick = { searching = true }) {
                                 Icon(Icons.Default.Search, stringResource(R.string.library_search))
                             }
                             SortMenu(order, onSort = viewModel::setSort, onDescending = viewModel::setSortDescending)
-                            IconButton(onClick = { menuOpen = true }) {
-                                Icon(Icons.Default.MoreVert, stringResource(R.string.library_more))
-                            }
-                            DropdownMenu(menuOpen, onDismissRequest = { menuOpen = false }) {
-                                @Composable
-                                fun Item(label: Int, onClick: () -> Unit) = DropdownMenuItem(
-                                    text = { Text(stringResource(label)) },
-                                    onClick = {
-                                        menuOpen = false
-                                        onClick()
-                                    },
-                                )
-                                Item(R.string.library_import) { picker.launch(arrayOf("*/*")) }
-                                Item(R.string.library_show_all) { viewModel.setAllVisible(true) }
-                                Item(R.string.library_hide_all) { viewModel.setAllVisible(false) }
+                            IconButton(onClick = { picker.launch(arrayOf("*/*")) }) {
+                                Icon(Icons.Default.Add, stringResource(R.string.library_import))
                             }
                         }
                         // Empty, the page itself offers the import.
@@ -285,73 +300,111 @@ fun LibraryScreen(
             }
         },
     ) { padding ->
+        val listing = loaded
         when {
             // Blank rather than flashing the empty state.
-            loaded == null -> Unit
+            listing == null -> Unit
 
-            tracks.isEmpty() && query.isNotBlank() -> NoMatches(
-                query = query,
-                modifier = Modifier.fillMaxSize().padding(padding),
-            )
-
-            tracks.isEmpty() -> EmptyState(
+            listing.total == 0 -> EmptyState(
                 onImport = { picker.launch(arrayOf("*/*")) },
                 modifier = Modifier.fillMaxSize().padding(padding),
             )
 
-            else -> {
-            // Filtering is silent otherwise.
-            if (query.isNotBlank()) {
-                val found = pluralStringResource(R.plurals.library_search_found, tracks.size, tracks.size)
-                Box(Modifier.semantics { liveRegion = LiveRegionMode.Polite; contentDescription = found })
-            }
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(
+            else -> Column(Modifier.fillMaxSize().padding(top = padding.calculateTopPadding())) {
+                val sides = Modifier.padding(
                     start = padding.calculateStartPadding(layoutDirection),
-                    top = padding.calculateTopPadding(),
                     end = padding.calculateEndPadding(layoutDirection),
-                    bottom = padding.calculateBottomPadding() + 24.dp,
-                ),
-            ) {
-                items(tracks, key = TrackEntity::id) { track ->
-                    TrackRow(
-                        modifier = Modifier.animateItem(),
-                        track = track,
-                        sizeBytes = sizes[track.id],
-                        selected = track.id in selection,
-                        selectionActive = selection.isNotEmpty(),
-                        onOpen = {
-                            // Otherwise the switch would say off for a line on the map.
-                            if (!track.visible) viewModel.setVisible(track.id, true)
-                            onOpenTrack(track.id)
-                        },
-                        onToggleSelected = { viewModel.toggleSelected(track.id) },
-                        onToggleVisible = { viewModel.setVisible(track.id, !track.visible) },
-                        onColor = { viewModel.setColor(track.id, it) },
-                        onShare = {
-                            context.startActivity(
-                                shareTrackIntent(context, track.location, track.trackName, track.displayName)
-                            )
-                        },
-                        onRename = { renaming = track },
-                        onDuplicate = { viewModel.duplicate(track.id) },
-                        onDelete = { delete(setOf(track.id)) },
-                    )
+                )
+                Filters(
+                    inArea = inArea,
+                    hasArea = viewModel.area != null,
+                    shownOnly = shownOnly,
+                    onInArea = viewModel::setInArea,
+                    onShownOnly = viewModel::setShownOnly,
+                    modifier = sides,
+                )
+                // Filtering is silent otherwise.
+                if (filtered && tracks.isNotEmpty()) {
+                    val found = pluralStringResource(R.plurals.library_search_found, tracks.size, tracks.size)
+                    Box(Modifier.semantics { liveRegion = LiveRegionMode.Polite; contentDescription = found })
                 }
-            }
+                if (tracks.isEmpty()) {
+                    NoMatches(
+                        query = query,
+                        modifier = Modifier.fillMaxSize().then(sides).padding(bottom = padding.calculateBottomPadding()),
+                    )
+                } else LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(
+                        start = padding.calculateStartPadding(layoutDirection),
+                        end = padding.calculateEndPadding(layoutDirection),
+                        bottom = padding.calculateBottomPadding() + 24.dp,
+                    ),
+                ) {
+                    sections.forEachIndexed { sectionIndex, section ->
+                        if (headed) item(key = "category:${section.category.orEmpty()}", contentType = "header") {
+                            val ids = section.tracks.map(TrackEntity::id)
+                            val picked = ids.count { it in selection }
+                            CategoryHeader(
+                                title = section.category ?: stringResource(R.string.library_uncategorised),
+                                // The pills end the first group's top already.
+                                divider = sectionIndex > 0,
+                                selected = when {
+                                    selection.isEmpty() -> null
+                                    picked == ids.size -> ToggleableState.On
+                                    picked == 0 -> ToggleableState.Off
+                                    else -> ToggleableState.Indeterminate
+                                },
+                                onToggle = { viewModel.setSelected(ids, picked < ids.size) },
+                                modifier = Modifier.animateItem(),
+                            )
+                        }
+                        itemsIndexed(section.tracks, key = { _, track -> track.id }, contentType = { _, _ -> "track" }) { index, track ->
+                            TrackRow(
+                                modifier = Modifier.animateItem(),
+                                // Under the header's checkbox, as what it selects.
+                                indent = if (headed && selection.isNotEmpty()) CategoryIndent else 0.dp,
+                                // The next header's line ends the group.
+                                divider = index < section.tracks.lastIndex,
+                                track = track,
+                                sizeBytes = sizes[track.id],
+                                selected = track.id in selection,
+                                selectionActive = selection.isNotEmpty(),
+                                onOpen = {
+                                    // Otherwise the switch would say off for a line on the map.
+                                    if (!track.visible) viewModel.setVisible(track.id, true)
+                                    onOpenTrack(track.id)
+                                },
+                                onToggleSelected = { viewModel.toggleSelected(track.id) },
+                                onToggleVisible = { viewModel.setVisible(track.id, !track.visible) },
+                                onColor = { viewModel.setColor(track.id, it) },
+                                onShare = {
+                                    context.startActivity(
+                                        shareTrackIntent(context, track.location, track.trackName, track.displayName)
+                                    )
+                                },
+                                onRename = { renaming = track },
+                                onDuplicate = { viewModel.duplicate(track.id) },
+                                onDelete = { delete(setOf(track.id)) },
+                            )
+                        }
+                    }
+                }
             }
         }
     }
 
     renaming?.let { track ->
+        val categories by viewModel.categories.collectAsStateWithLifecycle()
         TrackNameDialog(
             initialName = track.editableName,
+            initialCategory = track.category.orEmpty(),
+            categories = categories,
             onDismiss = { renaming = null },
-            onConfirm = { name ->
-                viewModel.rename(track.id, name)
-                // A new name can move it, sorted by name.
+            onConfirm = { name, category ->
+                viewModel.rename(track.id, name, category)
+                // A new name or category can move it.
                 reveal = track.id
                 renaming = null
             },
@@ -367,6 +420,9 @@ private fun SelectionBar(
     total: Int,
     onClose: () -> Unit,
     onSelectAll: () -> Unit,
+    onShow: () -> Unit,
+    onHide: () -> Unit,
+    onShowOnly: () -> Unit,
     onExport: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -396,20 +452,127 @@ private fun SelectionBar(
                 onClick = { if (allSelected) onClose() else onSelectAll() },
                 modifier = Modifier.semantics { contentDescription = selectAll },
             )
-            IconButton(onClick = onExport) {
-                Icon(Icons.Default.Share, stringResource(R.string.library_export_all))
-            }
-            IconButton(onClick = onDelete) {
-                Icon(Icons.Default.Delete, stringResource(R.string.library_delete_selected))
-            }
+            SelectionMenu(count, onShow, onHide, onShowOnly, onExport, onDelete)
         },
     )
+}
+
+/** Visibility first, as what selecting a category is mostly for; each choice says what it does. */
+@Composable
+private fun SelectionMenu(
+    count: Int,
+    onShow: () -> Unit,
+    onHide: () -> Unit,
+    onShowOnly: () -> Unit,
+    onExport: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { open = true }) {
+            Icon(Icons.Default.MoreVert, stringResource(R.string.library_more))
+        }
+        DropdownMenu(open, onDismissRequest = { open = false }) {
+            @Composable
+            fun Item(label: String, action: () -> Unit, error: Boolean = false) = DropdownMenuItem(
+                text = {
+                    Text(
+                        label,
+                        color = if (error) MaterialTheme.colorScheme.error else Color.Unspecified,
+                    )
+                },
+                onClick = {
+                    open = false
+                    action()
+                },
+            )
+            Item(stringResource(R.string.library_show_selected), onShow)
+            Item(stringResource(R.string.library_hide_selected), onHide)
+            Item(pluralStringResource(R.plurals.library_show_only_selected, count), onShowOnly)
+            HorizontalDivider()
+            Item(stringResource(R.string.library_export), onExport)
+            Item(stringResource(R.string.library_delete), onDelete, error = true)
+        }
+    }
+}
+
+/** In this area stays put but off when the map showed nothing to filter to, as when tracks are too far apart. */
+@Composable
+private fun Filters(
+    inArea: Boolean,
+    hasArea: Boolean,
+    shownOnly: Boolean,
+    onInArea: (Boolean) -> Unit,
+    onShownOnly: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    @Composable
+    fun Filter(label: Int, on: Boolean, onChange: (Boolean) -> Unit, enabled: Boolean = true) = FilterChip(
+        selected = on,
+        onClick = { onChange(!on) },
+        enabled = enabled,
+        label = { Text(stringResource(label)) },
+        leadingIcon = if (on) {
+            { Icon(Icons.Default.Check, null, Modifier.size(FilterChipDefaults.IconSize)) }
+        } else null,
+    )
+
+    Row(modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Filter(R.string.library_filter_shown, shownOnly, onShownOnly)
+        Filter(R.string.library_filter_area, inArea && hasArea, onInArea, enabled = hasArea)
+    }
+}
+
+/** [selected] is null outside selection, where the header is only a label. */
+@Composable
+private fun CategoryHeader(
+    title: String,
+    /** Above it, ending the previous group. */
+    divider: Boolean,
+    selected: ToggleableState?,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier) {
+        if (divider) HorizontalDivider()
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(
+                    if (selected != null) {
+                        Modifier.triStateToggleable(state = selected, onClick = onToggle, role = Role.Checkbox)
+                    } else Modifier
+                )
+                .semantics { heading() }
+                // Nearer its rows than the group before.
+                .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (selected != null) {
+                // The rows' slot and gap, so they indent to the title; the row toggles, so the box doesn't.
+                Box(Modifier.width(CategoryIndent)) {
+                    Box(Modifier.width(LeadingSlot), contentAlignment = Alignment.Center) {
+                        TriStateCheckbox(state = selected, onClick = null)
+                    }
+                }
+            }
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun TrackRow(
     modifier: Modifier,
+    indent: Dp,
+    divider: Boolean,
     track: TrackEntity,
     sizeBytes: Long?,
     selected: Boolean,
@@ -457,15 +620,17 @@ private fun TrackRow(
         ).joinToString(", ")
     }
 
-    Column(modifier) {
+    // Under the divider too, so its inset doesn't notch a run of selected rows.
+    Column(
+        modifier.background(
+            if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface
+        )
+    ) {
         // A row, not ListItem: with three lines it pins the dot and the controls to the top
         // padding, out of line with each other and the text.
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(
-                    if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface
-                )
                 .combinedClickable(
                     onClickLabel = if (selectionActive) null else openLabel,
                     onLongClickLabel = if (selectionActive) null else selectLabel,
@@ -487,14 +652,17 @@ private fun TrackRow(
                         )
                     }
                 }
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(start = 16.dp + indent, end = 16.dp, top = 12.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (selectionActive) {
-                // The row toggles, so it's one stop that says what's selected.
-                Checkbox(checked = selected, onCheckedChange = null)
-            } else {
-                ColorDot(track.colorIndex, onColor)
+            // One width for both, so the title doesn't shift entering selection.
+            Box(Modifier.width(LeadingSlot), contentAlignment = Alignment.Center) {
+                if (selectionActive) {
+                    // The row toggles, so it's one stop that says what's selected.
+                    Checkbox(checked = selected, onCheckedChange = null)
+                } else {
+                    ColorDot(track.colorIndex, onColor)
+                }
             }
             Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {
@@ -528,7 +696,8 @@ private fun TrackRow(
                 TrackMenu(onRename, onShare, onHide = null, onDelete, trackTitle = title, onDuplicate = onDuplicate)
             }
         }
-        HorizontalDivider()
+        // Inset to the title: the same group, next item.
+        if (divider) HorizontalDivider(Modifier.padding(start = 16.dp + indent + LeadingSlot + 16.dp))
     }
 }
 
@@ -576,6 +745,17 @@ private val TrackSort.label: Int
         TrackSort.NAME -> R.string.library_sort_name
     }
 
+/** Named when it's one, as delete's is. */
+private fun visibilityMessage(resources: Resources, event: LibraryEvent.VisibilityChanged): String {
+    val (named, counted) = when (event.change) {
+        BulkVisibility.SHOW -> R.string.library_shown_named to R.plurals.library_shown
+        BulkVisibility.HIDE -> R.string.track_hidden to R.plurals.library_hidden
+        BulkVisibility.SHOW_ONLY -> R.string.library_shown_only_named to R.plurals.library_shown_only
+    }
+    return event.name?.let { resources.getString(named, it) }
+        ?: resources.getQuantityString(counted, event.count, event.count)
+}
+
 @Composable
 private fun EmptyState(onImport: () -> Unit, modifier: Modifier = Modifier) {
     Column(
@@ -597,11 +777,13 @@ private fun EmptyState(onImport: () -> Unit, modifier: Modifier = Modifier) {
     }
 }
 
+/** Names the search if there is one; else it's the filters that left nothing. */
 @Composable
 private fun NoMatches(query: String, modifier: Modifier = Modifier) {
     Box(modifier.padding(32.dp), contentAlignment = Alignment.Center) {
         Text(
-            text = stringResource(R.string.library_search_empty, query.trim()),
+            text = if (query.isNotBlank()) stringResource(R.string.library_search_empty, query.trim())
+            else stringResource(R.string.library_filter_empty),
             modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -659,6 +841,12 @@ private fun SearchBar(
         },
     )
 }
+
+/** A row's dot or checkbox. */
+private val LeadingSlot = 24.dp
+
+/** A header's checkbox and the gap after it, which its rows are indented by. */
+private val CategoryIndent = LeadingSlot + 16.dp
 
 /** The bars' own insets, plus the cutout, which they leave out and landscape puts beside them. */
 private val BarInsets: WindowInsets

@@ -24,6 +24,9 @@ object TrackFiles {
     /** Relative, since a device transfer may restore filesDir under another path. */
     fun location(context: Context, file: File): String = file.relativeTo(context.filesDir).path
 
+    /** Recorded by the app, not imported; a copy of one is too. */
+    fun isRecording(entity: TrackEntity): Boolean = entity.location.substringBefore('/') == RECORDINGS
+
     /** A recording's filename, from its local start. `Locale.ROOT` keeps ASCII digits so they sort. */
     internal val STAMP: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HHmmss", Locale.ROOT)
 
@@ -42,7 +45,7 @@ object TrackFiles {
      * filename does; the stamp only stands in for a row without a start.
      */
     fun recordedAt(entity: TrackEntity): String? {
-        if (entity.location.substringBefore('/') != RECORDINGS) return null
+        if (!isRecording(entity)) return null
         return entity.startedAtEpochMillis
             ?.let { localized(LocalDateTime.ofInstant(Instant.ofEpochMilli(it), ZoneId.systemDefault())) }
             ?: recordedAt(entity.displayName)

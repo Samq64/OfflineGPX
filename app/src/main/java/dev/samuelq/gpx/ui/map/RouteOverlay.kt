@@ -36,4 +36,10 @@ fun LoadedTrack.toOverlay(color: Color, bounds: GeoBounds? = null) = RouteOverla
 
 /** Camera position, kept so returning to the map doesn't re-fit. */
 @Immutable
-data class CameraSnapshot(val latitude: Double, val longitude: Double, val zoom: Double)
+data class CameraSnapshot(
+    val latitude: Double,
+    val longitude: Double,
+    val zoom: Double,
+    /** What's on screen clear of the sheet, panel and controls; null before the view is laid out. */
+    val area: GeoBounds? = null,
+)

@@ -29,6 +29,8 @@ data class Track(
     val points: TrackPoints,
     /** The `<trk><desc>`. */
     val description: String? = null,
+    /** The `<trk><type>`, which the app keeps as the category. */
+    val type: String? = null,
     /** Unordered. */
     val waypoints: List<Waypoint> = emptyList(),
 ) {

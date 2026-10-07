@@ -6,6 +6,7 @@ import androidx.annotation.StringRes
 import dev.samuelq.gpx.core.model.TrackPoint
 import dev.samuelq.gpx.core.model.TrackPoints
 import dev.samuelq.gpx.core.model.Waypoint
+import dev.samuelq.gpx.data.track.TrackLabel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -110,15 +111,18 @@ class RecordingController(context: Context, private val locationSource: Location
         send(RecordingService.ACTION_RELEASE)
     }
 
-    /** A blank [name] uses the default. */
-    fun stop(name: String) = answerStop(RecordingService.ACTION_STOP, name)
+    /** A blank name uses the default. */
+    fun stop(label: TrackLabel) = answerStop(RecordingService.ACTION_STOP, label)
 
-    /** [name] is what an undo saves it as. */
-    fun discard(name: String) = answerStop(RecordingService.ACTION_DISCARD, name)
+    /** [label] is what an undo saves it as. */
+    fun discard(label: TrackLabel) = answerStop(RecordingService.ACTION_DISCARD, label)
 
-    private fun answerStop(action: String, name: String) {
+    private fun answerStop(action: String, label: TrackLabel) {
         _stopRequested.value = false
-        send(action) { putExtra(RecordingService.EXTRA_NAME, name) }
+        send(action) {
+            putExtra(RecordingService.EXTRA_NAME, label.name)
+            putExtra(RecordingService.EXTRA_CATEGORY, label.category)
+        }
     }
 
     /** [name] may be blank. */

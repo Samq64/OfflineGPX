@@ -44,6 +44,18 @@ class GpxWriterTest {
     }
 
     @Test
+    fun `writes the type after the name, and it reads back`() {
+        val out = ByteArrayOutputStream()
+        writer.write(track.copy(type = "Commute"), out)
+        val xml = out.toString(Charsets.UTF_8)
+        assertTrue(xml.indexOf("<type>Commute</type>") in xml.indexOf("</name>")..xml.indexOf("<trkseg>"), xml)
+        assertEquals("Commute", parser.parse(xml.byteInputStream()).type)
+        assertFalse("<type>" in write(), "untyped")
+        val blank = ByteArrayOutputStream().also { writer.write(track.copy(type = " "), it) }
+        assertFalse("<type>" in blank.toString(Charsets.UTF_8), "blank")
+    }
+
+    @Test
     fun `drops characters XML can't hold, so the file reads back`() {
         val read = parser.parse(write().byteInputStream())
         assertEquals("Ride home", read.name)

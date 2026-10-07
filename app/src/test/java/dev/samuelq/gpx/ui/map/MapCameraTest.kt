@@ -48,6 +48,26 @@ class MapCameraTest {
     }
 
     @Test
+    fun `the uncovered area leaves out what the insets cover`() {
+        val position = MapPosition(10.0, 20.0, scale)
+        val whole = position.uncoveredArea(IntSize(512, 256), none)
+        assertEquals(20.0, (whole.westLongitude + whole.eastLongitude) / 2, 1e-9)
+        assertEquals(512 / mapSize * 360, whole.eastLongitude - whole.westLongitude, 1e-9)
+
+        // A sheet over the bottom half: the area ends at the camera's latitude.
+        val above = position.uncoveredArea(IntSize(512, 256), Insets(0, 0, 0, 128))
+        assertEquals(10.0, above.southLatitude, 1e-9)
+        assertEquals(whole.northLatitude, above.northLatitude, 1e-9)
+    }
+
+    @Test
+    fun `the uncovered area runs past 180 rather than wrapping`() {
+        val position = MapPosition(0.0, 179.99, scale)
+        val area = position.uncoveredArea(IntSize(4096, 256), none)
+        assertTrue(area.westLongitude < 180.0 && area.eastLongitude > 180.0, "$area")
+    }
+
+    @Test
     fun `usable space is what the insets leave, if any`() {
         val insets = Insets(10, 20, 30, 40)
         assertEquals(IntSize(60, 40), IntSize(100, 100).usable(insets))

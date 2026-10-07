@@ -89,6 +89,21 @@ internal fun MapPosition.visibleBox(size: IntSize): BoundingBox {
     )
 }
 
+/**
+ * What a [size] view shows with the camera at [this], less [insets]. Longitudes run past ±180
+ * when it spans the antimeridian, so west is always less than east.
+ */
+internal fun MapPosition.uncoveredArea(size: IntSize, insets: Insets): GeoBounds {
+    val mapSize = Tile.SIZE * scale
+    fun longitude(x: Double) = (x - 0.5) * 360.0
+    return GeoBounds(
+        southLatitude = MercatorProjection.toLatitude(y + (size.height / 2.0 - insets.bottom) / mapSize),
+        westLongitude = longitude(x + (insets.left - size.width / 2.0) / mapSize),
+        northLatitude = MercatorProjection.toLatitude(y + (insets.top - size.height / 2.0) / mapSize),
+        eastLongitude = longitude(x + (size.width / 2.0 - insets.right) / mapSize),
+    )
+}
+
 /** 5% of a track's span on each side, as VTM's total-span factor. */
 private const val TRACK_MARGIN_FACTOR = 1.1f
 

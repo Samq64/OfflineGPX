@@ -72,6 +72,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.samuelq.gpx.R
+import dev.samuelq.gpx.core.model.GeoBounds
 import dev.samuelq.gpx.data.track.editableName
 import dev.samuelq.gpx.data.track.title
 import dev.samuelq.gpx.core.analysis.TrackProfile
@@ -102,7 +103,8 @@ import kotlinx.coroutines.launch
 fun MapScreen(
     pendingFocus: TrackRef?,
     onFocusConsumed: () -> Unit,
-    onOpenList: () -> Unit,
+    /** With the area the map last showed, for the list to filter to. */
+    onOpenList: (area: GeoBounds?) -> Unit,
     onOpenSettings: () -> Unit,
     /** Straight to the file picker; the import itself, with its merge prompt, lives in settings. */
     onImportMap: () -> Unit,
@@ -144,6 +146,7 @@ fun MapScreen(
 
     val focusedTrack = (focused as? FocusedTrack.Ready)?.track
     // Name and colour are the row's; the file's name stands in until a new import's row arrives.
+    val openList = { onOpenList(viewModel.lastCamera?.area) }
     val focusedRow = focusedTrack?.let { state.entity(it.id) }
     val focusedColor = palette.slot(focusedRow?.colorIndex ?: 0)
     val focusedTitle = when {
@@ -577,7 +580,7 @@ fun MapScreen(
                         )
                     },
                     actions = {
-                        IconButton(onClick = onOpenList) {
+                        IconButton(onClick = openList) {
                             Icon(
                                 Icons.AutoMirrored.Filled.List,
                                 stringResource(R.string.library_title),
@@ -663,7 +666,7 @@ fun MapScreen(
                 val hasContent = hasRoutes || basemaps.isNotEmpty()
 
                 when {
-                    hasRoutes && tooFarApart -> TooFarApartState(onOpenList, Modifier.fillMaxSize())
+                    hasRoutes && tooFarApart -> TooFarApartState(openList, Modifier.fillMaxSize())
 
                     hasRoutes -> Unit
 
@@ -682,7 +685,7 @@ fun MapScreen(
                     )
 
                     else -> ShowTracksHint(
-                        onClick = onOpenList,
+                        onClick = openList,
                         modifier = Modifier.align(Alignment.Center),
                     )
                 }
@@ -768,12 +771,15 @@ fun MapScreen(
 
     // Only once loaded, which is what knows the name to offer.
     focusedRow?.takeIf { it.id == screen.renamingId }?.let { track ->
+        val categories by viewModel.categories.collectAsStateWithLifecycle()
         TrackNameDialog(
             initialName = track.editableName,
+            initialCategory = track.category.orEmpty(),
+            categories = categories,
             // Prefilled, not a hint: dismissing keeps what's shown.
             onDismiss = { screen.renamingId = null },
-            onConfirm = { name ->
-                viewModel.rename(track.id, name)
+            onConfirm = { name, category ->
+                viewModel.rename(track.id, name, category)
                 screen.renamingId = null
             },
         )

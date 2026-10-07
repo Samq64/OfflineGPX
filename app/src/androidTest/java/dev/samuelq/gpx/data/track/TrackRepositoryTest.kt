@@ -154,6 +154,74 @@ class TrackRepositoryTest {
     }
 
     @Test
+    fun importTakesTheFilesType() {
+        assertNull(row(importSample()).category)
+        val typed = importSample(sampleGpx().replace("<trkseg>", "<type>trail_running</type><trkseg>"))
+        // As written, not tidied.
+        assertEquals("trail_running", row(typed).category)
+        // But in the spelling a category already has.
+        val again = importSample(sampleGpx().replace("<trkseg>", "<type>Trail_Running</type><trkseg>"))
+        assertEquals("trail_running", row(again).category)
+    }
+
+    @Test
+    fun showOnlyHidesEveryOtherTrack() {
+        val kept = importSample()
+        val hidden = importSample()
+        val shown = importSample()
+        runBlocking {
+            repository.setVisible(listOf(hidden), false)
+            repository.showOnly(listOf(hidden, shown))
+        }
+        assertFalse(row(kept).visible)
+        assertTrue(row(hidden).visible)
+        assertTrue(row(shown).visible)
+    }
+
+    @Test
+    fun restoreVisibilityPutsEachBack() {
+        val shown = importSample()
+        val hidden = importSample()
+        runBlocking {
+            repository.setVisible(listOf(hidden), false)
+            repository.showOnly(listOf(hidden))
+            repository.restoreVisibility(mapOf(shown to true, hidden to false))
+        }
+        assertTrue(row(shown).visible)
+        assertFalse(row(hidden).visible)
+    }
+
+    @Test
+    fun categoryTakesTheSpellingInUseElseItsOwn() {
+        val first = importSample()
+        val second = importSample()
+        runBlocking { repository.rename(first, name = null, category = "Hikes ${first}").getOrThrow() }
+        runBlocking { repository.rename(second, name = null, category = "HIKES ${first}").getOrThrow() }
+        assertEquals("Hikes $first", row(second).category)
+        assertEquals("Hikes $first", parsed(second).type)
+        // Alone in it, a track can respell its own.
+        val alone = importSample()
+        runBlocking { repository.rename(alone, name = null, category = "solo $alone").getOrThrow() }
+        runBlocking { repository.rename(alone, name = null, category = "Solo $alone").getOrThrow() }
+        assertEquals("Solo $alone", row(alone).category)
+    }
+
+    @Test
+    fun categoryIsSetAloneInTheFileAndRow() {
+        val id = importSample()
+        val file = fileOf(id)
+        runBlocking { repository.rename(id, name = null, category = " Hikes ").getOrThrow() }
+        assertEquals("Hikes", row(id).category)
+        assertEquals("Hikes", parsed(id).type)
+        assertEquals("Test ride", row(id).trackName)
+        assertEquals(file, fileOf(id))
+
+        runBlocking { repository.rename(id, name = null, category = " ").getOrThrow() }
+        assertNull(row(id).category)
+        assertNull(parsed(id).type)
+    }
+
+    @Test
     fun renameMovesTheFileAfterTheName() {
         val name = "sample-${System.nanoTime()}.gpx"
         val id = importSample(name = name)
@@ -302,7 +370,7 @@ class TrackRepositoryTest {
         runBlocking {
             repository.setColor(id, TrackEntity.PALETTE_SIZE + 2)
             assertEquals(2, row(id).colorIndex)
-            repository.setAllVisible(false)
+            repository.setVisible(listOf(id), false)
             assertFalse(row(id).visible)
             assertEquals(mapOf(id to fileOf(id).length()), repository.fileSizes(listOf(row(id))))
         }

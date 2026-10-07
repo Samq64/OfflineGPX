@@ -14,6 +14,9 @@ import dev.samuelq.gpx.MainActivity
 import dev.samuelq.gpx.container
 import dev.samuelq.gpx.core.model.TrackPoint
 import dev.samuelq.gpx.data.db.TrackEntity
+import dev.samuelq.gpx.data.gpx.GpxParser
+import dev.samuelq.gpx.data.track.TrackFiles
+import dev.samuelq.gpx.data.track.TrackLabel
 import dev.samuelq.gpx.shell
 import dev.samuelq.gpx.targetContext
 import dev.samuelq.gpx.waitFor
@@ -67,7 +70,7 @@ class RecordingServiceTest {
     @After
     fun tearDown() {
         if (controller.state.value is RecordingState.Active) {
-            controller.discard("")
+            controller.discard(TrackLabel("", ""))
             waitFor(message = "idle") { controller.state.value == RecordingState.Idle }
         }
         scenario?.close()
@@ -120,13 +123,18 @@ class RecordingServiceTest {
 
         controller.requestStop()
         waitFor(message = "stop asked") { controller.stopRequested.value }
-        controller.stop("Service ride")
+        controller.stop(TrackLabel("Service ride", " Commute "))
         waitFor(message = "idle") { controller.state.value == RecordingState.Idle }
 
         val saved = recordings().filter { it.id !in before }
         assertEquals(1, saved.size)
         assertEquals("Service ride", saved.single().trackName)
+        assertEquals("Commute", saved.single().category)
+        assertEquals("Commute", runBlocking { container.trackRepository.lastRecordingCategory.first() })
         val track = runBlocking { container.trackRepository.geometry(saved.single().id).getOrThrow() }.track
+        // Written into the file, so an export keeps it; the cache holds no type.
+        val file = TrackFiles.file(targetContext, saved.single().location)
+        assertEquals("Commute", file.inputStream().use(GpxParser()::parse).type)
         // The pause is a segment break.
         assertEquals(2, track.points.segmentCount)
         assertEquals("Bench", track.waypoints.single().name)
@@ -139,7 +147,7 @@ class RecordingServiceTest {
         val before = recordings().size
         controller.start()
         waitFor(message = "active") { active() != null }
-        controller.stop("")
+        controller.stop(TrackLabel("", ""))
         waitFor(message = "idle") { controller.state.value == RecordingState.Idle }
         assertEquals(before, recordings().size)
     }
@@ -153,18 +161,18 @@ class RecordingServiceTest {
         waitFor(message = "points") { (active()?.pointCount ?: 0) >= 3 }
 
         val before = recordings().size
-        controller.discard("Undone")
+        controller.discard(TrackLabel("Undone", ""))
         waitFor(message = "idle") { controller.state.value == RecordingState.Idle }
         assertEquals(before, recordings().size)
 
         // The event may be taken by the UI, so set aside again from a fresh log instead.
         val log = java.io.File(targetContext.cacheDir, "discard.wal")
         RecordingWal.open(log).use { wal -> walkNorth(20).forEach(wal::append) }
-        val aside = assertNotNull(runBlocking { recovery.setAside(log, "Undone") })
+        val aside = assertNotNull(runBlocking { recovery.setAside(log, TrackLabel("Undone", "Rides")) })
         val id = runBlocking { recovery.restore(aside).getOrThrow() }
         // The shared list may replay its previous value first.
         waitFor(message = "restored") {
-            container.trackRepository.tracks.first().any { it.id == id && it.trackName == "Undone" }
+            container.trackRepository.tracks.first().any { it.id == id && it.trackName == "Undone" && it.category == "Rides" }
         }
     }
 
@@ -186,7 +194,7 @@ class RecordingServiceTest {
             val ride = abandoned.single { it.track.points.size == 10 }
             assertEquals(2, ride.track.points.segmentCount)
 
-            val id = recovery.save(ride, "Recovered").getOrThrow()
+            val id = recovery.save(ride, TrackLabel("Recovered", "")).getOrThrow()
             val saved = container.trackRepository.geometry(id).getOrThrow()
             assertEquals(10, saved.track.points.size)
             assertTrue(recovery.abandoned().none { it.track.points.size == 10 })
@@ -201,14 +209,14 @@ class RecordingServiceTest {
             assertTrue(recovery.claim())
             assertTrue(recovery.abandoned().isEmpty())
             val log = java.io.File(targetContext.cacheDir, "short.wal").apply { writeText("") }
-            assertEquals(null, recovery.setAside(log, "x"))
+            assertEquals(null, recovery.setAside(log, TrackLabel("x", "")))
             assertTrue(!log.exists())
         }
     }
 
     @Test
     fun restoreOfAMissingFileFails() {
-        val missing = DiscardedRecording(java.io.File(targetContext.cacheDir, "gone.wal"), "x")
+        val missing = DiscardedRecording(java.io.File(targetContext.cacheDir, "gone.wal"), TrackLabel("x", ""))
         assertIs<java.io.IOException>(runBlocking { container.recordingRecovery.restore(missing) }.exceptionOrNull())
     }
 

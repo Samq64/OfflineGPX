@@ -103,6 +103,20 @@ class GpxParserTest {
     }
 
     @Test
+    fun `reads the first track's type`() {
+        val track = parse(
+            """
+            <gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+              <trk><type> hiking </type><trkseg><trkpt lat="47.0" lon="8.0"/></trkseg></trk>
+              <trk><type>running</type><trkseg><trkpt lat="47.1" lon="8.0"/></trkseg></trk>
+            </gpx>
+            """.trimIndent()
+        )
+
+        assertEquals("hiking", track.type)
+    }
+
+    @Test
     fun `skips vendor extensions and unknown elements`() {
         val track = parse(
             """

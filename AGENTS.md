@@ -34,7 +34,8 @@ app/ di/     AppContainer: manual wiring, no Hilt.
   its row only. Files shared from other apps join the library; MainActivity is singleTask so
   they reach the one instance.
 - Schema changes need a migration: installs exist. 1 to 2 added the stats columns with
-  defaults, and `pointCount` -1 marks a row that `summariseOlderRows` reads at launch.
+  defaults, and `pointCount` -1 marks a row that `summariseOlderRows` reads at launch. 2 to 3
+  added `category`, which mirrors the first `<trk><type>`; null is uncategorised.
 - Trim rewrites a file with `GpxTrimmer`, which streams it through and keeps
   everything but the points cut; `GpxWriter` writes only what the app reads. The original
   waits under `noBackupFilesDir/edits` for the undo, and is purged at the next launch.

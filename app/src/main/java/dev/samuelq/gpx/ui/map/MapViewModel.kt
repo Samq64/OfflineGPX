@@ -126,6 +126,10 @@ class MapViewModel(
     /** The screen's state that outlives leaving it; see [rememberMapScreenState]. */
     val screenKept = MapScreenState.Kept()
 
+    /** For the rename dialog to suggest. */
+    val categories: StateFlow<List<String>> = repository.categories
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     var lastCamera: CameraSnapshot? = null
         private set
 
@@ -185,9 +189,10 @@ class MapViewModel(
     }
 
     /** The sheet reads the name off the row, so the row's update is all it needs. */
-    fun rename(id: Long, name: String) {
+    /** Null leaves either as it is. */
+    fun rename(id: Long, name: String?, category: String?) {
         viewModelScope.launch {
-            repository.rename(id, name).onFailure { _messages.trySend(MapMessage.RenameFailed) }
+            repository.rename(id, name, category).onFailure { _messages.trySend(MapMessage.RenameFailed) }
         }
     }
 

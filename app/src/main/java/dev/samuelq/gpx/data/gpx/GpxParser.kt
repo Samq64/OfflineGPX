@@ -53,6 +53,7 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
         var trackName: String? = null
         var metadataName: String? = null
         var trackDescription: String? = null
+        var trackType: String? = null
 
         forEachChild(parser) {
             when (parser.name) {
@@ -76,6 +77,11 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
                         TAG_DESC -> {
                             val value = readLabel(parser)
                             if (trackDescription == null) trackDescription = value
+                        }
+
+                        TAG_TYPE -> {
+                            val value = readLabel(parser)
+                            if (trackType == null) trackType = value
                         }
 
                         TAG_TRKSEG -> readSegment(parser, points)
@@ -105,6 +111,7 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
             name = trackName ?: metadataName,
             points = points.build(),
             description = trackDescription,
+            type = trackType,
             waypoints = waypoints,
         )
     }
@@ -240,6 +247,7 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
         private const val TAG_WPT = "wpt"
         private const val TAG_NAME = "name"
         private const val TAG_DESC = "desc"
+        private const val TAG_TYPE = "type"
         private const val TAG_CMT = "cmt"
         private const val TAG_ELE = "ele"
         private const val TAG_TIME = "time"

@@ -45,7 +45,6 @@
     <string name="library_color">Colour: %1$s</string>
     <string name="library_color_change">Change colour</string>
     <string name="library_delete">Delete</string>
-    <string name="library_delete_selected">Delete selected</string>
     <plurals name="library_deleted">
         <item quantity="one">Deleted %d track.</item>
         <item quantity="other">Deleted %d tracks.</item>
@@ -56,7 +55,7 @@
     <!-- Not "files are read only when you pick them": import keeps a copy. -->
     <string name="library_empty_body">Record one, or import a .gpx file into this app\'s storage.</string>
     <string name="library_empty_title">No tracks yet</string>
-    <string name="library_export_all">Export to a folder</string>
+    <string name="library_export">Export</string>
     <string name="library_export_failed">Couldn\'t export to that folder.</string>
     <plurals name="library_exported_all">
         <item quantity="one">Exported %1$d track.</item>
@@ -66,7 +65,14 @@
         <item quantity="one">Exported %1$d of %2$d track. The rest couldn\'t be written there.</item>
         <item quantity="other">Exported %1$d of %2$d tracks. The rest couldn\'t be written there.</item>
     </plurals>
-    <string name="library_hide_all">Hide all</string>
+    <string name="library_filter_area">In this area</string>
+    <string name="library_filter_empty">Nothing matches these filters.</string>
+    <string name="library_filter_shown">Shown</string>
+    <plurals name="library_hidden">
+        <item quantity="one">Hid %d track.</item>
+        <item quantity="other">Hid %d tracks.</item>
+    </plurals>
+    <string name="library_hide_selected">Hide on map</string>
     <string name="library_import">Import track</string>
     <string name="library_import_failed">Couldn\'t import that file.</string>
     <plurals name="library_imported_all">
@@ -98,7 +104,22 @@
         <item quantity="other">%d selected</item>
     </plurals>
     <string name="library_share">Share</string>
-    <string name="library_show_all">Show all</string>
+    <!-- Of the selected tracks: "this" for one, "these" for more. -->
+    <plurals name="library_show_only_selected">
+        <item quantity="one">Show only this</item>
+        <item quantity="other">Show only these</item>
+    </plurals>
+    <string name="library_show_selected">Show on map</string>
+    <plurals name="library_shown">
+        <item quantity="one">Showed %d track.</item>
+        <item quantity="other">Showed %d tracks.</item>
+    </plurals>
+    <string name="library_shown_named">Showed “%1$s”.</string>
+    <plurals name="library_shown_only">
+        <item quantity="one">Showing only %d track.</item>
+        <item quantity="other">Showing only %d tracks.</item>
+    </plurals>
+    <string name="library_shown_only_named">Showing only “%1$s”.</string>
     <string name="library_show_on_map">Show %1$s on map</string>
     <string name="library_size">Size</string>
     <string name="library_sort">Sort</string>
@@ -107,8 +128,9 @@
     <string name="library_sort_descending">Descending</string>
     <string name="library_sort_length">Length</string>
     <string name="library_sort_name">Name</string>
-    <string name="library_sort_recent">Last viewed</string>
+    <string name="library_sort_recent">Recent</string>
     <string name="library_title">Tracks</string>
+    <string name="library_uncategorised">Uncategorised</string>
 
     <string name="map_description">Map showing your tracks. Open one by tapping its line or from the Tracks list.</string>
     <string name="map_empty_body">Start a recording, open a track or import a map to get started.</string>
@@ -238,6 +260,7 @@
     <!-- Spoken for a stat tile: label, then value. -->
     <string name="stat_spoken">%1$s: %2$s</string>
 
+    <string name="track_category">Category</string>
     <string name="track_close">Close</string>
     <string name="track_edit_failed">Couldn\'t change that track.</string>
     <string name="track_error_empty">This GPX file has no track points.</string>

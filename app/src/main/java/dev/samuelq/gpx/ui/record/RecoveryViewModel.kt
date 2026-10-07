@@ -7,6 +7,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import dev.samuelq.gpx.data.record.AbandonedRecording
 import dev.samuelq.gpx.data.record.DiscardedRecording
 import dev.samuelq.gpx.data.record.RecordingRecovery
+import dev.samuelq.gpx.data.track.TrackLabel
 import dev.samuelq.gpx.di.appContainer
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -25,7 +26,7 @@ sealed interface RecoveryEvent {
     data object Failed : RecoveryEvent
 
     /** Undone with [RecoveryViewModel.restoreAbandoned], else [RecoveryViewModel.forgetAbandoned]. */
-    class AbandonedDiscarded(val recording: AbandonedRecording, val name: String) : RecoveryEvent
+    class AbandonedDiscarded(val recording: AbandonedRecording, val label: TrackLabel) : RecoveryEvent
 }
 
 /** Recordings a crash left unsaved, and undoing Stop's discard. */
@@ -45,16 +46,16 @@ class RecoveryViewModel(private val recovery: RecordingRecovery) : ViewModel() {
     }
 
     /** Saves the abandoned recording on offer and opens it, as a clean stop would. */
-    fun saveAbandoned(name: String) {
+    fun saveAbandoned(label: TrackLabel) {
         val recording = _abandoned.value ?: return
         _abandoned.value = null
-        restoreAbandoned(recording, name)
+        restoreAbandoned(recording, label)
     }
 
     /** Also what undoing its discard runs. */
-    fun restoreAbandoned(recording: AbandonedRecording, name: String) {
+    fun restoreAbandoned(recording: AbandonedRecording, label: TrackLabel) {
         viewModelScope.launch {
-            recovery.save(recording, name).fold(
+            recovery.save(recording, label).fold(
                 onSuccess = { _events.trySend(RecoveryEvent.Saved(it)) },
                 // Still on disk: asked about again next launch.
                 onFailure = {
@@ -66,12 +67,12 @@ class RecoveryViewModel(private val recovery: RecordingRecovery) : ViewModel() {
         }
     }
 
-    /** Kept on disk, and skipped here, until the undo lapses. [name] is what an undo saves. */
-    fun discardAbandoned(name: String) {
+    /** Kept on disk, and skipped here, until the undo lapses. [label] is what an undo saves. */
+    fun discardAbandoned(label: TrackLabel) {
         val recording = _abandoned.value ?: return
         _abandoned.value = null
         skipped += recording.file
-        _events.trySend(RecoveryEvent.AbandonedDiscarded(recording, name))
+        _events.trySend(RecoveryEvent.AbandonedDiscarded(recording, label))
         viewModelScope.launch { nextAbandoned() }
     }
 

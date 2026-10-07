@@ -299,6 +299,7 @@ internal fun OfflineMapCanvas(
     // Read fresh, not via recomposition: a framing move's own update must already see its view.
     fun currentClamp() = currentExtent?.including(framedView)
     val currentCover by rememberUpdatedState(cover)
+    val currentInsets by rememberUpdatedState(insets)
 
     // Tracks first, else the maps. Too far apart, the camera stays put and the screen says so.
     fun frameAll(): Boolean {
@@ -385,7 +386,8 @@ internal fun OfflineMapCanvas(
             // Not before first framing: until then VTM sits at whole-world, and remembering that
             // would feed back in as initialCamera.
             if (hasFramed) {
-                reportCamera(CameraSnapshot(position.latitude, position.longitude, position.zoom))
+                val area = viewSize?.let { position.uncoveredArea(it, currentInsets) }
+                reportCamera(CameraSnapshot(position.latitude, position.longitude, position.zoom, area))
             }
             currentClamp()?.let { map.keepInView(it, currentCover) }
         }
