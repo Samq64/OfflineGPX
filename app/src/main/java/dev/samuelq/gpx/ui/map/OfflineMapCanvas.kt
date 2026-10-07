@@ -287,15 +287,26 @@ internal fun OfflineMapCanvas(
         map.updateMap(true)
     }
 
+    // A frame fitted into the uncovered part, say beside the side panel, can need further out
+    // than the floor below. Clamped to it, it kept its centre at the closer zoom, off screen.
+    var framedScale by remember { mutableStateOf<Double?>(null) }
+
     // Zoom-out floor: everything fits on the tighter axis. Against the whole view, not the
-    // uncovered part, since the sheet comes and goes.
-    LaunchedEffect(map, extent, basemaps, viewSize) {
+    // uncovered part, since the sheet comes and goes; lowered for the last frame if need be.
+    LaunchedEffect(map, extent, basemaps, viewSize, framedScale) {
         if (extent == null) return@LaunchedEffect
         val size = viewSize ?: return@LaunchedEffect
         if (size.width <= 0 || size.height <= 0) return@LaunchedEffect
         val viewport = map.viewport()
         val floor = MapPosition().apply { setByBoundingBox(extent, size.width, size.height) }.scale
-        viewport.setMinScale(minOf(floor, viewport.maxScale))
+        viewport.setMinScale(minOf(floor, framedScale ?: floor, viewport.maxScale))
+    }
+
+    // Lowers the floor now, not after recomposing, or this move would be clamped to it.
+    fun allowScale(scale: Double) {
+        framedScale = scale
+        val viewport = map.viewport()
+        if (scale < viewport.minScale) viewport.setMinScale(scale)
     }
 
     // Clamp panning to the extent, measuring covered edges from the sheet/panel so anything
@@ -330,6 +341,7 @@ internal fun OfflineMapCanvas(
         if (spread) return true
         val target = tracks ?: extentOf(emptyList(), null, basemaps) ?: return false
         val position = fit(target, usable, insets, maxScale)
+        allowScale(position.scale)
         // Replacing the last framed view, as a framed track does: one left from following a
         // recording elsewhere would stretch the clamp and pull this frame off centre.
         framedView = position.visibleBox(size)
@@ -469,6 +481,7 @@ internal fun OfflineMapCanvas(
         // Null for a single point, which is left where the camera already is.
         extentOf(listOf(route), null, emptyList())?.let { target ->
             val position = fit(target, usable, frameInsets, map.viewport().maxScale)
+            allowScale(position.scale)
             val view = position.visibleBox(size)
             spread = false
             framedView = view

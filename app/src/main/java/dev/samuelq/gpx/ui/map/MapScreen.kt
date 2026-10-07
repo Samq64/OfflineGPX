@@ -445,12 +445,19 @@ fun MapScreen(
     val sheetInset = sheetCover.coerceIn(navigationBarInset, maxOf(navigationBarInset, peekHeight))
     // Floating controls must be counted, or the fit puts part of a route behind them.
     var controlsHeight by remember { mutableStateOf(0.dp) }
+    var controlsWidth by remember { mutableStateOf(0.dp) }
+    // Beside a side panel the map is short and wide, and a band across its whole width for
+    // controls in one corner can leave a route a sliver. They take whichever edge costs less.
+    val mapWidth = with(density) { windowSize.width.toDp() } - if (sidePanel) panelWidth else 0.dp
+    val controlsAtEnd = sidePanel && controlsWidth / mapWidth < controlsHeight / windowHeight
+    val controlsBottom = if (controlsAtEnd) 0.dp else controlsHeight
+    val controlsEnd = if (controlsAtEnd) controlsWidth else 0.dp
 
-    val coveredHeight = maxOf(sheetCover, sheetInset + controlsHeight)
+    val coveredHeight = maxOf(sheetCover, sheetInset + controlsBottom)
 
     val canvasPadding = PaddingValues(
         start = MapEdgePadding + panelCover,
-        end = MapEdgePadding,
+        end = MapEdgePadding + controlsEnd,
         top = MapEdgePadding,
         bottom = MapEdgePadding + coveredHeight,
     )
@@ -470,9 +477,9 @@ fun MapScreen(
     // Settled padding, so the frame isn't fitted to a screen the sheet is about to cover.
     val framePadding = PaddingValues(
         start = MapEdgePadding + if (sidePanel) panelWidth else 0.dp,
-        end = MapEdgePadding,
+        end = MapEdgePadding + controlsEnd,
         top = MapEdgePadding,
-        bottom = MapEdgePadding + controlsHeight + if (sidePanel) navigationBarInset else peekHeight,
+        bottom = MapEdgePadding + controlsBottom + if (sidePanel) navigationBarInset else peekHeight,
     )
     val frameTrackId = focusedTrack?.id
         ?.takeIf(screen::frames)
@@ -727,7 +734,10 @@ fun MapScreen(
                         .onSizeChanged { controlsHeight = with(density) { it.height.toDp() } },
                 ) {
                     Column(
-                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .onSizeChanged { controlsWidth = with(density) { it.width.toDp() } }
+                            .padding(16.dp),
                         horizontalAlignment = Alignment.End,
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
