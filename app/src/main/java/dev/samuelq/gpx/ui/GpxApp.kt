@@ -21,11 +21,13 @@ import dev.samuelq.gpx.ui.format.LocalFormatters
 import dev.samuelq.gpx.ui.format.rememberSystemFormatters
 import dev.samuelq.gpx.ui.library.LibraryScreen
 import dev.samuelq.gpx.ui.map.MapScreen
+import dev.samuelq.gpx.ui.nav.LibrariesRoute
 import dev.samuelq.gpx.ui.nav.LibraryRoute
 import dev.samuelq.gpx.ui.nav.MapRoute
 import dev.samuelq.gpx.ui.nav.SettingsRoute
 import dev.samuelq.gpx.ui.record.RecordingViewModel
 import dev.samuelq.gpx.ui.record.StopRecordingDialog
+import dev.samuelq.gpx.ui.settings.LibrariesScreen
 import dev.samuelq.gpx.ui.settings.SettingsScreen
 import dev.samuelq.gpx.ui.settings.SettingsViewModel
 import dev.samuelq.gpx.ui.track.TrackRef
@@ -82,8 +84,13 @@ fun GpxApp(incomingTrack: Uri?, onIncomingTrackHandled: () -> Unit) {
             composable<SettingsRoute> { entry ->
                 SettingsScreen(
                     onBack = dropUnlessResumed { navController.popBackStack() },
+                    onOpenLibraries = { navController.open(LibrariesRoute) },
                     importMapOnOpen = entry.toRoute<SettingsRoute>().importMap,
                 )
+            }
+
+            composable<LibrariesRoute> {
+                LibrariesScreen(onBack = dropUnlessResumed { navController.popBackStack() })
             }
         }
 

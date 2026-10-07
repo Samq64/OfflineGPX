@@ -31,3 +31,6 @@ data class LibraryRoute(
 /** [importMap] opens the map file picker on arrival, for the map's first-run "Import map". */
 @Serializable
 data class SettingsRoute(val importMap: Boolean = false)
+
+@Serializable
+data object LibrariesRoute

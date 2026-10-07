@@ -1,6 +1,5 @@
 package dev.samuelq.gpx.ui.settings
 
-import android.content.Intent
 import android.icu.text.ListFormatter
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -79,7 +78,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.samuelq.gpx.BuildConfig
@@ -109,6 +107,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
+    onOpenLibraries: () -> Unit,
     /** Opens the map file picker on arrival. */
     importMapOnOpen: Boolean = false,
     viewModel: SettingsViewModel = viewModel(factory = SettingsViewModel.Factory),
@@ -161,12 +160,8 @@ fun SettingsScreen(
         )
     }
 
-    // The browser fetches it, so no INTERNET permission is needed.
     fun openUrl(url: String) {
-        val opened = runCatching {
-            context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri()))
-        }.isSuccess
-        if (!opened) viewModel.reportNoBrowser()
+        if (!context.openUrl(url)) viewModel.reportNoBrowser()
     }
 
     LaunchedEffect(viewModel) {
@@ -255,32 +250,10 @@ fun SettingsScreen(
                 ),
                 onClick = ::openUrl,
             )
-            Text(
-                text = stringResource(R.string.settings_about_libraries),
-                style = MaterialTheme.typography.titleSmall,
-                modifier = Modifier
-                    .padding(horizontal = EdgePadding, vertical = 4.dp)
-                    .semantics { heading() },
-            )
-            LIBRARIES.forEach { library ->
-                LibraryRow(library, onClick = { openUrl(library.url) })
-            }
+            PageRow(stringResource(R.string.settings_about_libraries), onClick = onOpenLibraries)
         }
     }
 }
-
-private class Library(val name: String, val licence: String, val url: String)
-
-private val LIBRARIES = listOf(
-    Library("AndroidX", "Apache-2.0", "https://developer.android.com/jetpack/androidx"),
-    Library("JTS", "EDL-1.0", "https://github.com/locationtech/jts"),
-    Library("Kotlin", "Apache-2.0", "https://kotlinlang.org"),
-    // Copied in as vector drawables.
-    Library("Material Symbols", "Apache-2.0", "https://github.com/google/material-design-icons"),
-    // Bundled inside core-location-altitude.
-    Library("Protocol Buffers", "BSD-3-Clause", "https://github.com/protocolbuffers/protobuf"),
-    Library("VTM", "LGPL-3.0", "https://github.com/mapsforge/vtm"),
-)
 
 private const val REPO_URL = "https://github.com/Samq64/offline-gpx-android"
 private const val COMMIT_URL = "$REPO_URL/commits/"
@@ -367,22 +340,22 @@ private fun LinkButtons(links: List<Pair<String, String>>, onClick: (String) -> 
     }
 }
 
-/** The whole row opens the project; a plain Row, since ListItem pads far more. */
+/** Opens a sub-page; the chevron marks it as one. */
 @Composable
-private fun LibraryRow(library: Library, onClick: () -> Unit) {
+private fun PageRow(title: String, onClick: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 48.dp)
-            .clickable(onClickLabel = stringResource(R.string.settings_about_open_site), onClick = onClick)
+            .heightIn(min = 56.dp)
+            .clickable(onClick = onClick)
             .padding(horizontal = EdgePadding),
     ) {
-        Text(library.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-        Text(
-            library.licence,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        Text(title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        Icon(
+            painterResource(R.drawable.ic_chevron_right),
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
