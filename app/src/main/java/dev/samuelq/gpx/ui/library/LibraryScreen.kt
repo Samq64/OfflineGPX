@@ -94,6 +94,7 @@ import dev.samuelq.gpx.data.track.editableName
 import dev.samuelq.gpx.data.track.isTitledByStart
 import dev.samuelq.gpx.data.track.title
 import dev.samuelq.gpx.ui.BarInsets
+import dev.samuelq.gpx.ui.EdgePadding
 import dev.samuelq.gpx.ui.EmptyPage
 import dev.samuelq.gpx.ui.format.Formatters
 import dev.samuelq.gpx.ui.format.LocalFormatters
@@ -542,7 +543,7 @@ private fun Filters(
         },
     )
 
-    Row(modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(modifier.padding(horizontal = EdgePadding), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Filter(R.string.library_filter_shown, shownOnly, onShownOnly)
         if (hasArea) Filter(R.string.library_filter_area, inArea, onInArea)
     }
@@ -572,7 +573,7 @@ private fun CategoryHeader(
                 )
                 .semantics { heading() }
                 // Nearer its rows than the group before.
-                .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp),
+                .padding(start = EdgePadding, end = EdgePadding, top = 16.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (selected != null) {
@@ -695,7 +696,7 @@ private fun TrackRow(
                         )
                     }
                 }
-                .padding(start = 16.dp + indent, end = 16.dp, top = 12.dp, bottom = 12.dp),
+                .padding(start = EdgePadding + indent, end = EdgePadding, top = 12.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // One width for both, so the title doesn't shift entering selection.
@@ -740,7 +741,7 @@ private fun TrackRow(
             }
         }
         // Inset to the title: the same group, next item.
-        if (divider) HorizontalDivider(Modifier.padding(start = 16.dp + indent + LeadingSlot + 16.dp))
+        if (divider) HorizontalDivider(Modifier.padding(start = EdgePadding + indent + LeadingSlot + 16.dp))
     }
 }
 

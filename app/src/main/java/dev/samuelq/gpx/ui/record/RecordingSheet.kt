@@ -55,12 +55,12 @@ import dev.samuelq.gpx.R
 import dev.samuelq.gpx.core.analysis.TrackProfile
 import dev.samuelq.gpx.data.record.RecordingState
 import dev.samuelq.gpx.data.record.RecordingStatus
+import dev.samuelq.gpx.ui.EdgePadding
 import dev.samuelq.gpx.ui.format.Formatters
 import dev.samuelq.gpx.ui.format.LocalFormatters
 import dev.samuelq.gpx.ui.format.spokenDuration
 import dev.samuelq.gpx.ui.theme.recordingColor
 import dev.samuelq.gpx.ui.track.ProfileSheet
-import dev.samuelq.gpx.ui.track.SheetPadding
 import dev.samuelq.gpx.ui.track.Stat
 import dev.samuelq.gpx.ui.track.StatRow
 import dev.samuelq.gpx.ui.track.distanceAndElapsed
@@ -115,7 +115,7 @@ private fun RecordingHeader(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = SheetPadding, end = SheetPadding, top = 4.dp, bottom = 12.dp),
+            .padding(start = EdgePadding, end = EdgePadding, top = 4.dp, bottom = 12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         // Tells a cold start (settles soon) from being indoors (never will).

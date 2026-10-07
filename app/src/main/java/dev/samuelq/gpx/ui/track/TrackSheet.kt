@@ -60,6 +60,7 @@ import dev.samuelq.gpx.R
 import dev.samuelq.gpx.core.analysis.TrackProfile
 import dev.samuelq.gpx.core.model.Waypoint
 import dev.samuelq.gpx.data.track.LoadedTrack
+import dev.samuelq.gpx.ui.EdgePadding
 import dev.samuelq.gpx.ui.chart.ChartAxisGroup
 import dev.samuelq.gpx.ui.chart.ChartSeries
 import dev.samuelq.gpx.ui.chart.EmptyChart
@@ -76,8 +77,6 @@ import dev.samuelq.gpx.ui.isLargeText
 import dev.samuelq.gpx.ui.theme.LocalChartColors
 import java.time.Instant
 import java.time.ZoneId
-
-internal val SheetPadding = 20.dp
 
 /** Peek height before a track loads, and the minimum after. */
 val TrackSheetPeekHeight = 128.dp
@@ -149,13 +148,13 @@ fun TrackSheet(
             onClose = onClose,
             // Waypoints are otherwise reached only by their pins, and the sheet has no room to list them.
             modifier = Modifier
-                .padding(start = SheetPadding, end = 4.dp)
+                .padding(start = EdgePadding, end = 4.dp)
                 .semantics { if (waypointActions.isNotEmpty()) customActions = waypointActions },
         )
 
         StatRow(
             stats = trackHeadline(profile.stats, profile.hasTime),
-            modifier = Modifier.padding(start = SheetPadding, end = 8.dp),
+            modifier = Modifier.padding(start = EdgePadding, end = 8.dp),
         )
 
         profile.stats.startedAt?.let {
@@ -163,7 +162,7 @@ fun TrackSheet(
                 text = LocalFormatters.current.dateTime(it),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = SheetPadding, vertical = 8.dp),
+                modifier = Modifier.padding(horizontal = EdgePadding, vertical = 8.dp),
             )
         }
     }
@@ -221,7 +220,7 @@ fun ProfileSheet(
         ) {
             if (scrollHeader) measuredHeader()
             // Just above the gesture bar at peek: a second hint, beside the handle, that there's more.
-            HorizontalDivider(Modifier.padding(horizontal = SheetPadding, vertical = 8.dp))
+            HorizontalDivider(Modifier.padding(horizontal = EdgePadding, vertical = 8.dp))
             if (profile != null) {
                 ProfileDetails(
                     profile = profile,
@@ -317,14 +316,14 @@ private fun ProfileDetails(
             Text(
                 text = it,
                 style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(horizontal = SheetPadding, vertical = 4.dp),
+                modifier = Modifier.padding(horizontal = EdgePadding, vertical = 4.dp),
             )
         }
         TrackDetails(
             stats = profile.stats,
             hasTime = profile.hasTime,
             hasElevation = profile.hasElevation,
-            modifier = Modifier.padding(horizontal = SheetPadding, vertical = 4.dp),
+            modifier = Modifier.padding(horizontal = EdgePadding, vertical = 4.dp),
             // Only a recording overrides the count.
             complete = pointCount != null,
             pointCount = pointCount,
@@ -337,7 +336,7 @@ private fun ProfileDetails(
         AxisSelector(
             useTimeAxis = useTimeAxis,
             onChange = onAxisChange,
-            modifier = Modifier.padding(horizontal = SheetPadding),
+            modifier = Modifier.padding(horizontal = EdgePadding),
         )
         Spacer(Modifier.height(16.dp))
     }
@@ -356,7 +355,7 @@ private fun ProfileDetails(
     ) {
         ChartSection(
             title = stringResource(title),
-            modifier = Modifier.padding(horizontal = SheetPadding),
+            modifier = Modifier.padding(horizontal = EdgePadding),
         ) {
             if (!available) {
                 Unavailable(stringResource(empty))
@@ -435,7 +434,7 @@ private fun TrimHeader(title: String, profile: TrackProfile, trim: TrimControls,
         if (timed) { v -> Formatters.duration(v.toDouble()) } else { v -> formatters.distance(v.toDouble()) }
 
     Column(
-        modifier = Modifier.fillMaxWidth().padding(start = SheetPadding, end = 8.dp, bottom = 8.dp),
+        modifier = Modifier.fillMaxWidth().padding(start = EdgePadding, end = 8.dp, bottom = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -472,7 +471,7 @@ private fun TrimHeader(title: String, profile: TrackProfile, trim: TrimControls,
             },
             valueRange = x[0]..x[last].coerceAtLeast(x[0] + 1f),
             // The thumbs sit where edge swipes mean back; padded in, and claimed from the system.
-            modifier = Modifier.padding(end = SheetPadding - 8.dp).systemGestureExclusion(),
+            modifier = Modifier.padding(end = EdgePadding - 8.dp).systemGestureExclusion(),
         )
         Text(
             text = stringResource(R.string.trim_range, format(x[first]), format(x[end])),
@@ -531,7 +530,7 @@ internal fun TrackSheetLoading(modifier: Modifier = Modifier) {
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = TrackSheetPeekHeight)
-            .padding(horizontal = SheetPadding),
+            .padding(horizontal = EdgePadding),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
@@ -546,7 +545,7 @@ internal fun TrackSheetError(messageRes: Int, onRetry: () -> Unit, onClose: () -
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = TrackSheetPeekHeight)
-            .padding(horizontal = SheetPadding)
+            .padding(horizontal = EdgePadding)
             .navigationBarsPadding(),
     ) {
         Text(
@@ -605,7 +604,7 @@ private fun EmptyProfile(pointCount: Int?, useTimeAxis: Boolean) {
         hasElevation = false,
         complete = true,
         pointCount = pointCount,
-        modifier = Modifier.padding(horizontal = SheetPadding, vertical = 4.dp),
+        modifier = Modifier.padding(horizontal = EdgePadding, vertical = 4.dp),
     )
     Spacer(Modifier.height(20.dp))
     // Disabled, not hidden, so nothing shifts once the charts fill in.
@@ -613,14 +612,14 @@ private fun EmptyProfile(pointCount: Int?, useTimeAxis: Boolean) {
         useTimeAxis = useTimeAxis,
         onChange = {},
         enabled = false,
-        modifier = Modifier.padding(horizontal = SheetPadding),
+        modifier = Modifier.padding(horizontal = EdgePadding),
     )
     Spacer(Modifier.height(16.dp))
     val message = stringResource(R.string.chart_waiting)
     for (title in listOf(R.string.chart_speed, R.string.chart_elevation)) {
         ChartSection(
             title = stringResource(title),
-            modifier = Modifier.padding(horizontal = SheetPadding),
+            modifier = Modifier.padding(horizontal = EdgePadding),
         ) {
             EmptyChart(message)
         }

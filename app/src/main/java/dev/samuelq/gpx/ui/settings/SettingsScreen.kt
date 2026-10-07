@@ -90,6 +90,7 @@ import dev.samuelq.gpx.core.model.UnitSystem
 import dev.samuelq.gpx.data.map.OfflineMap
 import dev.samuelq.gpx.data.settings.Settings
 import dev.samuelq.gpx.ui.BarInsets
+import dev.samuelq.gpx.ui.EdgePadding
 import dev.samuelq.gpx.ui.format.LocalFormatters
 import dev.samuelq.gpx.ui.format.tabularFigures
 import dev.samuelq.gpx.ui.isLargeText
@@ -99,8 +100,6 @@ import dev.samuelq.gpx.ui.readableWidth
 import dev.samuelq.gpx.ui.screenSnackbars
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
-
-private val ScreenPadding = 20.dp
 
 /**
  * Pause detection is deliberately not a setting: changing it would re-summarise the whole
@@ -307,7 +306,7 @@ fun SettingsScreen(
                 text = stringResource(R.string.settings_about_libraries),
                 style = MaterialTheme.typography.titleSmall,
                 modifier = Modifier
-                    .padding(horizontal = ScreenPadding, vertical = 4.dp)
+                    .padding(horizontal = EdgePadding, vertical = 4.dp)
                     .semantics { heading() },
             )
             LIBRARIES.forEach { library ->
@@ -415,7 +414,7 @@ private fun AppHeader(onOpenCommit: (String) -> Unit) {
     val link = linkStyles()
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.padding(horizontal = ScreenPadding, vertical = 8.dp),
+        modifier = Modifier.padding(horizontal = EdgePadding, vertical = 8.dp),
     ) {
         AppIcon()
         Spacer(Modifier.width(16.dp))
@@ -470,7 +469,7 @@ private const val DIRTY = "-dirty"
 @Composable
 private fun LinkButtons(links: List<Pair<String, String>>, onClick: (String) -> Unit) {
     FlowRow(
-        modifier = Modifier.padding(horizontal = ScreenPadding - 12.dp),
+        modifier = Modifier.padding(horizontal = EdgePadding - 12.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         links.forEach { (label, url) ->
@@ -488,7 +487,7 @@ private fun LibraryRow(library: Library, onClick: () -> Unit) {
             .fillMaxWidth()
             .heightIn(min = 48.dp)
             .clickable(onClickLabel = stringResource(R.string.settings_about_open_site), onClick = onClick)
-            .padding(horizontal = ScreenPadding),
+            .padding(horizontal = EdgePadding),
     ) {
         Text(library.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         Text(
@@ -514,13 +513,13 @@ private fun MapsSection(
             text = stringResource(R.string.settings_maps_explanation),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = ScreenPadding),
+            modifier = Modifier.padding(horizontal = EdgePadding),
         )
 
         Spacer(Modifier.height(8.dp))
 
         Row(
-            modifier = Modifier.padding(horizontal = ScreenPadding - 12.dp),
+            modifier = Modifier.padding(horizontal = EdgePadding - 12.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             TextButton(onClick = onImport, enabled = !importing) {
@@ -533,7 +532,7 @@ private fun MapsSection(
 
         if (importing) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = ScreenPadding, vertical = 8.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = EdgePadding, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -551,7 +550,7 @@ private fun MapsSection(
                 text = stringResource(R.string.settings_maps_none),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = ScreenPadding, vertical = 8.dp),
+                modifier = Modifier.padding(horizontal = EdgePadding, vertical = 8.dp),
             )
         } else {
             maps.forEach { map ->
@@ -569,7 +568,7 @@ private fun MapRow(map: OfflineMap, onExport: () -> Unit, onDelete: () -> Unit) 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = ScreenPadding, vertical = 10.dp),
+            .padding(horizontal = EdgePadding, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -642,14 +641,14 @@ private fun SectionHeading(text: String) {
         style = MaterialTheme.typography.titleSmall,
         color = MaterialTheme.colorScheme.primary,
         modifier = Modifier
-            .padding(horizontal = ScreenPadding, vertical = 12.dp)
+            .padding(horizontal = EdgePadding, vertical = 12.dp)
             .semantics { heading() },
     )
 }
 
 @Composable
 private fun Setting(title: String, explanation: String, value: String? = null, control: @Composable () -> Unit) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = ScreenPadding, vertical = 8.dp)) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = EdgePadding, vertical = 8.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
