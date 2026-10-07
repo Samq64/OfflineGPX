@@ -5,8 +5,10 @@ import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * `andorra-fragment.map` is a real mapsforge extract truncated to its header, which is all
@@ -23,6 +25,15 @@ class OfflineMapTest {
             writeBytes(bytes)
             RandomAccessFile(this, "rw").use { it.setLength(declaredSize) }
         }
+    }
+
+    @Test
+    fun `only the same extract again is the same map`() {
+        val map = offlineMap(mapFile())
+        assertTrue(map.isSameAs(offlineMap(mapFile())))
+        assertFalse(map.isSameAs(offlineMap(mapFile(date = 1_800_000_000_000))), "a newer extract")
+        assertFalse(map.isSameAs(offlineMap(mapFile(east = 2.5))), "a neighbour reaching over it")
+        assertFalse(map.isSameAs(offlineMap(mapFile(comment = "another tool's"))), "another file of the area")
     }
 
     @Test

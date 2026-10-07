@@ -28,6 +28,7 @@ enum class SettingsMessage(@param:StringRes val text: Int) {
     MapUnreadable(R.string.settings_maps_failed_unreadable),
     MapWrongFormat(R.string.settings_maps_failed_format),
     MapNoSpace(R.string.settings_maps_failed_space),
+    MapAlreadyImported(R.string.settings_maps_failed_duplicate),
     MapExported(R.string.settings_maps_exported),
     MapExportFailed(R.string.settings_maps_export_failed),
     NoBrowser(R.string.settings_maps_no_browser),
@@ -42,10 +43,6 @@ class SettingsViewModel(private val repository: SettingsRepository, private val 
     /** Maps run to tens of megabytes, so the copy takes visible seconds. */
     private val _importing = MutableStateFlow(false)
     val importing: StateFlow<Boolean> = _importing.asStateFlow()
-
-    /** An import waiting on the user to confirm merging with the maps it duplicates. */
-    private val _overlapping = MutableStateFlow<MapImportResult.Overlaps?>(null)
-    val overlapping: StateFlow<MapImportResult.Overlaps?> = _overlapping.asStateFlow()
 
     private val _messages = Channel<SettingsMessage>(Channel.BUFFERED)
     val messages: Flow<SettingsMessage> = _messages.receiveAsFlow()
@@ -62,36 +59,19 @@ class SettingsViewModel(private val repository: SettingsRepository, private val 
         }
     }
 
-    fun mergeOverlapping() {
-        val overlaps = _overlapping.value ?: return
-        _overlapping.value = null
-        viewModelScope.launch { report(mapStore.confirmImport(overlaps)) }
-    }
-
-    fun cancelImport() {
-        val overlaps = _overlapping.value ?: return
-        _overlapping.value = null
-        mapStore.cancelImport(overlaps)
-    }
-
     private suspend fun report(result: MapImportResult) {
         _messages.send(
             when (result) {
                 is MapImportResult.Imported -> SettingsMessage.MapImported
-                is MapImportResult.Overlaps -> {
-                    _overlapping.value = result
-                    return
-                }
                 is MapImportResult.Failed -> when (result.error) {
                     MapImportError.UNREADABLE -> SettingsMessage.MapUnreadable
                     MapImportError.NOT_A_MAP_FILE -> SettingsMessage.MapWrongFormat
                     MapImportError.NO_SPACE -> SettingsMessage.MapNoSpace
+                    MapImportError.ALREADY_IMPORTED -> SettingsMessage.MapAlreadyImported
                 }
             },
         )
     }
-
-    override fun onCleared() = cancelImport()
 
     /** Undoable until [commitDeleteMap]. */
     fun deleteMap(map: OfflineMap) = mapStore.deleteLater(map)

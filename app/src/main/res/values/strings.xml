@@ -215,6 +215,7 @@
     <string name="settings_maps_export">Export</string>
     <string name="settings_maps_export_failed">Couldn\'t export that map.</string>
     <string name="settings_maps_exported">Map exported.</string>
+    <string name="settings_maps_failed_duplicate">That map is already imported.</string>
     <string name="settings_maps_failed_format">That isn\'t a supported map format.</string>
     <string name="settings_maps_failed_space">Not enough free space for that map.</string>
     <string name="settings_maps_failed_unreadable">Couldn\'t read that file.</string>
@@ -222,16 +223,6 @@
     <string name="settings_maps_imported">Map imported.</string>
     <string name="settings_maps_importing">Copying map…</string>
     <string name="settings_maps_manage_named">Manage %1$s</string>
-    <string name="settings_maps_merge">Merge</string>
-    <!-- %1$s is the new map, %2$s a list of the maps covering the same area, each already quoted. -->
-    <plurals name="settings_maps_merge_body">
-        <item quantity="one">“%1$s” covers the same area as %2$s. Both are kept and drawn as one.</item>
-        <item quantity="other">“%1$s” covers the same area as %2$s. All are kept and drawn as one.</item>
-    </plurals>
-    <plurals name="settings_maps_merge_title">
-        <item quantity="one">Merge with existing map?</item>
-        <item quantity="other">Merge with existing maps?</item>
-    </plurals>
     <string name="settings_maps_no_browser">No app on this device can open a web page.</string>
     <string name="settings_maps_none">No maps imported.</string>
     <!-- A direct link to where the files are published, so an action, not a heading. -->

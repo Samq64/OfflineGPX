@@ -4,22 +4,9 @@ import java.io.File
 import java.io.RandomAccessFile
 import org.oscim.tiling.source.mapfile.header.SubFileParameter
 
-/** A sub-file's index: one 5-byte entry per tile, row by row, a water flag over a 39-bit offset. */
+/** A sub-file's index: one 5-byte entry per tile, row by row, a water flag over a 39-bit offset. Only the flag is read. */
 internal class TileIndex(file: File, private val subFile: SubFileParameter) : AutoCloseable {
     private val handle = RandomAccessFile(file, "r")
-
-    /** Bytes of each tile from [from] to [to] on row [y]. */
-    fun row(y: Long, from: Long, to: Long): LongArray = with(subFile) {
-        val first = (y - boundaryTileTop) * blocksWidth + (from - boundaryTileLeft)
-        val tiles = (to - from + 1).toInt()
-        // One entry more, for the last tile's end.
-        val entries = minOf(tiles + 1L, numberOfBlocks - first).toInt()
-        val bytes = read(first, entries)
-        val offsets = LongArray(tiles + 1) { i ->
-            if (i < entries) entry(bytes, i) and OFFSET_MASK else subFileSize
-        }
-        return LongArray(tiles) { i -> (offsets[i + 1] - offsets[i]).coerceAtLeast(0) }
-    }
 
     /** Whether the writer found tile [x], [y] all water; false outside the box. */
     fun isWater(x: Long, y: Long): Boolean = with(subFile) {
@@ -45,6 +32,5 @@ internal class TileIndex(file: File, private val subFile: SubFileParameter) : Au
     private companion object {
         const val ENTRY_BYTES = SubFileParameter.BYTES_PER_INDEX_ENTRY.toInt()
         const val WATER_BIT = 1L shl 39
-        const val OFFSET_MASK = WATER_BIT - 1
     }
 }

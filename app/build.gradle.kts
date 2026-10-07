@@ -255,7 +255,6 @@ val coverageMinimums = mapOf(
     "dev/samuelq/gpx/data/record/RecordingSession.kt" to (1.00 to 0.95),
     "dev/samuelq/gpx/data/track/TrackCache.kt" to (1.00 to 0.96),
     "dev/samuelq/gpx/data/map/TileIndex.kt" to (1.00 to 1.00),
-    "dev/samuelq/gpx/data/map/MapOverlap.kt" to (1.00 to 1.00),
     "dev/samuelq/gpx/ui/chart/ChartMath.kt" to (1.00 to 0.89),
     "dev/samuelq/gpx/ui/format/Formatters.kt" to (1.00 to 0.97),
 )

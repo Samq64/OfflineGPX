@@ -20,6 +20,7 @@ internal fun mapFile(
     debug: Boolean = false,
     wayTags: List<String> = listOf("highway=path"),
     water: Set<Int> = emptySet(),
+    date: Long = 1_700_000_000_000,
 ): File {
     val columns = Projection.longitudeToTileX(east, baseZoom) - Projection.longitudeToTileX(west, baseZoom) + 1
     val rows = Projection.latitudeToTileY(south, baseZoom) - Projection.latitudeToTileY(north, baseZoom) + 1
@@ -40,7 +41,7 @@ internal fun mapFile(
     fun header(fileSize: Long, start: Long) = Bytes().apply {
         i32(5) // file version
         i64(fileSize)
-        i64(1_700_000_000_000) // creation date
+        i64(date)
         i32((south * 1e6).toInt())
         i32((west * 1e6).toInt())
         i32((north * 1e6).toInt())

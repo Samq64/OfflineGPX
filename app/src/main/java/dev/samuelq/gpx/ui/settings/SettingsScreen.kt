@@ -118,7 +118,6 @@ fun SettingsScreen(
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val maps by viewModel.maps.collectAsStateWithLifecycle()
     val importing by viewModel.importing.collectAsStateWithLifecycle()
-    val overlapping by viewModel.overlapping.collectAsStateWithLifecycle()
     val formatters = LocalFormatters.current
     val context = LocalContext.current
     val snackbars = screenSnackbars()
@@ -174,15 +173,6 @@ fun SettingsScreen(
 
     LaunchedEffect(viewModel) {
         viewModel.messages.collect { message -> launch { snackbars.say(resources.getString(message.text)) } }
-    }
-
-    overlapping?.let { overlaps ->
-        MergeMapsDialog(
-            newMap = overlaps.staged.displayName,
-            existing = overlaps.existing.map { it.displayName },
-            onMerge = viewModel::mergeOverlapping,
-            onCancel = viewModel::cancelImport,
-        )
     }
 
     Scaffold(
@@ -279,30 +269,6 @@ fun SettingsScreen(
             }
         }
     }
-}
-
-@Composable
-private fun MergeMapsDialog(newMap: String, existing: List<String>, onMerge: () -> Unit, onCancel: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onCancel,
-        title = { DialogTitle(pluralStringResource(R.plurals.settings_maps_merge_title, existing.size)) },
-        text = {
-            Text(
-                pluralStringResource(
-                    R.plurals.settings_maps_merge_body,
-                    existing.size,
-                    newMap,
-                    ListFormatter.getInstance().format(existing.map { "“$it”" }),
-                ),
-            )
-        },
-        confirmButton = {
-            TextButton(onClick = onMerge) { Text(stringResource(R.string.settings_maps_merge)) }
-        },
-        dismissButton = {
-            TextButton(onClick = onCancel) { Text(stringResource(R.string.action_cancel)) }
-        },
-    )
 }
 
 private class Library(val name: String, val licence: String, val url: String)

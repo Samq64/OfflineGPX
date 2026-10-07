@@ -55,14 +55,10 @@ class OfflineMap(
 
     internal fun movedTo(file: File) = OfflineMap(file, header, sizeBytes)
 
-    /** Bounding-box overlap; true of most neighbours too, so see [duplicates]. */
-    fun overlaps(other: OfflineMap): Boolean = bounds.minLongitude < other.bounds.maxLongitude &&
-        other.bounds.minLongitude < bounds.maxLongitude &&
-        bounds.minLatitude < other.bounds.maxLatitude &&
-        other.bounds.minLatitude < bounds.maxLatitude
-
-    /** Whether [other] covers the same place, not just a box that reaches over this one. */
-    fun duplicates(other: OfflineMap): Boolean = overlaps(other) && (sharedData(this, other) ?: 1.0) >= DUPLICATE_SHARE
+    /** The same extract imported again: same area, same date, same size. Overlapping maps are drawn as one. */
+    fun isSameAs(other: OfflineMap): Boolean = bounds == other.bounds &&
+        header.mapFileInfo.mapDate == other.header.mapFileInfo.mapDate &&
+        sizeBytes == other.sizeBytes
 
     companion object {
         /** Null unless a mapsforge map file VTM reads. Not a debug build, whose index has a signature. */
@@ -85,13 +81,12 @@ enum class MapImportError {
     NOT_A_MAP_FILE,
 
     NO_SPACE,
+
+    ALREADY_IMPORTED,
 }
 
 sealed interface MapImportResult {
     class Imported(val map: OfflineMap) : MapImportResult
-
-    /** Staged, awaiting [MapStore.confirmImport] or [MapStore.cancelImport]. */
-    class Overlaps(val staged: OfflineMap, val existing: List<OfflineMap>) : MapImportResult
 
     class Failed(val error: MapImportError) : MapImportResult
 }
@@ -180,9 +175,11 @@ class MapStore(
             return@withContext MapImportResult.Failed(MapImportError.NOT_A_MAP_FILE)
         }
 
-        // Neighbours go straight in; a second copy of a place is asked about.
-        val overlapping = _maps.value.filter { it.duplicates(map) }
-        if (overlapping.isEmpty()) install(map) else MapImportResult.Overlaps(map, overlapping)
+        if (_maps.value.any { it.isSameAs(map) }) {
+            destination.delete()
+            return@withContext MapImportResult.Failed(MapImportError.ALREADY_IMPORTED)
+        }
+        install(map)
     }
 
     /** Whether [bytes] could be had on the maps' volume, counting cache the system would clear. */
@@ -205,14 +202,6 @@ class MapStore(
         } catch (_: IOException) {
             default
         }
-    }
-
-    /** Keeps both; the renderer passes on repeated features once. */
-    suspend fun confirmImport(overlaps: MapImportResult.Overlaps): MapImportResult =
-        withContext(io) { install(overlaps.staged) }
-
-    fun cancelImport(overlaps: MapImportResult.Overlaps) {
-        scope.launch(io) { overlaps.staged.file.delete() }
     }
 
     private suspend fun install(staged: OfflineMap): MapImportResult {
