@@ -116,9 +116,6 @@ android {
         jacocoVersion = libs.versions.jacoco.get()
     }
 
-    // Room's exported schemas, for MigrationTestHelper.
-    sourceSets.getByName("androidTest").assets.directories.add("$projectDir/schemas")
-
     // Skip the dependency-metadata blob Play would embed.
     dependenciesInfo {
         includeInApk = false
@@ -191,7 +188,6 @@ dependencies {
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.rules)
     androidTestImplementation(libs.androidx.test.ext.junit)
-    androidTestImplementation(libs.androidx.room.testing)
     androidTestImplementation(libs.androidx.test.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

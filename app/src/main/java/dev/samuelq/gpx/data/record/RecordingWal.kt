@@ -18,15 +18,13 @@ import java.util.zip.CRC32
  * recoverable (a half-written GPX would not be).
  *
  * ```
- * #v2                                                          first: every line is checked
  * <epochMillis>,<lat>,<lon>,[<ele>],[<accuracyMeters>]*<crc>   a fix
  * -*<crc>                                                      a segment break
  * W,<epochMillis>,<lat>,<lon>,[<ele>],[<base64 name>]*<crc>    a waypoint
  * ```
  *
  * The CRC-32 of the line before the `*` drops one a power cut tore or storage corrupted.
- * Logs from before it have no header and are read by field count. Base64 keeps commas and
- * newlines in names from breaking the format.
+ * Base64 keeps commas and newlines in names from breaking the format.
  */
 class RecordingWal private constructor(val file: File, private val writer: BufferedWriter) : Closeable {
 
@@ -59,20 +57,12 @@ class RecordingWal private constructor(val file: File, private val writer: Buffe
         private const val BREAK = "-"
         private const val WAYPOINT = "W"
         private const val WAYPOINT_PREFIX = "$WAYPOINT,"
-        private const val HEADER = "#v2"
         private const val CHECK = '*'
 
         /** Opens [file] for appending, never truncating. */
         fun open(file: File): RecordingWal {
             file.parentFile?.mkdirs()
-            val fresh = file.length() == 0L
-            return RecordingWal(file, FileWriter(file, true).buffered()).apply {
-                if (fresh) {
-                    writer.write(HEADER)
-                    writer.newLine()
-                    writer.flush()
-                }
-            }
+            return RecordingWal(file, FileWriter(file, true).buffered())
         }
 
         private fun checksum(line: String): String =
@@ -93,18 +83,10 @@ class RecordingWal private constructor(val file: File, private val writer: Buffe
             val points = TrackPointsBuilder()
             val waypoints = mutableListOf<Waypoint>()
 
-            var checked = false
             file.forEachLine { line ->
-                val trimmed = line.trim()
-                if (trimmed == HEADER) {
-                    checked = true
-                    return@forEachLine
-                }
-                val text = if (checked) verified(trimmed) ?: return@forEachLine else trimmed
+                val text = verified(line.trim()) ?: return@forEachLine
                 when {
-                    text.isEmpty() -> Unit
                     text == BREAK -> points.startSegment()
-
                     text.startsWith(WAYPOINT_PREFIX) -> parseWaypoint(text)?.let(waypoints::add)
                     else -> parsePoint(text)?.let(points::add)
                 }
@@ -115,8 +97,7 @@ class RecordingWal private constructor(val file: File, private val writer: Buffe
 
         private fun parsePoint(line: String): TrackPoint? {
             val parts = line.split(',')
-            // Every format had a field after the longitude, so its comma shows it's whole.
-            if (parts.size < 4) return null
+            if (parts.size != 5) return null
             val millis = parts[0].toLongOrNull() ?: return null
             val latitude = parts[1].toDoubleOrNull() ?: return null
             val longitude = parts[2].toDoubleOrNull() ?: return null
@@ -126,7 +107,7 @@ class RecordingWal private constructor(val file: File, private val writer: Buffe
                 longitude = longitude,
                 elevation = parts[3].toDoubleOrNull(),
                 time = millis.takeIf { it > 0 }?.let(Instant::ofEpochMilli),
-                accuracyMeters = parts.getOrNull(4)?.toDoubleOrNull(),
+                accuracyMeters = parts[4].toDoubleOrNull(),
             )
         }
 

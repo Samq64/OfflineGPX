@@ -369,22 +369,6 @@ class TrackRepository(
         scope.launch(io) { edit.backup.delete() }
     }
 
-    /**
-     * At launch: reads the files of rows from before the summary was kept. One at a time, so
-     * the map's own first reads aren't crowded out. A file that can't be read is tried again
-     * next launch.
-     */
-    fun summariseOlderRows() {
-        scope.launch(io) {
-            for (entity in dao.unsummarised()) {
-                runCancellable {
-                    val loaded = load(entity)
-                    dao.setSummary(summaryUpdate(entity.id, loaded.track, loaded.profile))
-                }.onFailure { Log.d(TAG, "Could not summarise ${entity.displayName}", it) }
-            }
-        }
-    }
-
     /** At launch: an undo from a previous process can no longer be taken. */
     fun purgeEdits() {
         scope.launch(io) { editsDir.listFiles().orEmpty().forEach(File::delete) }

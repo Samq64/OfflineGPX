@@ -16,6 +16,5 @@ class GpxApplication : Application() {
         container.claimAbandonedRecording()
         container.loadOfflineMaps()
         container.trackRepository.purgeEdits()
-        container.trackRepository.summariseOlderRows()
     }
 }

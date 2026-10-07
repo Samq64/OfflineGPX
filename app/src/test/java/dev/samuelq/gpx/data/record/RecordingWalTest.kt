@@ -5,6 +5,7 @@ import dev.samuelq.gpx.core.model.Waypoint
 import java.io.File
 import java.nio.file.Files
 import java.time.Instant
+import java.util.zip.CRC32
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -68,20 +69,20 @@ class RecordingWalTest {
         wal.close()
     }
 
-    /** A log from before checksums: fields are checked, so a line cut short is dropped. */
+    /** Checksummed but malformed, as only a bug would write: fields are still checked. */
     @Test
-    fun `legacy lines are read, and malformed ones dropped`() {
-        val file = File(dir, "legacy.wal").apply {
+    fun `malformed lines are dropped`() {
+        val file = File(dir, "malformed.wal").apply {
             writeText(
                 listOf(
                     "1000,51.5,-0.1,,",
                     "",
                     "  ",
                     "2000,51.6", // too few fields
-                    "x,51.6,-0.1,", // bad time
-                    "3000,north,-0.1,", // bad latitude
-                    "3000,51.6,east,", // bad longitude
-                    "3000,95.0,-0.1,", // off the globe
+                    "x,51.6,-0.1,,", // bad time
+                    "3000,north,-0.1,,", // bad latitude
+                    "3000,51.6,east,,", // bad longitude
+                    "3000,95.0,-0.1,,", // off the globe
                     "4000,51.7,-0.3,abc,def", // bad optional fields are just absent
                     "W,1000,51.5,-0.1,", // too few fields
                     "W,x,51.5,-0.1,,",
@@ -90,11 +91,11 @@ class RecordingWalTest {
                     "W,1000,51.5,200.0,,",
                     "W,1000,51.5,-0.1,,!!not base64!!",
                     "W,0,51.5,-0.1,10.0,",
-                    "4500,51.75,-0.35,", // the oldest format, without accuracy
+                    "4500,51.75,-0.35,,",
                     "W,2000,51.6,-0.2,,",
-                    "5000,51.8,-0.4,1", // cut in the elevation: can't tell, so kept
-                    "6000,51.9,-0.4", // cut in the longitude
-                ).joinToString("\n"),
+                    "5000,51.8,-0.4,1,",
+                    "6000,51.9,-0.4,,,", // too many fields
+                ).joinToString("\n") { if (it.isBlank()) it else "$it*${crc(it)}" },
             )
         }
 
@@ -114,6 +115,8 @@ class RecordingWalTest {
             track.waypoints,
         )
     }
+
+    private fun crc(line: String) = "%08x".format(CRC32().apply { update(line.toByteArray()) }.value)
 
     private fun writeThree(file: File) = RecordingWal.open(file).use { wal ->
         wal.append(TrackPoint(51.5, -0.1, 12.5, at, 4.0))
@@ -143,7 +146,7 @@ class RecordingWalTest {
         writeThree(file)
         val lines = file.readLines().toMutableList()
         // One digit of the latitude changed, as a bad sector might: still a valid number.
-        lines[2] = lines[2].replaceFirst("51.6", "51.9")
+        lines[1] = lines[1].replaceFirst("51.6", "51.9")
         file.writeText(lines.joinToString("\n", postfix = "\n"))
 
         val track = assertNotNull(RecordingWal.recover(file))

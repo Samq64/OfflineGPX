@@ -30,7 +30,7 @@ internal class TrackCache(private val dir: File) {
         return try {
             decode(ByteBuffer.wrap(file.readBytes()), Stamp.of(source))
         } catch (e: Exception) {
-            // Truncated by a crash mid-write, or from an older format.
+            // Truncated by a crash mid-write, or another version.
             Log.d(TAG, "Dropping cache for $id", e)
             file.delete()
             null
@@ -75,7 +75,7 @@ internal class TrackCache(private val dir: File) {
     internal companion object {
         private const val TAG = "TrackCache"
         private const val MAGIC = 0x47505843 // "GPXC"
-        private const val VERSION = 3
+        private const val VERSION = 1
         private const val STAMP_OFFSET = 8
 
         fun encode(track: Track, stamp: Stamp): ByteArray {

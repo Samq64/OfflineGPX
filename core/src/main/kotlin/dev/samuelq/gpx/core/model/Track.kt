@@ -6,7 +6,7 @@ import java.time.Instant
 public data class TrackPoint(
     val latitude: Double,
     val longitude: Double,
-    /** Metres above sea level; older recordings from this app hold WGS84 ellipsoid height. */
+    /** Metres above sea level. */
     val elevation: Double? = null,
     val time: Instant? = null,
     /** Horizontal accuracy in metres, while recording only: `<hdop>` is unitless, not this. */

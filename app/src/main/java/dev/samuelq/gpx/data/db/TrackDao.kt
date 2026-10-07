@@ -29,10 +29,6 @@ interface TrackDao {
     @Update(entity = TrackEntity::class)
     suspend fun setSummary(summary: SummaryUpdate)
 
-    /** Rows from before the summary was kept, still to be read. */
-    @Query("SELECT * FROM tracks WHERE pointCount < 0")
-    suspend fun unsummarised(): List<TrackEntity>
-
     @Query("UPDATE tracks SET trackName = :name WHERE id = :id")
     suspend fun setTrackName(id: Long, name: String?)
 

@@ -7,7 +7,6 @@ import dev.samuelq.gpx.core.model.Track
 import dev.samuelq.gpx.core.model.TrackPoint
 import dev.samuelq.gpx.core.model.TrackPointsBuilder
 import dev.samuelq.gpx.data.db.GpxDatabase
-import dev.samuelq.gpx.data.db.SummaryUpdate
 import dev.samuelq.gpx.data.db.TrackDao
 import dev.samuelq.gpx.data.db.TrackEntity
 import dev.samuelq.gpx.data.gpx.GpxParser
@@ -22,7 +21,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
-import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
@@ -84,7 +82,6 @@ class TrackRepositoryTest {
         assertTrue(entity.distanceMeters > 200)
         assertEquals(38.0, entity.totalSeconds)
         assertEquals(Instant.parse("2024-05-04T09:00:00Z").toEpochMilli(), entity.startedAtEpochMillis)
-        assertNotNull(entity.bounds)
 
         val track = loaded(id)
         assertEquals(20, track.track.points.size)
@@ -327,23 +324,6 @@ class TrackRepositoryTest {
         repository.commitDelete(listOf(id))
         waitFor(message = "row deleted") { dao.byId(id) == null }
         waitFor(message = "file deleted") { !file.exists() }
-    }
-
-    @Test
-    fun summariseOlderRowsFillsVersion1Rows() {
-        val id = importSample()
-        val summary = row(id).summary
-        runBlocking {
-            dao.setSummary(
-                SummaryUpdate(id, null, summary.copy(pointCount = -1, ascentMeters = 0.0, northLatitude = 0.0)),
-            )
-        }
-        assertFalse(row(id).summarised)
-
-        repository.summariseOlderRows()
-        waitFor(message = "summarised") { dao.byId(id)!!.summarised }
-        assertEquals(summary, row(id).summary)
-        assertNotNull(row(id).startedAtEpochMillis)
     }
 
     @Test

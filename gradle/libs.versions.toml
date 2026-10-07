@@ -61,7 +61,6 @@ vtm-android = { group = "com.github.mapsforge.vtm", name = "vtm-android", versio
 # The filled overlays: each map's land box.
 vtm-jts = { group = "com.github.mapsforge.vtm", name = "vtm-jts", version.ref = "vtm" }
 
-androidx-room-testing = { group = "androidx.room", name = "room-testing", version.ref = "room" }
 androidx-test-runner = { group = "androidx.test", name = "runner", version.ref = "androidxTestRunner" }
 androidx-test-rules = { group = "androidx.test", name = "rules", version.ref = "androidxTestRunner" }
 androidx-test-ext-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidxTestExtJunit" }

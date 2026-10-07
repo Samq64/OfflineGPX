@@ -108,7 +108,7 @@ class LibraryViewModel(
         combine(repository.tracks, _query, order, inArea, shownOnly) { tracks, query, order, inArea, shownOnly ->
             val area = area.takeIf { inArea }
             val shown = tracks.filter {
-                it.matches(query) && (!shownOnly || it.visible) && (area == null || it.bounds?.overlaps(area) == true)
+                it.matches(query) && (!shownOnly || it.visible) && (area == null || it.bounds.overlaps(area))
             }
             Listing(shown.sortedFor(order).groupedByCategory(), tracks.size)
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)

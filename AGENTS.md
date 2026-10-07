@@ -33,9 +33,8 @@ app/ di/     AppContainer: manual wiring, no Hilt.
   is regenerable and never backed up or shared. A saved track's name and colour come from
   its row only. Files shared from other apps join the library; MainActivity is singleTask so
   they reach the one instance.
-- Schema changes need a migration: installs exist. 1 to 2 added the stats columns with
-  defaults, and `pointCount` -1 marks a row that `summariseOlderRows` reads at launch. 2 to 3
-  added `category`, which mirrors the first `<trk><type>`; null is uncategorised.
+- No backwards compatibility for now: the schema is version 1 with no migrations, and the
+  WAL has one format. `category` mirrors the first `<trk><type>`; null is uncategorised.
 - Trim rewrites a file with `GpxTrimmer`, which streams it through and keeps
   everything but the points cut; `GpxWriter` writes only what the app reads. The original
   waits under `noBackupFilesDir/edits` for the undo, and is purged at the next launch.

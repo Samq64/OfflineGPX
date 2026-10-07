@@ -129,7 +129,7 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
 
         if (latitude == null || longitude == null) return null
         if (!isValidCoordinate(latitude, longitude)) return null
-        // Older files from this app put the label in <desc>.
+        // Other apps may label a waypoint only in <desc> or <cmt>.
         return Waypoint(TrackPoint(latitude, longitude, elevation, time), name ?: description ?: comment)
     }
 
