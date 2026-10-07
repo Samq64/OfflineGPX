@@ -63,6 +63,7 @@ import dev.samuelq.gpx.ui.track.ProfileSheet
 import dev.samuelq.gpx.ui.track.SheetPadding
 import dev.samuelq.gpx.ui.track.Stat
 import dev.samuelq.gpx.ui.track.StatRow
+import dev.samuelq.gpx.ui.track.distanceAndElapsed
 
 /** The live recording in the sheet: status, numbers and controls in the peek, charts below. */
 @Composable
@@ -144,7 +145,7 @@ private fun RecordingHeader(
             RecordingDot(paused = state.paused)
             Spacer(Modifier.width(8.dp))
             Text(
-                text = listOfNotNull(status, waypointCount).joinToString("  ·  "),
+                text = listOfNotNull(status, waypointCount).joinToString(Formatters.SEPARATOR),
                 modifier = Modifier.semantics {
                     liveRegion = LiveRegionMode.Polite
                     contentDescription = listOfNotNull(spokenStatus, waypointCount).joinToString(", ")
@@ -160,7 +161,7 @@ private fun RecordingHeader(
 
         val speedLabel = stringResource(R.string.chart_speed)
         StatRow(
-            recordingStats(state.distanceMeters, state.totalSeconds) + Stat(
+            distanceAndElapsed(state.distanceMeters, state.totalSeconds) + Stat(
                 speedLabel,
                 // Blank, not zero, until the first fix.
                 state.currentSpeedMps?.let(formatters::speed) ?: Formatters.EMPTY,
@@ -206,17 +207,6 @@ private fun RecordingHeader(
         )
     }
 }
-
-/** Distance and elapsed time, shared by the sheet and the save dialogs. */
-@Composable
-internal fun recordingStats(distanceMeters: Double, elapsedSeconds: Double): List<Stat> = listOf(
-    Stat(stringResource(R.string.axis_distance), LocalFormatters.current.distance(distanceMeters)),
-    Stat(
-        stringResource(R.string.stat_elapsed),
-        Formatters.duration(elapsedSeconds),
-        LocalResources.current.spokenDuration(elapsedSeconds),
-    ),
-)
 
 @Composable
 private fun WaypointDialog(number: Int, onDismiss: () -> Unit, onConfirm: (name: String) -> Unit) {

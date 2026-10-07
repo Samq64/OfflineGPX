@@ -94,6 +94,7 @@ import dev.samuelq.gpx.data.track.editableName
 import dev.samuelq.gpx.data.track.isTitledByStart
 import dev.samuelq.gpx.data.track.title
 import dev.samuelq.gpx.ui.BarInsets
+import dev.samuelq.gpx.ui.EmptyPage
 import dev.samuelq.gpx.ui.format.Formatters
 import dev.samuelq.gpx.ui.format.LocalFormatters
 import dev.samuelq.gpx.ui.format.spokenDuration
@@ -630,10 +631,10 @@ private fun TrackRow(
     }
     val summary = remember(track, sizeBytes, formatters) {
         listOfNotNull(
-            track.totalSeconds.takeIf { it > 0 }?.let { Formatters.duration(it) },
             formatters.distance(track.distanceMeters),
+            track.totalSeconds.takeIf { it > 0 }?.let { Formatters.duration(it) },
             sizeBytes?.let { Formatters.kilobytes(it) },
-        ).joinToString("  ·  ")
+        ).joinToString(Formatters.SEPARATOR)
     }
     // Labelled and in words, as the sheet's stats are: "3:57" alone reads as a time of day.
     val resources = LocalResources.current
@@ -641,8 +642,8 @@ private fun TrackRow(
         fun stat(label: Int, value: String) =
             resources.getString(R.string.stat_spoken, resources.getString(label), value)
         listOfNotNull(
-            track.totalSeconds.takeIf { it > 0 }?.let { stat(R.string.stat_elapsed, resources.spokenDuration(it)) },
             stat(R.string.axis_distance, formatters.distance(track.distanceMeters)),
+            track.totalSeconds.takeIf { it > 0 }?.let { stat(R.string.stat_elapsed, resources.spokenDuration(it)) },
             sizeBytes?.let { stat(R.string.library_size, resources.spokenKilobytes(it)) },
         ).joinToString(", ")
     }
@@ -801,21 +802,11 @@ private fun visibilityMessage(resources: Resources, event: LibraryEvent.Visibili
 
 @Composable
 private fun EmptyState(onImport: () -> Unit, modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier.padding(32.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
-        horizontalAlignment = Alignment.CenterHorizontally,
+    EmptyPage(
+        title = stringResource(R.string.library_empty_title),
+        body = stringResource(R.string.library_empty_body),
+        modifier = modifier,
     ) {
-        Text(
-            text = stringResource(R.string.library_empty_title),
-            modifier = Modifier.semantics { heading() },
-            style = MaterialTheme.typography.titleMedium,
-        )
-        Text(
-            text = stringResource(R.string.library_empty_body),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
         Button(onClick = onImport) { Text(stringResource(R.string.library_import)) }
     }
 }

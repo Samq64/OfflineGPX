@@ -97,6 +97,15 @@ fun trackHeadline(stats: TrackStats, hasTime: Boolean): List<Stat> {
     }
 }
 
+/** Distance, then elapsed time unless [elapsedSeconds] is null: a recording's, a save's or a trim's. */
+@Composable
+internal fun distanceAndElapsed(distanceMeters: Double, elapsedSeconds: Double?): List<Stat> = listOfNotNull(
+    Stat(stringResource(R.string.axis_distance), LocalFormatters.current.distance(distanceMeters)),
+    elapsedSeconds?.let {
+        Stat(stringResource(R.string.stat_elapsed), Formatters.duration(it), LocalResources.current.spokenDuration(it))
+    },
+)
+
 /**
  * Moving time, ascent, descent and points. [complete] shows every entry, zero where there's
  * no data, so a recording's layout holds still; null [stats] is no data yet.

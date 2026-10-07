@@ -20,6 +20,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import dev.samuelq.gpx.R
+import dev.samuelq.gpx.ui.EmptyPage
 
 @Composable
 internal fun EmptyState(onImportMap: () -> Unit, onImportTrack: () -> Unit, modifier: Modifier = Modifier) {
@@ -49,31 +50,6 @@ internal fun TooFarApartState(onOpenList: () -> Unit, modifier: Modifier = Modif
         Button(onClick = onOpenList) {
             Text(stringResource(R.string.map_spread_action))
         }
-    }
-}
-
-@Composable
-private fun EmptyPage(title: String, body: String, modifier: Modifier = Modifier, buttons: @Composable () -> Unit) {
-    Column(
-        // Opaque and page-coloured: with nothing to show, this is a page, not a map.
-        modifier = modifier
-            .background(MaterialTheme.colorScheme.background)
-            .padding(32.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.semantics { heading() },
-        )
-        Text(
-            text = body,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { buttons() }
     }
 }
 

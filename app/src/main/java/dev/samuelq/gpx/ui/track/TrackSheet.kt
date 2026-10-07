@@ -455,21 +455,12 @@ private fun TrimHeader(title: String, profile: TrackProfile, trim: TrimControls,
         }
 
         // From the cumulative series: a break adds nothing to either, so a difference is exact.
-        val kept = buildList {
-            val meters = (profile.distanceMeters[end] - profile.distanceMeters[first]).toDouble()
-            add(Stat(stringResource(R.string.axis_distance), formatters.distance(meters)))
-            if (profile.hasTime) {
-                val seconds = (profile.elapsedSeconds[end] - profile.elapsedSeconds[first]).toDouble()
-                add(
-                    Stat(
-                        stringResource(R.string.stat_elapsed),
-                        Formatters.duration(seconds),
-                        LocalResources.current.spokenDuration(seconds),
-                    ),
-                )
-            }
-        }
-        StatRow(kept)
+        StatRow(
+            distanceAndElapsed(
+                (profile.distanceMeters[end] - profile.distanceMeters[first]).toDouble(),
+                (profile.elapsedSeconds[end] - profile.elapsedSeconds[first]).toDouble().takeIf { profile.hasTime },
+            ),
+        )
 
         RangeSlider(
             value = x[first]..x[end],

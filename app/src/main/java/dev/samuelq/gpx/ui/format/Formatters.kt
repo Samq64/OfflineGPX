@@ -117,6 +117,9 @@ class Formatters(
     private fun elevationIn(meters: Double): Double = if (metric) meters else meters * FEET_PER_METER
 
     companion object {
+        /** Between items sharing one line. */
+        const val SEPARATOR = "  ·  "
+
         val Metric = Formatters(UnitSystem.METRIC)
 
         const val EMPTY = "—"

@@ -22,6 +22,7 @@ import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import dev.samuelq.gpx.R
+import dev.samuelq.gpx.ui.map.openAppDetails
 
 /** How to keep recordings alive, shown only while the app is still optimised. */
 @Composable
@@ -41,7 +42,9 @@ fun BatteryOptimisationHint(modifier: Modifier = Modifier) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         TextButton(
-            onClick = { context.openBatterySettings() },
+            // App info has the app's own battery page, where Unrestricted is the exemption; its name
+            // varies by skin. Not a direct exemption request, which needs a permission Play restricts.
+            onClick = { context.openAppDetails() },
             // Aligns the label, not the ripple, with the text above.
             modifier = Modifier.offset(x = (-12).dp),
         ) {
@@ -52,14 +55,3 @@ fun BatteryOptimisationHint(modifier: Modifier = Modifier) {
 
 private fun Context.isIgnoringBatteryOptimizations(): Boolean =
     getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(packageName)
-
-/**
- * App info has the app's own battery page, where Unrestricted is the exemption; its name varies
- * by skin but always says battery. Not a direct exemption request, which needs a permission Play
- * restricts.
- */
-private fun Context.openBatterySettings() {
-    runCatching {
-        startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, "package:$packageName".toUri()))
-    }
-}

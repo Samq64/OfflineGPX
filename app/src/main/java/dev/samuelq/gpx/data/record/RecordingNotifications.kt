@@ -68,7 +68,13 @@ internal class RecordingNotifications(private val service: Service) {
     private fun shownOf(content: NotificationContent): Shown {
         val distance = Formatters(content.units).distance(content.distanceMeters)
         // The chronometer shows a running time, so only a stopped one is in the text.
-        val text = if (content.timing) distance else "$distance${SEPARATOR}${Formatters.duration(content.totalSeconds)}"
+        val text = if (content.timing) {
+            distance
+        } else {
+            "$distance${Formatters.SEPARATOR}${Formatters.duration(
+                content.totalSeconds,
+            )}"
+        }
         return Shown(content.status, content.timing, text)
     }
 
@@ -165,8 +171,6 @@ internal class RecordingNotifications(private val service: Service) {
 /** "12.3 km  ·  1:02:03", read with the duration in words and the dot as a pause. */
 private fun spokenText(distance: String, duration: String, spokenDuration: String): CharSequence =
     SpannableStringBuilder(distance).apply {
-        append(SEPARATOR, TtsSpan.TextBuilder(", ").build(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        append(Formatters.SEPARATOR, TtsSpan.TextBuilder(", ").build(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         append(duration, TtsSpan.TextBuilder(spokenDuration).build(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
     }
-
-private const val SEPARATOR = "  ·  "

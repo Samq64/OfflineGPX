@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
@@ -26,6 +27,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import dev.samuelq.gpx.R
@@ -36,6 +38,7 @@ import dev.samuelq.gpx.data.track.TrackLabel
 import dev.samuelq.gpx.ui.format.LocalFormatters
 import dev.samuelq.gpx.ui.track.CategoryField
 import dev.samuelq.gpx.ui.track.StatRow
+import dev.samuelq.gpx.ui.track.distanceAndElapsed
 
 /** The categories in use, and the one a new recording gets unless changed: the last one's. */
 internal class CategoryChoice(val all: List<String>, val default: String)
@@ -53,7 +56,7 @@ internal fun StopRecordingDialog(
     SaveRecordingDialog(
         title = stringResource(R.string.record_stop_title),
         // The distance says why Save is off, so no separate "too short" message.
-        summary = { StatRow(recordingStats(state.distanceMeters, state.totalSeconds)) },
+        summary = { StatRow(distanceAndElapsed(state.distanceMeters, state.totalSeconds)) },
         canSave = RecordingRecovery.isSaveable(state.distanceMeters),
         categories = categories,
         onSave = onSave,
@@ -78,7 +81,7 @@ internal fun RecoveredRecordingDialog(
             // Laid out like Stop's, plus when it started and why it's being asked about.
             summary = {
                 Column {
-                    StatRow(recordingStats(stats.distanceMeters, stats.totalDurationSeconds))
+                    StatRow(distanceAndElapsed(stats.distanceMeters, stats.totalDurationSeconds))
                     val formatters = LocalFormatters.current
                     val date = formatters.date(stats.startedAt)
                     val time = formatters.time(stats.startedAt)
@@ -146,6 +149,7 @@ private fun SaveRecordingDialog(
                     onValueChange = { name = it },
                     singleLine = true,
                     label = { Text(stringResource(R.string.library_rename_label)) },
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(8.dp))

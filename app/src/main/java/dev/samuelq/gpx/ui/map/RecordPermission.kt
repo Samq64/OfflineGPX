@@ -30,6 +30,13 @@ internal fun Context.openLocationSettings() {
     runCatching { startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)) }
 }
 
+/** This app's info page, for its permissions and battery use. */
+internal fun Context.openAppDetails() {
+    runCatching {
+        startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)))
+    }
+}
+
 /** What location is asked for, why, which words a refusal gets, and whether notifications come too. */
 internal enum class LocationUse(
     @param:StringRes val why: Int,
@@ -133,14 +140,7 @@ internal fun rememberLocationRequest(
         // False after a refusal means "don't ask again": the request returns without a dialog.
         val settled = activity != null &&
             !activity.shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_FINE_LOCATION)
-        val appSettings = {
-            context.startActivity(
-                Intent(
-                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                    Uri.fromParts("package", context.packageName, null),
-                ),
-            )
-        }
+        val appSettings = { context.openAppDetails() }
         when {
             // Precise only: GPS_PROVIDER needs it, and approximate is hundreds of metres off.
             granted[Manifest.permission.ACCESS_FINE_LOCATION] == true -> start()
