@@ -69,6 +69,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.toSize
 import dev.samuelq.gpx.R
 import dev.samuelq.gpx.ui.PointTooltip
+import dev.samuelq.gpx.ui.TooltipSecondary
 import dev.samuelq.gpx.ui.format.tabularFigures
 import dev.samuelq.gpx.ui.theme.ChartColors
 import dev.samuelq.gpx.ui.theme.LocalChartColors
@@ -431,7 +432,7 @@ private fun ChartTooltip(
     ) {
         Text(
             text = buildAnnotatedString {
-                withStyle(SpanStyle(color = LocalContentColor.current.copy(alpha = 0.7f))) {
+                withStyle(SpanStyle(color = TooltipSecondary)) {
                     append(formatPosition(series.x[index]))
                 }
                 append('\n')

@@ -35,6 +35,7 @@ import dev.samuelq.gpx.data.record.AbandonedRecording
 import dev.samuelq.gpx.data.record.RecordingRecovery
 import dev.samuelq.gpx.data.record.RecordingState
 import dev.samuelq.gpx.data.track.TrackLabel
+import dev.samuelq.gpx.ui.DialogTitle
 import dev.samuelq.gpx.ui.format.LocalFormatters
 import dev.samuelq.gpx.ui.track.CategoryField
 import dev.samuelq.gpx.ui.track.StatRow
@@ -138,7 +139,7 @@ private fun SaveRecordingDialog(
             dismissOnBackPress = onDismiss != null,
             dismissOnClickOutside = onDismiss != null,
         ),
-        title = { Text(title, Modifier.semantics { heading() }) },
+        title = { DialogTitle(title) },
         text = {
             // Scrolls when the keyboard or large text leaves too little room.
             Column(Modifier.verticalScroll(rememberScrollState())) {

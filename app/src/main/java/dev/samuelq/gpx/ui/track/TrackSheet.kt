@@ -289,13 +289,7 @@ private fun ProfileDetails(
         remember(formatters) { { formatters.speed(it.toDouble()) } }
     val elevationValue: (Float) -> String =
         remember(formatters) { { formatters.meters(it.toDouble()) } }
-    val positionValue: (Float) -> String = remember(formatters, useTimeAxis) {
-        if (useTimeAxis) {
-            { Formatters.duration(it.toDouble()) }
-        } else {
-            { formatters.distance(it.toDouble()) }
-        }
-    }
+    val positionValue = remember(formatters, useTimeAxis) { formatters.position(useTimeAxis) }
 
     // Time axis only: on a distance axis a stop is zero wide.
     val resources = LocalResources.current
@@ -429,8 +423,7 @@ private fun TrimHeader(title: String, profile: TrackProfile, trim: TrimControls,
     val last = x.size - 1
     val first = trim.range.first
     val end = trim.range.last
-    val format: (Float) -> String =
-        if (timed) { v -> Formatters.duration(v.toDouble()) } else { v -> formatters.distance(v.toDouble()) }
+    val format = formatters.position(timed)
 
     Column(
         modifier = Modifier.fillMaxWidth().padding(start = EdgePadding, end = 8.dp, bottom = 8.dp),

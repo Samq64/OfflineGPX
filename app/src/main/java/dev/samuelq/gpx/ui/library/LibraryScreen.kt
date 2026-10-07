@@ -91,8 +91,10 @@ import dev.samuelq.gpx.data.db.TrackEntity
 import dev.samuelq.gpx.data.settings.TrackOrder
 import dev.samuelq.gpx.data.settings.TrackSort
 import dev.samuelq.gpx.data.track.editableName
+import dev.samuelq.gpx.data.track.exportFileName
 import dev.samuelq.gpx.data.track.isTitledByStart
 import dev.samuelq.gpx.data.track.title
+import dev.samuelq.gpx.ui.BackButton
 import dev.samuelq.gpx.ui.BarInsets
 import dev.samuelq.gpx.ui.EdgePadding
 import dev.samuelq.gpx.ui.EmptyPage
@@ -107,8 +109,7 @@ import dev.samuelq.gpx.ui.screenSnackbars
 import dev.samuelq.gpx.ui.track.ColorDot
 import dev.samuelq.gpx.ui.track.TrackMenu
 import dev.samuelq.gpx.ui.track.TrackNameDialog
-import dev.samuelq.gpx.ui.track.exportFileName
-import dev.samuelq.gpx.ui.track.shareTrackIntent
+import dev.samuelq.gpx.ui.track.shareTrack
 import java.text.Collator
 import java.time.Instant
 import kotlinx.coroutines.launch
@@ -277,12 +278,7 @@ fun LibraryScreen(
                         Text(stringResource(R.string.library_title), Modifier.semantics { heading() })
                     },
                     navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(
-                                painterResource(R.drawable.ic_arrow_back),
-                                stringResource(R.string.action_back),
-                            )
-                        }
+                        BackButton(onBack)
                     },
                     actions = {
                         // Shown while loading so icons don't pop in during the slide.
@@ -393,16 +389,7 @@ fun LibraryScreen(
                                     onToggleSelected = { viewModel.toggleSelected(track.id) },
                                     onToggleVisible = { viewModel.setVisible(track.id, !track.visible) },
                                     onColor = { viewModel.setColor(track.id, it) },
-                                    onShare = {
-                                        context.startActivity(
-                                            shareTrackIntent(
-                                                context,
-                                                track.location,
-                                                track.trackName,
-                                                track.displayName,
-                                            ),
-                                        )
-                                    },
+                                    onShare = { context.shareTrack(track) },
                                     onRename = { renaming = track },
                                     onDelete = { delete(setOf(track.id)) },
                                 )
@@ -840,12 +827,7 @@ private fun LibrarySearchBar(query: String, onQueryChange: (String) -> Unit, onC
                 onExpandedChange = {},
                 placeholder = { Text(hint) },
                 leadingIcon = {
-                    IconButton(onClick = onClose) {
-                        Icon(
-                            painterResource(R.drawable.ic_arrow_back),
-                            stringResource(R.string.library_search_close),
-                        )
-                    }
+                    BackButton(onClose, stringResource(R.string.library_search_close))
                 },
                 trailingIcon = {
                     if (query.isNotEmpty()) {

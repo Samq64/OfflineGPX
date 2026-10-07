@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import dev.samuelq.gpx.R
 import dev.samuelq.gpx.core.model.Waypoint
 import dev.samuelq.gpx.ui.PointTooltip
+import dev.samuelq.gpx.ui.TooltipSecondary
 import dev.samuelq.gpx.ui.format.LocalFormatters
 import kotlin.math.roundToInt
 
@@ -62,7 +63,7 @@ internal fun WaypointTooltip(waypoint: Waypoint, distanceMeters: Double?, tipAt:
                 Text(
                     text = detail ?: formatters.time(null),
                     style = MaterialTheme.typography.labelMedium,
-                    color = LocalContentColor.current.copy(alpha = 0.7f),
+                    color = TooltipSecondary,
                 )
             }
             name?.let {

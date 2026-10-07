@@ -2,6 +2,7 @@ package dev.samuelq.gpx.data.track
 
 import android.content.Context
 import dev.samuelq.gpx.data.db.TrackEntity
+import dev.samuelq.gpx.data.safeFileName
 import java.io.File
 import java.time.Instant
 import java.time.LocalDateTime
@@ -66,9 +67,19 @@ val TrackEntity.title: String
 val TrackEntity.isTitledByStart: Boolean
     get() = trackName.isNullOrBlank() && TrackFiles.recordedAt(this) != null
 
-/** [title] without the `.gpx` extension, to name a part or copy after. */
+/** [title] without the `.gpx` extension. */
 val TrackEntity.titleStem: String
-    get() = title.let { if (it.endsWith(".gpx", ignoreCase = true)) it.dropLast(4) else it }
+    get() = title.dropGpxSuffix()
+
+/** The track's name, made safe as a filename; unnamed, the file it's stored under, whose stamp sorts. */
+fun exportFileName(trackName: String?, displayName: String): String =
+    safeFileName(trackName?.takeIf(String::isNotBlank) ?: displayName.dropGpxSuffix()).ensureGpxSuffix()
+
+private fun String.dropGpxSuffix(): String = if (endsWith(GPX, ignoreCase = true)) dropLast(GPX.length) else this
+
+private fun String.ensureGpxSuffix(): String = if (endsWith(GPX, ignoreCase = true)) this else "$this$GPX"
+
+private const val GPX = ".gpx"
 
 /** [titleStem] to rename from, but empty for a recording titled by its start: that's no name. */
 val TrackEntity.editableName: String

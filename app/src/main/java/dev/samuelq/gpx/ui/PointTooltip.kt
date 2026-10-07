@@ -17,6 +17,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -25,6 +26,10 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+
+/** For a tooltip's secondary line, such as the position above a value. */
+internal val TooltipSecondary: Color
+    @Composable get() = LocalContentColor.current.copy(alpha = 0.7f)
 
 /**
  * A bubble beside a box that moves: a scrubbed chart point, a tapped map pin. [anchorAt] is

@@ -16,6 +16,12 @@ class FormattersTest {
     private val en = Locale.UK
 
     @Test
+    fun `a chart position is a duration on a time axis and a distance otherwise`() {
+        assertEquals(Formatters.duration(90.0), metric.position(timed = true)(90f))
+        assertEquals(metric.distance(1500.0), metric.position(timed = false)(1500f))
+    }
+
+    @Test
     fun `metric distance uses metres below a kilometre`() {
         assertEquals("850 m", metric.distance(850.0, en))
         assertEquals("1.20 km", metric.distance(1200.0, en))

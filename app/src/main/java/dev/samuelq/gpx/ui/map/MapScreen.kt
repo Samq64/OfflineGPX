@@ -99,7 +99,7 @@ import dev.samuelq.gpx.ui.track.TrackSheetError
 import dev.samuelq.gpx.ui.track.TrackSheetLoading
 import dev.samuelq.gpx.ui.track.TrackSheetPeekHeight
 import dev.samuelq.gpx.ui.track.TrimControls
-import dev.samuelq.gpx.ui.track.shareTrackIntent
+import dev.samuelq.gpx.ui.track.shareTrack
 import dev.samuelq.gpx.ui.track.trackTitle
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.flow.drop
@@ -508,11 +508,7 @@ fun MapScreen(
         remember(entity.id, entity.trackName, entity.displayName, entity.location, entity.colorIndex, screen) {
             TrackActions(
                 onRename = { screen.renamingId = entity.id },
-                onShare = {
-                    context.startActivity(
-                        shareTrackIntent(context, entity.location, entity.trackName, entity.displayName),
-                    )
-                },
+                onShare = { context.shareTrack(entity) },
                 onHide = {
                     viewModel.hide(entity.id)
                     viewModel.focus(null)

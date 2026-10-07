@@ -56,6 +56,10 @@ class Formatters(
     val elevationPerMeter: Float get() = elevationIn(1.0).toFloat()
     val distancePerMeter: Float get() = (1.0 / if (metric) METERS_PER_KM else METERS_PER_MILE).toFloat()
 
+    /** A chart position: elapsed time on a time axis, else distance. */
+    fun position(timed: Boolean): (Float) -> String =
+        if (timed) { seconds -> duration(seconds.toDouble()) } else { meters -> distance(meters.toDouble()) }
+
     fun distance(meters: Double, locale: Locale = Locale.getDefault()): String = when {
         meters.isNaN() -> EMPTY
         metric -> when {

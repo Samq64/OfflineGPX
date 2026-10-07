@@ -24,6 +24,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import dev.samuelq.gpx.R
+import dev.samuelq.gpx.ui.DialogTitle
 
 /** The system's location switch. Not every build has the screen. */
 internal fun Context.openLocationSettings() {
@@ -100,7 +101,7 @@ internal fun LocationRationale(request: LocationRequest) {
     val notifications = request.use.asksNotifications
     AlertDialog(
         onDismissRequest = request::dismiss,
-        title = { Text(stringResource(R.string.location_why_title)) },
+        title = { DialogTitle(stringResource(R.string.location_why_title)) },
         text = {
             Text(
                 stringResource(request.use.why) +

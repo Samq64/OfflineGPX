@@ -55,6 +55,7 @@ import dev.samuelq.gpx.R
 import dev.samuelq.gpx.core.analysis.TrackProfile
 import dev.samuelq.gpx.data.record.RecordingState
 import dev.samuelq.gpx.data.record.RecordingStatus
+import dev.samuelq.gpx.ui.DialogTitle
 import dev.samuelq.gpx.ui.EdgePadding
 import dev.samuelq.gpx.ui.format.Formatters
 import dev.samuelq.gpx.ui.format.LocalFormatters
@@ -216,7 +217,7 @@ private fun WaypointDialog(number: Int, onDismiss: () -> Unit, onConfirm: (name:
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.record_waypoint_title, number)) },
+        title = { DialogTitle(stringResource(R.string.record_waypoint_title, number)) },
         text = {
             OutlinedTextField(
                 value = name,

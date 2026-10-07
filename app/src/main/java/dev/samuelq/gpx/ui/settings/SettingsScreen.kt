@@ -89,7 +89,9 @@ import dev.samuelq.gpx.R
 import dev.samuelq.gpx.core.model.UnitSystem
 import dev.samuelq.gpx.data.map.OfflineMap
 import dev.samuelq.gpx.data.settings.Settings
+import dev.samuelq.gpx.ui.BackButton
 import dev.samuelq.gpx.ui.BarInsets
+import dev.samuelq.gpx.ui.DialogTitle
 import dev.samuelq.gpx.ui.EdgePadding
 import dev.samuelq.gpx.ui.format.LocalFormatters
 import dev.samuelq.gpx.ui.format.tabularFigures
@@ -192,12 +194,7 @@ fun SettingsScreen(
                 windowInsets = BarInsets,
                 title = { Text(stringResource(R.string.settings_title), Modifier.semantics { heading() }) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            painterResource(R.drawable.ic_arrow_back),
-                            stringResource(R.string.action_back),
-                        )
-                    }
+                    BackButton(onBack)
                 },
             )
         },
@@ -288,9 +285,7 @@ fun SettingsScreen(
 private fun MergeMapsDialog(newMap: String, existing: List<String>, onMerge: () -> Unit, onCancel: () -> Unit) {
     AlertDialog(
         onDismissRequest = onCancel,
-        title = {
-            Text(pluralStringResource(R.plurals.settings_maps_merge_title, existing.size))
-        },
+        title = { DialogTitle(pluralStringResource(R.plurals.settings_maps_merge_title, existing.size)) },
         text = {
             Text(
                 pluralStringResource(

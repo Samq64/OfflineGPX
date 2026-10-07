@@ -2,7 +2,6 @@ package dev.samuelq.gpx.data.track
 
 import dev.samuelq.gpx.data.db.TrackEntity
 import dev.samuelq.gpx.data.db.TrackSummary
-import dev.samuelq.gpx.ui.track.exportFileName
 import dev.samuelq.gpx.ui.track.trackTitle
 import java.time.LocalDateTime
 import java.time.ZoneId
