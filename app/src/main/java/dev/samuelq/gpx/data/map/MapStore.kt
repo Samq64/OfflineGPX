@@ -10,7 +10,6 @@ import dev.samuelq.gpx.data.size
 import dev.samuelq.gpx.data.uniqueFile
 import java.io.File
 import java.io.IOException
-import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -150,21 +149,14 @@ class MapStore(
             return@withContext MapImportResult.Failed(MapImportError.NO_SPACE)
         }
         val destination = uniqueFile(staging, resolver.displayName(uri), EXTENSION, fallback = "map")
-        try {
-            if (!resolver.copyInto(uri, destination)) {
-                destination.delete()
-                return@withContext MapImportResult.Failed(MapImportError.UNREADABLE)
-            }
+        val copied = try {
+            resolver.copyInto(uri, destination)
         } catch (_: IOException) {
-            destination.delete()
-            // Out of space is named separately since it's the user's to fix.
-            val error = if (!hasRoomFor(LOW_SPACE_BYTES)) {
-                MapImportError.NO_SPACE
-            } else {
-                MapImportError.UNREADABLE
-            }
-            return@withContext MapImportResult.Failed(error)
+            false
         } catch (_: SecurityException) {
+            false
+        }
+        if (!copied) {
             destination.delete()
             return@withContext MapImportResult.Failed(MapImportError.UNREADABLE)
         }
@@ -182,25 +174,14 @@ class MapStore(
         install(map)
     }
 
-    /** Whether [bytes] could be had on the maps' volume, counting cache the system would clear. */
-    private fun hasRoomFor(bytes: Long): Boolean = withStorage(default = true) { storage, volume ->
-        storage.getAllocatableBytes(volume) >= bytes
-    }
-
     /** Has the system clear cache, if it must, to make room for [bytes]. False if it can't. */
-    private fun reserve(bytes: Long): Boolean = withStorage(default = false) { storage, volume ->
-        storage.getAllocatableBytes(volume) >= bytes && run {
-            storage.allocateBytes(volume, bytes)
-            true
-        }
-    }
-
-    private inline fun withStorage(default: Boolean, block: (StorageManager, UUID) -> Boolean): Boolean {
-        val storage = appContext.getSystemService<StorageManager>() ?: return default
+    private fun reserve(bytes: Long): Boolean {
+        val storage = appContext.getSystemService<StorageManager>() ?: return false
         return try {
-            block(storage, storage.getUuidForPath(directory))
+            storage.allocateBytes(storage.getUuidForPath(directory), bytes)
+            true
         } catch (_: IOException) {
-            default
+            false
         }
     }
 
@@ -252,8 +233,5 @@ class MapStore(
         const val DIRECTORY = "maps"
         const val EXTENSION = "map"
         const val STAGING = "staging"
-
-        /** Below this, a failed copy is reported as out of space. */
-        const val LOW_SPACE_BYTES = 64L * 1024 * 1024
     }
 }
