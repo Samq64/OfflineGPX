@@ -1,6 +1,7 @@
 package dev.samuelq.gpx.data
 
 import android.content.ContentResolver
+import android.database.Cursor
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.util.Log
@@ -9,22 +10,16 @@ import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
 
-internal fun ContentResolver.displayName(uri: Uri): String? = try {
-    query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
-        if (cursor.moveToFirst()) cursor.getString(0)?.takeIf(String::isNotBlank) else null
-    }
-} catch (e: Exception) {
-    Log.d("Files", "Could not query a display name for $uri", e)
-    null
-}
+internal fun ContentResolver.displayName(uri: Uri): String? =
+    queryOne(uri, OpenableColumns.DISPLAY_NAME) { it.getString(0)?.takeIf(String::isNotBlank) }
 
 /** Its size in bytes, if the provider says. */
-internal fun ContentResolver.size(uri: Uri): Long? = try {
-    query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { cursor ->
-        if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getLong(0) else null
-    }
+internal fun ContentResolver.size(uri: Uri): Long? = queryOne(uri, OpenableColumns.SIZE) { it.getLong(0) }
+
+private inline fun <T> ContentResolver.queryOne(uri: Uri, column: String, read: (Cursor) -> T?): T? = try {
+    query(uri, arrayOf(column), null, null, null)?.use { if (it.moveToFirst() && !it.isNull(0)) read(it) else null }
 } catch (e: Exception) {
-    Log.d("Files", "Could not query a size for $uri", e)
+    Log.d("Files", "Could not query $column for $uri", e)
     null
 }
 

@@ -37,16 +37,13 @@ interface TrackDao {
     suspend fun setTrackName(id: Long, name: String?)
 
     @Query("SELECT DISTINCT category FROM tracks WHERE category IS NOT NULL AND id != :except")
-    suspend fun categories(except: Long = 0): List<String>
+    suspend fun categories(except: Long): List<String>
 
     @Query("UPDATE tracks SET category = :category WHERE id = :id")
     suspend fun setCategory(id: Long, category: String?)
 
     @Query("UPDATE tracks SET location = :location WHERE id = :id")
     suspend fun setLocation(id: Long, location: String)
-
-    @Query("DELETE FROM tracks WHERE id = :id")
-    suspend fun delete(id: Long)
 
     @Query("DELETE FROM tracks WHERE id IN (:ids)")
     suspend fun delete(ids: List<Long>)

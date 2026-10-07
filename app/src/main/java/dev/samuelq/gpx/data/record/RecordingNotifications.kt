@@ -14,7 +14,6 @@ import android.text.Spanned
 import android.text.style.TtsSpan
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import androidx.core.app.ServiceCompat
 import androidx.core.content.getSystemService
 import dev.samuelq.gpx.MainActivity
 import dev.samuelq.gpx.R
@@ -43,12 +42,7 @@ internal class RecordingNotifications(private val service: Service) {
     fun startForeground(content: NotificationContent): Boolean {
         createChannel()
         try {
-            ServiceCompat.startForeground(
-                service,
-                NOTIFICATION_ID,
-                build(content),
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION,
-            )
+            service.startForeground(NOTIFICATION_ID, build(content), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
         } catch (e: SecurityException) {
             Log.w(TAG, "Not allowed to record", e)
             return false
@@ -69,7 +63,7 @@ internal class RecordingNotifications(private val service: Service) {
         service.getSystemService<NotificationManager>()?.notify(NOTIFICATION_ID, build(content))
     }
 
-    fun remove() = ServiceCompat.stopForeground(service, ServiceCompat.STOP_FOREGROUND_REMOVE)
+    fun remove() = service.stopForeground(Service.STOP_FOREGROUND_REMOVE)
 
     private fun shownOf(content: NotificationContent): Shown {
         val distance = Formatters(content.units).distance(content.distanceMeters)

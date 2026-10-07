@@ -236,10 +236,8 @@ class TrackRepository(
     /** From the cache when it's current, else parsed and cached. */
     private fun load(entity: TrackEntity): LoadedTrack {
         val file = fileOf(entity)
-        cache.read(entity.id, file)?.let { track ->
-            return LoadedTrack(entity.id, entity.displayName, track, TrackAnalyzer.analyze(track))
-        }
-        val track = parse(file.inputStream(), entity.displayName).also { cache.write(entity.id, file, it) }
+        val track = cache.read(entity.id, file)
+            ?: parse(file.inputStream(), entity.displayName).also { cache.write(entity.id, file, it) }
         return LoadedTrack(entity.id, entity.displayName, track, TrackAnalyzer.analyze(track))
     }
 

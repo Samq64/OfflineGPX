@@ -50,7 +50,7 @@ internal class RecordingSession(private val maxAccuracyMeters: Double, private v
     var locationOff = false
 
     /** Stop was asked for; fixes wait on the answer. */
-    val held: Boolean get() = heldAt != null
+    private val held: Boolean get() = heldAt != null
 
     /** [totalSeconds] is counting. */
     val timing: Boolean get() = startedAt != null && pausedAt == null && heldAt == null

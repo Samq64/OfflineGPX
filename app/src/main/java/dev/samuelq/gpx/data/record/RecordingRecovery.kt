@@ -81,14 +81,12 @@ class RecordingRecovery(
         }
     }
 
-    private fun read(claimed: File): AbandonedRecording? {
-        val track = RecordingWal.recover(claimed)
-        val profile = track?.let(TrackAnalyzer::analyze)
-        if (track == null || profile == null || !isSaveable(profile)) {
-            claimed.delete()
-            return null
-        }
-        return AbandonedRecording(claimed, track, profile)
+    private fun read(claimed: File): AbandonedRecording? = saveable(claimed) ?: null.also { claimed.delete() }
+
+    private fun saveable(log: File): AbandonedRecording? {
+        val track = RecordingWal.recover(log) ?: return null
+        val profile = TrackAnalyzer.analyze(track).takeIf(::isSaveable) ?: return null
+        return AbandonedRecording(log, track, profile)
     }
 
     /** A blank name leaves it unnamed. */
@@ -108,8 +106,7 @@ class RecordingRecovery(
     suspend fun setAside(log: File, label: TrackLabel): DiscardedRecording? = lock.withLock {
         withContext(io) {
             val aside = File(dir, "$DISCARD_PREFIX${System.currentTimeMillis()}.wal")
-            val profile = RecordingWal.recover(log)?.let(TrackAnalyzer::analyze)
-            if (profile != null && isSaveable(profile) && log.renameTo(aside)) {
+            if (saveable(log) != null && log.renameTo(aside)) {
                 DiscardedRecording(aside, label)
             } else {
                 log.delete()

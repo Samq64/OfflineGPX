@@ -124,9 +124,9 @@ private class ClippedMapData(private val files: List<OpenedMap>) : ITileDataSour
         try {
             val covering = files.withIndex().filter { (_, opened) -> opened.file.supportsTile(tile) }
             clipping.merging = covering.size > 1
+            clipping.levels = files.size
             covering.forEach { (i, opened) ->
                 clipping.level = i + 1
-                clipping.levels = files.size
                 clipping.startFile(tile, opened.box)
                 opened.file.query(tile, clipping)
                 clipping.finishFile { x, y -> opened.isWater(tile, x, y) }
@@ -307,15 +307,14 @@ private class ClippingSink(sink: ITileDataSink) : TileDataSink(sink) {
             earlierKeys += keys
             keys.clear()
         }
-        val scale = Tile.SIZE.toDouble() * (1 shl tile.zoomLevel.toInt())
-        worldPixels = scale
+        worldPixels = Tile.SIZE.toDouble() * (1 shl tile.zoomLevel.toInt())
         tileX = tile.tileX.toDouble() * Tile.SIZE
         tileY = tile.tileY.toDouble() * Tile.SIZE
         box = Rect(
-            left = (MercatorProjection.longitudeToX(bounds.minLongitude) * scale - tile.tileX * Tile.SIZE).toFloat(),
-            top = (MercatorProjection.latitudeToY(bounds.maxLatitude) * scale - tile.tileY * Tile.SIZE).toFloat(),
-            right = (MercatorProjection.longitudeToX(bounds.maxLongitude) * scale - tile.tileX * Tile.SIZE).toFloat(),
-            bottom = (MercatorProjection.latitudeToY(bounds.minLatitude) * scale - tile.tileY * Tile.SIZE).toFloat(),
+            left = longitudeToPixel(bounds.minLongitude),
+            top = latitudeToPixel(bounds.maxLatitude),
+            right = longitudeToPixel(bounds.maxLongitude),
+            bottom = latitudeToPixel(bounds.minLatitude),
         )
         uncovered = if (earlierBoxes.isEmpty()) listOf(box) else box.minus(earlierBoxes)
     }

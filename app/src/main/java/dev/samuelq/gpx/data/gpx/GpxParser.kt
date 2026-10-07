@@ -68,21 +68,10 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
 
                 TAG_TRK -> forEachChild(parser) {
                     when (parser.name) {
-                        TAG_NAME -> {
-                            val value = readLabel(parser)
-                            // First named track wins; later ones are usually laps.
-                            if (trackName == null) trackName = value
-                        }
-
-                        TAG_DESC -> {
-                            val value = readLabel(parser)
-                            if (trackDescription == null) trackDescription = value
-                        }
-
-                        TAG_TYPE -> {
-                            val value = readLabel(parser)
-                            if (trackType == null) trackType = value
-                        }
+                        // First named track wins; later ones are usually laps. Read regardless, to consume it.
+                        TAG_NAME -> readLabel(parser).let { if (trackName == null) trackName = it }
+                        TAG_DESC -> readLabel(parser).let { if (trackDescription == null) trackDescription = it }
+                        TAG_TYPE -> readLabel(parser).let { if (trackType == null) trackType = it }
 
                         TAG_TRKSEG -> readSegment(parser, points)
                         else -> skip(parser)

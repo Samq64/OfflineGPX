@@ -32,8 +32,12 @@ internal fun sharedData(a: OfflineMap, b: OfflineMap): Double? {
         TileIndex(a.file, sa).use { ia ->
             TileIndex(b.file, sb).use { ib ->
                 val sampled = (top..bottom step step).toList()
-                sampled.flatMapTo(ArrayList()) { ia.row(it, left, right).asList() }.toLongArray() to
-                    sampled.flatMapTo(ArrayList()) { ib.row(it, left, right).asList() }.toLongArray()
+
+                // Unboxed: up to MAX_SAMPLED_TILES sizes each.
+                fun TileIndex.sizes() = LongArray(sampled.size * columns.toInt()).also { out ->
+                    sampled.forEachIndexed { i, y -> row(y, left, right).copyInto(out, i * columns.toInt()) }
+                }
+                ia.sizes() to ib.sizes()
             }
         }
     } catch (_: IOException) {
@@ -48,8 +52,9 @@ internal fun sharedData(a: OfflineMap, b: OfflineMap): Double? {
 
 /** Each tile's bytes less a low percentile, which is the land and sea filler. */
 private fun LongArray.aboveFiller(): LongArray {
-    val nonEmpty = filter { it > 0 }.sorted()
-    val filler = if (nonEmpty.isEmpty()) 0 else nonEmpty[(nonEmpty.size * FILLER_PERCENTILE).toInt()]
+    val sorted = copyOf().apply { sort() }
+    val first = sorted.indexOfFirst { it > 0 }
+    val filler = if (first < 0) 0 else sorted[first + ((size - first) * FILLER_PERCENTILE).toInt()]
     return LongArray(size) { (this[it] - filler).coerceAtLeast(0) }
 }
 
