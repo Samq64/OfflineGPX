@@ -89,7 +89,6 @@ class TrackActions(
     val onHide: () -> Unit,
     val onDelete: () -> Unit,
     val onTrim: () -> Unit,
-    val onDuplicate: () -> Unit,
     val colorIndex: Int,
     val onColor: (Int) -> Unit,
 )
@@ -512,7 +511,6 @@ private fun SheetTitle(
                 it.onHide,
                 it.onDelete,
                 onTrim = it.onTrim,
-                onDuplicate = it.onDuplicate,
             )
         }
         onClose?.let {

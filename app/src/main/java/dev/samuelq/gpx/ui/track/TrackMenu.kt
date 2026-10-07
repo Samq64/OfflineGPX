@@ -31,7 +31,6 @@ fun TrackMenu(
     trackTitle: String? = null,
     /** On the map only, where the charts to trim against are. */
     onTrim: (() -> Unit)? = null,
-    onDuplicate: (() -> Unit)? = null,
 ) {
     var open by remember { mutableStateOf(false) }
 
@@ -66,7 +65,6 @@ fun TrackMenu(
                 if (onHide != null || onTrim != null) HorizontalDivider()
                 Item(R.string.library_rename, onRename)
                 Item(R.string.library_share, onShare)
-                onDuplicate?.let { Item(R.string.library_duplicate, it) }
                 HorizontalDivider()
                 Item(R.string.library_delete, onDelete, error = true)
             }

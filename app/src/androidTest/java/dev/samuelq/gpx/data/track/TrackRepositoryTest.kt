@@ -314,22 +314,6 @@ class TrackRepositoryTest {
     }
 
     @Test
-    fun duplicateCopiesFileAndRow() {
-        val id = importSample()
-        runBlocking { repository.setVisible(id, false) }
-
-        val copy = runBlocking { repository.duplicate(id).getOrThrow() }
-        assertNotEquals(id, copy)
-        val entity = row(copy)
-        assertEquals("Test ride (copy)", entity.trackName)
-        assertTrue(entity.visible)
-        assertNotEquals(row(id).location, entity.location)
-        assertEquals(row(id).summary, entity.summary)
-        assertEquals("Test ride (copy)", parsed(copy).name)
-        assertEquals(20, parsed(copy).points.size)
-    }
-
-    @Test
     fun deleteIsHiddenUntilCommittedOrUndone() {
         val id = importSample()
         val file = fileOf(id)

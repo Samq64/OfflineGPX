@@ -530,7 +530,6 @@ fun MapScreen(
                     )
                 },
                 onTrim = { screen.startTrim(focusedTrack.profile.points.size) },
-                onDuplicate = { viewModel.duplicate(entity.id) },
                 colorIndex = entity.colorIndex,
                 onColor = { viewModel.setColor(entity.id, it) },
             )

@@ -47,7 +47,6 @@ sealed interface LibraryEvent {
     data class ImportedAll(val imported: Int, val requested: Int) : LibraryEvent
 
     data class ExportedAll(val written: Int, val requested: Int) : LibraryEvent
-    data class Duplicated(val id: Long) : LibraryEvent
 
     /** [count] tracks, [name] if it was one; undone by restoring [before]. */
     data class VisibilityChanged(
@@ -192,16 +191,6 @@ class LibraryViewModel(
 
     fun setVisible(id: Long, visible: Boolean) {
         viewModelScope.launch { repository.setVisible(id, visible) }
-    }
-
-    /** The copy lists first, as the last viewed. */
-    fun duplicate(id: Long) {
-        viewModelScope.launch {
-            repository.duplicate(id).fold(
-                onSuccess = { _events.send(LibraryEvent.Duplicated(it)) },
-                onFailure = { _events.send(LibraryEvent.Say(R.string.library_duplicate_failed)) },
-            )
-        }
     }
 
     fun setColor(id: Long, colorIndex: Int) {

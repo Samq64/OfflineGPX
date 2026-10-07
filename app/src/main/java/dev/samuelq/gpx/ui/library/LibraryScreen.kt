@@ -215,10 +215,6 @@ fun LibraryScreen(
         viewModel.events.collect { event ->
             when (event) {
                 is LibraryEvent.Open -> onOpenTrack(event.id)
-                is LibraryEvent.Duplicated -> {
-                    reveal = event.id
-                    say(resources.getString(R.string.library_duplicated))
-                }
                 is LibraryEvent.Say -> say(resources.getString(event.text))
                 is LibraryEvent.ImportedAll -> say(
                     allOrSome(
@@ -408,7 +404,6 @@ fun LibraryScreen(
                                         )
                                     },
                                     onRename = { renaming = track },
-                                    onDuplicate = { viewModel.duplicate(track.id) },
                                     onDelete = { delete(setOf(track.id)) },
                                 )
                             }
@@ -610,7 +605,6 @@ private fun TrackRow(
     onColor: (Int) -> Unit,
     onShare: () -> Unit,
     onRename: () -> Unit,
-    onDuplicate: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -621,7 +615,6 @@ private fun TrackRow(
     val selectLabel = stringResource(R.string.library_select)
     val renameLabel = stringResource(R.string.library_rename)
     val shareLabel = stringResource(R.string.library_share)
-    val duplicateLabel = stringResource(R.string.library_duplicate)
     val deleteLabel = stringResource(R.string.library_delete)
 
     // Remembered: a DateTimeFormatter's first use loads locale data, janking the entry animation.
@@ -685,10 +678,6 @@ private fun TrackRow(
                                 onShare()
                                 true
                             },
-                            CustomAccessibilityAction(duplicateLabel) {
-                                onDuplicate()
-                                true
-                            },
                             CustomAccessibilityAction(deleteLabel) {
                                 onDelete()
                                 true
@@ -737,7 +726,7 @@ private fun TrackRow(
                     onCheckedChange = { onToggleVisible() },
                     modifier = Modifier.padding(start = 8.dp).semantics { contentDescription = showOnMap },
                 )
-                TrackMenu(onRename, onShare, onHide = null, onDelete, trackTitle = title, onDuplicate = onDuplicate)
+                TrackMenu(onRename, onShare, onHide = null, onDelete, trackTitle = title)
             }
         }
         // Inset to the title: the same group, next item.

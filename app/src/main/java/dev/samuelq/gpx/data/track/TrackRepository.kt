@@ -348,34 +348,6 @@ class TrackRepository(
         }.recoverFailure()
     }
 
-    /** A copy beside the original, named "(copy)" in its file and row. Returns the new row id. */
-    suspend fun duplicate(id: Long): Result<Long> = withContext(io) {
-        runCancellable {
-            val entity = entity(id)
-            val file = fileOf(entity)
-            val title = entity.titleStem.trim()
-            val name = appContext.getString(R.string.duplicate_name, title)
-            val copy = uniqueFile(checkNotNull(file.parentFile), name, "gpx", fallback = "track")
-            try {
-                writeAtomically(copy) { output -> file.inputStream().use { trimmer.trim(it, output, name = name) } }
-                val row = entity.copy(
-                    id = 0,
-                    location = TrackFiles.location(appContext, copy),
-                    displayName = copy.name,
-                    trackName = name,
-                    lastOpenedAtEpochMillis = System.currentTimeMillis(),
-                    colorIndex = leastUsedSlot(dao.colorUsage(), TrackEntity.PALETTE_SIZE),
-                    // Shown, even of a hidden track: a copy is made to be looked at.
-                    visible = true,
-                )
-                dao.upsert(row)
-            } catch (e: Throwable) {
-                copy.delete()
-                throw e
-            }
-        }.recoverFailure()
-    }
-
     /** Puts the file and row back as they were before [edit]. */
     suspend fun undoEdit(edit: TrackEdit): Result<Unit> = withContext(io) {
         runCancellable {

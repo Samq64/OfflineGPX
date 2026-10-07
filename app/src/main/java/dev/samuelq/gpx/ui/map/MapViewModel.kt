@@ -290,19 +290,6 @@ class MapViewModel(
 
     fun commitEdit(edit: TrackEdit) = repository.commitEdit(edit)
 
-    /** Opens the copy, so what was made is what's shown. */
-    fun duplicate(id: Long) {
-        viewModelScope.launch {
-            repository.duplicate(id).fold(
-                onSuccess = {
-                    focus(TrackRef.Saved(it))
-                    _messages.trySend(MapMessage.Say(R.string.library_duplicated))
-                },
-                onFailure = { _messages.trySend(MapMessage.Say(R.string.library_duplicate_failed)) },
-            )
-        }
-    }
-
     /** Rereads [id] after its file changed: the cached geometry, and the sheet if it shows it. */
     private suspend fun refresh(id: Long) {
         _state.update { it.copy(geometry = it.geometry - id) }
