@@ -10,9 +10,9 @@ import dev.samuelq.gpx.core.analysis.bearingDegrees
 import dev.samuelq.gpx.core.analysis.haversineMeters
 import dev.samuelq.gpx.core.model.TrackPoint
 import dev.samuelq.gpx.core.model.Waypoint
-import org.oscim.layers.marker.MarkerInterface
 import org.oscim.android.canvas.AndroidBitmap
 import org.oscim.core.GeoPoint
+import org.oscim.layers.marker.MarkerInterface
 import org.oscim.layers.marker.MarkerItem
 import org.oscim.layers.marker.MarkerSymbol
 
@@ -32,12 +32,21 @@ internal class MarkerSymbols(marker: Color, puck: Color, hole: Color, density: D
         with(density) {
             val ringWidth = MARKER_RING_WIDTH_DP.dp.toPx()
             this@MarkerSymbols.marker = symbol(
-                MARKER_RADIUS_DP.dp.toPx(), ringWidth, fill = marker, ring = MARKER_RING, halo = null, haloRadius = 0f,
+                MARKER_RADIUS_DP.dp.toPx(),
+                ringWidth,
+                fill = marker,
+                ring = MARKER_RING,
+                halo = null,
+                haloRadius = 0f,
             )
             // Bigger and haloed: the only marker about right now.
             this@MarkerSymbols.puck = symbol(
-                PUCK_RADIUS_DP.dp.toPx(), ringWidth, fill = puck, ring = MARKER_RING,
-                halo = puck.copy(alpha = PUCK_HALO_ALPHA), haloRadius = PUCK_HALO_RADIUS_DP.dp.toPx(),
+                PUCK_RADIUS_DP.dp.toPx(),
+                ringWidth,
+                fill = puck,
+                ring = MARKER_RING,
+                halo = puck.copy(alpha = PUCK_HALO_ALPHA),
+                haloRadius = PUCK_HALO_RADIUS_DP.dp.toPx(),
             )
             heading = arrow(PUCK_ARROW_RADIUS_DP.dp.toPx(), ringWidth, fill = puck, ring = MARKER_RING)
             // Hotspot at the tip, so the pin points at the position exactly.
@@ -168,9 +177,8 @@ internal fun MarkerSymbols.pins(
     trackWaypoints: List<Waypoint>,
     liveWaypoints: List<Waypoint>,
     onTop: Waypoint?,
-): List<MarkerInterface> =
-    trackWaypoints.filter { it != onTop }.map { marker(it.point, trackWaypoint) } +
-        liveWaypoints.filter { it != onTop }.map { marker(it.point, liveWaypoint) }
+): List<MarkerInterface> = trackWaypoints.filter { it != onTop }.map { marker(it.point, trackWaypoint) } +
+    liveWaypoints.filter { it != onTop }.map { marker(it.point, liveWaypoint) }
 
 /** From the last point back to one far enough off to point from, within its segment. */
 internal fun RouteOverlay.headingDegrees(): Double? {

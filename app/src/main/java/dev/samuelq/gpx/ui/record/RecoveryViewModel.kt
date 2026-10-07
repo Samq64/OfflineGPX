@@ -9,6 +9,7 @@ import dev.samuelq.gpx.data.record.DiscardedRecording
 import dev.samuelq.gpx.data.record.RecordingRecovery
 import dev.samuelq.gpx.data.track.TrackLabel
 import dev.samuelq.gpx.di.appContainer
+import java.io.File
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,7 +17,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
-import java.io.File
 
 /** Delivered once. */
 sealed interface RecoveryEvent {

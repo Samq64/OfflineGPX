@@ -1,12 +1,12 @@
 package dev.samuelq.gpx.ui.chart
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,23 +15,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.ui.input.pointer.PointerInputChange
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.ProgressBarRangeInfo
-import androidx.compose.ui.semantics.progressBarRangeInfo
-import androidx.compose.ui.semantics.setProgress
-import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.unit.DpSize
 import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -47,22 +39,30 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.setProgress
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -78,6 +78,7 @@ import kotlin.math.roundToInt
 private val LineWidth = 2.dp
 private val GridWidth = 1.dp
 private val MarkerRadius = 4.dp
+
 /** Enough to read as cut while the line beneath still shows. */
 private const val CutScrimAlpha = 0.75f
 private val SurfaceRing = 2.dp
@@ -128,7 +129,13 @@ fun ProfileChart(
 
     // Measured in composition: label width sets the plot rect the pointer handler also needs.
     val render = remember(
-        series, xScale, yScale, formatX, formatY, labelStyle, breakLabel,
+        series,
+        xScale,
+        yScale,
+        formatX,
+        formatY,
+        labelStyle,
+        breakLabel,
     ) {
         ChartRender(
             series = series,
@@ -241,11 +248,7 @@ fun ProfileChart(
 
 /** Stable params only, so Compose skips it while the scrubber moves. */
 @Composable
-private fun StaticLayer(
-    render: ChartRender,
-    geometry: ChartGeometry,
-    chartColors: ChartColors,
-) {
+private fun StaticLayer(render: ChartRender, geometry: ChartGeometry, chartColors: ChartColors) {
     Box(
         Modifier
             .fillMaxSize()
@@ -294,8 +297,14 @@ private fun KeptLayer(render: ChartRender, geometry: ChartGeometry, kept: IntRan
     Canvas(Modifier.fillMaxSize()) {
         if (series.size == 0) return@Canvas
         val plot = geometry.plotRect(size)
-        val start = plot.xFor(series.x[kept.first.coerceIn(0, series.size - 1)], render.xScale).coerceIn(plot.left, plot.right)
-        val end = plot.xFor(series.x[kept.last.coerceIn(0, series.size - 1)], render.xScale).coerceIn(plot.left, plot.right)
+        val start = plot.xFor(
+            series.x[kept.first.coerceIn(0, series.size - 1)],
+            render.xScale,
+        ).coerceIn(plot.left, plot.right)
+        val end = plot.xFor(
+            series.x[kept.last.coerceIn(0, series.size - 1)],
+            render.xScale,
+        ).coerceIn(plot.left, plot.right)
         drawRect(scrim, Offset(plot.left, plot.top), Size(start - plot.left, plot.height))
         drawRect(scrim, Offset(end, plot.top), Size(plot.right - end, plot.height))
     }
@@ -323,8 +332,7 @@ private fun ScrubberLayer(
         Modifier
             .fillMaxSize()
             .pointerInput(geometry) {
-                fun select(x: Float) =
-                    onSelectedIndexChange(geometry.indexAt(x, size.toSize(), currentRender))
+                fun select(x: Float) = onSelectedIndexChange(geometry.indexAt(x, size.toSize(), currentRender))
 
                 // The first tap still selects at once, so a single tap never waits for a second.
                 var lastTapAt = Long.MIN_VALUE / 2
@@ -500,11 +508,9 @@ private class ChartGeometry(
     }
 }
 
-private fun Rect.xFor(value: Float, scale: Scale): Float =
-    left + ((value - scale.min) / scale.span) * width
+private fun Rect.xFor(value: Float, scale: Scale): Float = left + ((value - scale.min) / scale.span) * width
 
-private fun Rect.yFor(value: Float, scale: Scale): Float =
-    bottom - ((value - scale.min) / scale.span) * height
+private fun Rect.yFor(value: Float, scale: Scale): Float = bottom - ((value - scale.min) / scale.span) * height
 
 /** Where the scrubber at [index] meets the line, null outside the plot; y is NaN in a gap. */
 private fun ChartRender.scrubberAt(index: Int?, plot: Rect): Offset? {
@@ -514,17 +520,9 @@ private fun ChartRender.scrubberAt(index: Int?, plot: Rect): Offset? {
     return Offset(x, plot.yFor(series.y[index], yScale))
 }
 
-private fun Rect.valueForX(px: Float, scale: Scale): Float =
-    scale.min + ((px - left) / width) * scale.span
+private fun Rect.valueForX(px: Float, scale: Scale): Float = scale.min + ((px - left) / width) * scale.span
 
-private fun buildPaths(
-    series: ChartSeries,
-    xScale: Scale,
-    yScale: Scale,
-    plot: Rect,
-    line: Path,
-    area: Path,
-) {
+private fun buildPaths(series: ChartSeries, xScale: Scale, yScale: Scale, plot: Rect, line: Path, area: Path) {
     val starts = series.segmentStartIndices
     val builder = PolylineBuilder(line, area, plot.bottom)
     // Visible range plus one either side, so the line runs off both edges.
@@ -639,9 +637,11 @@ private fun DrawScope.drawAxisLabels(render: ChartRender, plot: Rect, geometry: 
 private fun ChartSeries.yRange(): ClosedFloatingPointRange<Float>? {
     var low = Float.POSITIVE_INFINITY
     var high = Float.NEGATIVE_INFINITY
-    for (v in y) if (v.isFinite()) {
-        low = minOf(low, v)
-        high = maxOf(high, v)
+    for (v in y) {
+        if (v.isFinite()) {
+            low = minOf(low, v)
+            high = maxOf(high, v)
+        }
     }
     return if (low <= high) low..high else null
 }

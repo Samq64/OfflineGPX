@@ -30,7 +30,13 @@ class TrackTitleTest {
         TimeZone.setDefault(zone)
     }
 
-    private val started = LocalDateTime.of(2024, 5, 4, 18, 0).atZone(ZoneId.of("America/Toronto")).toInstant().toEpochMilli()
+    private val started = LocalDateTime.of(
+        2024,
+        5,
+        4,
+        18,
+        0,
+    ).atZone(ZoneId.of("America/Toronto")).toInstant().toEpochMilli()
 
     private fun row(location: String, trackName: String? = null, startedAt: Long? = started) = TrackEntity(
         location = location,
@@ -50,7 +56,12 @@ class TrackTitleTest {
 
     @Test
     fun `an unnamed recording is titled by its start, whatever its file is called`() {
-        for (file in listOf("2024-05-04T180000.gpx", "2024-05-04T180000 (2).gpx", "2024-05-04T180000 (copy).gpx", "Renamed-1.gpx")) {
+        for (file in listOf(
+            "2024-05-04T180000.gpx",
+            "2024-05-04T180000 (2).gpx",
+            "2024-05-04T180000 (copy).gpx",
+            "Renamed-1.gpx",
+        )) {
             assertEquals("4 May 2024, 18:00", row("recordings/$file").title, file)
             assertEquals("4 May 2024, 18:00", row("recordings/$file", trackName = " ").titleStem, file)
             assertEquals("", row("recordings/$file", trackName = " ").editableName, file)

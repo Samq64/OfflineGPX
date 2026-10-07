@@ -8,6 +8,10 @@ import dev.samuelq.gpx.data.copyInto
 import dev.samuelq.gpx.data.displayName
 import dev.samuelq.gpx.data.size
 import dev.samuelq.gpx.data.uniqueFile
+import java.io.File
+import java.io.IOException
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,10 +24,6 @@ import org.oscim.core.BoundingBox
 import org.oscim.tiling.source.mapfile.header.MapFileHeader
 import org.oscim.tiling.source.mapfile.header.SubFileParameter
 import org.oscim.tiling.source.mapfile.readMapFileHeader
-import java.io.File
-import java.io.IOException
-import java.util.UUID
-import java.util.concurrent.ConcurrentHashMap
 
 /** An offline basemap the user has imported, and what its header says about it. */
 class OfflineMap(
@@ -55,15 +55,13 @@ class OfflineMap(
     internal fun movedTo(file: File) = OfflineMap(file, header, sizeBytes)
 
     /** Bounding-box overlap; true of most neighbours too, so see [duplicates]. */
-    fun overlaps(other: OfflineMap): Boolean =
-        bounds.minLongitude < other.bounds.maxLongitude &&
-            other.bounds.minLongitude < bounds.maxLongitude &&
-            bounds.minLatitude < other.bounds.maxLatitude &&
-            other.bounds.minLatitude < bounds.maxLatitude
+    fun overlaps(other: OfflineMap): Boolean = bounds.minLongitude < other.bounds.maxLongitude &&
+        other.bounds.minLongitude < bounds.maxLongitude &&
+        bounds.minLatitude < other.bounds.maxLatitude &&
+        other.bounds.minLatitude < bounds.maxLatitude
 
     /** Whether [other] covers the same place, not just a box that reaches over this one. */
-    fun duplicates(other: OfflineMap): Boolean =
-        overlaps(other) && (sharedData(this, other) ?: 1.0) >= DUPLICATE_SHARE
+    fun duplicates(other: OfflineMap): Boolean = overlaps(other) && (sharedData(this, other) ?: 1.0) >= DUPLICATE_SHARE
 
     companion object {
         /** Null unless a mapsforge map file VTM reads. Not a debug build, whose index has a signature. */
@@ -144,46 +142,45 @@ class MapStore(
      * Copies [uri] into staging and validates the copy, deleting it on failure. Validated
      * after copying since SAF doesn't promise a second open returns the same bytes.
      */
-    suspend fun import(uri: Uri): MapImportResult =
-        withContext(Dispatchers.IO) {
-            // Only one import is ever pending, so anything here is a leftover.
-            staging.listFiles()?.forEach { it.delete() }
+    suspend fun import(uri: Uri): MapImportResult = withContext(Dispatchers.IO) {
+        // Only one import is ever pending, so anything here is a leftover.
+        staging.listFiles()?.forEach { it.delete() }
 
-            val resolver = appContext.contentResolver
-            // Before copying, so a map too big doesn't fill the disk first.
-            if (resolver.size(uri)?.let(::reserve) == false) {
-                return@withContext MapImportResult.Failed(MapImportError.NO_SPACE)
-            }
-            val destination = uniqueFile(staging, resolver.displayName(uri), EXTENSION, fallback = "map")
-            try {
-                if (!resolver.copyInto(uri, destination)) {
-                    destination.delete()
-                    return@withContext MapImportResult.Failed(MapImportError.UNREADABLE)
-                }
-            } catch (_: IOException) {
-                destination.delete()
-                // Out of space is named separately since it's the user's to fix.
-                val error = if (!hasRoomFor(LOW_SPACE_BYTES)) {
-                    MapImportError.NO_SPACE
-                } else {
-                    MapImportError.UNREADABLE
-                }
-                return@withContext MapImportResult.Failed(error)
-            } catch (_: SecurityException) {
+        val resolver = appContext.contentResolver
+        // Before copying, so a map too big doesn't fill the disk first.
+        if (resolver.size(uri)?.let(::reserve) == false) {
+            return@withContext MapImportResult.Failed(MapImportError.NO_SPACE)
+        }
+        val destination = uniqueFile(staging, resolver.displayName(uri), EXTENSION, fallback = "map")
+        try {
+            if (!resolver.copyInto(uri, destination)) {
                 destination.delete()
                 return@withContext MapImportResult.Failed(MapImportError.UNREADABLE)
             }
-
-            val map = OfflineMap.read(destination)
-            if (map == null) {
-                destination.delete()
-                return@withContext MapImportResult.Failed(MapImportError.NOT_A_MAP_FILE)
+        } catch (_: IOException) {
+            destination.delete()
+            // Out of space is named separately since it's the user's to fix.
+            val error = if (!hasRoomFor(LOW_SPACE_BYTES)) {
+                MapImportError.NO_SPACE
+            } else {
+                MapImportError.UNREADABLE
             }
-
-            // Neighbours go straight in; a second copy of a place is asked about.
-            val overlapping = _maps.value.filter { it.duplicates(map) }
-            if (overlapping.isEmpty()) install(map) else MapImportResult.Overlaps(map, overlapping)
+            return@withContext MapImportResult.Failed(error)
+        } catch (_: SecurityException) {
+            destination.delete()
+            return@withContext MapImportResult.Failed(MapImportError.UNREADABLE)
         }
+
+        val map = OfflineMap.read(destination)
+        if (map == null) {
+            destination.delete()
+            return@withContext MapImportResult.Failed(MapImportError.NOT_A_MAP_FILE)
+        }
+
+        // Neighbours go straight in; a second copy of a place is asked about.
+        val overlapping = _maps.value.filter { it.duplicates(map) }
+        if (overlapping.isEmpty()) install(map) else MapImportResult.Overlaps(map, overlapping)
+    }
 
     /** Whether [bytes] could be had on the maps' volume, counting cache the system would clear. */
     private fun hasRoomFor(bytes: Long): Boolean = withStorage(default = true) { storage, volume ->

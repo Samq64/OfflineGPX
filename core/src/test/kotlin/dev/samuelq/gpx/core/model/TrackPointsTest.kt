@@ -50,7 +50,12 @@ class TrackPointsTest {
 
     @Test
     fun `empty and repeated segment starts add no segment`() {
-        val points = TrackPoints.of(emptyList(), listOf(TrackPoint(1.0, 1.0)), emptyList(), listOf(TrackPoint(2.0, 2.0)))
+        val points = TrackPoints.of(
+            emptyList(),
+            listOf(TrackPoint(1.0, 1.0)),
+            emptyList(),
+            listOf(TrackPoint(2.0, 2.0)),
+        )
 
         assertContentEquals(intArrayOf(0, 1), points.segmentStarts())
         assertEquals(1, points.segmentEnd(0))

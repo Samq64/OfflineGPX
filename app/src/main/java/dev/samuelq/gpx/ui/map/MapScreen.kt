@@ -31,8 +31,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SheetValue
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -60,8 +60,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalWindowInfo
-import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -70,28 +70,28 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.samuelq.gpx.R
-import dev.samuelq.gpx.core.model.GeoBounds
-import dev.samuelq.gpx.data.track.editableName
-import dev.samuelq.gpx.data.track.title
 import dev.samuelq.gpx.core.analysis.TrackProfile
+import dev.samuelq.gpx.core.model.GeoBounds
 import dev.samuelq.gpx.core.model.Waypoint
 import dev.samuelq.gpx.data.record.RecordingController
 import dev.samuelq.gpx.data.record.RecordingState
-import dev.samuelq.gpx.ui.record.RecordingSheet
-import dev.samuelq.gpx.ui.record.RecordingOutcomes
+import dev.samuelq.gpx.data.track.editableName
+import dev.samuelq.gpx.data.track.title
 import dev.samuelq.gpx.ui.makeWay
+import dev.samuelq.gpx.ui.record.RecordingOutcomes
+import dev.samuelq.gpx.ui.record.RecordingSheet
 import dev.samuelq.gpx.ui.rememberSnackbars
 import dev.samuelq.gpx.ui.theme.recordingColor
 import dev.samuelq.gpx.ui.theme.routePalette
 import dev.samuelq.gpx.ui.theme.slot
 import dev.samuelq.gpx.ui.track.FocusedTrack
 import dev.samuelq.gpx.ui.track.TrackActions
-import dev.samuelq.gpx.ui.track.TrimControls
 import dev.samuelq.gpx.ui.track.TrackNameDialog
 import dev.samuelq.gpx.ui.track.TrackRef
 import dev.samuelq.gpx.ui.track.TrackSheetPeekHeight
-import dev.samuelq.gpx.ui.track.trackTitle
+import dev.samuelq.gpx.ui.track.TrimControls
 import dev.samuelq.gpx.ui.track.shareTrackIntent
+import dev.samuelq.gpx.ui.track.trackTitle
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
@@ -136,7 +136,7 @@ fun MapScreen(
     val metersPerPixel = remember { mutableDoubleStateOf(0.0) }
 
     val trackImporter = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument()
+        ActivityResultContracts.OpenDocument(),
     ) { uri -> uri?.let(viewModel::importTrack) }
 
     // Distance by default: on a time axis a stop becomes a gap as wide as the stop.
@@ -266,7 +266,9 @@ fun MapScreen(
         location.stopped.collect { reason ->
             screen.stopFollowing()
             when (reason) {
-                LocationStopped.OFF -> say(resources.getString(R.string.map_location_off)) { context.openLocationSettings() }
+                LocationStopped.OFF -> say(resources.getString(R.string.map_location_off)) {
+                    context.openLocationSettings()
+                }
                 LocationStopped.DENIED -> say(resources.getString(R.string.map_location_denied))
             }
         }
@@ -380,7 +382,6 @@ fun MapScreen(
         }
     }
 
-
     // Indexed like the analysis, so a chart index is a point on this line.
     val liveOverlay = remember(trace, liveColor) {
         if (trace.size == 0) null else RouteOverlay(trackId = LIVE_TRACK_ID, points = trace, color = liveColor)
@@ -464,7 +465,7 @@ fun MapScreen(
                 onRename = { screen.renamingId = entity.id },
                 onShare = {
                     context.startActivity(
-                        shareTrackIntent(context, entity.location, entity.trackName, entity.displayName)
+                        shareTrackIntent(context, entity.location, entity.trackName, entity.displayName),
                     )
                 },
                 onHide = {
@@ -574,7 +575,7 @@ fun MapScreen(
                                     state.entities.size,
                                     state.entities.size,
                                 )
-                            }
+                            },
                         )
                     },
                     actions = {
@@ -601,7 +602,6 @@ fun MapScreen(
         ) { padding ->
             // Top padding only: the map runs under the sheet so the sheet can hide fully.
             Box(Modifier.fillMaxSize().padding(top = padding.calculateTopPadding())) {
-
                 // Always composed: a basemap is worth showing with no tracks.
                 OfflineMapCanvas(
                     routes = overlays,
@@ -762,7 +762,7 @@ fun MapScreen(
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .height(buttonsHeight)
-                    .background(MaterialTheme.colorScheme.surfaceContainer)
+                    .background(MaterialTheme.colorScheme.surfaceContainer),
             )
         }
     }

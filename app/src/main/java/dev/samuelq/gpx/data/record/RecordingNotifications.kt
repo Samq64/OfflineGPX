@@ -54,7 +54,11 @@ internal class RecordingNotifications(private val service: Service) {
             Log.w(TAG, "Not allowed to record", e)
             return false
         } catch (e: IllegalStateException) {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || e !is ForegroundServiceStartNotAllowedException) throw e
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+                e !is ForegroundServiceStartNotAllowedException
+            ) {
+                throw e
+            }
             Log.w(TAG, "Not allowed to record", e)
             return false
         }
@@ -106,8 +110,8 @@ internal class RecordingNotifications(private val service: Service) {
                         RecordingStatus.RECORDING -> R.string.record_notification_active
                         RecordingStatus.LOCATION_OFF -> R.string.record_location_is_off
                         RecordingStatus.PAUSED -> R.string.record_notification_paused
-                    }
-                )
+                    },
+                ),
             )
             .setContentText(text)
             .setUsesChronometer(content.timing)

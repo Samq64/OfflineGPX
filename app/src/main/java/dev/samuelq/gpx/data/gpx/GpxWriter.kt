@@ -2,14 +2,16 @@ package dev.samuelq.gpx.data.gpx
 
 import dev.samuelq.gpx.core.model.Track
 import dev.samuelq.gpx.core.model.bounds
-import org.xmlpull.v1.XmlSerializer
 import java.io.OutputStream
 import java.time.format.DateTimeFormatter
+import org.xmlpull.v1.XmlSerializer
 
 const val GPX_MIME_TYPE = "application/gpx+xml"
 
 /** Without the control characters XML 1.0 forbids even escaped, which a pasted name can carry. */
-internal fun String.xmlSafe(): String = filterNot { it < ' ' && it != '\t' && it != '\n' && it != '\r' || it == '\uFFFE' || it == '\uFFFF' }
+internal fun String.xmlSafe(): String = filterNot {
+    (it < ' ' && it != '\t' && it != '\n' && it != '\r') || it == '\uFFFE' || it == '\uFFFF'
+}
 
 /**
  * Writes a [Track] as GPX 1.1, the on-disk format for recordings.

@@ -14,9 +14,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.CacheDrawScope
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -99,8 +99,10 @@ fun PointTooltip(
     }
 }
 
-/** One outline, so the border has no seam where the caret meets the bubble. */
-/** The caret at [caretY] from the top, kept off the corners; mid-height if null. */
+/**
+ * One outline, so the border has no seam where the caret meets the bubble. The caret is at
+ * [caretY] from the top, kept off the corners; mid-height if null.
+ */
 private fun CacheDrawScope.bubblePath(size: Size, caretOnLeft: Boolean, caretY: Float?): Path {
     val depth = CaretDepth.toPx()
     val half = CaretHalfWidth.toPx()

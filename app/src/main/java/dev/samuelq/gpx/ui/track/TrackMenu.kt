@@ -56,16 +56,18 @@ fun TrackMenu(
             )
         }
         // Composed only when open; per-row menu setup adds up in a list.
-        if (open) DropdownMenu(expanded = true, onDismissRequest = { open = false }) {
-            // The map's own first, apart from what the list's menu has too.
-            onHide?.let { Item(R.string.track_hide, it) }
-            onTrim?.let { Item(R.string.track_trim, it) }
-            if (onHide != null || onTrim != null) HorizontalDivider()
-            Item(R.string.library_rename, onRename)
-            Item(R.string.library_share, onShare)
-            onDuplicate?.let { Item(R.string.library_duplicate, it) }
-            HorizontalDivider()
-            Item(R.string.library_delete, onDelete, error = true)
+        if (open) {
+            DropdownMenu(expanded = true, onDismissRequest = { open = false }) {
+                // The map's own first, apart from what the list's menu has too.
+                onHide?.let { Item(R.string.track_hide, it) }
+                onTrim?.let { Item(R.string.track_trim, it) }
+                if (onHide != null || onTrim != null) HorizontalDivider()
+                Item(R.string.library_rename, onRename)
+                Item(R.string.library_share, onShare)
+                onDuplicate?.let { Item(R.string.library_duplicate, it) }
+                HorizontalDivider()
+                Item(R.string.library_delete, onDelete, error = true)
+            }
         }
     }
 }

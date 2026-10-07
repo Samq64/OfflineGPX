@@ -1,11 +1,11 @@
 package dev.samuelq.gpx.data.gpx
 
 import dev.samuelq.gpx.core.model.isValidCoordinate
+import java.io.InputStream
+import java.io.OutputStream
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserFactory
 import org.xmlpull.v1.XmlSerializer
-import java.io.InputStream
-import java.io.OutputStream
 
 /**
  * Copies a GPX document keeping only some of its points and waypoints, and optionally renaming
@@ -64,15 +64,19 @@ class GpxTrimmer(
     ) {
         private val path = ArrayList<String>()
         private var skipDepth = 0
+
         /** Whitespace since the last write, dropped with an element it led up to. */
         private val whitespace = StringBuilder()
+
         /** The open `<trkseg>`, until its first kept point. */
         private var pendingSegment: StartTag? = null
         private var pointIndex = 0
         private var segmentPoints = 0
         private var waypointIndex = 0
+
         /** Inside the first `<trk>`, before its first child. */
         private var nameDue = false
+
         /** Inside the first `<trk>`, before what follows its type. */
         private var typeDue = false
         private var trackNamespace: String? = null
@@ -123,8 +127,9 @@ class GpxTrimmer(
                 if (name == TAG_EXTENSIONS || name == TAG_TRKSEG) insertType()
             }
             val keep = when {
-                name == TAG_TRKPT && path == TRKSEG_PATH || name == TAG_RTEPT && path == RTE_PATH -> point()
-                name == TAG_WPT && path == ROOT_PATH -> keepWaypoint == null || readable() && keepWaypoint(waypointIndex++)
+                (name == TAG_TRKPT && path == TRKSEG_PATH) || (name == TAG_RTEPT && path == RTE_PATH) -> point()
+                name == TAG_WPT && path == ROOT_PATH ->
+                    keepWaypoint == null || (readable() && keepWaypoint(waypointIndex++))
                 // Wider than what's left; optional, so dropped rather than recomputed ahead of the points.
                 name == TAG_BOUNDS && path == METADATA_PATH -> keepPoint == null
                 // Nothing but points is worth reopening an emptied segment for.
@@ -250,7 +255,13 @@ class GpxTrimmer(
                 (parser.getNamespacePrefix(it) ?: "") to parser.getNamespaceUri(it)
             }
             val attributes = (0 until parser.attributeCount).map {
-                Triple(parser.getAttributeNamespace(it).ifEmpty { null }, parser.getAttributeName(it), parser.getAttributeValue(it))
+                Triple(
+                    parser.getAttributeNamespace(it).ifEmpty {
+                        null
+                    },
+                    parser.getAttributeName(it),
+                    parser.getAttributeValue(it),
+                )
             }
             val leading = whitespace.toString().also { whitespace.clear() }
             return StartTag(namespaces, parser.namespace.ifEmpty { null }, parser.name, attributes, leading)

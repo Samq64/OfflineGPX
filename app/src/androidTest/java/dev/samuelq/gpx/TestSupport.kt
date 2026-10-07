@@ -3,11 +3,11 @@ package dev.samuelq.gpx
 import android.content.Context
 import android.os.ParcelFileDescriptor
 import androidx.test.platform.app.InstrumentationRegistry
+import java.io.File
+import java.time.Instant
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
-import java.io.File
-import java.time.Instant
 
 val targetContext: Context get() = InstrumentationRegistry.getInstrumentation().targetContext
 
@@ -26,7 +26,11 @@ fun sampleGpx(name: String? = "Test ride", points: Int = 20, waypointAt: Int = 1
     name?.let { appendLine("<name>$it</name>") }
     appendLine("<trkseg>")
     repeat(points) { i ->
-        appendLine("""<trkpt lat="${lat(i)}" lon="-0.1"><ele>${10 + i}</ele><time>${start.plusSeconds(2L * i)}</time></trkpt>""")
+        appendLine(
+            """<trkpt lat="${lat(
+                i,
+            )}" lon="-0.1"><ele>${10 + i}</ele><time>${start.plusSeconds(2L * i)}</time></trkpt>""",
+        )
     }
     appendLine("</trkseg></trk></gpx>")
 }

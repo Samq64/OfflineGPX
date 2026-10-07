@@ -20,6 +20,11 @@ import dev.samuelq.gpx.data.track.TrackLabel
 import dev.samuelq.gpx.shell
 import dev.samuelq.gpx.targetContext
 import dev.samuelq.gpx.waitFor
+import java.time.Instant
+import kotlin.test.assertEquals
+import kotlin.test.assertIs
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -27,11 +32,6 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.time.Instant
-import kotlin.test.assertEquals
-import kotlin.test.assertIs
-import kotlin.test.assertNotNull
-import kotlin.test.assertTrue
 
 /**
  * Drives the real service with fixes from a GPS test provider. The activity is up so the
@@ -46,7 +46,7 @@ class RecordingServiceTest {
             add(Manifest.permission.ACCESS_FINE_LOCATION)
             add(Manifest.permission.ACCESS_COARSE_LOCATION)
             if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
-        }.toTypedArray()
+        }.toTypedArray(),
     )
 
     private val manager = targetContext.getSystemService<LocationManager>()!!
@@ -172,7 +172,10 @@ class RecordingServiceTest {
         val id = runBlocking { recovery.restore(aside).getOrThrow() }
         // The shared list may replay its previous value first.
         waitFor(message = "restored") {
-            container.trackRepository.tracks.first().any { it.id == id && it.trackName == "Undone" && it.category == "Rides" }
+            container.trackRepository.tracks.first().any {
+                it.id == id && it.trackName == "Undone" &&
+                    it.category == "Rides"
+            }
         }
     }
 

@@ -13,12 +13,12 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalResources
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.samuelq.gpx.R
 import dev.samuelq.gpx.core.analysis.TrackStats
@@ -34,10 +34,7 @@ class Stat(val label: String, val value: String, val spoken: String = value)
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun StatRow(
-    stats: List<Stat>,
-    modifier: Modifier = Modifier,
-) {
+fun StatRow(stats: List<Stat>, modifier: Modifier = Modifier) {
     // Wraps rather than clips at large font scales.
     FlowRow(
         modifier = modifier.fillMaxWidth().heightIn(min = RowHeight),
@@ -90,7 +87,7 @@ fun trackHeadline(stats: TrackStats, hasTime: Boolean): List<Stat> {
                         label = timeLabel,
                         value = Formatters.duration(stats.totalDurationSeconds),
                         spoken = resources.spokenDuration(stats.totalDurationSeconds),
-                    )
+                    ),
                 )
                 add(Stat(speedLabel, formatters.speed(stats.averageSpeedMps)))
             } else {

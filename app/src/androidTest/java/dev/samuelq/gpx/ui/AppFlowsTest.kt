@@ -19,13 +19,13 @@ import dev.samuelq.gpx.data.track.TrackFiles
 import dev.samuelq.gpx.sampleGpx
 import dev.samuelq.gpx.targetContext
 import dev.samuelq.gpx.waitFor
+import java.io.File
+import kotlin.test.assertEquals
 import kotlinx.coroutines.flow.first
 import org.junit.After
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.io.File
-import kotlin.test.assertEquals
 
 /** Whole-app flows, found by text and semantics. */
 @RunWith(AndroidJUnit4::class)
@@ -80,7 +80,7 @@ class AppFlowsTest {
 
         launch(
             Intent(Intent.ACTION_VIEW, uri, targetContext, MainActivity::class.java)
-                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),
         )
 
         // The rule's own wait: effects run on its dispatcher, which a blocking poll would stall.
@@ -102,7 +102,9 @@ class AppFlowsTest {
     @Test
     fun undoSurvivesRecreation() {
         val name = "Undone ${System.nanoTime()}"
-        val file = File(targetContext.cacheDir, "undo-${System.nanoTime()}.gpx").apply { writeText(sampleGpx(name = name)) }
+        val file = File(targetContext.cacheDir, "undo-${System.nanoTime()}.gpx").apply {
+            writeText(sampleGpx(name = name))
+        }
         val repository = container.trackRepository
         val id = kotlinx.coroutines.runBlocking { repository.import(Uri.fromFile(file)).getOrThrow() }
         file.delete()

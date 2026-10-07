@@ -22,11 +22,7 @@ import androidx.compose.ui.unit.dp
 import dev.samuelq.gpx.R
 
 @Composable
-internal fun EmptyState(
-    onImportMap: () -> Unit,
-    onImportTrack: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
+internal fun EmptyState(onImportMap: () -> Unit, onImportTrack: () -> Unit, modifier: Modifier = Modifier) {
     EmptyPage(
         title = stringResource(R.string.map_empty_title),
         body = stringResource(R.string.map_empty_body),
@@ -57,12 +53,7 @@ internal fun TooFarApartState(onOpenList: () -> Unit, modifier: Modifier = Modif
 }
 
 @Composable
-private fun EmptyPage(
-    title: String,
-    body: String,
-    modifier: Modifier = Modifier,
-    buttons: @Composable () -> Unit,
-) {
+private fun EmptyPage(title: String, body: String, modifier: Modifier = Modifier, buttons: @Composable () -> Unit) {
     Column(
         // Opaque and page-coloured: with nothing to show, this is a page, not a map.
         modifier = modifier

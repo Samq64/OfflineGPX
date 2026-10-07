@@ -52,8 +52,10 @@ object TrackFiles {
     }
 
     /** The default locale is the app's: Android sets it from the app's locale too. */
-    private fun localized(at: LocalDateTime): String =
-        DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT).withLocale(Locale.getDefault()).format(at)
+    private fun localized(at: LocalDateTime): String = DateTimeFormatter.ofLocalizedDateTime(
+        FormatStyle.MEDIUM,
+        FormatStyle.SHORT,
+    ).withLocale(Locale.getDefault()).format(at)
 }
 
 /** What a track is called: its name, else when a recording started, else the file it arrived as. */

@@ -40,9 +40,9 @@ object MapRenderTheme {
     // --- Ground ----------------------------------------------------------------------
 
     /**
-         * The sea isn't a feature: coastal tiles get `sea`/`nosea` polygons and all-water tiles
-         * `issea`. Undrawn, the ocean reads as land.
-         */
+     * The sea isn't a feature: coastal tiles get `sea`/`nosea` polygons and all-water tiles
+     * `issea`. Undrawn, the ocean reads as land.
+     */
     private fun StringBuilder.sea(land: Color, dark: Boolean) {
         area("natural", "issea|sea", waterBlue(dark))
         area("natural", "nosea", land.css())
@@ -93,7 +93,7 @@ object MapRenderTheme {
             stops = MINOR_ROAD_STOPS,
         )
         zoomedLine(
-            selector = """<rule e="way" k="highway" v="motorway|trunk|primary|secondary|tertiary|motorway_link|trunk_link|primary_link|secondary_link|tertiary_link">""",
+            selector = """<rule e="way" k="highway" v="$MAJOR_ROADS">""",
             stroke = land.shifted(0.45f, dark).css(),
             stops = listOf(9 to 0.5f, 13 to 2f, 18 to 10f),
         )
@@ -127,8 +127,13 @@ object MapRenderTheme {
     private fun StringBuilder.labels(label: Color, background: Color, scale: Float) {
         caption("natural", "water", label, background, minZoom = 10, size = fontSize(12, scale), priority = 10)
         caption(
-            "place", "city|town|village|hamlet|locality", label, background,
-            minZoom = 6, size = fontSize(14, scale), priority = 20,
+            "place",
+            "city|town|village|hamlet|locality",
+            label,
+            background,
+            minZoom = 6,
+            size = fontSize(14, scale),
+            priority = 20,
         )
 
         // Trail names win every collision: "which trail is this" is the app's core question.
@@ -164,10 +169,10 @@ object MapRenderTheme {
     }
 
     /**
-         * A line whose width follows [stops], filled in to one nested rule per zoom level: stepping
-         * only at the stops made roads hold a width then jump. `e="any" k="*" v="*"` is the
-         * pass-through child selector.
-         */
+     * A line whose width follows [stops], filled in to one nested rule per zoom level: stepping
+     * only at the stops made roads hold a width then jump. `e="any" k="*" v="*"` is the
+     * pass-through child selector.
+     */
     private fun StringBuilder.zoomedLine(
         selector: String,
         stroke: String,
@@ -189,11 +194,14 @@ object MapRenderTheme {
     }
 
     /**
-         * [width] with VTM's own growth divided out: its tile loader widens lines 1.4x per zoom
-         * above 12, which on per-zoom widths drew z18 streets six times too wide.
-         */
-    internal fun unscaled(zoom: Int, width: Float): Float =
-        Math.round(width / Math.pow(VTM_STROKE_INCREASE, (zoom - VTM_STROKE_MIN_ZOOM).coerceAtLeast(0).toDouble()).toFloat() * 1000) / 1000f
+     * [width] with VTM's own growth divided out: its tile loader widens lines 1.4x per zoom
+     * above 12, which on per-zoom widths drew z18 streets six times too wide.
+     */
+    internal fun unscaled(zoom: Int, width: Float): Float = Math.round(
+        width / Math.pow(VTM_STROKE_INCREASE, (zoom - VTM_STROKE_MIN_ZOOM).coerceAtLeast(0).toDouble()).toFloat() *
+            1000,
+    ) /
+        1000f
 
     internal fun perZoom(stops: List<Pair<Int, Float>>): List<Pair<Int, Float>> =
         stops.zipWithNext().flatMap { (from, to) ->
@@ -211,9 +219,9 @@ object MapRenderTheme {
     private fun greenVegetation(dark: Boolean) = if (dark) "#1e3220" else "#d5e9cf"
 
     /**
-         * Trail brown. The dark variant is much darker: roads step toward white in dark mode, and
-         * a mid-tone brown outshone them all.
-         */
+     * Trail brown. The dark variant is much darker: roads step toward white in dark mode, and
+     * a mid-tone brown outshone them all.
+     */
     private fun pathBrown(dark: Boolean) = if (dark) "#6b4f3e" else "#a8785f"
 
     /** Below this background luminance, derived colours move toward white. */
@@ -228,8 +236,7 @@ object MapRenderTheme {
 private fun Color.css(): String = String.format(java.util.Locale.ROOT, "#%06X", 0xFFFFFF and toArgb())
 
 /** A step away from the background: lighter on a dark theme, darker on a light one. */
-private fun Color.shifted(amount: Float, dark: Boolean): Color =
-    if (dark) lighten(amount) else darken(amount)
+private fun Color.shifted(amount: Float, dark: Boolean): Color = if (dark) lighten(amount) else darken(amount)
 
 private fun Color.darken(amount: Float): Color = Color(
     red = (red * (1f - amount)).coerceIn(0f, 1f),
@@ -244,3 +251,6 @@ private fun Color.lighten(amount: Float): Color = Color(
     blue = (blue + (1f - blue) * amount).coerceIn(0f, 1f),
     alpha = alpha,
 )
+
+private const val MAJOR_ROADS =
+    "motorway|trunk|primary|secondary|tertiary|motorway_link|trunk_link|primary_link|secondary_link|tertiary_link"

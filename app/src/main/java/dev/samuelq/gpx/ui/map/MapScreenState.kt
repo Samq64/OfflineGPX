@@ -32,6 +32,7 @@ class MapScreenState(
         var framing by mutableStateOf<TrackRef?>(null)
         var following by mutableStateOf(false)
         var snapping by mutableStateOf(false)
+
         /** Null until a subject is first seen, e.g. after process death mid-recording. */
         var wasRecording: Boolean? = null
     }

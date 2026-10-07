@@ -1,13 +1,13 @@
 package dev.samuelq.gpx.ui
 
 import androidx.compose.material3.SnackbarHostState
+import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.yield
 import org.junit.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertNull
 
 class UndoSnackbarTest {
 
@@ -15,7 +15,10 @@ class UndoSnackbarTest {
     private var outcome: String? = null
 
     private fun CoroutineScope.offer(message: String = "Deleted") = launch {
-        host.showUndo(message, "Undo", indefinite = false, onUndo = { outcome = "undo $message" }, onCommit = { outcome = "commit $message" })
+        host.showUndo(message, "Undo", indefinite = false, onUndo = { outcome = "undo $message" }, onCommit = {
+            outcome =
+                "commit $message"
+        })
     }
 
     private suspend fun shown(): String? {

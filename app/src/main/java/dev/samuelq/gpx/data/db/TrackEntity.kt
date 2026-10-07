@@ -44,7 +44,13 @@ data class TrackEntity(
 
     /** Null until [summarised]. */
     val bounds: GeoBounds?
-        get() = if (summarised) with(summary) { GeoBounds(southLatitude, westLongitude, northLatitude, eastLongitude) } else null
+        get() = if (summarised) {
+            with(summary) {
+                GeoBounds(southLatitude, westLongitude, northLatitude, eastLongitude)
+            }
+        } else {
+            null
+        }
 
     // What the list sorts and shows by.
     val distanceMeters: Double get() = summary.distanceMeters
@@ -77,8 +83,4 @@ data class TrackSummary(
 )
 
 /** The columns a file's contents decide, written alone so a concurrent rename or recolour survives. */
-data class SummaryUpdate(
-    val id: Long,
-    val startedAtEpochMillis: Long?,
-    @Embedded val summary: TrackSummary,
-)
+data class SummaryUpdate(val id: Long, val startedAtEpochMillis: Long?, @Embedded val summary: TrackSummary)

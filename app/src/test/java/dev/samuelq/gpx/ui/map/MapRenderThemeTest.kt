@@ -1,6 +1,12 @@
 package dev.samuelq.gpx.ui.map
 
 import androidx.compose.ui.graphics.Color
+import java.io.ByteArrayInputStream
+import java.io.InputStream
+import java.lang.reflect.Proxy
+import kotlin.test.Test
+import kotlin.test.assertContains
+import kotlin.test.assertNotNull
 import org.oscim.backend.CanvasAdapter
 import org.oscim.backend.canvas.Bitmap
 import org.oscim.backend.canvas.Canvas
@@ -9,12 +15,6 @@ import org.oscim.theme.ThemeFile
 import org.oscim.theme.ThemeLoader
 import org.oscim.theme.XmlRenderThemeMenuCallback
 import org.oscim.theme.XmlThemeResourceProvider
-import java.io.ByteArrayInputStream
-import java.io.InputStream
-import java.lang.reflect.Proxy
-import kotlin.test.Test
-import kotlin.test.assertContains
-import kotlin.test.assertNotNull
 
 /**
  * A malformed theme draws a blank map rather than erroring, so parse it with VTM's own
@@ -34,7 +34,9 @@ class MapRenderThemeTest {
                 override fun getResourceProvider(): XmlThemeResourceProvider? = null
                 override fun setResourceProvider(provider: XmlThemeResourceProvider?) = Unit
                 override fun isMapsforgeTheme() = mapsforge
-                override fun setMapsforgeTheme(value: Boolean) { mapsforge = value }
+                override fun setMapsforgeTheme(value: Boolean) {
+                    mapsforge = value
+                }
             },
         )
     }
@@ -66,8 +68,14 @@ class MapRenderThemeTest {
     @Test
     fun `the vocabulary the app relies on is present`() {
         listOf(
-            "natural", "waterway", "landuse", "leisure", "building",
-            "highway", "railway", "place",
+            "natural",
+            "waterway",
+            "landuse",
+            "leisure",
+            "building",
+            "highway",
+            "railway",
+            "place",
         ).forEach { assertContains(lightXml, """k="$it"""") }
     }
 
@@ -133,7 +141,8 @@ private object NullGraphics : CanvasAdapter() {
     }
 
     private inline fun <reified T> stub(): T = Proxy.newProxyInstance(
-        T::class.java.classLoader, arrayOf(T::class.java),
+        T::class.java.classLoader,
+        arrayOf(T::class.java),
     ) { _, method, _ ->
         when (method.returnType) {
             java.lang.Boolean.TYPE -> false

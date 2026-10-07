@@ -5,6 +5,8 @@ import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -27,12 +29,10 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.core.content.FileProvider
 import dev.samuelq.gpx.R
-import dev.samuelq.gpx.data.gpx.GPX_MIME_TYPE
 import dev.samuelq.gpx.data.db.TrackEntity
+import dev.samuelq.gpx.data.gpx.GPX_MIME_TYPE
 import dev.samuelq.gpx.data.safeFileName
 import dev.samuelq.gpx.data.track.TrackFiles
 
@@ -49,7 +49,7 @@ fun TrackNameDialog(
 ) {
     var field by remember(initialName) {
         mutableStateOf(
-            TextFieldValue(initialName, selection = TextRange(0, initialName.length))
+            TextFieldValue(initialName, selection = TextRange(0, initialName.length)),
         )
     }
     var category by remember(initialCategory) { mutableStateOf(initialCategory) }
@@ -142,20 +142,20 @@ fun CategoryField(
 fun trackTitle(trackName: String?, displayName: String): String =
     trackName?.takeIf(String::isNotBlank) ?: TrackFiles.recordedAt(displayName) ?: displayName
 
-private fun String.dropGpxSuffix(): String =
-    if (endsWith(GPX, ignoreCase = true)) dropLast(GPX.length) else this
+private fun String.dropGpxSuffix(): String = if (endsWith(GPX, ignoreCase = true)) dropLast(GPX.length) else this
 
 /** The track's name, made safe as a filename; unnamed, the file it's stored under, whose stamp sorts. */
 fun exportFileName(trackName: String?, displayName: String): String =
     safeFileName(trackName?.takeIf(String::isNotBlank) ?: displayName.dropGpxSuffix()).ensureGpxSuffix()
 
-fun String.ensureGpxSuffix(): String =
-    if (endsWith(GPX, ignoreCase = true)) this else "$this$GPX"
+fun String.ensureGpxSuffix(): String = if (endsWith(GPX, ignoreCase = true)) this else "$this$GPX"
 
 /** Shares the stored file via a [FileProvider] grant scoped to it. */
 fun shareTrackIntent(context: Context, location: String, trackName: String?, displayName: String): Intent {
     val uri = FileProvider.getUriForFile(
-        context, "${context.packageName}.fileprovider", TrackFiles.file(context, location),
+        context,
+        "${context.packageName}.fileprovider",
+        TrackFiles.file(context, location),
     )
     val send = Intent(Intent.ACTION_SEND).apply {
         type = GPX_MIME_TYPE

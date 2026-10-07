@@ -44,13 +44,26 @@ class LibraryListingTest {
 
     @Test
     fun `categories group alphabetically, uncategorised last, keeping the sort within`() {
-        val sorted = listOf(track(1, null), track(2, "Rides"), track(3, "Hikes"), track(4, null), track(5, "Rides"), track(6, "Hikes"))
+        val sorted =
+            listOf(
+                track(1, null),
+                track(2, "Rides"),
+                track(3, "Hikes"),
+                track(4, null),
+                track(5, "Rides"),
+                track(6, "Hikes"),
+            )
         val grouped = sorted.groupedByCategory()
         assertEquals(listOf(3L, 6L, 2L, 5L, 1L, 4L), grouped.map(TrackEntity::id))
 
         val sections = grouped.sections()
         assertEquals(listOf("Hikes", "Rides", null), sections.map(Section::category))
-        assertEquals(listOf(listOf(3L, 6L), listOf(2L, 5L), listOf(1L, 4L)), sections.map { it.tracks.map(TrackEntity::id) })
+        assertEquals(
+            listOf(listOf(3L, 6L), listOf(2L, 5L), listOf(1L, 4L)),
+            sections.map {
+                it.tracks.map(TrackEntity::id)
+            },
+        )
         assertTrue(emptyList<TrackEntity>().sections().isEmpty())
     }
 

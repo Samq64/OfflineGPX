@@ -142,4 +142,3 @@ private val HaloWidth = 3.dp
 
 private const val METERS_PER_MILE = Formatters.METERS_PER_MILE
 private const val METERS_PER_FOOT = 1 / Formatters.FEET_PER_METER
-

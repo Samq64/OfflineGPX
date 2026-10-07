@@ -1,20 +1,20 @@
 package dev.samuelq.gpx.ui.map
 
+import android.view.ViewConfiguration
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import kotlin.math.hypot
+import kotlin.math.pow
 import org.oscim.core.Box
 import org.oscim.core.MapPosition
-import android.view.ViewConfiguration
 import org.oscim.event.Event
 import org.oscim.event.MotionEvent
 import org.oscim.layers.vector.VectorLayer
 import org.oscim.layers.vector.geometries.LineDrawable
 import org.oscim.layers.vector.geometries.Style
 import org.oscim.map.Map
-import kotlin.math.hypot
-import kotlin.math.pow
 
 /**
  * Stacking order, bottom first; VTM keeps each group together however late it's added.
@@ -55,6 +55,7 @@ internal class TapDetector(
 
     private var scaling = false
     private var scaledY = 0f
+
     // Set by a second finger; cleared by the next first one.
     private var pinched = false
     private var dragged = false
@@ -181,7 +182,9 @@ internal fun List<RouteOverlay>.toLines(styles: RouteStyles, focusedId: Long? = 
 internal class OverlayLayer(private val owner: Map) : VectorLayer(owner) {
     private val drawnFor = MapPosition()
     private val current = MapPosition()
+
     @Volatile private var drawnValid = false
+
     @Volatile private var checking = false
 
     override fun processFeatures(t: Task, b: Box) {

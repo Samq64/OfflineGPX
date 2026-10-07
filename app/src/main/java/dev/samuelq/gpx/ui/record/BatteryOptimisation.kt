@@ -48,9 +48,12 @@ fun BatteryOptimisationHint(modifier: Modifier = Modifier) {
         ) {
             Text(
                 stringResource(
-                    if (BatteryInAppInfo) R.string.record_battery_open_app_info
-                    else R.string.record_battery_open
-                )
+                    if (BatteryInAppInfo) {
+                        R.string.record_battery_open_app_info
+                    } else {
+                        R.string.record_battery_open
+                    },
+                ),
             )
         }
     }

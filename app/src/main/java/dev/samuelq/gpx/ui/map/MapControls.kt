@@ -18,8 +18,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.DpSize
@@ -95,9 +95,10 @@ internal fun LocationButton(following: Boolean, waiting: Boolean, recording: Boo
             !following -> R.string.map_follow_location
             recording -> R.string.map_following_location
             else -> R.string.map_stop_location
-        }
+        },
     )
     val waitingLabel = stringResource(R.string.record_waiting_for_fix)
+    val icon = if (following && !waiting) R.drawable.ic_my_location else R.drawable.ic_location_searching
     Surface(
         onClick = onClick,
         modifier = Modifier.size(48.dp).semantics {
@@ -105,12 +106,12 @@ internal fun LocationButton(following: Boolean, waiting: Boolean, recording: Boo
             if (waiting) stateDescription = waitingLabel
         },
         shape = CircleShape,
-        color = if (following) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+        color = with(MaterialTheme.colorScheme) { if (following) primaryContainer else surfaceContainerHigh },
         shadowElevation = 2.dp,
     ) {
         Box(contentAlignment = Alignment.Center) {
             Icon(
-                painterResource(if (following && !waiting) R.drawable.ic_my_location else R.drawable.ic_location_searching),
+                painterResource(icon),
                 contentDescription = null,
             )
         }

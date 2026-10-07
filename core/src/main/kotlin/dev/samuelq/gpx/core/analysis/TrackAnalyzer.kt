@@ -37,8 +37,11 @@ object TrackAnalyzer {
         // Partially timed files are treated as untimed rather than inventing speeds.
         val hasTime = size > 1 && points.indices.all(points::hasTime)
         val starts =
-            if (hasTime) breaksAt(points, minGapSeconds)
-            else points.segmentStarts()
+            if (hasTime) {
+                breaksAt(points, minGapSeconds)
+            } else {
+                points.segmentStarts()
+            }
         val ends = IntArray(starts.size) { i -> if (i + 1 < starts.size) starts[i + 1] else size }
 
         val elapsed = FloatArray(size)
@@ -71,7 +74,10 @@ object TrackAnalyzer {
                 // Gaps between segments are signal loss, not travel.
                 if (i > start) {
                     cumulative += haversineMeters(
-                        points.latitude(i - 1), points.longitude(i - 1), points.latitude(i), points.longitude(i),
+                        points.latitude(i - 1),
+                        points.longitude(i - 1),
+                        points.latitude(i),
+                        points.longitude(i),
                     )
                 }
                 distance[i] = cumulative.toFloat()

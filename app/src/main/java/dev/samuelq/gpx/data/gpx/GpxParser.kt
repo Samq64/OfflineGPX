@@ -3,17 +3,17 @@ package dev.samuelq.gpx.data.gpx
 import dev.samuelq.gpx.core.model.Track
 import dev.samuelq.gpx.core.model.TrackPoint
 import dev.samuelq.gpx.core.model.TrackPointsBuilder
-import dev.samuelq.gpx.core.model.isValidCoordinate
 import dev.samuelq.gpx.core.model.Waypoint
-import org.xmlpull.v1.XmlPullParser
-import org.xmlpull.v1.XmlPullParserException
-import org.xmlpull.v1.XmlPullParserFactory
+import dev.samuelq.gpx.core.model.isValidCoordinate
 import java.io.InputStream
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.time.format.DateTimeParseException
+import org.xmlpull.v1.XmlPullParser
+import org.xmlpull.v1.XmlPullParserException
+import org.xmlpull.v1.XmlPullParserFactory
 
 class GpxParseException(message: String, cause: Throwable? = null) : Exception(message, cause)
 

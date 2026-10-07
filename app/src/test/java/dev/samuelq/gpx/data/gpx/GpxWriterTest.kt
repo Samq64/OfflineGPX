@@ -4,13 +4,13 @@ import dev.samuelq.gpx.core.model.Track
 import dev.samuelq.gpx.core.model.TrackPoint
 import dev.samuelq.gpx.core.model.TrackPointsBuilder
 import dev.samuelq.gpx.core.model.Waypoint
-import org.kxml2.io.KXmlParser
-import org.kxml2.io.KXmlSerializer
 import java.io.ByteArrayOutputStream
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import org.kxml2.io.KXmlParser
+import org.kxml2.io.KXmlSerializer
 
 class GpxWriterTest {
 
@@ -38,7 +38,9 @@ class GpxWriterTest {
         val xml = write()
         assertTrue("<name>Summit</name>" in xml, xml)
         assertTrue(
-            Regex("""<bounds minlat="47.100000" minlon="8.500000" maxlat="47.300000" maxlon="8.600000"""").containsMatchIn(xml),
+            Regex(
+                """<bounds minlat="47.100000" minlon="8.500000" maxlat="47.300000" maxlon="8.600000"""",
+            ).containsMatchIn(xml),
             xml,
         )
     }

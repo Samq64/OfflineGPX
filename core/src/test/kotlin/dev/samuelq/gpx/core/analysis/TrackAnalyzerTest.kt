@@ -33,7 +33,7 @@ class TrackAnalyzerTest {
                 time = if (timed) start.plusSeconds(i * secondsBetween) else null,
             )
         }
-        return Track(name = "test", segments = listOf(TrackSegment(points)))
+        return Track(name = "test", segments = listOf(segment(points)))
     }
 
     @Test
@@ -77,7 +77,7 @@ class TrackAnalyzerTest {
             )
         }
         val profile = TrackAnalyzer.analyze(
-            Track("jitter", listOf(TrackSegment(points)))
+            Track("jitter", listOf(segment(points))),
         )
 
         // Unsmoothed, the glitch would read ~35 m/s.
@@ -95,7 +95,7 @@ class TrackAnalyzerTest {
             TrackPoint(5.0 + it * step, 8.0, time = start.plusSeconds(600 + it.toLong()))
         }
         val profile = TrackAnalyzer.analyze(
-            Track("gap", listOf(TrackSegment(first), TrackSegment(second)))
+            Track("gap", listOf(segment(first), segment(second))),
         )
 
         // 100 m + 100 m, not the ~550 km jump between them.
@@ -109,8 +109,10 @@ class TrackAnalyzerTest {
             straightRun(count = 60, metersPerSecond = 5.0) { i ->
                 // 30 samples of +/-1 m barometric wander, then a genuine 50 m climb.
                 if (i < 30) if (i % 2 == 0) 100.0 else 101.0
-                else 100.0 + (i - 29) * (50.0 / 30.0)
-            }
+                else {
+                    100.0 + (i - 29) * (50.0 / 30.0)
+                }
+            },
         )
 
         assertTrue(profile.hasElevation)
@@ -132,7 +134,7 @@ class TrackAnalyzerTest {
             TrackPoint(30 * step, 8.0, time = start.plusSeconds(30 + it.toLong()))
         }
         val profile = TrackAnalyzer.analyze(
-            Track("stop", listOf(TrackSegment(moving + parked)))
+            Track("stop", listOf(segment(moving + parked))),
         )
 
         assertEquals(150.0, profile.stats.totalDurationSeconds, 1e-6)
@@ -146,7 +148,7 @@ class TrackAnalyzerTest {
     @Test
     fun `degrades cleanly when a route has no timestamps`() {
         val profile = TrackAnalyzer.analyze(
-            straightRun(count = 20, metersPerSecond = 10.0, timed = false) { 400.0 }
+            straightRun(count = 20, metersPerSecond = 10.0, timed = false) { 400.0 },
         )
 
         assertFalse(profile.hasTime)
@@ -159,7 +161,7 @@ class TrackAnalyzerTest {
     @Test
     fun `marks missing elevation samples rather than guessing them`() {
         val profile = TrackAnalyzer.analyze(
-            straightRun(count = 10, metersPerSecond = 5.0) { i -> if (i == 5) null else 400.0 }
+            straightRun(count = 10, metersPerSecond = 5.0) { i -> if (i == 5) null else 400.0 },
         )
 
         assertTrue(profile.elevationMeters[5].isNaN())
@@ -179,11 +181,11 @@ class TrackAnalyzerTest {
                         latitude = (60 + i) * step,
                         longitude = 8.0,
                         time = start.plusSeconds(59 + gapSeconds + i),
-                    )
+                    ),
                 )
             }
         }
-        return Track(name = "gap", segments = listOf(TrackSegment(points)))
+        return Track(name = "gap", segments = listOf(segment(points)))
     }
 
     @Test
@@ -200,7 +202,7 @@ class TrackAnalyzerTest {
         // One missing timestamp makes the whole track untimed, gap detection included.
         points[0] = points[0].copy(time = null)
         val profile = TrackAnalyzer.analyze(
-            Track(name = "gap", segments = listOf(TrackSegment(points)))
+            Track(name = "gap", segments = listOf(segment(points))),
         )
 
         assertFalse(profile.hasTime)
@@ -242,7 +244,7 @@ class TrackAnalyzerTest {
     @Test
     fun `a sparsely sampled file is left alone`() {
         val profile = TrackAnalyzer.analyze(
-            straightRun(count = 30, metersPerSecond = 8.0, secondsBetween = 60)
+            straightRun(count = 30, metersPerSecond = 8.0, secondsBetween = 60),
         )
         assertEquals(listOf(0), profile.segmentStartIndices.toList())
     }
@@ -313,7 +315,7 @@ class TrackAnalyzerTest {
         val points = (0 until 30_000).map { i ->
             TrackPoint(latitude = i * step, longitude = 8.0, elevation = null, time = start)
         }
-        val track = Track(name = null, segments = listOf(TrackSegment(points)))
+        val track = Track(name = null, segments = listOf(segment(points)))
 
         val elapsed = kotlin.system.measureTimeMillis {
             val profile = TrackAnalyzer.analyze(track)
@@ -326,7 +328,7 @@ class TrackAnalyzerTest {
     fun `a file sparser than the speed window still has a speed`() {
         // No sample has a neighbour within the 10 s window.
         val profile = TrackAnalyzer.analyze(
-            straightRun(count = 30, metersPerSecond = 8.0, secondsBetween = 20)
+            straightRun(count = 30, metersPerSecond = 8.0, secondsBetween = 20),
         )
 
         assertEquals(8.0f, profile.speedMps[15], 0.1f)
@@ -335,12 +337,7 @@ class TrackAnalyzerTest {
     }
 
     /** 16 m hills every 300 m at 5 m/s, +/-1.5 m jitter; [secondsBetween] thins it. */
-    private fun hillyRun(
-        meters: Double,
-        secondsBetween: Long = 1,
-        reverse: Boolean = false,
-        seed: Int = 1,
-    ): Track {
+    private fun hillyRun(meters: Double, secondsBetween: Long = 1, reverse: Boolean = false, seed: Int = 1): Track {
         val random = kotlin.random.Random(seed)
         val count = (meters / (5.0 * secondsBetween)).toInt() + 1
         val step = 5.0 * secondsBetween
@@ -354,7 +351,7 @@ class TrackAnalyzerTest {
                 time = start.plusSeconds(i * secondsBetween),
             )
         }
-        return Track(name = "hills", segments = listOf(TrackSegment(points)))
+        return Track(name = "hills", segments = listOf(segment(points)))
     }
 
     @Test
@@ -388,7 +385,7 @@ class TrackAnalyzerTest {
         val second = (20 until 40).map {
             TrackPoint(it * step, 8.0, elevation = 104.0, time = start.plusSeconds(600 + it.toLong()))
         }
-        val profile = TrackAnalyzer.analyze(Track("break", listOf(TrackSegment(first), TrackSegment(second))))
+        val profile = TrackAnalyzer.analyze(Track("break", listOf(segment(first), segment(second))))
 
         assertEquals(4.0, profile.stats.ascentMeters, 0.01)
         assertEquals(0.0, profile.stats.descentMeters, 0.01)
@@ -414,7 +411,7 @@ class TrackAnalyzerTest {
                 time = start.plusSeconds(seconds),
             )
         }
-        return Track(name = null, segments = listOf(TrackSegment(points)))
+        return Track(name = null, segments = listOf(segment(points)))
     }
 
     @Test
@@ -479,13 +476,12 @@ class TrackAnalyzerTest {
         assertEquals(70.0, profile.distanceTo(probe)!!, 1.0)
         assertNull(TrackAnalyzer.analyze(TrackPoints.EMPTY).distanceTo(probe))
     }
-
 }
 
 private fun TrackProfile.maxSpeed(): Double = speedMps.filterNot(Float::isNaN).max().toDouble()
 
 /** Fixtures read as segments; a segment is just its points. */
-private fun TrackSegment(points: List<TrackPoint>) = points
+private fun segment(points: List<TrackPoint>) = points
 
-private fun Track(name: String?, segments: List<List<TrackPoint>>) =
+private fun Track(name: String?, segments: List<List<TrackPoint>>): Track =
     Track(name, TrackPoints.of(*segments.toTypedArray()))

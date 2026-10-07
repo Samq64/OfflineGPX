@@ -39,8 +39,7 @@ fun axisScale(min: Float, max: Float, perUnit: Float = 1f): Scale =
     axisScale(min, max, perUnit) { niceStep(it, TARGET_TICKS) }
 
 /** [axisScale] for elapsed seconds, ticked on steps a clock reads in. */
-fun timeAxisScale(min: Float, max: Float): Scale =
-    axisScale(min, max, 1f) { range -> timeStep(range, TARGET_TICKS) }
+fun timeAxisScale(min: Float, max: Float): Scale = axisScale(min, max, 1f) { range -> timeStep(range, TARGET_TICKS) }
 
 private const val TARGET_TICKS = 4
 
@@ -186,11 +185,7 @@ fun nearestIndex(values: FloatArray, target: Float): Int {
  * Polyline reduced to first, min, max, last per pixel column. Every-nth subsampling would
  * drop the peaks.
  */
-class PolylineBuilder(
-    private val line: Path,
-    private val area: Path? = null,
-    private val baselineY: Float = 0f,
-) {
+class PolylineBuilder(private val line: Path, private val area: Path? = null, private val baselineY: Float = 0f) {
     private var hasColumn = false
     private var lineStarted = false
     private var runStartColumn = 0f

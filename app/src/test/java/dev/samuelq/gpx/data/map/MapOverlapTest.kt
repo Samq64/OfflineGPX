@@ -1,11 +1,11 @@
 package dev.samuelq.gpx.data.map
 
+import java.io.RandomAccessFile
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
-import java.io.RandomAccessFile
 
 /** Maps at zoom 2 over the whole world: a 4 by 4 tile index and nothing else. */
 class MapOverlapTest {
@@ -15,8 +15,7 @@ class MapOverlapTest {
     )
 
     /** Land and sea everywhere, and a region's real data on one side. */
-    private fun region(heavyColumns: Set<Int>) =
-        map(List(16) { i -> if (i % 4 in heavyColumns) 1_000L else 50L })
+    private fun region(heavyColumns: Set<Int>) = map(List(16) { i -> if (i % 4 in heavyColumns) 1_000L else 50L })
 
     @Test
     fun `a map shares all of its data with a copy`() {

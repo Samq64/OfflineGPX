@@ -39,10 +39,10 @@ import dev.samuelq.gpx.R
 import dev.samuelq.gpx.core.model.Waypoint
 import dev.samuelq.gpx.ui.track.FocusedTrack
 import dev.samuelq.gpx.ui.track.TrackActions
-import dev.samuelq.gpx.ui.track.TrimControls
 import dev.samuelq.gpx.ui.track.TrackSheet
 import dev.samuelq.gpx.ui.track.TrackSheetError
 import dev.samuelq.gpx.ui.track.TrackSheetLoading
+import dev.samuelq.gpx.ui.track.TrimControls
 
 /** A focused track's details, however far it has loaded. Nothing for [FocusedTrack.None]. */
 @Composable
@@ -154,7 +154,7 @@ internal fun CompactDragHandle() {
             Modifier
                 .size(width = 32.dp, height = 4.dp)
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.outlineVariant)
+                .background(MaterialTheme.colorScheme.outlineVariant),
         )
     }
 }

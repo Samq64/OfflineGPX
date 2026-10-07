@@ -30,8 +30,4 @@ sealed class TrackLoadException(message: String, cause: Throwable? = null) : Exc
 }
 
 /** What undoing a trim needs: the replaced file and row. */
-class TrackEdit internal constructor(
-    val id: Long,
-    internal val backup: File,
-    internal val before: TrackEntity,
-)
+class TrackEdit internal constructor(val id: Long, internal val backup: File, internal val before: TrackEntity)

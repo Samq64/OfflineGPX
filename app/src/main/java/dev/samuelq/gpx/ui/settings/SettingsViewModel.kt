@@ -31,10 +31,7 @@ enum class SettingsMessage {
     NoBrowser,
 }
 
-class SettingsViewModel(
-    private val repository: SettingsRepository,
-    private val mapStore: MapStore,
-) : ViewModel() {
+class SettingsViewModel(private val repository: SettingsRepository, private val mapStore: MapStore) : ViewModel() {
 
     val settings: StateFlow<Settings> = repository.settings
 
@@ -89,7 +86,7 @@ class SettingsViewModel(
                     MapImportError.NOT_A_MAP_FILE -> SettingsMessage.MapWrongFormat
                     MapImportError.NO_SPACE -> SettingsMessage.MapNoSpace
                 }
-            }
+            },
         )
     }
 
@@ -101,7 +98,9 @@ class SettingsViewModel(
     fun exportMap(map: OfflineMap, uri: Uri?) {
         if (uri == null) return
         viewModelScope.launch {
-            _messages.send(if (mapStore.export(map, uri)) SettingsMessage.MapExported else SettingsMessage.MapExportFailed)
+            _messages.send(
+                if (mapStore.export(map, uri)) SettingsMessage.MapExported else SettingsMessage.MapExportFailed,
+            )
         }
     }
 

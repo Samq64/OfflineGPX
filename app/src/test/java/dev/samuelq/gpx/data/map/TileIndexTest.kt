@@ -6,11 +6,15 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /** A zoom 2 world map: 4 by 4 tiles, numbered row by row. */
-class MapTileIndexTest {
+class TileIndexTest {
 
     private val map = offlineMap(
         mapFile(
-            south = -85.0, west = -180.0, north = 85.0, east = 180.0, baseZoom = 2,
+            south = -85.0,
+            west = -180.0,
+            north = 85.0,
+            east = 180.0,
+            baseZoom = 2,
             tileBytes = List(16) { it * 10L },
             water = setOf(5, 15),
         ),

@@ -31,12 +31,10 @@ import kotlinx.coroutines.flow.stateIn
 enum class LocationStopped { OFF, DENIED }
 
 /** The user's position on the map, outside a recording. */
-class LocationViewModel(
-    private val locationSource: LocationSource,
-    controller: RecordingController,
-) : ViewModel() {
+class LocationViewModel(private val locationSource: LocationSource, controller: RecordingController) : ViewModel() {
 
     private val _locating = MutableStateFlow(false)
+
     /** Kept across navigation, so returning to the map shows the position again. */
     val locating: StateFlow<Boolean> = _locating.asStateFlow()
 

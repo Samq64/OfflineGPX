@@ -50,7 +50,7 @@ fun ColorDot(colorIndex: Int, onColor: (Int) -> Unit) {
                 // Its colour even when hidden: it's the picker, and the switch says hidden.
                 .background(routePalette().slot(colorIndex))
                 .clickable(onClickLabel = stringResource(R.string.library_color_change)) { open = true }
-                .semantics { contentDescription = label }
+                .semantics { contentDescription = label },
         )
         DropdownMenu(open, onDismissRequest = { open = false }) {
             ColorSwatches(colorIndex) {

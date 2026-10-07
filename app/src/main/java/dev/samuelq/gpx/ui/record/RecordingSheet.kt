@@ -58,10 +58,10 @@ import dev.samuelq.gpx.data.record.RecordingStatus
 import dev.samuelq.gpx.ui.format.Formatters
 import dev.samuelq.gpx.ui.format.LocalFormatters
 import dev.samuelq.gpx.ui.format.spokenDuration
-import dev.samuelq.gpx.ui.track.Stat
 import dev.samuelq.gpx.ui.theme.recordingColor
 import dev.samuelq.gpx.ui.track.ProfileSheet
 import dev.samuelq.gpx.ui.track.SheetPadding
+import dev.samuelq.gpx.ui.track.Stat
 import dev.samuelq.gpx.ui.track.StatRow
 
 /** The live recording in the sheet: status, numbers and controls in the peek, charts below. */
@@ -125,9 +125,10 @@ private fun RecordingHeader(
             RecordingStatus.PAUSED -> stringResource(R.string.record_notification_paused)
             RecordingStatus.LOCATION_OFF -> stringResource(R.string.record_location_is_off)
             RecordingStatus.RECORDING -> stringResource(R.string.record_notification_active)
-            RecordingStatus.WAITING -> poorSignal
-                ?.let { stringResource(R.string.record_weak_signal, formatters.meters(it)) }
-                ?: stringResource(R.string.record_waiting_for_fix)
+            RecordingStatus.WAITING ->
+                poorSignal
+                    ?.let { stringResource(R.string.record_weak_signal, formatters.meters(it)) }
+                    ?: stringResource(R.string.record_waiting_for_fix)
         }
         // Announced on change, so without the accuracy, which changes with every fix.
         val spokenStatus = if (poorSignal != null && waiting) {
@@ -190,7 +191,10 @@ private fun RecordingHeader(
             // Icon only, so flipping between the two can't change its width.
             FilledTonalIconButton(onClick = if (state.paused) onResume else onPause) {
                 if (state.paused) {
-                    Icon(painterResource(R.drawable.ic_play_arrow), contentDescription = stringResource(R.string.record_resume))
+                    Icon(
+                        painterResource(R.drawable.ic_play_arrow),
+                        contentDescription = stringResource(R.string.record_resume),
+                    )
                 } else {
                     Icon(
                         painterResource(R.drawable.ic_pause),
@@ -227,11 +231,7 @@ internal fun recordingStats(distanceMeters: Double, elapsedSeconds: Double): Lis
 )
 
 @Composable
-private fun WaypointDialog(
-    number: Int,
-    onDismiss: () -> Unit,
-    onConfirm: (name: String) -> Unit,
-) {
+private fun WaypointDialog(number: Int, onDismiss: () -> Unit, onConfirm: (name: String) -> Unit) {
     var name by remember { mutableStateOf("") }
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(focusRequester) { focusRequester.requestFocus() }
@@ -278,8 +278,16 @@ private fun RecordingDot(paused: Boolean) {
     Box(
         Modifier
             .size(10.dp)
-            .alpha(if (paused) 0.35f else if (animate) alpha else 1f)
+            .alpha(
+                if (paused) {
+                    0.35f
+                } else if (animate) {
+                    alpha
+                } else {
+                    1f
+                },
+            )
             .clip(CircleShape)
-            .background(recordingColor())
+            .background(recordingColor()),
     )
 }

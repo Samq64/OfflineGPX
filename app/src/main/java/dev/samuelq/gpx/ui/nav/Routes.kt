@@ -14,10 +14,18 @@ data class LibraryRoute(
     val north: Double? = null,
     val east: Double? = null,
 ) {
-    constructor(area: GeoBounds?) : this(area?.southLatitude, area?.westLongitude, area?.northLatitude, area?.eastLongitude)
+    constructor(
+        area: GeoBounds?,
+    ) : this(area?.southLatitude, area?.westLongitude, area?.northLatitude, area?.eastLongitude)
 
     val area: GeoBounds?
-        get() = if (south != null && west != null && north != null && east != null) GeoBounds(south, west, north, east) else null
+        get() = if (south != null && west != null && north != null &&
+            east != null
+        ) {
+            GeoBounds(south, west, north, east)
+        } else {
+            null
+        }
 }
 
 /** [importMap] opens the map file picker on arrival, for the map's first-run "Import map". */

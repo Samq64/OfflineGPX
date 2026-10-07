@@ -151,20 +151,13 @@ fun routePalette(): List<Color> =
 /** Not the scheme's error colour, which is wallpaper-derived and pale pink in dark mode. */
 @androidx.compose.runtime.Composable
 @androidx.compose.runtime.ReadOnlyComposable
-fun recordingColor(): Color =
-    if (androidx.compose.foundation.isSystemInDarkTheme()) RecordingDark else RecordingLight
+fun recordingColor(): Color = if (androidx.compose.foundation.isSystemInDarkTheme()) RecordingDark else RecordingLight
 
 /**
  * The series are fixed, not wallpaper-derived: their hues were checked for contrast and CVD
  * separation. Grid, axis and labels are chrome, so they follow the scheme like the text around them.
  */
-data class ChartColors(
-    val speed: Color,
-    val elevation: Color,
-    val grid: Color,
-    val axis: Color,
-    val label: Color,
-) {
+data class ChartColors(val speed: Color, val elevation: Color, val grid: Color, val axis: Color, val label: Color) {
     companion object {
         fun of(scheme: ColorScheme, dark: Boolean) = ChartColors(
             speed = if (dark) Blue400 else Blue450,

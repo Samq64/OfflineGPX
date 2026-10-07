@@ -10,14 +10,14 @@ import androidx.core.location.LocationCompat
 import androidx.core.location.LocationListenerCompat
 import androidx.core.location.altitude.AltitudeConverterCompat
 import dev.samuelq.gpx.core.model.TrackPoint
+import java.io.IOException
+import java.time.Instant
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
-import java.io.IOException
-import java.time.Instant
 
 /** Raw `GPS_PROVIDER` fixes; not the fused provider, which needs Play Services. Stateless, so shared. */
 class LocationSource(context: Context) {
@@ -78,7 +78,14 @@ class LocationSource(context: Context) {
             } catch (_: IllegalArgumentException) {
             }
         }
-        return if (LocationCompat.hasMslAltitude(location)) LocationCompat.getMslAltitudeMeters(location) else location.altitude
+        return if (LocationCompat.hasMslAltitude(
+                location,
+            )
+        ) {
+            LocationCompat.getMslAltitudeMeters(location)
+        } else {
+            location.altitude
+        }
     }
 
     private companion object {
@@ -93,4 +100,3 @@ class LocationSource(context: Context) {
         )
     }
 }
-

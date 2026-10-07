@@ -26,8 +26,7 @@ class TrackSortTest {
         summary = TrackSummary(2, meters, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
     )
 
-    private fun List<TrackEntity>.ids(sort: TrackSort) =
-        sortedFor(TrackOrder(sort)).map(TrackEntity::id)
+    private fun List<TrackEntity>.ids(sort: TrackSort) = sortedFor(TrackOrder(sort)).map(TrackEntity::id)
 
     @Test
     fun `recent keeps the repository order`() {
@@ -57,6 +56,9 @@ class TrackSortTest {
     fun `turned round, a sort runs the other way, ties included`() {
         val tracks = listOf(track(1, "a", meters = 5.0), track(2, "b", meters = 9.0), track(3, "c", meters = 5.0))
         assertEquals(listOf(2L, 1L, 3L), tracks.sortedFor(TrackOrder(TrackSort.LENGTH)).map(TrackEntity::id))
-        assertEquals(listOf(3L, 1L, 2L), tracks.sortedFor(TrackOrder(TrackSort.LENGTH, descending = false)).map(TrackEntity::id))
+        assertEquals(
+            listOf(3L, 1L, 2L),
+            tracks.sortedFor(TrackOrder(TrackSort.LENGTH, descending = false)).map(TrackEntity::id),
+        )
     }
 }

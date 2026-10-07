@@ -9,23 +9,31 @@ import dev.samuelq.gpx.core.analysis.TrackAnalyzer
 import dev.samuelq.gpx.core.analysis.TrackProfile
 import dev.samuelq.gpx.core.model.Track
 import dev.samuelq.gpx.core.model.bounds
-import dev.samuelq.gpx.data.runCancellable
+import dev.samuelq.gpx.data.copyInto
 import dev.samuelq.gpx.data.db.ColorUse
 import dev.samuelq.gpx.data.db.SummaryUpdate
 import dev.samuelq.gpx.data.db.TrackDao
 import dev.samuelq.gpx.data.db.TrackEntity
 import dev.samuelq.gpx.data.db.TrackSummary
+import dev.samuelq.gpx.data.displayName
+import dev.samuelq.gpx.data.gpx.GPX_MIME_TYPE
 import dev.samuelq.gpx.data.gpx.GpxParseException
 import dev.samuelq.gpx.data.gpx.GpxParser
 import dev.samuelq.gpx.data.gpx.GpxTrimmer
 import dev.samuelq.gpx.data.gpx.GpxWriter
-import dev.samuelq.gpx.data.gpx.GPX_MIME_TYPE
-import dev.samuelq.gpx.data.copyInto
-import dev.samuelq.gpx.data.displayName
-import dev.samuelq.gpx.data.uniqueFile
+import dev.samuelq.gpx.data.runCancellable
 import dev.samuelq.gpx.data.sameBytes
+import dev.samuelq.gpx.data.uniqueFile
 import dev.samuelq.gpx.data.uniqueName
 import dev.samuelq.gpx.data.writeAtomically
+import java.io.File
+import java.io.FileNotFoundException
+import java.io.IOException
+import java.io.InputStream
+import java.text.Collator
+import java.time.Instant
+import java.time.ZoneId
+import java.util.Locale
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -37,14 +45,6 @@ import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
-import java.io.InputStream
-import java.io.FileNotFoundException
-import java.io.IOException
-import java.text.Collator
-import java.time.Instant
-import java.time.ZoneId
-import java.util.Locale
 
 /** The single way the app gets at track data: Room rows plus the GPX files they index. */
 class TrackRepository(
@@ -148,55 +148,53 @@ class TrackRepository(
      *
      * @param analyzed the profile of this exact [track], if already computed.
      */
-    suspend fun saveRecording(
-        track: Track,
-        analyzed: TrackProfile? = null,
-    ): Result<Long> =
-        withContext(io) {
-            runCancellable {
-                val profile = analyzed ?: TrackAnalyzer.analyze(track)
-                val typed = track.copy(type = categoryAsSpelt(track.type))
-                val startedAt = profile.stats.startedAt ?: Instant.now()
-                // Numbered if taken: local time repeats an hour when the clocks go back.
-                val file = uniqueFile(
-                    recordingsDir,
-                    TrackFiles.STAMP.format(startedAt.atZone(ZoneId.systemDefault())),
-                    "gpx",
-                    fallback = "recording",
-                )
+    suspend fun saveRecording(track: Track, analyzed: TrackProfile? = null): Result<Long> = withContext(io) {
+        runCancellable {
+            val profile = analyzed ?: TrackAnalyzer.analyze(track)
+            val typed = track.copy(type = categoryAsSpelt(track.type))
+            val startedAt = profile.stats.startedAt ?: Instant.now()
+            // Numbered if taken: local time repeats an hour when the clocks go back.
+            val file = uniqueFile(
+                recordingsDir,
+                TrackFiles.STAMP.format(startedAt.atZone(ZoneId.systemDefault())),
+                "gpx",
+                fallback = "recording",
+            )
 
-                // Unnamed unless given one: it's titled by when it started.
-                writeAtomically(file) { writer.write(typed, it) }
+            // Unnamed unless given one: it's titled by when it started.
+            writeAtomically(file) { writer.write(typed, it) }
 
-                dao.upsert(newEntity(file, file.name, typed, profile, typed.type)).also { cache.write(it, file, typed) }
-            }.recoverFailure()
-        }
+            dao.upsert(newEntity(file, file.name, typed, profile, typed.type)).also { cache.write(it, file, typed) }
+        }.recoverFailure()
+    }
 
     /** Writes tracks into the SAF folder [treeUri] under [names]. Returns how many landed. */
-    suspend fun exportAll(names: Map<Long, String>, tree: Uri): Result<Int> =
-        withContext(io) {
-            runCancellable {
-                // A tree URI must be turned into a document URI before creating children.
-                val folder = DocumentsContract.buildDocumentUriUsingTree(
-                    tree,
-                    DocumentsContract.getTreeDocumentId(tree),
-                )
+    suspend fun exportAll(names: Map<Long, String>, tree: Uri): Result<Int> = withContext(io) {
+        runCancellable {
+            // A tree URI must be turned into a document URI before creating children.
+            val folder = DocumentsContract.buildDocumentUriUsingTree(
+                tree,
+                DocumentsContract.getTreeDocumentId(tree),
+            )
 
-                // Lowercased: shared storage is case-insensitive, so `A.gpx` would collide with `a.gpx`.
-                val taken = childNames(tree).mapTo(HashSet()) { it.lowercase(Locale.ROOT) }
+            // Lowercased: shared storage is case-insensitive, so `A.gpx` would collide with `a.gpx`.
+            val taken = childNames(tree).mapTo(HashSet()) { it.lowercase(Locale.ROOT) }
 
-                // Per track, so a failure halfway still reports the ones written.
-                names.count { (id, name) ->
-                    val unique = uniqueName(name, "gpx", fallback = "track") { it.lowercase(Locale.ROOT) in taken }
-                    taken += unique.lowercase(Locale.ROOT)
-                    runCancellable { writeExport(folder, id, unique) }.getOrDefault(false)
-                }
-            }.recoverFailure()
-        }
+            // Per track, so a failure halfway still reports the ones written.
+            names.count { (id, name) ->
+                val unique = uniqueName(name, "gpx", fallback = "track") { it.lowercase(Locale.ROOT) in taken }
+                taken += unique.lowercase(Locale.ROOT)
+                runCancellable { writeExport(folder, id, unique) }.getOrDefault(false)
+            }
+        }.recoverFailure()
+    }
 
     /** What [tree] already holds, so exports can be numbered around it. */
     private fun childNames(tree: Uri): List<String> {
-        val children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree))
+        val children = DocumentsContract.buildChildDocumentsUriUsingTree(
+            tree,
+            DocumentsContract.getTreeDocumentId(tree),
+        )
         return appContext.contentResolver
             .query(children, arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null)
             ?.use { cursor -> buildList { while (cursor.moveToNext()) cursor.getString(0)?.let(::add) } }
@@ -265,7 +263,14 @@ class TrackRepository(
             val file = fileOf(entity)
             writeAtomically(file) { output ->
                 file.inputStream().use {
-                    trimmer.trim(it, output, name = name?.let { newName.orEmpty() }, type = category?.let { newCategory.orEmpty() })
+                    trimmer.trim(
+                        it,
+                        output,
+                        name = name?.let {
+                            newName.orEmpty()
+                        },
+                        type = category?.let { newCategory.orEmpty() },
+                    )
                 }
             }
             // The cache holds neither, so the rewrite leaves it current.
@@ -284,7 +289,8 @@ class TrackRepository(
      */
     private suspend fun moveTo(id: Long, file: File, name: String) {
         val dir = file.parentFile ?: return
-        val target = File(dir, uniqueName(name, "gpx", fallback = "track") { it != file.name && File(dir, it).exists() })
+        val target =
+            File(dir, uniqueName(name, "gpx", fallback = "track") { it != file.name && File(dir, it).exists() })
         if (target == file || !file.renameTo(target)) return
         try {
             dao.setLocation(id, TrackFiles.location(appContext, target))
@@ -374,7 +380,9 @@ class TrackRepository(
     suspend fun undoEdit(edit: TrackEdit): Result<Unit> = withContext(io) {
         runCancellable {
             // Where it is now: a rename since moves the file.
-            writeAtomically(fileOf(dao.byId(edit.id) ?: edit.before)) { output -> edit.backup.inputStream().use { it.copyTo(output) } }
+            writeAtomically(fileOf(dao.byId(edit.id) ?: edit.before)) { output ->
+                edit.backup.inputStream().use { it.copyTo(output) }
+            }
             // Only what the edit changed, so a recolour since survives the undo.
             dao.setSummary(SummaryUpdate(edit.id, edit.before.startedAtEpochMillis, edit.before.summary))
             dao.setTrackName(edit.id, edit.before.trackName)
@@ -437,7 +445,13 @@ class TrackRepository(
     private suspend fun entity(id: Long): TrackEntity =
         dao.byId(id) ?: throw TrackLoadException.Unreadable("No track with id $id")
 
-    private suspend fun newEntity(file: File, displayName: String, track: Track, profile: TrackProfile, category: String?) = TrackEntity(
+    private suspend fun newEntity(
+        file: File,
+        displayName: String,
+        track: Track,
+        profile: TrackProfile,
+        category: String?,
+    ) = TrackEntity(
         colorIndex = leastUsedSlot(dao.colorUsage(), TrackEntity.PALETTE_SIZE),
         location = TrackFiles.location(appContext, file),
         displayName = displayName,

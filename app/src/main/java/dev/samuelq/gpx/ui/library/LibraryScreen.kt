@@ -4,25 +4,34 @@ import android.content.res.Resources
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.selection.triStateToggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.material3.Checkbox
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.selection.triStateToggleable
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -49,24 +58,16 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.layout.calculateEndPadding
-import androidx.compose.foundation.layout.calculateStartPadding
-import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.foundation.layout.union
-import androidx.compose.foundation.layout.only
-import androidx.compose.foundation.layout.displayCutout
-import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -76,7 +77,6 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.style.TextOverflow
@@ -85,12 +85,12 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.samuelq.gpx.R
-import dev.samuelq.gpx.data.track.editableName
-import dev.samuelq.gpx.data.track.isTitledByStart
-import dev.samuelq.gpx.data.track.title
 import dev.samuelq.gpx.data.db.TrackEntity
 import dev.samuelq.gpx.data.settings.TrackOrder
 import dev.samuelq.gpx.data.settings.TrackSort
+import dev.samuelq.gpx.data.track.editableName
+import dev.samuelq.gpx.data.track.isTitledByStart
+import dev.samuelq.gpx.data.track.title
 import dev.samuelq.gpx.ui.format.Formatters
 import dev.samuelq.gpx.ui.format.LocalFormatters
 import dev.samuelq.gpx.ui.format.spokenDuration
@@ -105,7 +105,6 @@ import dev.samuelq.gpx.ui.track.exportFileName
 import dev.samuelq.gpx.ui.track.shareTrackIntent
 import java.text.Collator
 import java.time.Instant
-
 
 /** Track management. Long-press starts a multi-selection. */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -154,10 +153,13 @@ fun LibraryScreen(
     // Not stringResource: a long-lived collector would keep the old locale.
     val resources = LocalResources.current
     val layoutDirection = LocalLayoutDirection.current
+
     // Plural on the total: "1 of 3 tracks".
-    fun allOrSome(done: Int, requested: Int, all: Int, some: Int) =
-        if (done == requested) resources.getQuantityString(all, done, done)
-        else resources.getQuantityString(some, requested, done, requested)
+    fun allOrSome(done: Int, requested: Int, all: Int, some: Int) = if (done == requested) {
+        resources.getQuantityString(all, done, done)
+    } else {
+        resources.getQuantityString(some, requested, done, requested)
+    }
 
     var renaming by remember { mutableStateOf<TrackEntity?>(null) }
 
@@ -194,12 +196,12 @@ fun LibraryScreen(
     }
 
     val picker = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenMultipleDocuments()
+        ActivityResultContracts.OpenMultipleDocuments(),
     ) { uris -> viewModel.import(uris) }
 
     // The folder grant is not persisted.
     val folderExporter = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocumentTree()
+        ActivityResultContracts.OpenDocumentTree(),
     ) { folder -> viewModel.finishExportAll(folder) }
 
     LaunchedEffect(viewModel) {
@@ -213,11 +215,21 @@ fun LibraryScreen(
                 }
                 LibraryEvent.ImportFailed -> say(resources.getString(R.string.library_import_failed))
                 is LibraryEvent.ImportedAll -> say(
-                    allOrSome(event.imported, event.requested, R.plurals.library_imported_all, R.plurals.library_imported_some)
+                    allOrSome(
+                        event.imported,
+                        event.requested,
+                        R.plurals.library_imported_all,
+                        R.plurals.library_imported_some,
+                    ),
                 )
                 LibraryEvent.ExportFailed -> say(resources.getString(R.string.library_export_failed))
                 is LibraryEvent.ExportedAll -> say(
-                    allOrSome(event.written, event.requested, R.plurals.library_exported_all, R.plurals.library_exported_some)
+                    allOrSome(
+                        event.written,
+                        event.requested,
+                        R.plurals.library_exported_all,
+                        R.plurals.library_exported_some,
+                    ),
                 )
                 LibraryEvent.RenameFailed -> say(resources.getString(R.string.library_rename_failed))
                 LibraryEvent.DuplicateFailed -> say(resources.getString(R.string.library_duplicate_failed))
@@ -249,7 +261,7 @@ fun LibraryScreen(
                     onShowOnly = { viewModel.changeVisibility(selection, BulkVisibility.SHOW_ONLY) },
                     onExport = {
                         viewModel.beginExportAll(
-                            chosen.associate { it.id to exportFileName(it.trackName, it.displayName) }
+                            chosen.associate { it.id to exportFileName(it.trackName, it.displayName) },
                         )
                         folderExporter.launch(null)
                     },
@@ -318,68 +330,86 @@ fun LibraryScreen(
                 // Filtering is silent otherwise.
                 if (filtered && tracks.isNotEmpty()) {
                     val found = pluralStringResource(R.plurals.library_search_found, tracks.size, tracks.size)
-                    Box(Modifier.semantics { liveRegion = LiveRegionMode.Polite; contentDescription = found })
+                    Box(
+                        Modifier.semantics {
+                            liveRegion = LiveRegionMode.Polite
+                            contentDescription = found
+                        },
+                    )
                 }
                 if (tracks.isEmpty()) {
                     NoMatches(
                         query = query,
-                        modifier = Modifier.fillMaxSize().then(sides).padding(bottom = padding.calculateBottomPadding()),
+                        modifier = Modifier.fillMaxSize().then(
+                            sides,
+                        ).padding(bottom = padding.calculateBottomPadding()),
                     )
-                } else LazyColumn(
-                    state = listState,
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(
-                        start = padding.calculateStartPadding(layoutDirection),
-                        end = padding.calculateEndPadding(layoutDirection),
-                        bottom = padding.calculateBottomPadding() + 24.dp,
-                    ),
-                ) {
-                    sections.forEachIndexed { sectionIndex, section ->
-                        if (headed) item(key = "category:${section.category.orEmpty()}", contentType = "header") {
-                            val ids = section.tracks.map(TrackEntity::id)
-                            val picked = ids.count { it in selection }
-                            CategoryHeader(
-                                title = section.category ?: stringResource(R.string.library_uncategorised),
-                                // The pills end the first group's top already.
-                                divider = sectionIndex > 0,
-                                selected = when {
-                                    selection.isEmpty() -> null
-                                    picked == ids.size -> ToggleableState.On
-                                    picked == 0 -> ToggleableState.Off
-                                    else -> ToggleableState.Indeterminate
-                                },
-                                onToggle = { viewModel.setSelected(ids, picked < ids.size) },
-                                modifier = Modifier.animateItem(),
-                            )
-                        }
-                        itemsIndexed(section.tracks, key = { _, track -> track.id }, contentType = { _, _ -> "track" }) { index, track ->
-                            TrackRow(
-                                modifier = Modifier.animateItem(),
-                                // Under the header's checkbox, as what it selects.
-                                indent = if (headed && selection.isNotEmpty()) CategoryIndent else 0.dp,
-                                // The next header's line ends the group.
-                                divider = index < section.tracks.lastIndex,
-                                track = track,
-                                sizeBytes = sizes[track.id],
-                                selected = track.id in selection,
-                                selectionActive = selection.isNotEmpty(),
-                                onOpen = {
-                                    // Otherwise the switch would say off for a line on the map.
-                                    if (!track.visible) viewModel.setVisible(track.id, true)
-                                    onOpenTrack(track.id)
-                                },
-                                onToggleSelected = { viewModel.toggleSelected(track.id) },
-                                onToggleVisible = { viewModel.setVisible(track.id, !track.visible) },
-                                onColor = { viewModel.setColor(track.id, it) },
-                                onShare = {
-                                    context.startActivity(
-                                        shareTrackIntent(context, track.location, track.trackName, track.displayName)
+                } else {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(
+                            start = padding.calculateStartPadding(layoutDirection),
+                            end = padding.calculateEndPadding(layoutDirection),
+                            bottom = padding.calculateBottomPadding() + 24.dp,
+                        ),
+                    ) {
+                        sections.forEachIndexed { sectionIndex, section ->
+                            if (headed) {
+                                item(key = "category:${section.category.orEmpty()}", contentType = "header") {
+                                    val ids = section.tracks.map(TrackEntity::id)
+                                    val picked = ids.count { it in selection }
+                                    CategoryHeader(
+                                        title = section.category ?: stringResource(R.string.library_uncategorised),
+                                        // The pills end the first group's top already.
+                                        divider = sectionIndex > 0,
+                                        selected = when {
+                                            selection.isEmpty() -> null
+                                            picked == ids.size -> ToggleableState.On
+                                            picked == 0 -> ToggleableState.Off
+                                            else -> ToggleableState.Indeterminate
+                                        },
+                                        onToggle = { viewModel.setSelected(ids, picked < ids.size) },
+                                        modifier = Modifier.animateItem(),
                                     )
-                                },
-                                onRename = { renaming = track },
-                                onDuplicate = { viewModel.duplicate(track.id) },
-                                onDelete = { delete(setOf(track.id)) },
-                            )
+                                }
+                            }
+                            itemsIndexed(section.tracks, key = { _, track ->
+                                track.id
+                            }, contentType = { _, _ -> "track" }) { index, track ->
+                                TrackRow(
+                                    modifier = Modifier.animateItem(),
+                                    // Under the header's checkbox, as what it selects.
+                                    indent = if (headed && selection.isNotEmpty()) CategoryIndent else 0.dp,
+                                    // The next header's line ends the group.
+                                    divider = index < section.tracks.lastIndex,
+                                    track = track,
+                                    sizeBytes = sizes[track.id],
+                                    selected = track.id in selection,
+                                    selectionActive = selection.isNotEmpty(),
+                                    onOpen = {
+                                        // Otherwise the switch would say off for a line on the map.
+                                        if (!track.visible) viewModel.setVisible(track.id, true)
+                                        onOpenTrack(track.id)
+                                    },
+                                    onToggleSelected = { viewModel.toggleSelected(track.id) },
+                                    onToggleVisible = { viewModel.setVisible(track.id, !track.visible) },
+                                    onColor = { viewModel.setColor(track.id, it) },
+                                    onShare = {
+                                        context.startActivity(
+                                            shareTrackIntent(
+                                                context,
+                                                track.location,
+                                                track.trackName,
+                                                track.displayName,
+                                            ),
+                                        )
+                                    },
+                                    onRename = { renaming = track },
+                                    onDuplicate = { viewModel.duplicate(track.id) },
+                                    onDelete = { delete(setOf(track.id)) },
+                                )
+                            }
                         }
                     }
                 }
@@ -486,7 +516,10 @@ private fun SelectionMenu(
     }
 }
 
-/** In this area is left out when the map showed nothing to filter to, as when tracks are too far apart; last, so the rest don't move. */
+/**
+ * In this area is left out when the map showed nothing to filter to, as when tracks are too far
+ * apart; last, so the rest don't move.
+ */
 @Composable
 private fun Filters(
     inArea: Boolean,
@@ -503,7 +536,9 @@ private fun Filters(
         label = { Text(stringResource(label)) },
         leadingIcon = if (on) {
             { Icon(painterResource(R.drawable.ic_check), null, Modifier.size(FilterChipDefaults.IconSize)) }
-        } else null,
+        } else {
+            null
+        },
     )
 
     Row(modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -530,7 +565,9 @@ private fun CategoryHeader(
                 .then(
                     if (selected != null) {
                         Modifier.triStateToggleable(state = selected, onClick = onToggle, role = Role.Checkbox)
-                    } else Modifier
+                    } else {
+                        Modifier
+                    },
                 )
                 .semantics { heading() }
                 // Nearer its rows than the group before.
@@ -601,7 +638,8 @@ private fun TrackRow(
     // Labelled and in words, as the sheet's stats are: "3:57" alone reads as a time of day.
     val resources = LocalResources.current
     val spokenSummary = remember(track, sizeBytes, formatters, resources) {
-        fun stat(label: Int, value: String) = resources.getString(R.string.stat_spoken, resources.getString(label), value)
+        fun stat(label: Int, value: String) =
+            resources.getString(R.string.stat_spoken, resources.getString(label), value)
         listOfNotNull(
             track.totalSeconds.takeIf { it > 0 }?.let { stat(R.string.stat_elapsed, resources.spokenDuration(it)) },
             stat(R.string.axis_distance, formatters.distance(track.distanceMeters)),
@@ -612,8 +650,8 @@ private fun TrackRow(
     // Under the divider too, so its inset doesn't notch a run of selected rows.
     Column(
         modifier.background(
-            if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface
-        )
+            if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface,
+        ),
     ) {
         // A row, not ListItem: with three lines it pins the dot and the controls to the top
         // padding, out of line with each other and the text.
@@ -633,11 +671,26 @@ private fun TrackRow(
                     } else {
                         // Long-press and the menu, without finding either.
                         customActions = listOf(
-                            CustomAccessibilityAction(selectLabel) { onToggleSelected(); true },
-                            CustomAccessibilityAction(renameLabel) { onRename(); true },
-                            CustomAccessibilityAction(shareLabel) { onShare(); true },
-                            CustomAccessibilityAction(duplicateLabel) { onDuplicate(); true },
-                            CustomAccessibilityAction(deleteLabel) { onDelete(); true },
+                            CustomAccessibilityAction(selectLabel) {
+                                onToggleSelected()
+                                true
+                            },
+                            CustomAccessibilityAction(renameLabel) {
+                                onRename()
+                                true
+                            },
+                            CustomAccessibilityAction(shareLabel) {
+                                onShare()
+                                true
+                            },
+                            CustomAccessibilityAction(duplicateLabel) {
+                                onDuplicate()
+                                true
+                            },
+                            CustomAccessibilityAction(deleteLabel) {
+                                onDelete()
+                                true
+                            },
                         )
                     }
                 }
@@ -703,6 +756,7 @@ private fun SortMenu(order: TrackOrder, onSort: (TrackSort) -> Unit, onDescendin
                 val collator = Collator.getInstance()
                 TrackSort.entries.sortedWith(compareBy(collator) { resources.getString(it.label) })
             }
+
             @Composable
             fun Choice(label: String, isSelected: Boolean, onClick: () -> Unit) = DropdownMenuItem(
                 text = { Text(label) },
@@ -771,8 +825,11 @@ private fun EmptyState(onImport: () -> Unit, modifier: Modifier = Modifier) {
 private fun NoMatches(query: String, modifier: Modifier = Modifier) {
     Box(modifier.padding(32.dp), contentAlignment = Alignment.Center) {
         Text(
-            text = if (query.isNotBlank()) stringResource(R.string.library_search_empty, query.trim())
-            else stringResource(R.string.library_filter_empty),
+            text = if (query.isNotBlank()) {
+                stringResource(R.string.library_search_empty, query.trim())
+            } else {
+                stringResource(R.string.library_filter_empty)
+            },
             modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -783,11 +840,7 @@ private fun NoMatches(query: String, modifier: Modifier = Modifier) {
 /** Material's input field in a plain bar: `SearchBar` itself expands for suggestions there are none of. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SearchBar(
-    query: String,
-    onQueryChange: (String) -> Unit,
-    onClose: () -> Unit,
-) {
+private fun SearchBar(query: String, onQueryChange: (String) -> Unit, onClose: () -> Unit) {
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
     val keyboard = LocalSoftwareKeyboardController.current
@@ -839,5 +892,6 @@ private val CategoryIndent = LeadingSlot + 16.dp
 
 /** The bars' own insets, plus the cutout, which they leave out and landscape puts beside them. */
 private val BarInsets: WindowInsets
-    @Composable get() = TopAppBarDefaults.windowInsets.union(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal))
-
+    @Composable get() = TopAppBarDefaults.windowInsets.union(
+        WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal),
+    )

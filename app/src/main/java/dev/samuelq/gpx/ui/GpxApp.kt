@@ -20,8 +20,8 @@ import dev.samuelq.gpx.GpxApplication
 import dev.samuelq.gpx.data.record.RecordingController
 import dev.samuelq.gpx.data.record.RecordingState
 import dev.samuelq.gpx.data.track.TrackRepository
-import dev.samuelq.gpx.ui.format.rememberSystemFormatters
 import dev.samuelq.gpx.ui.format.LocalFormatters
+import dev.samuelq.gpx.ui.format.rememberSystemFormatters
 import dev.samuelq.gpx.ui.library.LibraryScreen
 import dev.samuelq.gpx.ui.map.MapScreen
 import dev.samuelq.gpx.ui.nav.LibraryRoute
@@ -34,10 +34,7 @@ import dev.samuelq.gpx.ui.track.TrackRef
 
 /** A track is a selection on the map, not a destination. */
 @Composable
-fun GpxApp(
-    incomingTrack: Uri?,
-    onIncomingTrackHandled: () -> Unit,
-) {
+fun GpxApp(incomingTrack: Uri?, onIncomingTrackHandled: () -> Unit) {
     val navController = rememberNavController()
     val container = (LocalContext.current.applicationContext as GpxApplication).container
     val settings by container.settingsRepository.settings.collectAsStateWithLifecycle()
@@ -62,7 +59,6 @@ fun GpxApp(
             popEnterTransition = { slideIntoContainer(SlideDirection.End, NavigationSpec) },
             popExitTransition = { slideOutOfContainer(SlideDirection.End, NavigationSpec) },
         ) {
-
             composable<MapRoute> { entry ->
                 val pending by entry.savedStateHandle
                     .getStateFlow<Any?>(FocusRequest.KEY, null)

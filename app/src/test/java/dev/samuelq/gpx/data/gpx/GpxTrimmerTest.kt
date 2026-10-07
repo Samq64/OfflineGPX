@@ -1,13 +1,13 @@
 package dev.samuelq.gpx.data.gpx
 
-import org.kxml2.io.KXmlParser
-import org.kxml2.io.KXmlSerializer
 import java.io.ByteArrayOutputStream
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.kxml2.io.KXmlParser
+import org.kxml2.io.KXmlSerializer
 
 class GpxTrimmerTest {
 
@@ -273,7 +273,8 @@ class GpxTrimmerTest {
 
     @Test
     fun `a doctype is dropped rather than copied`() {
-        val doc = """<?xml version="1.0"?><!DOCTYPE gpx><gpx version="1.1"><trk><trkseg><trkpt lat="1" lon="1"/></trkseg></trk></gpx>"""
+        val doc = """<?xml version="1.0"?><!DOCTYPE gpx>""" +
+            """<gpx version="1.1"><trk><trkseg><trkpt lat="1" lon="1"/></trkseg></trk></gpx>"""
         val out = ByteArrayOutputStream()
         trimmer.trim(doc.byteInputStream(), out)
         val trimmed = out.toString(Charsets.UTF_8)
@@ -298,7 +299,10 @@ class GpxTrimmerTest {
     fun `a capped segment's excess has no index, as in the parser`() {
         val cap = GpxParser.MAX_POINTS_PER_SEGMENT
         val asked = ArrayList<Int>()
-        trimmer.trim(oversizedGpx(cap + 2), java.io.OutputStream.nullOutputStream(), keepPoint = { asked += it; true })
+        trimmer.trim(oversizedGpx(cap + 2), java.io.OutputStream.nullOutputStream(), keepPoint = {
+            asked += it
+            true
+        })
 
         // The segment's last two points are past the cap; the next segment's point follows on.
         assertEquals(cap + 1, asked.size)
@@ -318,7 +322,10 @@ class GpxTrimmerTest {
         trimmer.trim(doc.byteInputStream(), out, keepPoint = { true })
         val trimmed = out.toString(Charsets.UTF_8)
 
-        assertTrue(Regex("""\w+:schemaLocation="http://www.topografix.com/GPX/1/1 gpx.xsd"""").containsMatchIn(trimmed), trimmed)
+        assertTrue(
+            Regex("""\w+:schemaLocation="http://www.topografix.com/GPX/1/1 gpx.xsd"""").containsMatchIn(trimmed),
+            trimmed,
+        )
         assertEquals(1, parser.parse(trimmed.byteInputStream()).points.size)
     }
 

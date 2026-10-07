@@ -94,7 +94,7 @@ class RecordingWalTest {
                     "W,2000,51.6,-0.2,,",
                     "5000,51.8,-0.4,1", // cut in the elevation: can't tell, so kept
                     "6000,51.9,-0.4", // cut in the longitude
-                ).joinToString("\n")
+                ).joinToString("\n"),
             )
         }
 

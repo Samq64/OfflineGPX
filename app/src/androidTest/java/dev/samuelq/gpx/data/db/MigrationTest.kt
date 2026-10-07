@@ -5,14 +5,14 @@ import androidx.room.testing.MigrationTestHelper
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.samuelq.gpx.targetContext
-import kotlinx.coroutines.runBlocking
-import org.junit.Rule
-import org.junit.Test
-import org.junit.runner.RunWith
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.runBlocking
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class MigrationTest {
@@ -26,7 +26,7 @@ class MigrationTest {
             db.execSQL(
                 """INSERT INTO tracks (id, location, displayName, trackName, startedAtEpochMillis,
                    lastOpenedAtEpochMillis, visible, colorIndex, distanceMeters, totalSeconds)
-                   VALUES (7, 'imports/a.gpx', 'a.gpx', 'Ride', 1000, 2000, 0, 3, 1234.5, 600.0)"""
+                   VALUES (7, 'imports/a.gpx', 'a.gpx', 'Ride', 1000, 2000, 0, 3, 1234.5, 600.0)""",
             )
         }
 
@@ -61,7 +61,7 @@ class MigrationTest {
             db.execSQL(
                 """INSERT INTO tracks (id, location, displayName, trackName, startedAtEpochMillis,
                    lastOpenedAtEpochMillis, visible, colorIndex, pointCount, distanceMeters, totalSeconds)
-                   VALUES (8, 'recordings/b.gpx', 'b.gpx', NULL, 1000, 2000, 1, 2, 5, 10.0, 60.0)"""
+                   VALUES (8, 'recordings/b.gpx', 'b.gpx', NULL, 1000, 2000, 1, 2, 5, 10.0, 60.0)""",
             )
         }
         // Validates the migrated schema against 3.json.

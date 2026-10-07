@@ -1,8 +1,8 @@
 package dev.samuelq.gpx.data.map
 
-import org.oscim.tiling.source.mapfile.Projection
 import java.io.ByteArrayOutputStream
 import java.io.File
+import org.oscim.tiling.source.mapfile.Projection
 
 /**
  * A map file to the spec with one sub-file: a tile index, each tile holding its [tileBytes]
@@ -90,9 +90,18 @@ private const val MAGIC = "mapsforge binary OSM"
 
 private class Bytes : ByteArrayOutputStream() {
     fun u8(v: Int) = write(v)
-    fun u16(v: Int) { u8(v shr 8 and 0xFF); u8(v and 0xFF) }
-    fun i32(v: Int) { u16(v shr 16 and 0xFFFF); u16(v and 0xFFFF) }
-    fun i64(v: Long) { i32((v shr 32).toInt()); i32(v.toInt()) }
+    fun u16(v: Int) {
+        u8(v shr 8 and 0xFF)
+        u8(v and 0xFF)
+    }
+    fun i32(v: Int) {
+        u16(v shr 16 and 0xFFFF)
+        u16(v and 0xFFFF)
+    }
+    fun i64(v: Long) {
+        i32((v shr 32).toInt())
+        i32(v.toInt())
+    }
     fun bytes(b: ByteArray) = write(b)
 
     /** A VBE-U length, then UTF-8. */

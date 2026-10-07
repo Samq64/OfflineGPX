@@ -5,10 +5,10 @@ import androidx.compose.ui.graphics.Color
 import dev.samuelq.gpx.core.model.TrackPoint
 import dev.samuelq.gpx.core.model.TrackPoints
 import dev.samuelq.gpx.core.model.Waypoint
-import org.oscim.core.MercatorProjection
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import org.oscim.core.MercatorProjection
 
 /** Which point a tap on a line picks, in map pixels around the origin. */
 class MapHitTestTest {
@@ -78,8 +78,14 @@ class MapHitTestTest {
     /** Pins drawn with their tip at the waypoint, here on screen as given. */
     private fun pickPin(x: Float, y: Float, vararg pins: Pair<Waypoint, Offset>, onTop: Waypoint? = null) =
         pickWaypoint(
-            x, y, { point -> pins.first { it.first.point == point }.second }, pins.map { it.first },
-            headRadiusPx = 10f, tipLengthPx = 30f, minHalfPx = 24f, onTop = onTop,
+            x,
+            y,
+            { point -> pins.first { it.first.point == point }.second },
+            pins.map { it.first },
+            headRadiusPx = 10f,
+            tipLengthPx = 30f,
+            minHalfPx = 24f,
+            onTop = onTop,
         )
 
     private val a = Waypoint(TrackPoint(1.0, 1.0), "A")

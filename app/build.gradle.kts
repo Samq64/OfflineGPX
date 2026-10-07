@@ -37,7 +37,7 @@ abstract class CheckNoNetworkPermissions : DefaultTask() {
                     appendLine("declared one of these. Drop the dependency or, only if it works")
                     appendLine("offline, strip the permission with tools:node=\"remove\" in")
                     appendLine("AndroidManifest.xml and a comment saying why.")
-                }
+                },
             )
         }
         checkedManifest.get().asFile.writeText(manifest)
@@ -124,13 +124,12 @@ android {
         includeInApk = false
         includeInBundle = false
     }
-
 }
 
 androidComponents {
     onVariants { variant ->
         val check = tasks.register<CheckNoNetworkPermissions>(
-            "check${variant.name.replaceFirstChar(Char::uppercase)}NoNetworkPermissions"
+            "check${variant.name.replaceFirstChar(Char::uppercase)}NoNetworkPermissions",
         )
         variant.artifacts
             .use(check)
@@ -201,8 +200,13 @@ jacoco {
 
 // JVM test coverage over :app and :core. Generated code is left out.
 val coverageExcludes = listOf(
-    "**/R.class", "**/R$*.class", "**/BuildConfig.*", "**/Manifest*.*",
-    "**/*_Impl*", "**/ComposableSingletons*", "**/*\$serializer*",
+    "**/R.class",
+    "**/R$*.class",
+    "**/BuildConfig.*",
+    "**/Manifest*.*",
+    "**/*_Impl*",
+    "**/ComposableSingletons*",
+    "**/*\$serializer*",
 )
 val coreBuild = project(":core").layout.buildDirectory
 val coverageClasses = files(
@@ -244,7 +248,7 @@ val coverageMinimums = mapOf(
     "dev/samuelq/gpx/data/record/RecordingWal.kt" to (1.00 to 0.97),
     "dev/samuelq/gpx/data/record/RecordingSession.kt" to (1.00 to 0.95),
     "dev/samuelq/gpx/data/track/TrackCache.kt" to (1.00 to 0.96),
-    "dev/samuelq/gpx/data/map/MapTileIndex.kt" to (1.00 to 1.00),
+    "dev/samuelq/gpx/data/map/TileIndex.kt" to (1.00 to 1.00),
     "dev/samuelq/gpx/data/map/MapOverlap.kt" to (1.00 to 1.00),
     "dev/samuelq/gpx/ui/chart/ChartMath.kt" to (1.00 to 0.89),
     "dev/samuelq/gpx/ui/format/Formatters.kt" to (1.00 to 0.97),
@@ -262,8 +266,14 @@ val coverageVerification = tasks.register<JacocoCoverageVerification>("coverageV
             rule {
                 element = "SOURCEFILE"
                 includes = listOf(file)
-                limit { counter = "LINE"; minimum = minimums.first.toBigDecimal() }
-                limit { counter = "BRANCH"; minimum = minimums.second.toBigDecimal() }
+                limit {
+                    counter = "LINE"
+                    minimum = minimums.first.toBigDecimal()
+                }
+                limit {
+                    counter = "BRANCH"
+                    minimum = minimums.second.toBigDecimal()
+                }
             }
         }
     }

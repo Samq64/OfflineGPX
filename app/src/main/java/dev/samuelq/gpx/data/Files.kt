@@ -29,10 +29,9 @@ internal fun ContentResolver.size(uri: Uri): Long? = try {
 }
 
 /** Copies [uri] into [destination]. False when no provider could open it. */
-internal fun ContentResolver.copyInto(uri: Uri, destination: File): Boolean =
-    openInputStream(uri)?.use { input ->
-        destination.outputStream().use { output -> input.copyTo(output) }
-    } != null
+internal fun ContentResolver.copyInto(uri: Uri, destination: File): Boolean = openInputStream(uri)?.use { input ->
+    destination.outputStream().use { output -> input.copyTo(output) }
+} != null
 
 /** A sanitised, numbered-if-taken file in [dir]; never overwrites. */
 internal fun uniqueFile(dir: File, name: String?, extension: String, fallback: String): File =

@@ -86,12 +86,11 @@ class Formatters(
         return { meters -> String.format(locale, format, meters / perUnit) }
     }
 
-    fun speed(metersPerSecond: Double, locale: Locale = Locale.getDefault()): String =
-        if (metersPerSecond.isNaN()) {
-            EMPTY
-        } else {
-            String.format(locale, "%.1f $speedUnit", speedIn(metersPerSecond))
-        }
+    fun speed(metersPerSecond: Double, locale: Locale = Locale.getDefault()): String = if (metersPerSecond.isNaN()) {
+        EMPTY
+    } else {
+        String.format(locale, "%.1f $speedUnit", speedIn(metersPerSecond))
+    }
 
     /** See [distanceAxisFor]. */
     fun speedAxisFor(stepMps: Float, locale: Locale = Locale.getDefault()): (Float) -> String {
@@ -100,12 +99,11 @@ class Formatters(
     }
 
     /** Rounded metres or feet. */
-    fun meters(value: Double, locale: Locale = Locale.getDefault()): String =
-        if (value.isNaN()) {
-            EMPTY
-        } else {
-            String.format(locale, "%,d $elevationUnit", elevationIn(value).roundToInt())
-        }
+    fun meters(value: Double, locale: Locale = Locale.getDefault()): String = if (value.isNaN()) {
+        EMPTY
+    } else {
+        String.format(locale, "%,d $elevationUnit", elevationIn(value).roundToInt())
+    }
 
     /** See [distanceAxisFor]. */
     fun elevationAxisFor(stepMeters: Float, locale: Locale = Locale.getDefault()): (Float) -> String {
@@ -116,8 +114,7 @@ class Formatters(
     private fun speedIn(metersPerSecond: Double): Double =
         metersPerSecond * SECONDS_PER_HOUR / if (metric) METERS_PER_KM else METERS_PER_MILE
 
-    private fun elevationIn(meters: Double): Double =
-        if (metric) meters else meters * FEET_PER_METER
+    private fun elevationIn(meters: Double): Double = if (metric) meters else meters * FEET_PER_METER
 
     companion object {
         val Metric = Formatters(UnitSystem.METRIC)
@@ -127,13 +124,12 @@ class Formatters(
         private const val MAX_AXIS_DECIMALS = 3
 
         /** Decimals needed to tell ticks [step] apart. */
-        private fun axisDecimals(step: Double): Int =
-            if (step > 0.0 && step.isFinite()) {
-                // Tolerance absorbs the SI round trip: 0.1 km comes back as 0.09999999.
-                ceil(-log10(step) - 1e-4).toInt().coerceIn(0, MAX_AXIS_DECIMALS)
-            } else {
-                1
-            }
+        private fun axisDecimals(step: Double): Int = if (step > 0.0 && step.isFinite()) {
+            // Tolerance absorbs the SI round trip: 0.1 km comes back as 0.09999999.
+            ceil(-log10(step) - 1e-4).toInt().coerceIn(0, MAX_AXIS_DECIMALS)
+        } else {
+            1
+        }
 
         private const val METERS_PER_KM = 1000.0
         internal const val METERS_PER_MILE = 1609.344
@@ -181,8 +177,7 @@ class Formatters(
 
         private const val BYTES_PER_KB = 1000L
 
-        fun count(value: Int, locale: Locale = Locale.getDefault()): String =
-            String.format(locale, "%,d", value)
+        fun count(value: Int, locale: Locale = Locale.getDefault()): String = String.format(locale, "%,d", value)
 
         /** A platform pattern java.time can't parse falls back to the locale's style. */
         private fun patternOr(pattern: String?, locale: Locale, style: () -> DateTimeFormatter) =

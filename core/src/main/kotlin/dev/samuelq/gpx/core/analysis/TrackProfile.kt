@@ -63,5 +63,6 @@ class TrackProfile(
     }
 
     /** Distance from the start to the point nearest [point], or null if empty. */
-    fun distanceTo(point: TrackPoint): Double? = indexOf(point).takeIf { it >= 0 }?.let { distanceMeters[it].toDouble() }
+    fun distanceTo(point: TrackPoint): Double? =
+        indexOf(point).takeIf { it >= 0 }?.let { distanceMeters[it].toDouble() }
 }

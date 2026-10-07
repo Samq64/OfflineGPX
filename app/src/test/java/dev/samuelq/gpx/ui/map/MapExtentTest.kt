@@ -19,12 +19,8 @@ class MapExtentTest {
         color = Color.Red,
     )
 
-    private fun basemap(
-        south: Double,
-        west: Double,
-        north: Double,
-        east: Double,
-    ) = offlineMap(mapFile(south, west, north, east, baseZoom = 2))
+    private fun basemap(south: Double, west: Double, north: Double, east: Double) =
+        offlineMap(mapFile(south, west, north, east, baseZoom = 2))
 
     @Test
     fun `a route's box is the extremes of its positions`() {
@@ -47,7 +43,7 @@ class MapExtentTest {
                 routes = listOf(route(1.0 to 1.0, 2.0 to 2.0), route(-5.0 to 3.0, 0.0 to 4.0, id = 2)),
                 liveRoute = route(7.0 to -1.0, 7.5 to -0.5, id = 3),
                 basemaps = listOf(basemap(south = -6.0, west = -2.0, north = 3.0, east = 6.0)),
-            )
+            ),
         )
         // Tracks get 5% of their span each side; the map's edges stay where they are.
         assertEquals(-6.0, extent.minLatitude, 1e-6)
@@ -59,7 +55,7 @@ class MapExtentTest {
     @Test
     fun `the recording alone is enough to frame`() {
         val extent = assertNotNull(
-            extentOf(routes = emptyList(), liveRoute = route(1.0 to 1.0, 2.0 to 2.0), basemaps = emptyList())
+            extentOf(routes = emptyList(), liveRoute = route(1.0 to 1.0, 2.0 to 2.0), basemaps = emptyList()),
         )
         assertEquals(0.95, extent.minLatitude, 1e-6)
         assertEquals(2.05, extent.maxLatitude, 1e-6)
@@ -85,7 +81,7 @@ class MapExtentTest {
                 routes = listOf(route(51.5 to -0.1), route(52.0 to 0.2, id = 2)),
                 liveRoute = null,
                 basemaps = emptyList(),
-            )
+            ),
         )
         assertEquals(51.5, extent.minLatitude)
         assertEquals(52.0, extent.maxLatitude)
@@ -96,7 +92,9 @@ class MapExtentTest {
         val points = TrackPoints.of(listOf(TrackPoint(1.0, 1.0, null, null), TrackPoint(2.0, 2.0, null, null)))
         val track = dev.samuelq.gpx.core.model.Track(name = null, points = points)
         val loaded = dev.samuelq.gpx.data.track.LoadedTrack(
-            id = 9, displayName = "a.gpx", track = track,
+            id = 9,
+            displayName = "a.gpx",
+            track = track,
             profile = dev.samuelq.gpx.core.analysis.TrackAnalyzer.analyze(track),
         )
         val known = dev.samuelq.gpx.core.model.GeoBounds(0.0, 0.0, 5.0, 5.0)

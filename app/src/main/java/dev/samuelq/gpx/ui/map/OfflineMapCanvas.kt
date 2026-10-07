@@ -34,6 +34,7 @@ import dev.samuelq.gpx.core.model.TrackPoint
 import dev.samuelq.gpx.core.model.Waypoint
 import dev.samuelq.gpx.data.map.OfflineMap
 import dev.samuelq.gpx.data.map.maxViewZoom
+import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.oscim.android.MapView
@@ -46,7 +47,6 @@ import org.oscim.layers.marker.ItemizedLayer
 import org.oscim.layers.marker.MarkerInterface
 import org.oscim.layers.marker.MarkerSymbol
 import org.oscim.map.Map
-import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Routes over an offline basemap, or over nothing if none is imported. Each layer lives in
@@ -181,14 +181,22 @@ internal fun OfflineMapCanvas(
         listOf(belowPinsLayer, pinLayer, abovePinsLayer, onTopLayer)
             .forEach { layers.add(it, LayerGroup.Markers.ordinal) }
         val taps = TapDetector(
-            ViewConfiguration.get(context), map, doublingPx,
+            ViewConfiguration.get(context),
+            map,
+            doublingPx,
             onDrag = {
                 if (followedNow.getAndSet(null) != null) drag()
             },
         ) { x, y ->
             // Waypoints first: a pin sits on its own track's line and is the more specific hit.
             val waypointHit = pickWaypoint(
-                x, y, { map.screenPosition(it) }, currentWaypoints, pinHeadRadius, pinTipLength, pinMinHalf,
+                x,
+                y,
+                { map.screenPosition(it) },
+                currentWaypoints,
+                pinHeadRadius,
+                pinTipLength,
+                pinMinHalf,
                 onTop = currentFollowedWaypoint,
             )
             if (waypointHit != null) {
@@ -240,21 +248,30 @@ internal fun OfflineMapCanvas(
     }
 
     LaunchedEffect(
-        belowPinsLayer, pinLayer, abovePinsLayer, onTopLayer, symbols, routes, liveRoute, showPuck, focusedTrackId, selectedIndex, markEnds,
-        trackWaypoints, liveWaypoints, followedWaypoint, position,
+        belowPinsLayer, pinLayer, abovePinsLayer, onTopLayer, symbols, routes, liveRoute, showPuck,
+        focusedTrackId, selectedIndex, markEnds, trackWaypoints, liveWaypoints, followedWaypoint, position,
     ) {
         val puckRoute = liveRoute?.takeIf { showPuck }
         val here = symbols.puck(position, bearing = null)
         val focused = routeFor(focusedTrackId, routes, liveRoute)?.points
         val markerAt = focused?.getOrNull(selectedIndex ?: -1)
         // An out-and-back's kept part lies over its cut part; only its ends tell them apart.
-        val ends = if (markEnds) symbols.selectedDot(focused?.getOrNull(0)) + symbols.selectedDot(focused?.lastOrNull()) else emptyList()
+        val ends = if (markEnds) {
+            symbols.selectedDot(
+                focused?.getOrNull(0),
+            ) + symbols.selectedDot(focused?.lastOrNull())
+        } else {
+            emptyList()
+        }
 
         val selected = symbols.selectedDot(markerAt) + ends
         val pinTapped = followedWaypoint != null
         belowPinsLayer.show(if (pinTapped) emptyList() else selected)
         pinLayer.show(symbols.pins(trackWaypoints, liveWaypoints, followedWaypoint))
-        abovePinsLayer.show(symbols.puck(puckRoute?.points?.lastOrNull(), puckRoute?.headingDegrees()) + here + if (pinTapped) selected else emptyList())
+        abovePinsLayer.show(
+            symbols.puck(puckRoute?.points?.lastOrNull(), puckRoute?.headingDegrees()) + here +
+                if (pinTapped) selected else emptyList(),
+        )
         onTopLayer.show(symbols.onTopPin(followedWaypoint, liveWaypoints))
         map.render()
     }
@@ -296,6 +313,7 @@ internal fun OfflineMapCanvas(
     var framedView by remember { mutableStateOf<BoundingBox?>(null) }
     val clampExtent = remember(extent, framedView) { extent?.including(framedView) }
     val currentExtent by rememberUpdatedState(extent)
+
     // Read fresh, not via recomposition: a framing move's own update must already see its view.
     fun currentClamp() = currentExtent?.including(framedView)
     val currentCover by rememberUpdatedState(cover)
@@ -364,7 +382,10 @@ internal fun OfflineMapCanvas(
             zoomIn to controller::zoomIn,
             zoomOut to controller::zoomOut,
             // Asked for, like a drag, so it ends following.
-            showAll to { drag(); controller.showAllTracks() },
+            showAll to {
+                drag()
+                controller.showAllTracks()
+            },
         ).map { (label, act) -> ViewCompat.addAccessibilityAction(mapView, label) { _, _ -> act() } }
         onDispose { ids.forEach { ViewCompat.removeAccessibilityAction(mapView, it) } }
     }

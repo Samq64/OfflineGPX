@@ -1,8 +1,8 @@
 package dev.samuelq.gpx.data.record
 
 import dev.samuelq.gpx.core.analysis.FixFilter
-import dev.samuelq.gpx.core.analysis.TrackAnalyzer
 import dev.samuelq.gpx.core.analysis.SpeedWindow
+import dev.samuelq.gpx.core.analysis.TrackAnalyzer
 import dev.samuelq.gpx.core.analysis.haversineMeters
 import dev.samuelq.gpx.core.model.TrackPoint
 import dev.samuelq.gpx.core.model.TrackPoints
@@ -17,10 +17,7 @@ import java.time.Instant
  *
  * @param clock monotonic milliseconds.
  */
-internal class RecordingSession(
-    private val maxAccuracyMeters: Double,
-    private val clock: () -> Long,
-) {
+internal class RecordingSession(private val maxAccuracyMeters: Double, private val clock: () -> Long) {
     private val filter = FixFilter(maxAccuracyMeters)
     private val speedWindow = SpeedWindow()
 
@@ -29,6 +26,7 @@ internal class RecordingSession(
     var distanceMeters = 0.0
         private set
     private var pointCount = 0
+
     /** Kept through a pause, so a waypoint can still be dropped where the ride stopped. */
     private var lastPoint: TrackPoint? = null
 

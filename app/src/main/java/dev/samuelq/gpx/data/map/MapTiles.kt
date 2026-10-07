@@ -1,5 +1,12 @@
 package dev.samuelq.gpx.data.map
 
+import java.io.ByteArrayInputStream
+import java.io.IOException
+import java.io.InputStream
+import kotlin.math.abs
+import kotlin.math.ceil
+import kotlin.math.floor
+import kotlin.math.pow
 import org.oscim.core.BoundingBox
 import org.oscim.core.MapElement
 import org.oscim.core.MercatorProjection
@@ -19,13 +26,6 @@ import org.oscim.tiling.source.mapfile.MapFileTileSource
 import org.oscim.tiling.source.mapfile.MultiMapFileTileSource
 import org.oscim.tiling.source.mapfile.header.SubFileParameter
 import org.oscim.utils.geom.TileClipper
-import java.io.ByteArrayInputStream
-import java.io.IOException
-import java.io.InputStream
-import kotlin.math.abs
-import kotlin.math.ceil
-import kotlin.math.floor
-import kotlin.math.pow
 
 /** The generated theme, as the stream VTM insists on. */
 internal class GeneratedRenderTheme(xml: String) : ThemeFile {
@@ -35,14 +35,21 @@ internal class GeneratedRenderTheme(xml: String) : ThemeFile {
     private var mapsforgeTheme = false
 
     override fun getMenuCallback(): XmlRenderThemeMenuCallback? = menuCallback
-    override fun setMenuCallback(callback: XmlRenderThemeMenuCallback?) { menuCallback = callback }
+    override fun setMenuCallback(callback: XmlRenderThemeMenuCallback?) {
+        menuCallback = callback
+    }
     override fun getRelativePathPrefix(): String = ""
     override fun getRenderThemeAsStream(): InputStream = ByteArrayInputStream(bytes)
     override fun getResourceProvider(): XmlThemeResourceProvider? = resourceProvider
-    override fun setResourceProvider(provider: XmlThemeResourceProvider?) { resourceProvider = provider }
+    override fun setResourceProvider(provider: XmlThemeResourceProvider?) {
+        resourceProvider = provider
+    }
+
     // Set by the parser itself on seeing the mapsforge namespace.
     override fun isMapsforgeTheme(): Boolean = mapsforgeTheme
-    override fun setMapsforgeTheme(value: Boolean) { mapsforgeTheme = value }
+    override fun setMapsforgeTheme(value: Boolean) {
+        mapsforgeTheme = value
+    }
 }
 
 /**
@@ -142,8 +149,7 @@ private class Rect(val left: Float, val top: Float, val right: Float, val bottom
     fun contains(x: Float, y: Float) = x in left..right && y in top..bottom
 
     /** Sharing more than an edge. */
-    fun overlaps(other: Rect) =
-        left < other.right && other.left < right && top < other.bottom && other.top < bottom
+    fun overlaps(other: Rect) = left < other.right && other.left < right && top < other.bottom && other.top < bottom
 
     fun inset(by: Float) = Rect(left + by, top + by, right - by, bottom - by)
 
@@ -158,10 +164,12 @@ private class Rect(val left: Float, val top: Float, val right: Float, val bottom
         val ys = (others.flatMap { listOf(it.top, it.bottom) } + top + bottom)
             .filter { it in top..bottom }.distinct().sorted()
         val cells = ArrayList<Rect>()
-        for (i in 0 until xs.size - 1) for (j in 0 until ys.size - 1) {
-            val midX = (xs[i] + xs[i + 1]) / 2
-            val midY = (ys[j] + ys[j + 1]) / 2
-            if (others.none { it.contains(midX, midY) }) cells += Rect(xs[i], ys[j], xs[i + 1], ys[j + 1])
+        for (i in 0 until xs.size - 1) {
+            for (j in 0 until ys.size - 1) {
+                val midX = (xs[i] + xs[i + 1]) / 2
+                val midY = (ys[j] + ys[j + 1]) / 2
+                if (others.none { it.contains(midX, midY) }) cells += Rect(xs[i], ys[j], xs[i + 1], ys[j + 1])
+            }
         }
         return cells
     }
@@ -239,13 +247,20 @@ private class ClippingSink(sink: ITileDataSink) : TileDataSink(sink) {
         val xs = gridLines(rect.left, rect.right, ::pixelToLongitude, ::longitudeToPixel)
         val ys = gridLines(rect.top, rect.bottom, ::pixelToLatitude, ::latitudeToPixel)
         val cells = ArrayList<Rect>((xs.size - 1) * (ys.size - 1))
-        for (i in 0 until xs.size - 1) for (j in 0 until ys.size - 1) {
-            cells += Rect(xs[i], ys[j], xs[i + 1], ys[j + 1])
+        for (i in 0 until xs.size - 1) {
+            for (j in 0 until ys.size - 1) {
+                cells += Rect(xs[i], ys[j], xs[i + 1], ys[j + 1])
+            }
         }
         return cells
     }
 
-    private fun gridLines(from: Float, to: Float, toDegrees: (Float) -> Double, toPixel: (Double) -> Float): List<Float> {
+    private fun gridLines(
+        from: Float,
+        to: Float,
+        toDegrees: (Float) -> Double,
+        toPixel: (Double) -> Float,
+    ): List<Float> {
         val a = toDegrees(from)
         val b = toDegrees(to)
         val lines = (ceil(minOf(a, b)).toInt()..floor(maxOf(a, b)).toInt())

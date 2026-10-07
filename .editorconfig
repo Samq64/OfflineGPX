@@ -1,0 +1,22 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 4
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{kt,kts}]
+# Android's Kotlin style: 100 columns.
+ktlint_code_style = android_studio
+ktlint_function_naming_ignore_when_annotated_with = Composable
+# Kotlin's conventions recommend them; the android_studio preset otherwise bans them.
+ij_kotlin_allow_trailing_comma = true
+ij_kotlin_allow_trailing_comma_on_call_site = true
+# Longer than Android's 100: wrapping the code to that read worse than the long lines did.
+max_line_length = 120
+# Compose names constants in PascalCase, like ScreenPadding.
+ktlint_standard_property-naming = disabled
+ktlint_standard_blank-line-between-when-conditions = disabled

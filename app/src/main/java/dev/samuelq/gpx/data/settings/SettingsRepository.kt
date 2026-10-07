@@ -28,7 +28,10 @@ enum class TrackSort(
     /** The way it runs when picked: newest and longest first, names A to Z. */
     val naturallyDescending: Boolean,
 ) {
-    RECENT(true), DATE(true), LENGTH(true), NAME(false)
+    RECENT(true),
+    DATE(true),
+    LENGTH(true),
+    NAME(false),
 }
 
 /** A sort and which way it runs. */
@@ -70,8 +73,7 @@ class SettingsRepository(context: Context) {
 
     fun setUnits(units: UnitSystem) = update { putString(KEY_UNITS, units.name) }
 
-    fun setMaxAccuracyMeters(meters: Double) =
-        update { putFloat(KEY_ACCURACY, meters.toFloat()) }
+    fun setMaxAccuracyMeters(meters: Double) = update { putFloat(KEY_ACCURACY, meters.toFloat()) }
 
     private inline fun update(crossinline edits: SharedPreferences.Editor.() -> Unit) {
         prefs.edit { edits() }

@@ -48,16 +48,20 @@ internal suspend fun Map.attachBasemap(
 ) {
     // VTM fails the whole source if any file won't open, so MapStore lists only those whose header it reads.
     val theme = withContext(Dispatchers.IO) {
-        if (maps.isEmpty()) null else ThemeLoader.load(
-            GeneratedRenderTheme(
-                MapRenderTheme.xml(
-                    land = colors.land,
-                    label = colors.label,
-                    background = colors.background,
-                    textScale = density.fontScale,
-                )
+        if (maps.isEmpty()) {
+            null
+        } else {
+            ThemeLoader.load(
+                GeneratedRenderTheme(
+                    MapRenderTheme.xml(
+                        land = colors.land,
+                        label = colors.label,
+                        background = colors.background,
+                        textScale = density.fontScale,
+                    ),
+                ),
             )
-        )
+        }
     }
 
     // Land under the tiles, since the theme background is transparent (see MapRenderTheme).
@@ -113,7 +117,10 @@ internal suspend fun Map.attachBasemap(
 }
 
 internal fun Map.detach(basemap: Basemap) {
-    basemap.all.forEach { layers().remove(it); it.onDetach() }
+    basemap.all.forEach {
+        layers().remove(it)
+        it.onDetach()
+    }
     basemap.theme?.dispose()
 }
 
@@ -129,20 +136,30 @@ private fun outsideDrawables(maps: List<OfflineMap>, background: Color): List<Re
     // draw, and the camera can't zoom out past the extent anyway.
     val extent = extentOf(emptyList(), null, maps) ?: return emptyList()
     val outer = extent.extendMargin(MASK_MARGIN_FACTOR)
-    val latitudes = (maps.flatMap { listOf(it.bounds.minLatitude, it.bounds.maxLatitude) } +
-        listOf(outer.minLatitude, outer.maxLatitude)).distinct().sorted()
-    val longitudes = (maps.flatMap { listOf(it.bounds.minLongitude, it.bounds.maxLongitude) } +
-        listOf(outer.minLongitude, outer.maxLongitude)).distinct().sorted()
+    val latitudes = (
+        maps.flatMap { listOf(it.bounds.minLatitude, it.bounds.maxLatitude) } +
+            listOf(outer.minLatitude, outer.maxLatitude)
+        ).distinct().sorted()
+    val longitudes = (
+        maps.flatMap { listOf(it.bounds.minLongitude, it.bounds.maxLongitude) } +
+            listOf(outer.minLongitude, outer.maxLongitude)
+        ).distinct().sorted()
 
     val out = ArrayList<RectangleDrawable>()
-    for (i in 0 until latitudes.size - 1) for (j in 0 until longitudes.size - 1) {
-        val midLatitude = (latitudes[i] + latitudes[i + 1]) / 2
-        val midLongitude = (longitudes[j] + longitudes[j + 1]) / 2
-        val covered = maps.any {
-            val h = it.bounds
-            midLatitude in h.minLatitude..h.maxLatitude && midLongitude in h.minLongitude..h.maxLongitude
+    for (i in 0 until latitudes.size - 1) {
+        for (j in 0 until longitudes.size - 1) {
+            val midLatitude = (latitudes[i] + latitudes[i + 1]) / 2
+            val midLongitude = (longitudes[j] + longitudes[j + 1]) / 2
+            val covered = maps.any {
+                val h = it.bounds
+                midLatitude in h.minLatitude..h.maxLatitude && midLongitude in h.minLongitude..h.maxLongitude
+            }
+            if (!covered) {
+                out.add(
+                    RectangleDrawable(latitudes[i], longitudes[j], latitudes[i + 1], longitudes[j + 1], style),
+                )
+            }
         }
-        if (!covered) out.add(RectangleDrawable(latitudes[i], longitudes[j], latitudes[i + 1], longitudes[j + 1], style))
     }
     return out
 }

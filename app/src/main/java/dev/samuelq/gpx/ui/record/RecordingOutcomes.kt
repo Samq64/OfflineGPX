@@ -32,10 +32,13 @@ fun RecordingOutcomes(
     val resources = LocalResources.current
     val context = LocalContext.current
     val container = (context.applicationContext as GpxApplication).container
+
     // By the name it would have been saved as, if any.
-    fun discardedNamed(name: String) =
-        if (name.isBlank()) resources.getString(R.string.record_discarded)
-        else resources.getString(R.string.record_discarded_named, name.trim())
+    fun discardedNamed(name: String) = if (name.isBlank()) {
+        resources.getString(R.string.record_discarded)
+    } else {
+        resources.getString(R.string.record_discarded_named, name.trim())
+    }
 
     LaunchedEffect(recorder) {
         recorder.events.collect { event ->

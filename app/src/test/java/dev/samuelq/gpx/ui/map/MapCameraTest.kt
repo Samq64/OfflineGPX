@@ -7,16 +7,16 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import dev.samuelq.gpx.core.model.TrackPoint
-import org.oscim.core.BoundingBox
-import org.oscim.core.MapPosition
-import org.oscim.core.MercatorProjection
-import org.oscim.core.Tile
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
+import org.oscim.core.BoundingBox
+import org.oscim.core.MapPosition
+import org.oscim.core.MercatorProjection
+import org.oscim.core.Tile
 
 class MapCameraTest {
 
@@ -116,16 +116,28 @@ class MapCameraTest {
         assertFalse(tooFarApart(ottawa, listOf(ottawa), usable, Double.MAX_VALUE, minPx))
         // A few km apart, still lines.
         val nearby = BoundingBox(45.380, -75.750, 45.404, -75.748)
-        assertFalse(tooFarApart(ottawa.extendBoundingBox(nearby), listOf(ottawa, nearby), usable, Double.MAX_VALUE, minPx))
+        assertFalse(
+            tooFarApart(ottawa.extendBoundingBox(nearby), listOf(ottawa, nearby), usable, Double.MAX_VALUE, minPx),
+        )
         // Ottawa and Sydney, or Ottawa and Kingston, both specks.
         val sydney = BoundingBox(-33.870, 151.209, -33.846, 151.211)
-        assertTrue(tooFarApart(ottawa.extendBoundingBox(sydney), listOf(ottawa, sydney), usable, Double.MAX_VALUE, minPx))
+        assertTrue(
+            tooFarApart(ottawa.extendBoundingBox(sydney), listOf(ottawa, sydney), usable, Double.MAX_VALUE, minPx),
+        )
         val kingston = BoundingBox(44.230, -76.481, 44.254, -76.479)
-        assertTrue(tooFarApart(ottawa.extendBoundingBox(kingston), listOf(ottawa, kingston), usable, Double.MAX_VALUE, minPx))
+        assertTrue(
+            tooFarApart(ottawa.extendBoundingBox(kingston), listOf(ottawa, kingston), usable, Double.MAX_VALUE, minPx),
+        )
         // One long ride among them is enough to frame.
         val ride = BoundingBox(44.3, -76.4, 45.4, -75.7)
         assertFalse(
-            tooFarApart(ottawa.extendBoundingBox(kingston), listOf(ottawa, kingston, ride), usable, Double.MAX_VALUE, minPx),
+            tooFarApart(
+                ottawa.extendBoundingBox(kingston),
+                listOf(ottawa, kingston, ride),
+                usable,
+                Double.MAX_VALUE,
+                minPx,
+            ),
         )
     }
 

@@ -15,16 +15,6 @@ import dev.samuelq.gpx.fixture
 import dev.samuelq.gpx.sampleGpx
 import dev.samuelq.gpx.targetContext
 import dev.samuelq.gpx.waitFor
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
-import org.junit.After
-import org.junit.Before
-import org.junit.Test
-import org.junit.runner.RunWith
 import java.io.File
 import java.time.Instant
 import kotlin.test.assertContentEquals
@@ -35,6 +25,16 @@ import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import org.junit.After
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
 
 /** Against the real filesystem and an in-memory database. */
 @RunWith(AndroidJUnit4::class)
@@ -70,8 +70,7 @@ class TrackRepositoryTest {
 
     private fun loaded(id: Long): LoadedTrack = runBlocking { repository.geometry(id).getOrThrow() }
 
-    private fun importsFiles(): Set<String> =
-        TrackFiles.importsDir(targetContext).list().orEmpty().toSet()
+    private fun importsFiles(): Set<String> = TrackFiles.importsDir(targetContext).list().orEmpty().toSet()
 
     @Test
     fun importIndexesTheCopy() {
@@ -113,10 +112,14 @@ class TrackRepositoryTest {
     fun failedImportsLeaveNothingBehind() {
         val before = importsFiles()
         runBlocking {
-            val invalid = repository.import(Uri.fromFile(fixture("bad.gpx", "<gpx><trk><trkseg><trkpt"))).exceptionOrNull()
+            val invalid = repository.import(
+                Uri.fromFile(fixture("bad.gpx", "<gpx><trk><trkseg><trkpt")),
+            ).exceptionOrNull()
             assertIs<TrackLoadException.Invalid>(invalid)
 
-            val waypointsOnly = repository.import(Uri.fromFile(fixture("empty.gpx", sampleGpx(points = 0)))).exceptionOrNull()
+            val waypointsOnly = repository.import(
+                Uri.fromFile(fixture("empty.gpx", sampleGpx(points = 0))),
+            ).exceptionOrNull()
             assertIs<TrackLoadException.Empty>(waypointsOnly)
 
             val missing = repository.import(Uri.fromFile(File(targetContext.cacheDir, "missing.gpx"))).exceptionOrNull()
@@ -195,8 +198,8 @@ class TrackRepositoryTest {
     fun categoryTakesTheSpellingInUseElseItsOwn() {
         val first = importSample()
         val second = importSample()
-        runBlocking { repository.rename(first, name = null, category = "Hikes ${first}").getOrThrow() }
-        runBlocking { repository.rename(second, name = null, category = "HIKES ${first}").getOrThrow() }
+        runBlocking { repository.rename(first, name = null, category = "Hikes $first").getOrThrow() }
+        runBlocking { repository.rename(second, name = null, category = "HIKES $first").getOrThrow() }
         assertEquals("Hikes $first", row(second).category)
         assertEquals("Hikes $first", parsed(second).type)
         // Alone in it, a track can respell its own.
@@ -335,7 +338,9 @@ class TrackRepositoryTest {
         val id = importSample()
         val summary = row(id).summary
         runBlocking {
-            dao.setSummary(SummaryUpdate(id, null, summary.copy(pointCount = -1, ascentMeters = 0.0, northLatitude = 0.0)))
+            dao.setSummary(
+                SummaryUpdate(id, null, summary.copy(pointCount = -1, ascentMeters = 0.0, northLatitude = 0.0)),
+            )
         }
         assertFalse(row(id).summarised)
 

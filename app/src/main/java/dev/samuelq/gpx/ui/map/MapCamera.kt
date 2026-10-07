@@ -1,12 +1,12 @@
 package dev.samuelq.gpx.ui.map
 
-import dev.samuelq.gpx.core.model.GeoBounds
-import dev.samuelq.gpx.core.model.TrackPoint
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
+import dev.samuelq.gpx.core.model.GeoBounds
+import dev.samuelq.gpx.core.model.TrackPoint
 import dev.samuelq.gpx.data.map.OfflineMap
 import org.oscim.core.BoundingBox
 import org.oscim.core.Box
@@ -59,13 +59,11 @@ internal fun screenPosition(point: TrackPoint, position: MapPosition, width: Int
  * Every route's extent with a margin, plus every shown map's flush (past a map's edge is
  * nothing). Null when there's neither.
  */
-internal fun extentOf(
-    routes: List<RouteOverlay>,
-    liveRoute: RouteOverlay?,
-    basemaps: List<OfflineMap>,
-): BoundingBox? {
+internal fun extentOf(routes: List<RouteOverlay>, liveRoute: RouteOverlay?, basemaps: List<OfflineMap>): BoundingBox? {
     // From each route's cached bounds, so a growing recording doesn't re-walk every position.
-    val tracks = (routes + listOfNotNull(liveRoute)).mapNotNull { it.bounds?.toBoundingBox()?.extendMargin(TRACK_MARGIN_FACTOR) }
+    val tracks = (routes + listOfNotNull(liveRoute)).mapNotNull {
+        it.bounds?.toBoundingBox()?.extendMargin(TRACK_MARGIN_FACTOR)
+    }
     val extent = (tracks + basemaps.map { it.bounds }).reduceOrNull(BoundingBox::extendBoundingBox)
     // A single position isn't a box to fit.
     return extent?.takeIf { it.latitudeSpan > 0 || it.longitudeSpan > 0 }
@@ -133,7 +131,13 @@ internal fun fit(target: BoundingBox, usable: IntSize, insets: Insets, maxScale:
  * they're too far apart to show together, as specks. Never at the zoom cap, where the whole
  * extent is small rather than spread.
  */
-internal fun tooFarApart(extent: BoundingBox, tracks: List<BoundingBox>, usable: IntSize, maxScale: Double, minPx: Float): Boolean {
+internal fun tooFarApart(
+    extent: BoundingBox,
+    tracks: List<BoundingBox>,
+    usable: IntSize,
+    maxScale: Double,
+    minPx: Float,
+): Boolean {
     val scale = MapPosition().apply { setByBoundingBox(extent, usable.width, usable.height) }.scale
     if (scale >= maxScale) return false
     val mapSize = Tile.SIZE * scale
@@ -183,12 +187,18 @@ internal fun centreLimit(extent: BoundingBox, cover: Insets, width: Int, height:
     val (minX, maxX) = centreRange(
         MercatorProjection.longitudeToX(extent.minLongitude),
         MercatorProjection.longitudeToX(extent.maxLongitude),
-        view = width, visibleStart = cover.left, visibleEnd = width - cover.right, mapSize,
+        view = width,
+        visibleStart = cover.left,
+        visibleEnd = width - cover.right,
+        mapSize,
     )
     val (minY, maxY) = centreRange(
         MercatorProjection.latitudeToY(extent.maxLatitude),
         MercatorProjection.latitudeToY(extent.minLatitude),
-        view = height, visibleStart = 0, visibleEnd = height - cover.bottom, mapSize,
+        view = height,
+        visibleStart = 0,
+        visibleEnd = height - cover.bottom,
+        mapSize,
     )
     return Box(minX, minY, maxX, maxY)
 }

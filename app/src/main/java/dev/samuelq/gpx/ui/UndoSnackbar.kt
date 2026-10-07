@@ -48,7 +48,8 @@ internal suspend fun SnackbarHostState.showUndo(
     onUndo: () -> Unit,
     onCommit: () -> Unit,
 ) {
-    val visuals = UndoVisuals(message, undoLabel, if (indefinite) SnackbarDuration.Indefinite else SnackbarDuration.Long)
+    val visuals =
+        UndoVisuals(message, undoLabel, if (indefinite) SnackbarDuration.Indefinite else SnackbarDuration.Long)
     var undone = false
     try {
         currentSnackbarData?.dismiss()

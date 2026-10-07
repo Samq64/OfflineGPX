@@ -12,6 +12,8 @@ import dev.samuelq.gpx.core.analysis.TrackAnalyzer
 import dev.samuelq.gpx.core.model.TrackPoint
 import dev.samuelq.gpx.core.model.TrackPoints
 import dev.samuelq.gpx.data.track.TrackLabel
+import java.io.IOException
+import java.time.Instant
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -25,8 +27,6 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import java.io.IOException
-import java.time.Instant
 
 /** Foreground service owning a recording; commands arrive as intents from [RecordingController]. */
 class RecordingService : Service() {
@@ -42,7 +42,7 @@ class RecordingService : Service() {
         SupervisorJob() + recorder + CoroutineExceptionHandler { _, e ->
             Log.e(TAG, "Recording failed", e)
             scope.launch { fail() }
-        }
+        },
     )
 
     /** Commands suspend and must not interleave. */
@@ -279,8 +279,8 @@ class RecordingService : Service() {
                 log.file.delete()
                 controller.emit(
                     RecordingEvent.Failed(
-                        if (track == null) R.string.record_nothing_recorded else R.string.record_no_distance
-                    )
+                        if (track == null) R.string.record_nothing_recorded else R.string.record_no_distance,
+                    ),
                 )
                 return
             }

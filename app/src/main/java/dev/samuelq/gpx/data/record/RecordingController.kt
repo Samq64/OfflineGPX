@@ -98,6 +98,7 @@ class RecordingController(context: Context, private val locationSource: Location
     fun start() = send(RecordingService.ACTION_START)
     fun pause() = send(RecordingService.ACTION_PAUSE)
     fun resume() = send(RecordingService.ACTION_RESUME)
+
     /** Asks first, holding the ride where it is; nothing stops until [stop] or [discard]. */
     fun requestStop() {
         if (_state.value !is RecordingState.Active || _stopRequested.value) return

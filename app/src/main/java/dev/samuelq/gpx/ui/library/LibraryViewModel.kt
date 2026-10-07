@@ -11,11 +11,11 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.navigation.toRoute
 import dev.samuelq.gpx.core.model.GeoBounds
 import dev.samuelq.gpx.data.db.TrackEntity
-import dev.samuelq.gpx.data.track.title
 import dev.samuelq.gpx.data.settings.SettingsRepository
 import dev.samuelq.gpx.data.settings.TrackOrder
 import dev.samuelq.gpx.data.settings.TrackSort
 import dev.samuelq.gpx.data.track.TrackRepository
+import dev.samuelq.gpx.data.track.title
 import dev.samuelq.gpx.di.appContainer
 import dev.samuelq.gpx.ui.nav.LibraryRoute
 import java.text.Collator
@@ -25,11 +25,11 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.mapLatest
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -37,8 +37,10 @@ import kotlinx.coroutines.launch
 sealed interface LibraryEvent {
     data class Open(val id: Long) : LibraryEvent
     data object ImportFailed : LibraryEvent
+
     /** A multi-file import; a single file opens instead. */
     data class ImportedAll(val imported: Int, val requested: Int) : LibraryEvent
+
     /** Failed outright; see [ExportedAll] for a partial one. */
     data object ExportFailed : LibraryEvent
 
@@ -213,7 +215,10 @@ class LibraryViewModel(
         viewModelScope.launch {
             val all = repository.tracks.first()
             // Every track for show only, which may hide any of them.
-            val before = all.filter { change == BulkVisibility.SHOW_ONLY || it.id in ids }.associate { it.id to it.visible }
+            val before = all.filter { change == BulkVisibility.SHOW_ONLY || it.id in ids }.associate {
+                it.id to
+                    it.visible
+            }
             when (change) {
                 BulkVisibility.SHOW -> repository.setVisible(ids, true)
                 BulkVisibility.HIDE -> repository.setVisible(ids, false)
@@ -245,11 +250,13 @@ class LibraryViewModel(
         private const val SHOWN_ONLY = "shown_only"
 
         val Factory = viewModelFactory {
-            initializer { LibraryViewModel(
+            initializer {
+                LibraryViewModel(
                     appContainer.trackRepository,
                     appContainer.settingsRepository,
                     createSavedStateHandle(),
-                ) }
+                )
+            }
         }
     }
 }
@@ -284,7 +291,7 @@ internal fun List<TrackEntity>.groupedByCategory(): List<TrackEntity> {
     val collator = Collator.getInstance()
     return sortedWith(
         compareBy<TrackEntity> { it.category == null }
-            .thenBy(collator) { it.category.orEmpty().lowercase(Locale.ROOT) }
+            .thenBy(collator) { it.category.orEmpty().lowercase(Locale.ROOT) },
     )
 }
 
@@ -292,7 +299,9 @@ internal fun List<TrackEntity>.groupedByCategory(): List<TrackEntity> {
 internal fun List<TrackEntity>.sections(): List<Section> = buildList {
     var start = 0
     for (i in 1..this@sections.size) {
-        if (i == this@sections.size || !this@sections[i].category.equals(this@sections[start].category, ignoreCase = true)) {
+        if (i == this@sections.size ||
+            !this@sections[i].category.equals(this@sections[start].category, ignoreCase = true)
+        ) {
             add(Section(this@sections[start].category, this@sections.subList(start, i)))
             start = i
         }

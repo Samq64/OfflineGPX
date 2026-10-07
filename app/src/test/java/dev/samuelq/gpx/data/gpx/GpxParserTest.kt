@@ -1,12 +1,12 @@
 package dev.samuelq.gpx.data.gpx
 
-import org.kxml2.io.KXmlParser
 import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.kxml2.io.KXmlParser
 
 class GpxParserTest {
 
@@ -29,7 +29,7 @@ class GpxParserTest {
                 </trkseg>
               </trk>
             </gpx>
-            """.trimIndent()
+            """.trimIndent(),
         )
 
         assertEquals("Morning ride", track.name)
@@ -47,7 +47,7 @@ class GpxParserTest {
               <trkseg><trkpt lat="1" lon="1"/><trkpt lat="1.001" lon="1"/></trkseg>
               <trkseg><trkpt lat="2" lon="2"/></trkseg>
             </trk></gpx>
-            """.trimIndent()
+            """.trimIndent(),
         )
 
         assertEquals(2, track.points.segmentCount)
@@ -62,7 +62,7 @@ class GpxParserTest {
             <gpx version="1.0" xmlns="http://www.topografix.com/GPX/1/0"><trk><trkseg>
               <trkpt lat="47.0" lon="8.0"><ele>400</ele></trkpt>
             </trkseg></trk></gpx>
-            """.trimIndent()
+            """.trimIndent(),
         )
 
         assertEquals(1, track.points.size)
@@ -78,7 +78,7 @@ class GpxParserTest {
               <rtept lat="47.0" lon="8.0"><ele>400</ele></rtept>
               <rtept lat="47.1" lon="8.1"><ele>420</ele></rtept>
             </rte></gpx>
-            """.trimIndent()
+            """.trimIndent(),
         )
 
         assertEquals("Planned", track.name)
@@ -96,7 +96,7 @@ class GpxParserTest {
               <desc>Started at the trailhead, rained the whole way back.</desc>
               <trkseg><trkpt lat="47.0" lon="8.0"/></trkseg>
             </trk></gpx>
-            """.trimIndent()
+            """.trimIndent(),
         )
 
         assertEquals("Started at the trailhead, rained the whole way back.", track.description)
@@ -110,7 +110,7 @@ class GpxParserTest {
               <trk><type> hiking </type><trkseg><trkpt lat="47.0" lon="8.0"/></trkseg></trk>
               <trk><type>running</type><trkseg><trkpt lat="47.1" lon="8.0"/></trkseg></trk>
             </gpx>
-            """.trimIndent()
+            """.trimIndent(),
         )
 
         assertEquals("hiking", track.type)
@@ -129,7 +129,7 @@ class GpxParserTest {
                 </trkpt>
               </trkseg></trk>
             </gpx>
-            """.trimIndent()
+            """.trimIndent(),
         )
 
         assertEquals(1, track.points.size)
@@ -147,7 +147,7 @@ class GpxParserTest {
               <trkpt lat="200" lon="8.3"/>
               <trkpt lat="47.4" lon="8.4"/>
             </trkseg></trk></gpx>
-            """.trimIndent()
+            """.trimIndent(),
         )
 
         assertEquals(2, track.points.size)
@@ -195,7 +195,7 @@ class GpxParserTest {
               <wpt lat="3" lon="3"><cmt>Comment</cmt></wpt>
               <wpt lat="4" lon="4"><name> </name></wpt>
             </gpx>
-            """.trimIndent()
+            """.trimIndent(),
         )
 
         assertEquals(listOf("Summit", "Description", "Comment", null), track.waypoints.map { it.name })
@@ -210,7 +210,7 @@ class GpxParserTest {
               <wpt lat="1"><name>No longitude</name></wpt>
               <wpt lat="95" lon="2"><name>Off the globe</name></wpt>
             </gpx>
-            """.trimIndent()
+            """.trimIndent(),
         ).waypoints.single()
 
         assertEquals(12.5, waypoint.point.elevation)
@@ -229,7 +229,7 @@ class GpxParserTest {
               <rte><name>Route</name><rtept lat="3" lon="3"/></rte>
               <extensions><x/></extensions>
             </gpx>
-            """.trimIndent()
+            """.trimIndent(),
         )
 
         assertEquals("First", track.name)
@@ -245,7 +245,7 @@ class GpxParserTest {
               <metadata><name>Metadata</name></metadata>
               <rte><rtept lat="x" lon="3"/><rtept lat="4" lon="4"><extensions/></rtept></rte>
             </gpx>
-            """.trimIndent()
+            """.trimIndent(),
         )
 
         assertEquals("Metadata", track.name)
@@ -259,7 +259,7 @@ class GpxParserTest {
             <gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1"><trk><name/><trkseg>
               <trkpt lat="1" lon="1"><ele></ele><time/></trkpt>
               <trkpt lat="2" lon="2"><ele>nope</ele></trkpt>
-            """.trimIndent()
+            """.trimIndent(),
         )
 
         assertNull(track.name)
@@ -313,7 +313,7 @@ class GpxParserTest {
               <rte><desc>Route</desc><rtept lat="1" lon="1"/></rte>
               <trk><trkseg><trkpt lat="2" lon="2"/><trkpt lat="3"/><extensions><x/></extensions></trkseg></trk>
             </gpx>
-            """.trimIndent()
+            """.trimIndent(),
         )
 
         assertEquals(2, track.points.size)

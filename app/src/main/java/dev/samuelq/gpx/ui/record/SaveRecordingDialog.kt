@@ -158,7 +158,13 @@ private fun SaveRecordingDialog(
         ) {
             Column(Modifier.padding(bottom = 12.dp)) {
                 Column(Modifier.padding(start = 24.dp, end = 24.dp, top = 24.dp)) {
-                    Text(title, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
+                    Text(
+                        title,
+                        style = MaterialTheme.typography.headlineSmall,
+                        modifier = Modifier.semantics {
+                            heading()
+                        },
+                    )
                     Spacer(Modifier.height(16.dp))
                     summary()
                     Spacer(Modifier.height(16.dp))

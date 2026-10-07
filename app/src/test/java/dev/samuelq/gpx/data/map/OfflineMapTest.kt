@@ -122,7 +122,10 @@ class OfflineMapTest {
     @Test
     fun `the camera stops a few zooms past the deepest tiles`() {
         assertEquals(18, offlineMap(mapFile(baseZoom = 14)).maxViewZoom)
-        assertEquals(org.oscim.map.Viewport.MAX_ZOOM_LEVEL, offlineMap(mapFile(north = 42.01, east = 1.01, baseZoom = 19)).maxViewZoom)
+        assertEquals(
+            org.oscim.map.Viewport.MAX_ZOOM_LEVEL,
+            offlineMap(mapFile(north = 42.01, east = 1.01, baseZoom = 19)).maxViewZoom,
+        )
     }
 
     @Test

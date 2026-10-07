@@ -1,8 +1,8 @@
 package dev.samuelq.gpx.data.map
 
-import org.oscim.tiling.source.mapfile.header.SubFileParameter
 import java.io.File
 import java.io.RandomAccessFile
+import org.oscim.tiling.source.mapfile.header.SubFileParameter
 
 /** A sub-file's index: one 5-byte entry per tile, row by row, a water flag over a 39-bit offset. */
 internal class TileIndex(file: File, private val subFile: SubFileParameter) : AutoCloseable {

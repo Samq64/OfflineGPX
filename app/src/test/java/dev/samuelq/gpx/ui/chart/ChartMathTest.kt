@@ -227,7 +227,10 @@ class ChartMathTest {
 
         assertEquals(listOf("M0,10", "L0,10", "L1,20", "L1,20", "M5,30", "L5,30"), line.calls)
         assertEquals(
-            listOf("M0,10", "L0,10", "L1,20", "L1,20", "L1,100", "L0,100", "Z", "M5,30", "L5,30", "L5,100", "L5,100", "Z"),
+            listOf(
+                "M0,10", "L0,10", "L1,20", "L1,20", "L1,100", "L0,100", "Z",
+                "M5,30", "L5,30", "L5,100", "L5,100", "Z",
+            ),
             area.calls,
         )
     }
@@ -243,9 +246,18 @@ class ChartMathTest {
     private class RecordingPath {
         val calls = mutableListOf<String>()
         val path = java.lang.reflect.Proxy.newProxyInstance(
-            Path::class.java.classLoader, arrayOf(Path::class.java),
+            Path::class.java.classLoader,
+            arrayOf(Path::class.java),
         ) { _, method, args ->
-            fun f(i: Int) = (args[i] as Float).let { if (it == it.toInt().toFloat()) it.toInt().toString() else it.toString() }
+            fun f(i: Int) = (args[i] as Float).let {
+                if (it ==
+                    it.toInt().toFloat()
+                ) {
+                    it.toInt().toString()
+                } else {
+                    it.toString()
+                }
+            }
             when (method.name) {
                 "moveTo" -> calls += "M${f(0)},${f(1)}"
                 "lineTo" -> calls += "L${f(0)},${f(1)}"

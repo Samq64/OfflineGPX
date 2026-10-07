@@ -1,12 +1,8 @@
 package dev.samuelq.gpx.ui.track
 
-import dev.samuelq.gpx.ui.format.spokenDuration
-import dev.samuelq.gpx.ui.chart.nearestIndex
-import androidx.compose.material3.Button
-import androidx.compose.material3.RangeSlider
-import androidx.compose.foundation.systemGestureExclusion
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,15 +15,17 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -43,8 +41,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalResources
@@ -67,11 +65,13 @@ import dev.samuelq.gpx.ui.chart.ChartSeries
 import dev.samuelq.gpx.ui.chart.EmptyChart
 import dev.samuelq.gpx.ui.chart.ProfileChart
 import dev.samuelq.gpx.ui.chart.axisScale
+import dev.samuelq.gpx.ui.chart.nearestIndex
 import dev.samuelq.gpx.ui.chart.timeAxisScale
 import dev.samuelq.gpx.ui.chart.yScale
 import dev.samuelq.gpx.ui.chart.zoomView
 import dev.samuelq.gpx.ui.format.Formatters
 import dev.samuelq.gpx.ui.format.LocalFormatters
+import dev.samuelq.gpx.ui.format.spokenDuration
 import dev.samuelq.gpx.ui.isLargeText
 import dev.samuelq.gpx.ui.theme.LocalChartColors
 import java.time.Instant
@@ -199,7 +199,7 @@ fun ProfileSheet(
             // Taps not consumed by charts or buttons clear the selection.
             .pointerInput(Unit) {
                 detectTapGestures { onSelectedIndexChange(null) }
-            }
+            },
     ) {
         // Measured, since a larger font would push the date under the gesture bar.
         val measuredHeader = @Composable {
@@ -302,27 +302,37 @@ private fun ProfileDetails(
     // Time axis only: on a distance axis a stop is zero wide.
     val resources = LocalResources.current
     val breakLabel: ((Float) -> String)? = remember(useTimeAxis, resources) {
-        if (!useTimeAxis) null else { seconds -> resources.getString(R.string.chart_gap, Formatters.durationAxis(seconds)) }
+        if (!useTimeAxis) {
+            null
+        } else {
+            { seconds ->
+                resources.getString(R.string.chart_gap, Formatters.durationAxis(seconds))
+            }
+        }
     }
 
     // While trimming, the whole track's details would read as the trimmed one's.
-    if (keptRange == null) description?.takeIf(String::isNotBlank)?.let {
-        Text(
-            text = it,
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.padding(horizontal = SheetPadding, vertical = 4.dp),
-        )
+    if (keptRange == null) {
+        description?.takeIf(String::isNotBlank)?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(horizontal = SheetPadding, vertical = 4.dp),
+            )
+        }
     }
 
-    if (keptRange == null) Column(Modifier.padding(horizontal = SheetPadding, vertical = 4.dp)) {
-        TrackDetails(
-            stats = profile.stats,
-            hasTime = profile.hasTime,
-            hasElevation = profile.hasElevation,
-            // Only a recording overrides the count.
-            complete = pointCount != null,
-            pointCount = pointCount,
-        )
+    if (keptRange == null) {
+        Column(Modifier.padding(horizontal = SheetPadding, vertical = 4.dp)) {
+            TrackDetails(
+                stats = profile.stats,
+                hasTime = profile.hasTime,
+                hasElevation = profile.hasElevation,
+                // Only a recording overrides the count.
+                complete = pointCount != null,
+                pointCount = pointCount,
+            )
+        }
     }
 
     Spacer(Modifier.height(20.dp))
@@ -335,7 +345,6 @@ private fun ProfileDetails(
         )
         Spacer(Modifier.height(16.dp))
     }
-
 
     @Composable
     fun Profile(
@@ -426,7 +435,13 @@ private fun TrimHeader(title: String, profile: TrackProfile, trim: TrimControls,
     val first = trim.range.first
     val end = trim.range.last
     val format: (Float) -> String =
-        if (x === profile.elapsedSeconds) { v -> Formatters.duration(v.toDouble()) } else { v -> formatters.distance(v.toDouble()) }
+        if (x ===
+            profile.elapsedSeconds
+        ) {
+            { v -> Formatters.duration(v.toDouble()) }
+        } else {
+            { v -> formatters.distance(v.toDouble()) }
+        }
 
     Column(
         modifier = Modifier.fillMaxWidth().padding(start = SheetPadding, end = 8.dp, bottom = 8.dp),
@@ -456,7 +471,13 @@ private fun TrimHeader(title: String, profile: TrackProfile, trim: TrimControls,
             ),
         ) + if (profile.hasTime) {
             val seconds = (profile.elapsedSeconds[end] - profile.elapsedSeconds[first]).toDouble()
-            listOf(Stat(stringResource(R.string.stat_elapsed), Formatters.duration(seconds), LocalResources.current.spokenDuration(seconds)))
+            listOf(
+                Stat(
+                    stringResource(R.string.stat_elapsed),
+                    Formatters.duration(seconds),
+                    LocalResources.current.spokenDuration(seconds),
+                ),
+            )
         } else {
             emptyList()
         }
@@ -508,8 +529,12 @@ private fun SheetTitle(
         )
         actions?.let {
             TrackMenu(
-                it.onRename, it.onShare, it.onHide, it.onDelete,
-                onTrim = it.onTrim, onDuplicate = it.onDuplicate,
+                it.onRename,
+                it.onShare,
+                it.onHide,
+                it.onDelete,
+                onTrim = it.onTrim,
+                onDuplicate = it.onDuplicate,
             )
         }
         onClose?.let {
@@ -537,12 +562,7 @@ fun TrackSheetLoading(modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun TrackSheetError(
-    messageRes: Int,
-    onRetry: () -> Unit,
-    onClose: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
+fun TrackSheetError(messageRes: Int, onRetry: () -> Unit, onClose: () -> Unit, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -589,11 +609,7 @@ private fun AxisSelector(
 }
 
 @Composable
-private fun ChartSection(
-    title: String,
-    modifier: Modifier = Modifier,
-    content: @Composable () -> Unit,
-) {
+private fun ChartSection(title: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     Column(modifier.fillMaxWidth()) {
         Text(title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.semantics { heading() })
         Spacer(Modifier.height(4.dp))
@@ -670,12 +686,20 @@ private fun waypointActions(
             }
             val number = i + 1
             val label = when {
-                time != null && note != null -> resources.getString(R.string.waypoint_action_time_note, number, time, note)
+                time != null && note != null -> resources.getString(
+                    R.string.waypoint_action_time_note,
+                    number,
+                    time,
+                    note,
+                )
                 time != null -> resources.getString(R.string.waypoint_action_time, number, time)
                 note != null -> resources.getString(R.string.waypoint_action_note, number, note)
                 else -> resources.getString(R.string.record_waypoint_title, number)
             }
-            CustomAccessibilityAction(label) { select(waypoint); true }
+            CustomAccessibilityAction(label) {
+                select(waypoint)
+                true
+            }
         }
     }
 }

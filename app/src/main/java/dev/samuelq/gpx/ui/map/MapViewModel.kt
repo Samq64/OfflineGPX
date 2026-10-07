@@ -9,14 +9,14 @@ import dev.samuelq.gpx.core.analysis.TrackAnalyzer
 import dev.samuelq.gpx.core.analysis.TrackProfile
 import dev.samuelq.gpx.core.model.TrackPoints
 import dev.samuelq.gpx.data.db.TrackEntity
-import dev.samuelq.gpx.data.track.title
 import dev.samuelq.gpx.data.map.MapStore
 import dev.samuelq.gpx.data.map.OfflineMap
-import dev.samuelq.gpx.data.settings.SettingsRepository
 import dev.samuelq.gpx.data.record.RecordingController
+import dev.samuelq.gpx.data.settings.SettingsRepository
 import dev.samuelq.gpx.data.track.LoadedTrack
 import dev.samuelq.gpx.data.track.TrackEdit
 import dev.samuelq.gpx.data.track.TrackRepository
+import dev.samuelq.gpx.data.track.title
 import dev.samuelq.gpx.di.appContainer
 import dev.samuelq.gpx.ui.library.sortedFor
 import dev.samuelq.gpx.ui.track.FocusedTrack
@@ -35,8 +35,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.flow.runningFold
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.runningFold
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -118,12 +118,13 @@ class MapViewModel(
     private val _messages = Channel<MapMessage>(Channel.BUFFERED)
     val messages: Flow<MapMessage> = _messages.receiveAsFlow()
 
-
     private var requested: TrackRef? = null
     private var focusJob: Job? = null
 
-    /** Outlives the map's composition, which doesn't survive navigating away. */
-    /** The screen's state that outlives leaving it; see [rememberMapScreenState]. */
+    /**
+     * The screen's state that outlives leaving it, as the map's composition doesn't survive
+     * navigating away; see [rememberMapScreenState].
+     */
     val screenKept = MapScreenState.Kept()
 
     /** For the rename dialog to suggest. */
@@ -188,8 +189,7 @@ class MapViewModel(
         }
     }
 
-    /** The sheet reads the name off the row, so the row's update is all it needs. */
-    /** Null leaves either as it is. */
+    /** Null leaves either as it is. The sheet reads the name off the row, so the row's update is all it needs. */
     fun rename(id: Long, name: String?, category: String?) {
         viewModelScope.launch {
             repository.rename(id, name, category).onFailure { _messages.trySend(MapMessage.RenameFailed) }
@@ -257,8 +257,7 @@ class MapViewModel(
         }
     }
 
-    private fun nameOf(id: Long): String =
-        _state.value.entity(id)?.title.orEmpty()
+    private fun nameOf(id: Long): String = _state.value.entity(id)?.title.orEmpty()
 
     fun show(id: Long) {
         viewModelScope.launch { repository.setVisible(id, true) }

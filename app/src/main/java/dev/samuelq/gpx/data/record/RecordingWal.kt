@@ -3,8 +3,8 @@ package dev.samuelq.gpx.data.record
 import dev.samuelq.gpx.core.model.Track
 import dev.samuelq.gpx.core.model.TrackPoint
 import dev.samuelq.gpx.core.model.TrackPointsBuilder
-import dev.samuelq.gpx.core.model.isValidCoordinate
 import dev.samuelq.gpx.core.model.Waypoint
+import dev.samuelq.gpx.core.model.isValidCoordinate
 import java.io.BufferedWriter
 import java.io.Closeable
 import java.io.File
@@ -28,10 +28,7 @@ import java.util.zip.CRC32
  * Logs from before it have no header and are read by field count. Base64 keeps commas and
  * newlines in names from breaking the format.
  */
-class RecordingWal private constructor(
-    val file: File,
-    private val writer: BufferedWriter,
-) : Closeable {
+class RecordingWal private constructor(val file: File, private val writer: BufferedWriter) : Closeable {
 
     fun append(point: TrackPoint) {
         val elevation = point.elevation?.toString() ?: ""

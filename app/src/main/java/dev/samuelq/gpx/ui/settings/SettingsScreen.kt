@@ -5,15 +5,9 @@ import android.icu.text.ListFormatter
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.clickable
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.colorResource
-import androidx.compose.ui.draw.clip
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.layout.requiredSize
-import androidx.compose.foundation.background
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,16 +17,19 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -57,24 +54,27 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalResources
-import androidx.compose.ui.res.pluralStringResource
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -87,8 +87,8 @@ import dev.samuelq.gpx.data.settings.Settings
 import dev.samuelq.gpx.ui.format.LocalFormatters
 import dev.samuelq.gpx.ui.format.tabularFigures
 import dev.samuelq.gpx.ui.isLargeText
-import dev.samuelq.gpx.ui.readFirst
 import dev.samuelq.gpx.ui.makeWay
+import dev.samuelq.gpx.ui.readFirst
 import dev.samuelq.gpx.ui.rememberSnackbars
 import kotlin.math.roundToInt
 
@@ -116,7 +116,7 @@ fun SettingsScreen(
     val snackbarHostState = snackbars.host
 
     val importer = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument()
+        ActivityResultContracts.OpenDocument(),
     ) { uri -> viewModel.importMap(uri) }
     // Once per visit: saved, so returning from the picker or rotating doesn't reopen it.
     var importAsked by rememberSaveable { mutableStateOf(false) }
@@ -133,7 +133,7 @@ fun SettingsScreen(
     // By filename, saved, so the answer still finds its map after a recreation.
     var exporting by rememberSaveable { mutableStateOf<String?>(null) }
     val exporter = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/octet-stream")
+        ActivityResultContracts.CreateDocument("application/octet-stream"),
     ) { uri ->
         val map = maps.firstOrNull { it.file.name == exporting }
         exporting = null
@@ -177,8 +177,8 @@ fun SettingsScreen(
                         SettingsMessage.MapExported -> R.string.settings_maps_exported
                         SettingsMessage.MapExportFailed -> R.string.settings_maps_export_failed
                         SettingsMessage.NoBrowser -> R.string.settings_maps_no_browser
-                    }
-                )
+                    },
+                ),
             )
         }
     }
@@ -247,14 +247,13 @@ fun SettingsScreen(
                                     when (system) {
                                         UnitSystem.METRIC -> R.string.settings_units_metric
                                         UnitSystem.IMPERIAL -> R.string.settings_units_imperial
-                                    }
-                                )
+                                    },
+                                ),
                             )
                         }
                     }
                 }
             }
-
 
             // Committed on release, not per drag frame, to avoid a disk write each frame.
             // No `steps`: ~95 discrete steps would draw a dotted track.
@@ -315,12 +314,7 @@ fun SettingsScreen(
 }
 
 @Composable
-private fun MergeMapsDialog(
-    newMap: String,
-    existing: List<String>,
-    onMerge: () -> Unit,
-    onCancel: () -> Unit,
-) {
+private fun MergeMapsDialog(newMap: String, existing: List<String>, onMerge: () -> Unit, onCancel: () -> Unit) {
     AlertDialog(
         onDismissRequest = onCancel,
         title = {
@@ -333,7 +327,7 @@ private fun MergeMapsDialog(
                     existing.size,
                     newMap,
                     ListFormatter.getInstance().format(existing.map { "“$it”" }),
-                )
+                ),
             )
         },
         confirmButton = {
@@ -404,7 +398,7 @@ private const val ISSUES_URL = "$REPO_URL/issues"
 
 @Composable
 private fun linkStyles() = TextLinkStyles(
-    SpanStyle(color = MaterialTheme.colorScheme.primary, textDecoration = TextDecoration.Underline)
+    SpanStyle(color = MaterialTheme.colorScheme.primary, textDecoration = TextDecoration.Underline),
 )
 
 /** The commit hash, when the build has one, links to the history up to it. */
@@ -565,11 +559,7 @@ private fun MapsSection(
 
 /** A row, not ListItem: that insets 16dp against this screen's 20. */
 @Composable
-private fun MapRow(
-    map: OfflineMap,
-    onExport: () -> Unit,
-    onDelete: () -> Unit,
-) {
+private fun MapRow(map: OfflineMap, onExport: () -> Unit, onDelete: () -> Unit) {
     val size = android.text.format.Formatter.formatShortFileSize(LocalContext.current, map.sizeBytes)
 
     Row(
@@ -654,12 +644,7 @@ private fun SectionHeading(text: String) {
 }
 
 @Composable
-private fun Setting(
-    title: String,
-    explanation: String,
-    value: String? = null,
-    control: @Composable () -> Unit,
-) {
+private fun Setting(title: String, explanation: String, value: String? = null, control: @Composable () -> Unit) {
     Column(Modifier.fillMaxWidth().padding(horizontal = ScreenPadding, vertical = 8.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),

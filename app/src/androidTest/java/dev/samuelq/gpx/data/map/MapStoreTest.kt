@@ -1,19 +1,19 @@
 package dev.samuelq.gpx.data.map
 
+import android.net.Uri
 import androidx.core.content.FileProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.samuelq.gpx.container
 import dev.samuelq.gpx.data.track.TrackFiles
 import dev.samuelq.gpx.targetContext
-import android.net.Uri
-import kotlinx.coroutines.runBlocking
-import org.oscim.tiling.source.mapfile.header.MapFileHeader
-import org.junit.Test
-import org.junit.runner.RunWith
 import java.io.File
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import kotlinx.coroutines.runBlocking
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.oscim.tiling.source.mapfile.header.MapFileHeader
 
 @RunWith(AndroidJUnit4::class)
 class MapStoreTest {
@@ -35,7 +35,9 @@ class MapStoreTest {
     @Test
     fun exportCopiesTheFile() {
         val dir = targetContext.cacheDir
-        val source = File(dir, "source-${System.nanoTime()}.map").apply { writeBytes(ByteArray(10_000) { it.toByte() }) }
+        val source = File(dir, "source-${System.nanoTime()}.map").apply {
+            writeBytes(ByteArray(10_000) { it.toByte() })
+        }
         // Longer, so a copy that didn't truncate would leave a tail.
         val target = File(dir, "export-${System.nanoTime()}.map").apply { writeBytes(ByteArray(20_000)) }
         try {
