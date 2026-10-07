@@ -87,7 +87,7 @@ internal fun RecordButton(onStart: () -> Unit, modifier: Modifier = Modifier) {
 
 /**
  * Filled while [following], with the found-position icon once there's a fix; [waiting] until
- * then. Says what a tap does: follow, or stop showing the position, which a recording can't.
+ * then. Says what a tap does: follow, stop following, or, outside a recording, stop showing the position.
  */
 @Composable
 internal fun LocationButton(
@@ -100,7 +100,7 @@ internal fun LocationButton(
     val label = stringResource(
         when {
             !following -> R.string.map_follow_location
-            recording -> R.string.map_following_location
+            recording -> R.string.map_stop_following
             else -> R.string.map_stop_location
         },
     )

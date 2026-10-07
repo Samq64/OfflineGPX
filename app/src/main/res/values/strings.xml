@@ -145,7 +145,7 @@
     <string name="map_location_off">Location is switched off.</string>
     <string name="map_location_outside">You\'re outside your tracks and maps.</string>
     <string name="map_follow_location">Follow my location</string>
-    <string name="map_following_location">Following my location</string>
+    <string name="map_stop_following">Stop following my location</string>
     <string name="map_stop_location">Stop showing location</string>
     <string name="map_none_shown">No tracks shown</string>
     <string name="map_precise_required">Showing where you are uses GPS, which needs precise location.</string>

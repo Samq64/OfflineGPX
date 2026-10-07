@@ -198,7 +198,7 @@ fun MapScreen(
         when (screen.tapLocation(locating)) {
             LocationTap.Start -> showLocation()
             LocationTap.Stop -> location.showLocation(false)
-            LocationTap.Follow, LocationTap.Nothing -> Unit
+            LocationTap.Follow, LocationTap.Unfollow -> Unit
         }
     }
     // Once per subject, so a recording's start and end are each seen once.

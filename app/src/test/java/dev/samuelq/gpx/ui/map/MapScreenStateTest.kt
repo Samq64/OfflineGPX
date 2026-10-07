@@ -184,14 +184,15 @@ class MapScreenStateTest {
     }
 
     @Test
-    fun `a tap while following stops location, except while recording`() {
+    fun `a tap while following stops it, and location too unless recording`() {
         showing(null).follow()
         assertEquals(LocationTap.Stop, screen.tapLocation(locating = true))
         assertFalse(screen.following)
 
         showing(null, recording = true).follow()
-        assertEquals(LocationTap.Nothing, screen.tapLocation(locating = false))
-        assertTrue(screen.following)
+        assertEquals(LocationTap.Unfollow, screen.tapLocation(locating = false))
+        assertFalse(screen.following)
+        assertFalse(screen.snapping)
     }
 
     @Test

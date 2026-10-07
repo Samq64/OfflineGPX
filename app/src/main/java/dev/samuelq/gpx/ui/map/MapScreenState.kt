@@ -59,11 +59,14 @@ class MapScreenState(
     val snapping: Boolean get() = kept.snapping
 
     /**
-     * The location button. Outside a recording, a tap while following is the only way to
-     * stop showing the position; during one, the puck is the recording, so it does nothing.
+     * The location button. A tap while following stops following, as a drag does; outside a
+     * recording it also stops showing the position, while a recording keeps the GPS on.
      */
     fun tapLocation(locating: Boolean): LocationTap = when {
-        following && recording -> LocationTap.Nothing
+        following && recording -> {
+            stopFollowing()
+            LocationTap.Unfollow
+        }
         following -> {
             stopFollowing()
             LocationTap.Stop
@@ -171,7 +174,7 @@ class MapScreenState(
 }
 
 /** What a tap on the location button asks of location. */
-enum class LocationTap { Start, Follow, Stop, Nothing }
+enum class LocationTap { Start, Follow, Stop, Unfollow }
 
 /** [kept] from the view model: following outlives leaving the screen and rotation, not the process. */
 @Composable
