@@ -5,6 +5,7 @@ import android.util.Log
 import dev.samuelq.gpx.core.analysis.TrackAnalyzer
 import dev.samuelq.gpx.core.analysis.TrackProfile
 import dev.samuelq.gpx.core.model.Track
+import dev.samuelq.gpx.data.runCancellable
 import dev.samuelq.gpx.data.track.TrackRepository
 import dev.samuelq.gpx.data.track.TrackLabel
 import dev.samuelq.gpx.data.track.asTrackName
@@ -121,7 +122,7 @@ class RecordingRecovery(
 
     /** Read back as an abandoned one would be, then saved the same way. */
     suspend fun restore(recording: DiscardedRecording): Result<Long> {
-        val read = runCatching { withContext(io) { read(recording.file) } }
+        val read = runCancellable { withContext(io) { read(recording.file) } }
             .getOrElse { return Result.failure(it) }
             ?: return Result.failure(IOException("Nothing left in ${recording.file.name}"))
         return save(read, recording.label)

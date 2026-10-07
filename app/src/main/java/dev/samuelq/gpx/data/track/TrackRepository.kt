@@ -9,6 +9,7 @@ import dev.samuelq.gpx.core.analysis.TrackAnalyzer
 import dev.samuelq.gpx.core.analysis.TrackProfile
 import dev.samuelq.gpx.core.model.Track
 import dev.samuelq.gpx.core.model.bounds
+import dev.samuelq.gpx.data.runCancellable
 import dev.samuelq.gpx.data.db.ColorUse
 import dev.samuelq.gpx.data.db.SummaryUpdate
 import dev.samuelq.gpx.data.db.TrackDao
@@ -99,7 +100,7 @@ class TrackRepository(
      *   always copies.
      */
     suspend fun import(uri: Uri, reuseIdentical: Boolean = false): Result<Long> = withContext(io) {
-        runCatching {
+        runCancellable {
             val displayName = displayNameOf(uri)
             val destination = uniqueFile(importsDir, displayName, "gpx", fallback = "track")
 
@@ -111,7 +112,7 @@ class TrackRepository(
                 if (reuseIdentical) {
                     identicalImport(destination, displayName)?.let { existing ->
                         destination.delete()
-                        return@runCatching existing
+                        return@runCancellable existing
                     }
                 }
                 val track = parse(destination.inputStream(), displayName)
@@ -137,7 +138,7 @@ class TrackRepository(
 
     /** Loads a saved track and moves it to the top of the recent order. */
     suspend fun open(id: Long): Result<LoadedTrack> = withContext(io) {
-        runCatching {
+        runCancellable {
             load(entity(id)).also { dao.touch(id, System.currentTimeMillis()) }
         }.recoverFailure()
     }
@@ -152,7 +153,7 @@ class TrackRepository(
         analyzed: TrackProfile? = null,
     ): Result<Long> =
         withContext(io) {
-            runCatching {
+            runCancellable {
                 val profile = analyzed ?: TrackAnalyzer.analyze(track)
                 val typed = track.copy(type = categoryAsSpelt(track.type))
                 val startedAt = profile.stats.startedAt ?: Instant.now()
@@ -174,7 +175,7 @@ class TrackRepository(
     /** Writes tracks into the SAF folder [treeUri] under [names]. Returns how many landed. */
     suspend fun exportAll(names: Map<Long, String>, tree: Uri): Result<Int> =
         withContext(io) {
-            runCatching {
+            runCancellable {
                 // A tree URI must be turned into a document URI before creating children.
                 val folder = DocumentsContract.buildDocumentUriUsingTree(
                     tree,
@@ -188,7 +189,7 @@ class TrackRepository(
                 names.count { (id, name) ->
                     val unique = uniqueName(name, "gpx", fallback = "track") { it.lowercase(Locale.ROOT) in taken }
                     taken += unique.lowercase(Locale.ROOT)
-                    runCatching { writeExport(folder, id, unique) }.getOrDefault(false)
+                    runCancellable { writeExport(folder, id, unique) }.getOrDefault(false)
                 }
             }.recoverFailure()
         }
@@ -229,7 +230,7 @@ class TrackRepository(
 
     /** Like [open] but without touching the sort order, for drawing. */
     suspend fun geometry(id: Long): Result<LoadedTrack> = withContext(io) {
-        runCatching { load(entity(id)) }.recoverFailure()
+        runCancellable { load(entity(id)) }.recoverFailure()
     }
 
     /** From the cache when it's current, else parsed and cached. */
@@ -255,8 +256,8 @@ class TrackRepository(
      * [category] makes it uncategorised.
      */
     suspend fun rename(id: Long, name: String?, category: String? = null): Result<Unit> = withContext(io) {
-        runCatching {
-            if (name == null && category == null) return@runCatching
+        runCancellable {
+            if (name == null && category == null) return@runCancellable
             val newName = name?.asTrackName()
             val newCategory = categoryAsSpelt(category, except = id)
             val entity = entity(id)
@@ -328,7 +329,7 @@ class TrackRepository(
      * the original kept for [undoEdit] until [commitEdit].
      */
     suspend fun trim(id: Long, from: Int, to: Int): Result<TrackEdit> = withContext(io) {
-        runCatching {
+        runCancellable {
             val entity = entity(id)
             val loaded = load(entity)
             require(from in 0 until to && to < loaded.track.points.size) { "Can't trim to $from..$to" }
@@ -343,7 +344,7 @@ class TrackRepository(
 
     /** A copy beside the original, named "(copy)" in its file and row. Returns the new row id. */
     suspend fun duplicate(id: Long): Result<Long> = withContext(io) {
-        runCatching {
+        runCancellable {
             val entity = entity(id)
             val file = fileOf(entity)
             val title = entity.titleStem.trim()
@@ -371,7 +372,7 @@ class TrackRepository(
 
     /** Puts the file and row back as they were before [edit]. */
     suspend fun undoEdit(edit: TrackEdit): Result<Unit> = withContext(io) {
-        runCatching {
+        runCancellable {
             // Where it is now: a rename since moves the file.
             writeAtomically(fileOf(dao.byId(edit.id) ?: edit.before)) { output -> edit.backup.inputStream().use { it.copyTo(output) } }
             // Only what the edit changed, so a recolour since survives the undo.
@@ -396,7 +397,7 @@ class TrackRepository(
     fun summariseOlderRows() {
         scope.launch(io) {
             for (entity in dao.unsummarised()) {
-                runCatching {
+                runCancellable {
                     val loaded = load(entity)
                     dao.setSummary(summaryUpdate(entity.id, loaded.track, loaded.profile))
                 }.onFailure { Log.d(TAG, "Could not summarise ${entity.displayName}", it) }
