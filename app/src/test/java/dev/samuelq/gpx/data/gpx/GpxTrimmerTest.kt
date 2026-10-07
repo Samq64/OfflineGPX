@@ -250,6 +250,31 @@ class GpxTrimmerTest {
     }
 
     @Test
+    fun `beside a track, route points are kept and not counted`() {
+        val doc = """
+            <gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+              <rte><rtept lat="9" lon="9"/></rte>
+              <trk><trkseg><trkpt lat="1" lon="1"/><trkpt lat="2" lon="2"/></trkseg></trk>
+            </gpx>
+        """.trimIndent()
+        assertTrue(trimmer.hasTrackPoints(doc.byteInputStream()))
+
+        val out = ByteArrayOutputStream()
+        trimmer.trim(doc.byteInputStream(), out, keepPoint = { it == 1 }, countRoutes = false)
+
+        val written = out.toString(Charsets.UTF_8)
+        assertTrue("lat=\"9\"" in written)
+        val track = parser.parse(written.byteInputStream())
+        assertEquals(listOf(2.0), track.points.indices.map(track.points::latitude))
+    }
+
+    @Test
+    fun `a file with only unreadable track points counts as having none`() {
+        val doc = """<gpx><rte><rtept lat="1" lon="1"/></rte><trk><trkseg><trkpt lat="x"/></trkseg></trk></gpx>"""
+        assertFalse(trimmer.hasTrackPoints(doc.byteInputStream()))
+    }
+
+    @Test
     fun `CDATA, entities, comments and processing instructions pass through`() {
         val doc = """
             <?xml version="1.0" encoding="UTF-8"?>

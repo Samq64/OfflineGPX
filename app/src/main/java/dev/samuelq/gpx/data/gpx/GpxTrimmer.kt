@@ -23,6 +23,8 @@ class GpxTrimmer(
 
     /**
      * @param keepPoint null keeps every point and the bounds.
+     * @param countRoutes false where the file has track points: the parser ignores route points
+     *   then, so they're kept and not counted; see [hasTrackPoints].
      * @param keepWaypoint null keeps every waypoint.
      * @param name replaces the first `<trk>`'s name, or is added as its first child; blank
      *   removes it, null leaves it.
@@ -35,12 +37,43 @@ class GpxTrimmer(
         keepWaypoint: ((index: Int) -> Boolean)? = null,
         name: String? = null,
         type: String? = null,
+        countRoutes: Boolean = true,
     ) {
         val parser = newPullParser().apply {
             setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, true)
             setInput(input, null)
         }
-        Copy(parser, newSerializer().apply { setOutput(output, ENCODING) }, keepPoint, keepWaypoint, name, type).run()
+        Copy(
+            parser,
+            newSerializer().apply {
+                setOutput(output, ENCODING)
+            },
+            keepPoint,
+            keepWaypoint,
+            name,
+            type,
+            countRoutes,
+        )
+            .run()
+    }
+
+    /** Whether [input] has a track point the parser would read, which decides `countRoutes`. */
+    fun hasTrackPoints(input: InputStream): Boolean {
+        val parser = newPullParser().apply {
+            setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, true)
+            setInput(input, null)
+        }
+        val path = ArrayList<String>()
+        while (true) {
+            when (parser.next()) {
+                XmlPullParser.START_TAG -> {
+                    if (parser.name == TAG_TRKPT && path == TRKSEG_PATH && parser.isReadablePoint()) return true
+                    path += parser.name
+                }
+                XmlPullParser.END_TAG -> path.removeAt(path.lastIndex)
+                XmlPullParser.END_DOCUMENT -> return false
+            }
+        }
     }
 
     /** A start tag held back until something inside it is kept. */
@@ -61,6 +94,7 @@ class GpxTrimmer(
         private var newName: String?,
         /** Likewise. */
         private var newType: String?,
+        private val countRoutes: Boolean,
     ) {
         private val path = ArrayList<String>()
         private var skipDepth = 0
@@ -199,18 +233,14 @@ class GpxTrimmer(
 
         private fun point(): Boolean {
             val keepPoint = keepPoint ?: return true
+            if (path == RTE_PATH && !countRoutes) return true
             if (!readable()) return false
             // Only a track segment is capped, as in the parser.
             if (path == TRKSEG_PATH && segmentPoints++ >= GpxParser.MAX_POINTS_PER_SEGMENT) return false
             return keepPoint(pointIndex++)
         }
 
-        /** Mirrors the parser's test, so the indices agree. */
-        private fun readable(): Boolean {
-            val latitude = parser.getAttributeValue(null, ATTR_LAT)?.toDoubleOrNull() ?: return false
-            val longitude = parser.getAttributeValue(null, ATTR_LON)?.toDoubleOrNull() ?: return false
-            return isValidCoordinate(latitude, longitude)
-        }
+        private fun readable(): Boolean = parser.isReadablePoint()
 
         private fun endTag() {
             if (skipDepth > 0) {
@@ -283,6 +313,13 @@ class GpxTrimmer(
     }
 
     private companion object {
+        /** Mirrors the parser's test, so the indices agree. */
+        fun XmlPullParser.isReadablePoint(): Boolean {
+            val latitude = getAttributeValue(null, ATTR_LAT)?.toDoubleOrNull() ?: return false
+            val longitude = getAttributeValue(null, ATTR_LON)?.toDoubleOrNull() ?: return false
+            return isValidCoordinate(latitude, longitude)
+        }
+
         const val ENCODING = "UTF-8"
         const val TAG_TRK = "trk"
         const val TAG_TRKSEG = "trkseg"

@@ -234,7 +234,41 @@ class GpxParserTest {
 
         assertEquals("First", track.name)
         assertEquals("First desc", track.description)
-        assertEquals(3, track.points.segmentCount)
+        assertEquals(2, track.points.segmentCount)
+    }
+
+    @Test
+    fun `without a track, every route is read, named by the first`() {
+        val track = parse(
+            """
+            <gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+              <rte><name>Out</name><rtept lat="1" lon="1"/></rte>
+              <rte><name>Back</name><rtept lat="2" lon="2"/></rte>
+            </gpx>
+            """.trimIndent(),
+        )
+
+        assertEquals("Out", track.name)
+        assertEquals(2, track.points.segmentCount)
+    }
+
+    @Test
+    fun `a route beside a track is left out, so the track keeps its timing`() {
+        val track = parse(
+            """
+            <gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+              <rte><name>Plan</name><rtept lat="1" lon="1"/><rtept lat="1.1" lon="1.1"/></rte>
+              <trk><trkseg>
+                <trkpt lat="2" lon="2"><time>2024-05-01T10:00:00Z</time></trkpt>
+                <trkpt lat="2.1" lon="2.1"><time>2024-05-01T10:01:00Z</time></trkpt>
+              </trkseg></trk>
+            </gpx>
+            """.trimIndent(),
+        )
+
+        assertEquals("Plan", track.name)
+        assertEquals(listOf(2.0, 2.1), track.points.indices.map(track.points::latitude))
+        assertTrue(track.points.indices.all(track.points::hasTime))
     }
 
     @Test
@@ -316,8 +350,8 @@ class GpxParserTest {
             """.trimIndent(),
         )
 
-        assertEquals(2, track.points.size)
-        assertEquals(2, track.points.segmentCount)
+        assertEquals(1, track.points.size)
+        assertEquals(1, track.points.segmentCount)
     }
 
     @Test

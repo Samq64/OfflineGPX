@@ -49,8 +49,10 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
 
     private fun readGpx(parser: XmlPullParser): Track {
         val points = TrackPointsBuilder()
+        val routePoints = TrackPointsBuilder()
         val waypoints = mutableListOf<Waypoint>()
         var trackName: String? = null
+        var routeName: String? = null
         var metadataName: String? = null
         var trackDescription: String? = null
         var trackType: String? = null
@@ -78,18 +80,16 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
                     }
                 }
 
-                // Routes are untimed but still worth showing.
+                // Untimed, so shown only without a track, whose timing they'd void.
                 TAG_RTE -> {
-                    var routeName: String? = null
-                    points.startSegment()
+                    routePoints.startSegment()
                     forEachChild(parser) {
                         when (parser.name) {
-                            TAG_NAME -> routeName = readLabel(parser)
-                            TAG_RTEPT -> readPoint(parser)?.let(points::add)
+                            TAG_NAME -> readLabel(parser).let { if (routeName == null) routeName = it }
+                            TAG_RTEPT -> readPoint(parser)?.let(routePoints::add)
                             else -> skip(parser)
                         }
                     }
-                    if (trackName == null) trackName = routeName
                 }
 
                 else -> skip(parser)
@@ -97,8 +97,8 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
         }
 
         return Track(
-            name = trackName ?: metadataName,
-            points = points.build(),
+            name = trackName ?: routeName ?: metadataName,
+            points = if (points.size > 0) points.build() else routePoints.build(),
             description = trackDescription,
             type = trackType,
             waypoints = waypoints,

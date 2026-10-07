@@ -426,7 +426,13 @@ class TrackRepository(
         val waypoints = loaded.track.waypoints.indices.filter { loaded.waypointIndices[it] in keep }.toSet()
         writeAtomically(file) { output ->
             file.inputStream().use { input ->
-                trimmer.trim(input, output, keepPoint = { it in keep }, keepWaypoint = { it in waypoints })
+                trimmer.trim(
+                    input,
+                    output,
+                    keepPoint = { it in keep },
+                    keepWaypoint = { it in waypoints },
+                    countRoutes = !file.inputStream().use(trimmer::hasTrackPoints),
+                )
             }
         }
         val track = parse(file.inputStream(), file.name)

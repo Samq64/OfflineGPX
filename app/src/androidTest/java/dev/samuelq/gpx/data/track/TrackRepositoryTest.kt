@@ -264,6 +264,18 @@ class TrackRepositoryTest {
     }
 
     @Test
+    fun trimBesideARouteCutsTheTrackAndKeepsTheRoute() {
+        val id =
+            importSample(sampleGpx(waypointAt = -1).replace("<trk>", """<rte><rtept lat="60" lon="10"/></rte><trk>"""))
+
+        runBlocking { repository.trim(id, 5, 14).getOrThrow() }
+        val track = parsed(id)
+        assertEquals(10, track.points.size)
+        assertEquals(51.5005, track.points.latitude(0), 1e-9)
+        assertTrue("""lat="60"""" in fileOf(id).readText())
+    }
+
+    @Test
     fun trimAndUndo() {
         val id = importSample()
         val original = fileOf(id).readBytes()

@@ -33,7 +33,9 @@ class MigrationTest {
         // Validates the migrated schema against 2.json.
         helper.runMigrationsAndValidate(DB, 2, true).close()
 
-        val database = Room.databaseBuilder(targetContext, GpxDatabase::class.java, DB).build()
+        val database = Room.databaseBuilder(targetContext, GpxDatabase::class.java, DB)
+            .addMigrations(GpxDatabase.RESUMMARISE)
+            .build()
         try {
             runBlocking {
                 val dao = database.trackDao()
@@ -70,6 +72,28 @@ class MigrationTest {
                 assertTrue(cursor.moveToFirst())
                 assertTrue(cursor.isNull(0))
                 assertEquals(5, cursor.getInt(1))
+            }
+        }
+    }
+
+    @Test
+    fun version3RowsAwaitSummaryAndKeepWhatTheUserSet() {
+        helper.createDatabase(DB, 3).use { db ->
+            db.execSQL(
+                """INSERT INTO tracks (id, location, displayName, trackName, startedAtEpochMillis,
+                   lastOpenedAtEpochMillis, visible, colorIndex, pointCount, distanceMeters, totalSeconds, category)
+                   VALUES (9, 'imports/c.gpx', 'c.gpx', 'Mine', 1000, 2000, 0, 4, 50, 10.0, 0.0, 'Hike')""",
+            )
+        }
+        // Validates the migrated schema against 4.json.
+        helper.runMigrationsAndValidate(DB, 4, true, GpxDatabase.RESUMMARISE).use { db ->
+            db.query("SELECT pointCount, trackName, visible, colorIndex, category FROM tracks WHERE id = 9").use {
+                assertTrue(it.moveToFirst())
+                assertEquals(-1, it.getInt(0))
+                assertEquals("Mine", it.getString(1))
+                assertEquals(0, it.getInt(2))
+                assertEquals(4, it.getInt(3))
+                assertEquals("Hike", it.getString(4))
             }
         }
     }
