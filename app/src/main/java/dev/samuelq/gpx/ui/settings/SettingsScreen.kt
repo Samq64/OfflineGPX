@@ -343,12 +343,12 @@ private fun MergeMapsDialog(newMap: String, existing: List<String>, onMerge: () 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MarkedSlider(
-    modifier: Modifier = Modifier,
     value: Float,
     onValueChange: (Float) -> Unit,
     onValueChangeFinished: () -> Unit,
     valueRange: ClosedFloatingPointRange<Float>,
     marker: Float,
+    modifier: Modifier = Modifier,
 ) {
     val colors = SliderDefaults.colors()
     val fraction = (marker - valueRange.start) / (valueRange.endInclusive - valueRange.start)

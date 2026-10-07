@@ -14,6 +14,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -30,6 +31,7 @@ fun TrackMenu(
     /** On the map only, where the charts to trim against are. */
     onTrim: (() -> Unit)? = null,
     onDuplicate: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
 ) {
     var open by remember { mutableStateOf(false) }
 
@@ -47,7 +49,7 @@ fun TrackMenu(
         },
     )
 
-    Box {
+    Box(modifier) {
         IconButton(onClick = { open = true }) {
             Icon(
                 painterResource(R.drawable.ic_more_vert),

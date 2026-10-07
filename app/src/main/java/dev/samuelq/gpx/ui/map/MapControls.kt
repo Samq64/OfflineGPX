@@ -74,10 +74,11 @@ internal fun WaypointTooltip(waypoint: Waypoint, distanceMeters: Double?, tipAt:
 
 /** Starts a recording; once running, it lives in the sheet. */
 @Composable
-internal fun RecordButton(onStart: () -> Unit) {
+internal fun RecordButton(onStart: () -> Unit, modifier: Modifier = Modifier) {
     val label = stringResource(R.string.record_start)
     ExtendedFloatingActionButton(
         onClick = onStart,
+        modifier = modifier,
         // The label goes on the icon: this overload hides its text from accessibility.
         icon = { Icon(painterResource(R.drawable.ic_play_arrow), contentDescription = label) },
         text = { Text(label) },
@@ -89,7 +90,13 @@ internal fun RecordButton(onStart: () -> Unit) {
  * then. Says what a tap does: follow, or stop showing the position, which a recording can't.
  */
 @Composable
-internal fun LocationButton(following: Boolean, waiting: Boolean, recording: Boolean, onClick: () -> Unit) {
+internal fun LocationButton(
+    following: Boolean,
+    waiting: Boolean,
+    recording: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val label = stringResource(
         when {
             !following -> R.string.map_follow_location
@@ -101,7 +108,7 @@ internal fun LocationButton(following: Boolean, waiting: Boolean, recording: Boo
     val icon = if (following && !waiting) R.drawable.ic_my_location else R.drawable.ic_location_searching
     Surface(
         onClick = onClick,
-        modifier = Modifier.size(48.dp).semantics {
+        modifier = modifier.size(48.dp).semantics {
             contentDescription = label
             if (waiting) stateDescription = waitingLabel
         },

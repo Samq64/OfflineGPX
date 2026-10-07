@@ -596,7 +596,6 @@ private fun CategoryHeader(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun TrackRow(
-    modifier: Modifier,
     indent: Dp,
     divider: Boolean,
     track: TrackEntity,
@@ -611,6 +610,7 @@ private fun TrackRow(
     onRename: () -> Unit,
     onDuplicate: () -> Unit,
     onDelete: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val formatters = LocalFormatters.current
     val title = track.title

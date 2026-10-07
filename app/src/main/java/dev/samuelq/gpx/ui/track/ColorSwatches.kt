@@ -36,13 +36,13 @@ import dev.samuelq.gpx.ui.theme.slot
 
 /** The map line's hue; a tap picks another from the palette. */
 @Composable
-fun ColorDot(colorIndex: Int, onColor: (Int) -> Unit) {
+fun ColorDot(colorIndex: Int, onColor: (Int) -> Unit, modifier: Modifier = Modifier) {
     var open by remember { mutableStateOf(false) }
     val label = stringResource(
         R.string.library_color,
         stringResource(RouteColorNames[colorIndex.mod(RouteColorNames.size)]),
     )
-    Box {
+    Box(modifier) {
         Box(
             Modifier
                 .size(ColorDotSize)
@@ -53,10 +53,13 @@ fun ColorDot(colorIndex: Int, onColor: (Int) -> Unit) {
                 .semantics { contentDescription = label },
         )
         DropdownMenu(open, onDismissRequest = { open = false }) {
-            ColorSwatches(colorIndex) {
-                open = false
-                onColor(it)
-            }
+            ColorSwatches(
+                colorIndex,
+                onPick = {
+                    open = false
+                    onColor(it)
+                },
+            )
         }
     }
 }
@@ -65,12 +68,12 @@ val ColorDotSize = 20.dp
 
 /** The route palette as radio buttons, for a menu. [onPick] only for a different colour. */
 @Composable
-fun ColorSwatches(colorIndex: Int, onPick: (Int) -> Unit) {
+fun ColorSwatches(colorIndex: Int, onPick: (Int) -> Unit, modifier: Modifier = Modifier) {
     val palette = routePalette()
     // Seven 48dp targets need about 380dp; narrower windows get two rows.
     val windowWidth = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp() }
     FlowRow(
-        modifier = Modifier.padding(horizontal = 8.dp),
+        modifier = modifier.padding(horizontal = 8.dp),
         maxItemsInEachRow = if (windowWidth >= 380.dp) RoutePickerOrder.size else 4,
     ) {
         RoutePickerOrder.forEach { index ->
