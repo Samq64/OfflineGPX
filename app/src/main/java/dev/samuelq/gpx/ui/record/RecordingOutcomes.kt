@@ -61,6 +61,10 @@ internal fun RecordingOutcomes(
                         )
                     } ?: currentSay(resources.getString(R.string.record_discarded), null)
                 }
+                RecordingEvent.Unsaved -> {
+                    currentSay(resources.getString(R.string.record_save_failed), null)
+                    recovery.refresh()
+                }
                 is RecordingEvent.Failed -> currentSay(
                     resources.getString(event.messageRes),
                     { context.openLocationSettings() }.takeIf { event.messageRes == R.string.record_location_off },

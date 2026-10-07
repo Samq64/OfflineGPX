@@ -57,6 +57,9 @@ sealed interface RecordingEvent {
     class Discarded(val recording: DiscardedRecording?) : RecordingEvent
 
     data class Failed(@StringRes val messageRes: Int) : RecordingEvent
+
+    /** The save failed; the log is claimed for recovery, to be offered again now. */
+    data object Unsaved : RecordingEvent
 }
 
 /** Where the UI sends commands to [RecordingService] and observes what it publishes. */

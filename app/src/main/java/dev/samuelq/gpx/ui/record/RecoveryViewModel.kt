@@ -90,6 +90,11 @@ class RecoveryViewModel(private val recovery: RecordingRecovery) : ViewModel() {
 
     fun forgetDiscarded(recording: DiscardedRecording) = recovery.forget(recording)
 
+    /** After a stop's save failed and its log was claimed. */
+    fun refresh() {
+        viewModelScope.launch { nextAbandoned() }
+    }
+
     private suspend fun nextAbandoned() {
         // Skipping a failed save keeps the dialog from reopening on it.
         _abandoned.value = recovery.abandoned().firstOrNull { it.file !in skipped }

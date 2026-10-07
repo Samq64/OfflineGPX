@@ -148,6 +148,28 @@ class RecordingServiceTest {
     }
 
     @Test
+    fun aFailedSaveIsOfferedForRecoveryAtOnce() {
+        val recordingsDir = TrackFiles.recordingsDir(targetContext)
+        controller.start()
+        waitFor(message = "active") { active() != null }
+        pushFixes(6)
+        waitFor(message = "points") { (active()?.pointCount ?: 0) >= 5 }
+
+        // Unwritable, so the save fails as a full disk would.
+        assertTrue(recordingsDir.setWritable(false))
+        try {
+            controller.stop(TrackLabel("", ""))
+            waitFor(message = "idle") { controller.state.value == RecordingState.Idle }
+        } finally {
+            recordingsDir.setWritable(true)
+        }
+
+        val recovery = container.recordingRecovery
+        assertTrue(!recovery.liveLog.exists())
+        assertTrue(runBlocking { recovery.abandoned() }.any { it.track.points.size >= 5 })
+    }
+
+    @Test
     fun tooShortARideIsNotSaved() {
         val before = recordings().size
         controller.start()

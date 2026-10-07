@@ -289,15 +289,20 @@ class RecordingService : Service() {
                     log.file.delete()
                     controller.emit(RecordingEvent.Saved(it))
                 },
-                // Keep the log for recovery.
-                onFailure = { controller.emit(RecordingEvent.Failed(R.string.record_save_failed)) },
+                onFailure = { keepForRecovery() },
             )
         } catch (e: IOException) {
             Log.e(TAG, "Could not read back the recording", e)
-            controller.emit(RecordingEvent.Failed(R.string.record_save_failed))
+            keepForRecovery()
         } finally {
             finish()
         }
+    }
+
+    /** Claimed as a crash's log would be, so recovery offers it without waiting for a relaunch. */
+    private suspend fun keepForRecovery() {
+        container.recordingRecovery.claim()
+        controller.emit(RecordingEvent.Unsaved)
     }
 
     private fun publishTrace(session: RecordingSession) = controller.updateTrace(session.trace())
