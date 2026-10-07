@@ -194,6 +194,8 @@ fun MapScreen(
         },
         say = ::say,
     )
+    LocationRationale(requestRecording)
+    LocationRationale(showLocation)
     fun tapLocation() {
         when (screen.tapLocation(locating)) {
             LocationTap.Start -> showLocation()
