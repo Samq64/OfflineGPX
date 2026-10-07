@@ -3,6 +3,7 @@ package dev.samuelq.gpx.ui.settings
 import android.content.Context
 import android.content.Intent
 import android.icu.text.ListFormatter
+import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings as AndroidSettings
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -300,14 +301,22 @@ fun SettingsScreen(
             if (batteryRestricted) {
                 Setting(
                     title = stringResource(R.string.settings_battery),
-                    explanation = stringResource(R.string.settings_battery_explanation),
+                    explanation = stringResource(
+                        if (BatteryInAppInfo) R.string.settings_battery_explanation_app_info
+                        else R.string.settings_battery_explanation
+                    ),
                 ) {
                     TextButton(
                         onClick = { context.openBatterySettings() },
                         // Aligns the label, not the ripple, with the text above.
                         modifier = Modifier.offset(x = (-12).dp),
                     ) {
-                        Text(stringResource(R.string.settings_battery_open))
+                        Text(
+                            stringResource(
+                                if (BatteryInAppInfo) R.string.settings_battery_open_app_info
+                                else R.string.settings_battery_open
+                            )
+                        )
                     }
                 }
             }
@@ -406,11 +415,15 @@ private fun Context.isIgnoringBatteryOptimizations(): Boolean =
     getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(packageName)
 
 /**
- * The system list rather than a direct exemption request, which needs a permission Play
- * restricts. App info is the fallback where an OEM drops the list.
+ * From 12, app info has the app's own battery page, where Unrestricted is the exemption; its
+ * name varies by skin but always says battery. Before, its battery entry leads to the list
+ * anyway. Not a direct exemption request, which needs a permission Play restricts.
  */
+private val BatteryInAppInfo = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+
+/** App info is also the fallback where an OEM drops the list. */
 private fun Context.openBatterySettings() {
-    val opened = runCatching {
+    val opened = !BatteryInAppInfo && runCatching {
         startActivity(Intent(AndroidSettings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
     }.isSuccess
     if (!opened) {

@@ -207,7 +207,10 @@
     <string name="settings_accuracy_state">%1$s, default %2$s</string>
     <string name="settings_battery">Battery optimisation</string>
     <string name="settings_battery_explanation">Some phones stop recordings in the background. Turn optimisation off for this app to keep them running.</string>
+    <!-- Android 12+, where the button opens app info. Battery and Unrestricted are the system's words. -->
+    <string name="settings_battery_explanation_app_info">Some phones stop recordings in the background. Under Battery, choose Unrestricted to keep them running.</string>
     <string name="settings_battery_open">Open battery settings</string>
+    <string name="settings_battery_open_app_info">Open app settings</string>
     <string name="settings_maps_explanation">Manage .map file imports. Without one, tracks are drawn on a blank background.</string>
     <string name="settings_maps_export">Export</string>
     <string name="settings_maps_export_failed">Couldn\'t export that map.</string>
