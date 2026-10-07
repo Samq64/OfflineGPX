@@ -216,21 +216,22 @@ val coverageExcludes = listOf(
 val coreBuild = project(":core").layout.buildDirectory
 val coverageClasses = files(
     layout.buildDirectory.dir("intermediates/built_in_kotlinc/debug/compileDebugKotlin/classes"),
-    layout.buildDirectory.dir("intermediates/javac/debug/compileDebugJavaWithJavac/classes"),
     coreBuild.dir("classes/kotlin/main"),
 ).asFileTree.matching { exclude(coverageExcludes) }
 val coverageData = files(
     layout.buildDirectory.file("outputs/unit_test_code_coverage/debugUnitTest/testDebugUnitTest.exec"),
     coreBuild.file("jacoco/test.exec"),
 )
+tasks.withType<JacocoReportBase>().configureEach {
+    executionData.from(coverageData)
+    classDirectories.from(coverageClasses)
+    sourceDirectories.from("src/main/java", project(":core").layout.projectDirectory.dir("src/main/kotlin"))
+}
 
 val coverage = tasks.register<JacocoReport>("coverage") {
     group = "verification"
     description = "JVM test coverage of :app and :core, as HTML and XML."
     dependsOn("testDebugUnitTest", ":core:test")
-    executionData.from(coverageData)
-    classDirectories.from(coverageClasses)
-    sourceDirectories.from("src/main/java", project(":core").layout.projectDirectory.dir("src/main/kotlin"))
     reports {
         html.required = true
         xml.required = true
@@ -263,9 +264,6 @@ val coverageVerification = tasks.register<JacocoCoverageVerification>("coverageV
     group = "verification"
     description = "Fails if the data-safety logic drops below its coverage minimums."
     dependsOn(coverage)
-    executionData.from(coverageData)
-    classDirectories.from(coverageClasses)
-    sourceDirectories.from("src/main/java", project(":core").layout.projectDirectory.dir("src/main/kotlin"))
     violationRules {
         coverageMinimums.forEach { (file, minimums) ->
             rule {

@@ -125,7 +125,6 @@ public object TrackAnalyzer {
 
         return TrackProfile(
             points = points.withSegmentStarts(starts),
-            segmentStartIndices = starts,
             elapsedSeconds = elapsed,
             distanceMeters = distance,
             speedMps = speed,

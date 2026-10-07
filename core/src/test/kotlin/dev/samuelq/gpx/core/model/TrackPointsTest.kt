@@ -93,9 +93,8 @@ class TrackPointsTest {
         assertFailsWith<IndexOutOfBoundsException> { points.longitude(-1) }
         assertFailsWith<IndexOutOfBoundsException> { points.elevation(2) }
         assertNull(points.getOrNull(-1))
-        assertEquals(TrackPoint(1.0, 2.0), points.first())
-        assertEquals(TrackPoint(3.0, 4.0), points.last())
-        assertEquals(points.last(), points.lastOrNull())
+        assertEquals(TrackPoint(1.0, 2.0), points[0])
+        assertEquals(TrackPoint(3.0, 4.0), points.lastOrNull())
         assertFalse(points.hasTime(0))
     }
 

@@ -366,7 +366,7 @@ private fun ProfileDetails(
                 ChartSeries(
                     x = xValues,
                     y = y,
-                    segmentStartIndices = profile.segmentStartIndices,
+                    segmentStartIndices = profile.points.segmentStarts(),
                     color = color,
                 )
             }

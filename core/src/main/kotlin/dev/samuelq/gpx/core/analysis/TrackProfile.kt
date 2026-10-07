@@ -25,9 +25,8 @@ public data class TrackStats(
  * Not a `data class`: array equality is O(n), and `remember` keys want identity.
  */
 public class TrackProfile(
-    /** Cut at [segmentStartIndices], so gaps the clock shows are breaks here too. */
+    /** Cut at the file's segments and at gaps the clock shows, so those are breaks here too. */
     public val points: TrackPoints,
-    public val segmentStartIndices: IntArray,
     /** All zeroes when [hasTime] is false. */
     public val elapsedSeconds: FloatArray,
     /** Cumulative; flat across segment boundaries. */

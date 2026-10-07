@@ -100,7 +100,7 @@ class TrackAnalyzerTest {
 
         // 100 m + 100 m, not the ~550 km jump between them.
         assertEquals(200.0, profile.stats.distanceMeters, 2.0)
-        assertTrue(profile.segmentStartIndices.contentEquals(intArrayOf(0, 11)))
+        assertTrue(profile.points.segmentStarts().contentEquals(intArrayOf(0, 11)))
     }
 
     @Test
@@ -192,7 +192,7 @@ class TrackAnalyzerTest {
     fun `a long gap becomes a break in the track`() {
         val profile = TrackAnalyzer.analyze(rideWithGap(gapSeconds = 600))
 
-        assertEquals(listOf(0, 60), profile.segmentStartIndices.toList())
+        assertEquals(listOf(0, 60), profile.points.segmentStarts().toList())
     }
 
     @Test
@@ -206,7 +206,7 @@ class TrackAnalyzerTest {
         )
 
         assertFalse(profile.hasTime)
-        assertEquals(listOf(0), profile.segmentStartIndices.toList())
+        assertEquals(listOf(0), profile.points.segmentStarts().toList())
     }
 
     @Test
@@ -237,7 +237,7 @@ class TrackAnalyzerTest {
     @Test
     fun `an ordinary sample interval is not a break`() {
         val profile = TrackAnalyzer.analyze(straightRun(count = 120, metersPerSecond = 5.0))
-        assertEquals(listOf(0), profile.segmentStartIndices.toList())
+        assertEquals(listOf(0), profile.points.segmentStarts().toList())
     }
 
     /** A gap is "unusual for this file", not "longer than half a minute". */
@@ -246,7 +246,7 @@ class TrackAnalyzerTest {
         val profile = TrackAnalyzer.analyze(
             straightRun(count = 30, metersPerSecond = 8.0, secondsBetween = 60),
         )
-        assertEquals(listOf(0), profile.segmentStartIndices.toList())
+        assertEquals(listOf(0), profile.points.segmentStarts().toList())
     }
 
     @Test
@@ -254,11 +254,11 @@ class TrackAnalyzerTest {
         val track = rideWithGap(gapSeconds = 45)
 
         // 45s clears the default 30s floor and ten times the 1s median, so it is a break.
-        assertEquals(listOf(0, 60), TrackAnalyzer.analyze(track).segmentStartIndices.toList())
+        assertEquals(listOf(0, 60), TrackAnalyzer.analyze(track).points.segmentStarts().toList())
 
         assertEquals(
             listOf(0),
-            TrackAnalyzer.analyze(track, minGapSeconds = 120.0).segmentStartIndices.toList(),
+            TrackAnalyzer.analyze(track, minGapSeconds = 120.0).points.segmentStarts().toList(),
         )
     }
 
@@ -267,7 +267,7 @@ class TrackAnalyzerTest {
     fun `lowering the threshold cannot cut a sparse file into confetti`() {
         val sparse = straightRun(count = 30, metersPerSecond = 8.0, secondsBetween = 60)
         val profile = TrackAnalyzer.analyze(sparse, minGapSeconds = 10.0)
-        assertEquals(listOf(0), profile.segmentStartIndices.toList())
+        assertEquals(listOf(0), profile.points.segmentStarts().toList())
     }
 
     /**
@@ -279,7 +279,7 @@ class TrackAnalyzerTest {
         val track = awkwardlyTimedRide()
         val profile = TrackAnalyzer.analyze(track)
         val half = (TrackAnalyzer.SPEED_WINDOW_SECONDS / 2.0).toFloat()
-        val starts = profile.segmentStartIndices
+        val starts = profile.points.segmentStarts()
 
         assertTrue(starts.size > 1, "the fixture is meant to contain a break")
 
@@ -435,7 +435,7 @@ class TrackAnalyzerTest {
         val profile = TrackAnalyzer.analyze(points)
 
         assertTrue(profile.hasTime)
-        assertEquals(1, profile.segmentStartIndices.size)
+        assertEquals(1, profile.points.segmentStarts().size)
         assertEquals(start, profile.stats.startedAt)
         // Too slow to count as moving, so no moving speed either: the sheet shows both.
         assertTrue(profile.stats.distanceMeters > 0.0)

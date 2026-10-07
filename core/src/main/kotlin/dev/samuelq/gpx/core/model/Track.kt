@@ -87,9 +87,7 @@ public class TrackPoints internal constructor(
         accuracyMeters = accuracy(i).takeUnless(Float::isNaN)?.toDouble(),
     )
 
-    public fun first(): TrackPoint = get(0)
-    public fun last(): TrackPoint = get(size - 1)
-    public fun lastOrNull(): TrackPoint? = if (size > 0) last() else null
+    public fun lastOrNull(): TrackPoint? = if (size > 0) get(size - 1) else null
     public fun getOrNull(i: Int): TrackPoint? = if (i in 0 until size) get(i) else null
 
     /** Points [range] alone, copied, still cut where segments begin within it. */
