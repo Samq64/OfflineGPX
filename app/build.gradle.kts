@@ -55,7 +55,8 @@ abstract class CheckNoNetworkPermissions : DefaultTask() {
 /** The built commit, shown beside the version. Empty outside a git checkout. */
 val gitHash: String = runCatching {
     providers.exec {
-        commandLine("git", "rev-parse", "--short", "HEAD")
+        // The hash alone, with -dirty when tracked files have uncommitted changes.
+        commandLine("git", "describe", "--always", "--dirty", "--exclude=*")
         isIgnoreExitValue = true
     }.standardOutput.asText.get().trim()
 }.getOrDefault("")
@@ -178,7 +179,6 @@ dependencies {
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.material3)
-    implementation(libs.androidx.compose.material.icons.core)
 
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.kxml2)

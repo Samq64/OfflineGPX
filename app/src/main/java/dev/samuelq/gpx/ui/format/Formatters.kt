@@ -32,12 +32,16 @@ class Formatters(
     private val dateTimeFormat = patternOr(dateTimePattern, locale) {
         DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
     }
+    private val dateFormat = DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(locale)
     private val timeFormat = patternOr(timePattern, locale) {
         DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)
     }
 
     fun dateTime(instant: Instant?, zone: ZoneId = ZoneId.systemDefault()): String =
         instant?.let { dateTimeFormat.withZone(zone).format(it) } ?: EMPTY
+
+    fun date(instant: Instant?, zone: ZoneId = ZoneId.systemDefault()): String =
+        instant?.let { dateFormat.withZone(zone).format(it) } ?: EMPTY
 
     fun time(instant: Instant?, zone: ZoneId = ZoneId.systemDefault()): String =
         instant?.let { timeFormat.withZone(zone).format(it) } ?: EMPTY

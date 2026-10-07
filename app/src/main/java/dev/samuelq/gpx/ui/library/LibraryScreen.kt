@@ -21,13 +21,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
@@ -278,7 +271,7 @@ fun LibraryScreen(
                     navigationIcon = {
                         IconButton(onClick = onBack) {
                             Icon(
-                                Icons.AutoMirrored.Filled.ArrowBack,
+                                painterResource(R.drawable.ic_arrow_back),
                                 stringResource(R.string.action_back),
                             )
                         }
@@ -287,11 +280,11 @@ fun LibraryScreen(
                         // Shown while loading so icons don't pop in during the slide.
                         if (loaded.let { it == null || it.total > 0 }) {
                             IconButton(onClick = { searching = true }) {
-                                Icon(Icons.Default.Search, stringResource(R.string.library_search))
+                                Icon(painterResource(R.drawable.ic_search), stringResource(R.string.library_search))
                             }
                             SortMenu(order, onSort = viewModel::setSort, onDescending = viewModel::setSortDescending)
                             IconButton(onClick = { picker.launch(arrayOf("*/*")) }) {
-                                Icon(Icons.Default.Add, stringResource(R.string.library_import))
+                                Icon(painterResource(R.drawable.ic_add), stringResource(R.string.library_import))
                             }
                         }
                         // Empty, the page itself offers the import.
@@ -412,7 +405,6 @@ fun LibraryScreen(
     }
 }
 
-/** Select-all is a tri-state checkbox since `material-icons-core` has no `select_all`. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SelectionBar(
@@ -426,10 +418,6 @@ private fun SelectionBar(
     onExport: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    val allSelected = count >= total
-    // It clears once everything is selected, so it says so.
-    val selectAll = stringResource(if (allSelected) R.string.library_clear_selection else R.string.library_select_all)
-
     TopAppBar(
         windowInsets = BarInsets,
         colors = TopAppBarDefaults.topAppBarColors(
@@ -443,60 +431,63 @@ private fun SelectionBar(
         },
         navigationIcon = {
             IconButton(onClick = onClose) {
-                Icon(Icons.Default.Clear, stringResource(R.string.library_clear_selection))
+                Icon(painterResource(R.drawable.ic_close), stringResource(R.string.library_clear_selection))
             }
         },
         actions = {
-            TriStateCheckbox(
-                state = if (allSelected) ToggleableState.On else ToggleableState.Indeterminate,
-                onClick = { if (allSelected) onClose() else onSelectAll() },
-                modifier = Modifier.semantics { contentDescription = selectAll },
+            IconButton(onClick = onExport) {
+                Icon(painterResource(R.drawable.ic_share), stringResource(R.string.library_export))
+            }
+            IconButton(onClick = onDelete) {
+                Icon(painterResource(R.drawable.ic_delete), stringResource(R.string.library_delete))
+            }
+            SelectionMenu(
+                count = count,
+                // Gone once there's nothing left to add.
+                onSelectAll = onSelectAll.takeIf { count < total },
+                onShow = onShow,
+                onHide = onHide,
+                onShowOnly = onShowOnly,
             )
-            SelectionMenu(count, onShow, onHide, onShowOnly, onExport, onDelete)
         },
     )
 }
 
-/** Visibility first, as what selecting a category is mostly for; each choice says what it does. */
+/** Visibility after select all, as what selecting a category is mostly for; each choice says what it does. */
 @Composable
 private fun SelectionMenu(
     count: Int,
+    onSelectAll: (() -> Unit)?,
     onShow: () -> Unit,
     onHide: () -> Unit,
     onShowOnly: () -> Unit,
-    onExport: () -> Unit,
-    onDelete: () -> Unit,
 ) {
     var open by remember { mutableStateOf(false) }
     Box {
         IconButton(onClick = { open = true }) {
-            Icon(Icons.Default.MoreVert, stringResource(R.string.library_more))
+            Icon(painterResource(R.drawable.ic_more_vert), stringResource(R.string.library_more))
         }
         DropdownMenu(open, onDismissRequest = { open = false }) {
             @Composable
-            fun Item(label: String, action: () -> Unit, error: Boolean = false) = DropdownMenuItem(
-                text = {
-                    Text(
-                        label,
-                        color = if (error) MaterialTheme.colorScheme.error else Color.Unspecified,
-                    )
-                },
+            fun Item(label: String, action: () -> Unit) = DropdownMenuItem(
+                text = { Text(label) },
                 onClick = {
                     open = false
                     action()
                 },
             )
+            onSelectAll?.let {
+                Item(stringResource(R.string.library_select_all), it)
+                HorizontalDivider()
+            }
             Item(stringResource(R.string.library_show_selected), onShow)
             Item(stringResource(R.string.library_hide_selected), onHide)
             Item(pluralStringResource(R.plurals.library_show_only_selected, count), onShowOnly)
-            HorizontalDivider()
-            Item(stringResource(R.string.library_export), onExport)
-            Item(stringResource(R.string.library_delete), onDelete, error = true)
         }
     }
 }
 
-/** In this area stays put but off when the map showed nothing to filter to, as when tracks are too far apart. */
+/** In this area is left out when the map showed nothing to filter to, as when tracks are too far apart; last, so the rest don't move. */
 @Composable
 private fun Filters(
     inArea: Boolean,
@@ -507,19 +498,18 @@ private fun Filters(
     modifier: Modifier = Modifier,
 ) {
     @Composable
-    fun Filter(label: Int, on: Boolean, onChange: (Boolean) -> Unit, enabled: Boolean = true) = FilterChip(
+    fun Filter(label: Int, on: Boolean, onChange: (Boolean) -> Unit) = FilterChip(
         selected = on,
         onClick = { onChange(!on) },
-        enabled = enabled,
         label = { Text(stringResource(label)) },
         leadingIcon = if (on) {
-            { Icon(Icons.Default.Check, null, Modifier.size(FilterChipDefaults.IconSize)) }
+            { Icon(painterResource(R.drawable.ic_check), null, Modifier.size(FilterChipDefaults.IconSize)) }
         } else null,
     )
 
     Row(modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Filter(R.string.library_filter_shown, shownOnly, onShownOnly)
-        Filter(R.string.library_filter_area, inArea && hasArea, onInArea, enabled = hasArea)
+        if (hasArea) Filter(R.string.library_filter_area, inArea, onInArea)
     }
 }
 
@@ -723,7 +713,7 @@ private fun SortMenu(order: TrackOrder, onSort: (TrackSort) -> Unit, onDescendin
                 },
                 // Blank space when unchecked keeps the labels aligned.
                 leadingIcon = {
-                    if (isSelected) Icon(Icons.Default.Check, null) else Spacer(Modifier.size(24.dp))
+                    if (isSelected) Icon(painterResource(R.drawable.ic_check), null) else Spacer(Modifier.size(24.dp))
                 },
                 modifier = Modifier.semantics { selected = isSelected },
             )
@@ -827,7 +817,7 @@ private fun SearchBar(
         navigationIcon = {
             IconButton(onClick = onClose) {
                 Icon(
-                    Icons.AutoMirrored.Filled.ArrowBack,
+                    painterResource(R.drawable.ic_arrow_back),
                     stringResource(R.string.library_search_close),
                 )
             }
@@ -835,7 +825,7 @@ private fun SearchBar(
         actions = {
             if (query.isNotEmpty()) {
                 IconButton(onClick = { onQueryChange("") }) {
-                    Icon(Icons.Default.Clear, stringResource(R.string.library_search_clear))
+                    Icon(painterResource(R.drawable.ic_close), stringResource(R.string.library_search_clear))
                 }
             }
         },

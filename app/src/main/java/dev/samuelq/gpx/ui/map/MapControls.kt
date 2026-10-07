@@ -4,8 +4,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
@@ -81,7 +79,7 @@ internal fun RecordButton(onStart: () -> Unit) {
     ExtendedFloatingActionButton(
         onClick = onStart,
         // The label goes on the icon: this overload hides its text from accessibility.
-        icon = { Icon(Icons.Default.PlayArrow, contentDescription = label) },
+        icon = { Icon(painterResource(R.drawable.ic_play_arrow), contentDescription = label) },
         text = { Text(label) },
     )
 }

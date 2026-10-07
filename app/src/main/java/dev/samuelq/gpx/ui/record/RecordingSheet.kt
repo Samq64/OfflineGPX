@@ -18,8 +18,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalIconButton
@@ -192,7 +190,7 @@ private fun RecordingHeader(
             // Icon only, so flipping between the two can't change its width.
             FilledTonalIconButton(onClick = if (state.paused) onResume else onPause) {
                 if (state.paused) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = stringResource(R.string.record_resume))
+                    Icon(painterResource(R.drawable.ic_play_arrow), contentDescription = stringResource(R.string.record_resume))
                 } else {
                     Icon(
                         painterResource(R.drawable.ic_pause),

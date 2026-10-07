@@ -114,7 +114,10 @@ class FormattersTest {
 
         assertEquals("2 May 2026 01:30", formatters.dateTime(at, zone))
         assertEquals("01:30", formatters.time(at, zone))
+        // The date alone follows the locale, still in the given zone.
+        assertEquals("2 May 2026", formatters.date(at, zone))
         assertEquals(Formatters.EMPTY, formatters.dateTime(null))
+        assertEquals(Formatters.EMPTY, formatters.date(null))
         assertEquals(Formatters.EMPTY, formatters.time(null))
     }
 

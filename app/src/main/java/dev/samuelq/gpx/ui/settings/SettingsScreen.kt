@@ -1,31 +1,33 @@
 package dev.samuelq.gpx.ui.settings
 
-import android.content.Context
 import android.content.Intent
 import android.icu.text.ListFormatter
-import android.os.Build
-import android.os.PowerManager
-import android.provider.Settings as AndroidSettings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.CircularProgressIndicator
@@ -65,7 +67,6 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.text.withLink
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.pluralStringResource
@@ -76,8 +77,6 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.samuelq.gpx.BuildConfig
@@ -193,12 +192,6 @@ fun SettingsScreen(
         )
     }
 
-    // Rechecked on resume, since the user changes it in system settings.
-    var batteryRestricted by remember { mutableStateOf(false) }
-    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
-        batteryRestricted = !context.isIgnoringBatteryOptimizations()
-    }
-
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState, Modifier.readFirst()) },
         topBar = {
@@ -207,7 +200,7 @@ fun SettingsScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
+                            painterResource(R.drawable.ic_arrow_back),
                             stringResource(R.string.action_back),
                         )
                     }
@@ -234,7 +227,6 @@ fun SettingsScreen(
             )
 
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
-            SectionHeading(stringResource(R.string.settings_section_display))
 
             Setting(
                 title = stringResource(R.string.settings_units),
@@ -263,8 +255,6 @@ fun SettingsScreen(
                 }
             }
 
-            HorizontalDivider(Modifier.padding(vertical = 8.dp))
-            SectionHeading(stringResource(R.string.settings_section_recording))
 
             // Committed on release, not per drag frame, to avoid a disk write each frame.
             // No `steps`: ~95 discrete steps would draw a dotted track.
@@ -298,33 +288,18 @@ fun SettingsScreen(
                 )
             }
 
-            if (batteryRestricted) {
-                Setting(
-                    title = stringResource(R.string.settings_battery),
-                    explanation = stringResource(
-                        if (BatteryInAppInfo) R.string.settings_battery_explanation_app_info
-                        else R.string.settings_battery_explanation
-                    ),
-                ) {
-                    TextButton(
-                        onClick = { context.openBatterySettings() },
-                        // Aligns the label, not the ripple, with the text above.
-                        modifier = Modifier.offset(x = (-12).dp),
-                    ) {
-                        Text(
-                            stringResource(
-                                if (BatteryInAppInfo) R.string.settings_battery_open_app_info
-                                else R.string.settings_battery_open
-                            )
-                        )
-                    }
-                }
-            }
-
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
             SectionHeading(stringResource(R.string.settings_section_about))
 
-            VersionLine(onOpenCommit = { openUrl(COMMIT_URL + it) })
+            AppHeader(onOpenCommit = { openUrl(COMMIT_URL + it) })
+            LinkButtons(
+                listOf(
+                    stringResource(R.string.settings_about_source) to REPO_URL,
+                    stringResource(R.string.settings_about_licence) to LICENCE_URL,
+                    stringResource(R.string.settings_about_issues) to ISSUES_URL,
+                ),
+                onClick = ::openUrl,
+            )
             Text(
                 text = stringResource(R.string.settings_about_libraries),
                 style = MaterialTheme.typography.titleSmall,
@@ -333,10 +308,8 @@ fun SettingsScreen(
                     .semantics { heading() },
             )
             LIBRARIES.forEach { library ->
-                LibraryLine(library, onClick = { openUrl(library.url) })
+                LibraryRow(library, onClick = { openUrl(library.url) })
             }
-
-            Spacer(Modifier.height(24.dp))
         }
     }
 }
@@ -411,30 +384,6 @@ private fun MarkedSlider(
 
 private val MarkerRadius = 2.dp
 
-private fun Context.isIgnoringBatteryOptimizations(): Boolean =
-    getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(packageName)
-
-/**
- * From 12, app info has the app's own battery page, where Unrestricted is the exemption; its
- * name varies by skin but always says battery. Before, its battery entry leads to the list
- * anyway. Not a direct exemption request, which needs a permission Play restricts.
- */
-private val BatteryInAppInfo = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-
-/** App info is also the fallback where an OEM drops the list. */
-private fun Context.openBatterySettings() {
-    val opened = !BatteryInAppInfo && runCatching {
-        startActivity(Intent(AndroidSettings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
-    }.isSuccess
-    if (!opened) {
-        runCatching {
-            startActivity(
-                Intent(AndroidSettings.ACTION_APPLICATION_DETAILS_SETTINGS, "package:$packageName".toUri())
-            )
-        }
-    }
-}
-
 private class Library(val name: String, val licence: String, val url: String)
 
 private val LIBRARIES = listOf(
@@ -444,7 +393,10 @@ private val LIBRARIES = listOf(
     Library("Kotlin", "Apache-2.0", "https://kotlinlang.org"),
 )
 
-private const val COMMIT_URL = "https://github.com/Samq64/offline-gpx-android/commits/"
+private const val REPO_URL = "https://github.com/Samq64/offline-gpx-android"
+private const val COMMIT_URL = "$REPO_URL/commits/"
+private const val LICENCE_URL = "$REPO_URL/blob/master/LICENSE"
+private const val ISSUES_URL = "$REPO_URL/issues"
 
 @Composable
 private fun linkStyles() = TextLinkStyles(
@@ -453,36 +405,96 @@ private fun linkStyles() = TextLinkStyles(
 
 /** The commit hash, when the build has one, links to the history up to it. */
 @Composable
-private fun VersionLine(onOpenCommit: (String) -> Unit) {
-    val hash = BuildConfig.GIT_HASH
-    val version = BuildConfig.VERSION_NAME + if (hash.isEmpty()) "" else " ($hash)"
-    val text = stringResource(R.string.settings_about_version, stringResource(R.string.app_name), version)
+private fun AppHeader(onOpenCommit: (String) -> Unit) {
+    val described = BuildConfig.GIT_HASH
+    val hash = described.removeSuffix(DIRTY)
+    val version = stringResource(R.string.settings_about_version, BuildConfig.VERSION_NAME) +
+        if (described.isEmpty()) "" else " · $described"
     val link = linkStyles()
-    Text(
-        text = buildAnnotatedString {
-            append(text)
-            val at = if (hash.isEmpty()) -1 else text.indexOf(hash)
-            if (at >= 0) addLink(LinkAnnotation.Clickable(hash, link) { onOpenCommit(hash) }, at, at + hash.length)
-        },
-        style = MaterialTheme.typography.bodyMedium,
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.padding(horizontal = ScreenPadding, vertical = 8.dp),
-    )
+    ) {
+        AppIcon()
+        Spacer(Modifier.width(16.dp))
+        Column {
+            Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleMedium)
+            Text(
+                text = buildAnnotatedString {
+                    append(version)
+                    if (hash.isNotEmpty()) {
+                        val at = version.length - described.length
+                        addLink(LinkAnnotation.Clickable(hash, link) { onOpenCommit(hash) }, at, at + hash.length)
+                    }
+                },
+                style = MaterialTheme.typography.bodyMedium.tabularFigures(),
+            )
+            Text(
+                text = stringResource(R.string.settings_about_tagline),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
 }
 
-/** The name links to the project; the licence follows in brackets. */
+/**
+ * Compose can't paint an adaptive icon, so its layers are drawn here: the foreground's
+ * 72 of 108 dp safe zone fills the shape.
+ */
 @Composable
-private fun LibraryLine(library: Library, onClick: () -> Unit) {
-    val link = linkStyles()
-    Text(
-        text = buildAnnotatedString {
-            withLink(LinkAnnotation.Clickable(library.name, link) { onClick() }) {
-                append(library.name)
-            }
-            append(" (${library.licence})")
-        },
-        style = MaterialTheme.typography.bodyMedium,
-        modifier = Modifier.padding(horizontal = ScreenPadding, vertical = 2.dp),
-    )
+private fun AppIcon() {
+    Box(
+        modifier = Modifier
+            .size(IconSize)
+            .clip(CircleShape)
+            .background(colorResource(R.color.ic_launcher_background)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Image(
+            painter = painterResource(R.drawable.ic_launcher_foreground),
+            contentDescription = null,
+            modifier = Modifier.requiredSize(IconSize * 108 / 72),
+        )
+    }
+}
+
+private val IconSize = 56.dp
+
+/** Marks a build with uncommitted changes; not part of the commit link. */
+private const val DIRTY = "-dirty"
+
+/** Buttons rather than inline links, for full-size touch targets. */
+@Composable
+private fun LinkButtons(links: List<Pair<String, String>>, onClick: (String) -> Unit) {
+    FlowRow(
+        modifier = Modifier.padding(horizontal = ScreenPadding - 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        links.forEach { (label, url) ->
+            TextButton(onClick = { onClick(url) }) { Text(label) }
+        }
+    }
+}
+
+/** The whole row opens the project; a plain Row, since ListItem pads far more. */
+@Composable
+private fun LibraryRow(library: Library, onClick: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .clickable(onClickLabel = stringResource(R.string.settings_about_open_site), onClick = onClick)
+            .padding(horizontal = ScreenPadding),
+    ) {
+        Text(library.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        Text(
+            library.licence,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
 }
 
 /** No download button: the app has no network permission, so it links to how instead. */
@@ -589,7 +601,7 @@ private fun MapRow(
             var open by remember { mutableStateOf(false) }
             IconButton(onClick = { open = true }) {
                 Icon(
-                    Icons.Default.MoreVert,
+                    painterResource(R.drawable.ic_more_vert),
                     contentDescription = stringResource(R.string.settings_maps_manage_named, map.displayName),
                 )
             }

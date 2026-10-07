@@ -91,19 +91,25 @@ fun RecoveredRecordingDialog(
             summary = {
                 Column {
                     StatRow(recordingStats(stats.distanceMeters, stats.totalDurationSeconds))
-                    val date = LocalFormatters.current.dateTime(stats.startedAt)
-                    val body = stringResource(R.string.record_recovered_body, date)
+                    val formatters = LocalFormatters.current
+                    val date = formatters.date(stats.startedAt)
+                    val time = formatters.time(stats.startedAt)
+                    val body = stringResource(R.string.record_recovered_body, date, time)
                     Text(
                         buildAnnotatedString {
                             append(body)
-                            // Found, not split around: translations may move the date.
-                            val at = body.indexOf(date)
-                            if (at >= 0) addStyle(SpanStyle(fontWeight = FontWeight.Bold), at, at + date.length)
+                            // Found, not split around: translations may move them.
+                            for (part in listOf(date, time)) {
+                                val at = body.indexOf(part)
+                                if (at >= 0) addStyle(SpanStyle(fontWeight = FontWeight.Bold), at, at + part.length)
+                            }
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 8.dp),
                     )
+                    // Here, where a stopped recording has just shown why it matters.
+                    BatteryOptimisationHint(Modifier.padding(top = 8.dp))
                 }
             },
             canSave = true,

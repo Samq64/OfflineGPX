@@ -8,8 +8,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -24,6 +22,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -93,7 +92,7 @@ fun ColorSwatches(colorIndex: Int, onPick: (Int) -> Unit) {
                 ) {
                     // Pale swatches need a dark tick.
                     val tick = if (color.luminance() > 0.4f) Color.Black else Color.White
-                    if (isSelected) Icon(Icons.Default.Check, null, tint = tick)
+                    if (isSelected) Icon(painterResource(R.drawable.ic_check), null, tint = tick)
                 }
             }
         }

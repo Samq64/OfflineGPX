@@ -42,8 +42,8 @@
     <string name="duplicate_name">%1$s (copy)</string>
 
     <string name="library_clear_selection">Clear selection</string>
-    <string name="library_color">Colour: %1$s</string>
-    <string name="library_color_change">Change colour</string>
+    <string name="library_color">Color: %1$s</string>
+    <string name="library_color_change">Change color</string>
     <string name="library_delete">Delete</string>
     <plurals name="library_deleted">
         <item quantity="one">Deleted %d track.</item>
@@ -130,7 +130,7 @@
     <string name="library_sort_name">Name</string>
     <string name="library_sort_recent">Recent</string>
     <string name="library_title">Tracks</string>
-    <string name="library_uncategorised">Uncategorised</string>
+    <string name="library_uncategorised">Uncategorized</string>
 
     <string name="map_description">Map showing your tracks. Open one by tapping its line or from the Tracks list.</string>
     <string name="map_empty_body">Start a recording, open a track or import a map to get started.</string>
@@ -177,7 +177,11 @@
     <string name="record_notification_paused">Recording paused</string>
     <string name="record_pause">Pause</string>
     <string name="record_precise_required">Recording uses GPS, which needs precise location.</string>
-    <string name="record_recovered_body">Started %1$s. The app closed before it was saved.</string>
+    <string name="record_battery_explanation">Disabling battery optimizations may help prevent this in the future.</string>
+    <string name="record_battery_open">Open battery settings</string>
+    <string name="record_battery_open_app_info">Open app info</string>
+    <!-- %1$s is the date, %2$s the time. -->
+    <string name="record_recovered_body">The app was closed before the recording started on %1$s at %2$s was saved.</string>
     <string name="record_recovered_title">Unsaved recording</string>
     <string name="record_resume">Resume</string>
     <string name="record_save_failed">Couldn\'t save that recording. It\'s still on the device.</string>
@@ -199,18 +203,18 @@
     <string name="record_weak_signal_spoken">Signal too weak to record. Try outdoors.</string>
 
     <string name="settings_about_libraries">Libraries</string>
-    <!-- %1$s is the app's name, %2$s the version and commit, e.g. 0.1.0 (8c5759b). -->
-    <string name="settings_about_version">%1$s v%2$s. GPL-3.0.</string>
+    <string name="settings_about_issues">Report an issue</string>
+    <string name="settings_about_licence">Licence (GPL-3.0)</string>
+    <!-- Spoken for a library row: "double tap to open website". -->
+    <string name="settings_about_open_site">open website</string>
+    <string name="settings_about_source">Source code</string>
+    <string name="settings_about_tagline">Record and manage GPX tracks without the internet permission.</string>
+    <!-- %1$s is the version, e.g. 0.1.0; the commit follows it. -->
+    <string name="settings_about_version">v%1$s</string>
     <string name="settings_accuracy">Accuracy limit</string>
-    <string name="settings_accuracy_explanation">Fixes less certain than this are ignored. Lower it if the device wanders indoors, or increase it if points are not recorded in a wooded area.</string>
+    <string name="settings_accuracy_explanation">Fixes less certain than this are ignored. Increase it if points go missing under trees; lower it if the track wanders indoors.</string>
     <!-- Spoken for the slider: the value, then the default. -->
     <string name="settings_accuracy_state">%1$s, default %2$s</string>
-    <string name="settings_battery">Battery optimisation</string>
-    <string name="settings_battery_explanation">Some phones stop recordings in the background. Turn optimisation off for this app to keep them running.</string>
-    <!-- Android 12+, where the button opens app info. Battery and Unrestricted are the system's words. -->
-    <string name="settings_battery_explanation_app_info">Some phones stop recordings in the background. Under Battery, choose Unrestricted to keep them running.</string>
-    <string name="settings_battery_open">Open battery settings</string>
-    <string name="settings_battery_open_app_info">Open app settings</string>
     <string name="settings_maps_explanation">Manage .map file imports. Without one, tracks are drawn on a blank background.</string>
     <string name="settings_maps_export">Export</string>
     <string name="settings_maps_export_failed">Couldn\'t export that map.</string>
@@ -237,9 +241,7 @@
     <!-- A direct link to where the files are published, so an action, not a heading. -->
     <string name="settings_maps_where">Get maps</string>
     <string name="settings_section_about">About</string>
-    <string name="settings_section_display">Display</string>
     <string name="settings_section_maps">Offline maps</string>
-    <string name="settings_section_recording">Recording</string>
     <string name="settings_title">Settings</string>
     <string name="settings_units">Units</string>
     <string name="settings_units_explanation">Display only. File content stays in metric.</string>

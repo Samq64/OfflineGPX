@@ -2,8 +2,6 @@ package dev.samuelq.gpx.ui.track
 
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Box
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -17,6 +15,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import dev.samuelq.gpx.R
 
@@ -51,7 +50,7 @@ fun TrackMenu(
     Box {
         IconButton(onClick = { open = true }) {
             Icon(
-                Icons.Default.MoreVert,
+                painterResource(R.drawable.ic_more_vert),
                 trackTitle?.let { stringResource(R.string.track_manage_named, it) }
                     ?: stringResource(R.string.track_manage),
             )
