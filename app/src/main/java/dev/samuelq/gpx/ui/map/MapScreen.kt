@@ -408,6 +408,13 @@ fun MapScreen(
         }
     }
 
+    // What saving the trim would drop with the points.
+    val cutWaypoints = remember(focusedTrack, trimRange) {
+        val range = trimRange ?: return@remember emptySet()
+        focusedTrack?.track?.waypoints?.filterIndexed { i, _ -> focusedTrack.waypointIndices[i] !in range }?.toSet()
+            .orEmpty()
+    }
+
     // Indexed like the analysis, so a chart index is a point on this line.
     val liveOverlay = remember(trace, liveColor) {
         if (trace.size == 0) null else RouteOverlay(trackId = LIVE_TRACK_ID, points = trace, color = liveColor)
@@ -690,6 +697,7 @@ fun MapScreen(
                     // Only the focused track's and the recording's.
                     trackWaypoints = focusedTrack?.track?.waypoints.orEmpty(),
                     liveWaypoints = liveWaypoints,
+                    cutWaypoints = cutWaypoints,
                     onSelect = screen::tapLine,
                     onSelectNothing = screen::tapNothing,
                     onSelectWaypoint = selectWaypoint,

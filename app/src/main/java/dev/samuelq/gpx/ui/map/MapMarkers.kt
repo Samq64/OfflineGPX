@@ -28,6 +28,9 @@ internal class MarkerSymbols(marker: Color, puck: Color, hole: Color, density: D
     val trackWaypoint: MarkerSymbol
     val liveWaypoint: MarkerSymbol
 
+    /** A track waypoint a trim would drop: dimmed like the line cut with it. */
+    val cutWaypoint: MarkerSymbol
+
     init {
         with(density) {
             val ringWidth = MARKER_RING_WIDTH_DP.dp.toPx()
@@ -55,6 +58,8 @@ internal class MarkerSymbols(marker: Color, puck: Color, hole: Color, density: D
             val pinRing = PIN_RING_WIDTH_DP.dp.toPx()
             trackWaypoint = pin(pinRadius, tipLength, pinRing, fill = marker, ring = MARKER_RING, hole = hole)
             liveWaypoint = pin(pinRadius, tipLength, pinRing, fill = puck, ring = MARKER_RING, hole = hole)
+            cutWaypoint =
+                pin(pinRadius, tipLength, pinRing, fill = marker, ring = MARKER_RING, hole = hole, UNFOCUSED_ALPHA)
         }
     }
 
@@ -110,6 +115,7 @@ internal class MarkerSymbols(marker: Color, puck: Color, hole: Color, density: D
         fill: Color,
         ring: Color,
         hole: Color,
+        alpha: Float = 1f,
     ): MarkerSymbol {
         // Half margin below, with a round join: a mitred sharp tip would spike past the ring.
         val topPad = ringWidth
@@ -123,10 +129,13 @@ internal class MarkerSymbols(marker: Color, puck: Color, hole: Color, density: D
         val bitmap = createBitmap(width, height)
         val canvas = android.graphics.Canvas(bitmap)
         val path = teardropPath(cx, cy, radius, tipY)
+        // As one layer, so the ring doesn't show through the fill.
+        if (alpha < 1f) canvas.saveLayerAlpha(null, (alpha * 255).toInt())
         canvas.fillThenRing(fill, ring, ringWidth) { drawPath(path, it) }
         // Land-coloured, not see-through: that showed the pin's own line, the fill's own tone.
         // Not white either, which glared in dark mode.
         canvas.drawCircle(cx, cy, radius * PIN_HOLE_RATIO, fillPaint(hole))
+        if (alpha < 1f) canvas.restore()
         return MarkerSymbol(AndroidBitmap(bitmap), MarkerSymbol.HotspotPlace.BOTTOM_CENTER, false)
     }
 }
@@ -176,9 +185,14 @@ private fun marker(at: TrackPoint, symbol: MarkerSymbol) =
 internal fun MarkerSymbols.pins(
     trackWaypoints: List<Waypoint>,
     liveWaypoints: List<Waypoint>,
+    cutWaypoints: Set<Waypoint>,
     onTop: Waypoint?,
-): List<MarkerInterface> = trackWaypoints.filter { it != onTop }.map { marker(it.point, trackWaypoint) } +
-    liveWaypoints.filter { it != onTop }.map { marker(it.point, liveWaypoint) }
+): List<MarkerInterface> =
+    trackWaypoints.filter { it != onTop }.map { marker(it.point, trackSymbol(it, cutWaypoints)) } +
+        liveWaypoints.filter { it != onTop }.map { marker(it.point, liveWaypoint) }
+
+private fun MarkerSymbols.trackSymbol(waypoint: Waypoint, cut: Set<Waypoint>) =
+    if (waypoint in cut) cutWaypoint else trackWaypoint
 
 /** From the last point back to one far enough off to point from, within its segment. */
 internal fun RouteOverlay.headingDegrees(): Double? {
@@ -197,8 +211,13 @@ private const val HEADING_MIN_METERS = 3.0
 internal fun MarkerSymbols.selectedDot(at: TrackPoint?): List<MarkerInterface> =
     listOfNotNull(at?.let { marker(it, marker) })
 
-internal fun MarkerSymbols.onTopPin(onTop: Waypoint?, liveWaypoints: List<Waypoint>): List<MarkerInterface> =
-    listOfNotNull(onTop?.let { marker(it.point, if (it in liveWaypoints) liveWaypoint else trackWaypoint) })
+internal fun MarkerSymbols.onTopPin(
+    onTop: Waypoint?,
+    liveWaypoints: List<Waypoint>,
+    cutWaypoints: Set<Waypoint>,
+): List<MarkerInterface> = listOfNotNull(
+    onTop?.let { marker(it.point, if (it in liveWaypoints) liveWaypoint else trackSymbol(it, cutWaypoints)) },
+)
 
 private const val MARKER_RING_WIDTH_DP = 1.5f
 

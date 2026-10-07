@@ -234,7 +234,7 @@ internal class LineLayer(map: Map) {
 }
 
 private const val ROUTE_WIDTH_DP = 3f
-private const val UNFOCUSED_ALPHA = 0.45f
+internal const val UNFOCUSED_ALPHA = 0.45f
 
 /** Settle time before an overlay checks it drew for the current camera. */
 private const val OVERLAY_CHECK_MS = 150L

@@ -425,9 +425,7 @@ class TrackRepository(
 
     /** Rewrites [file] to its points [keep], with the waypoints nearest them. Cached, and returned. */
     private fun rewrite(file: File, loaded: LoadedTrack, keep: IntRange): Track {
-        val waypoints = loaded.track.waypoints.indices
-            .filter { loaded.profile.indexOf(loaded.track.waypoints[it].point) in keep }
-            .toSet()
+        val waypoints = loaded.track.waypoints.indices.filter { loaded.waypointIndices[it] in keep }.toSet()
         writeAtomically(file) { output ->
             file.inputStream().use { input ->
                 trimmer.trim(input, output, keepPoint = { it in keep }, keepWaypoint = { it in waypoints })

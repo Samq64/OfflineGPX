@@ -16,7 +16,12 @@ class LoadedTrack(
     val displayName: String,
     val track: Track,
     val profile: TrackProfile,
-)
+) {
+    /** Each waypoint's nearest point; a trim keeps the waypoints whose point it keeps. */
+    val waypointIndices: IntArray by lazy {
+        IntArray(track.waypoints.size) { profile.indexOf(track.waypoints[it].point) }
+    }
+}
 
 /** The UI maps these to messages. */
 sealed class TrackLoadException(message: String, cause: Throwable? = null) : Exception(message, cause) {

@@ -86,6 +86,8 @@ internal fun OfflineMapCanvas(
     trackWaypoints: List<Waypoint>,
     /** [liveRoute]'s waypoints. */
     liveWaypoints: List<Waypoint>,
+    /** Of [trackWaypoints], those a trim would drop. */
+    cutWaypoints: Set<Waypoint>,
     onSelect: (trackId: Long, index: Int) -> Unit,
     onSelectNothing: () -> Unit,
     onSelectWaypoint: (Waypoint) -> Unit,
@@ -249,7 +251,8 @@ internal fun OfflineMapCanvas(
 
     LaunchedEffect(
         belowPinsLayer, pinLayer, abovePinsLayer, onTopLayer, symbols, routes, liveRoute, showPuck,
-        focusedTrackId, selectedIndex, markEnds, trackWaypoints, liveWaypoints, followedWaypoint, position,
+        focusedTrackId, selectedIndex, markEnds, trackWaypoints, liveWaypoints, cutWaypoints, followedWaypoint,
+        position,
     ) {
         val puckRoute = liveRoute?.takeIf { showPuck }
         val here = symbols.puck(position, bearing = null)
@@ -267,12 +270,12 @@ internal fun OfflineMapCanvas(
         val selected = symbols.selectedDot(markerAt) + ends
         val pinTapped = followedWaypoint != null
         belowPinsLayer.show(if (pinTapped) emptyList() else selected)
-        pinLayer.show(symbols.pins(trackWaypoints, liveWaypoints, followedWaypoint))
+        pinLayer.show(symbols.pins(trackWaypoints, liveWaypoints, cutWaypoints, followedWaypoint))
         abovePinsLayer.show(
             symbols.puck(puckRoute?.points?.lastOrNull(), puckRoute?.headingDegrees()) + here +
                 if (pinTapped) selected else emptyList(),
         )
-        onTopLayer.show(symbols.onTopPin(followedWaypoint, liveWaypoints))
+        onTopLayer.show(symbols.onTopPin(followedWaypoint, liveWaypoints, cutWaypoints))
         map.render()
     }
 
