@@ -189,7 +189,7 @@ private class Rect(val left: Float, val top: Float, val right: Float, val bottom
  * border, is passed on only outside the earlier files' boxes: two copies of an area cancel
  * out when filled.
  */
-private class ClippingSink(sink: ITileDataSink) : TileDataSink(sink) {
+internal class ClippingSink(sink: ITileDataSink) : TileDataSink(sink) {
     /** More than one file covers the tile, so copies are possible. */
     var merging = false
 
