@@ -91,6 +91,7 @@ import dev.samuelq.gpx.data.settings.TrackSort
 import dev.samuelq.gpx.data.track.editableName
 import dev.samuelq.gpx.data.track.isTitledByStart
 import dev.samuelq.gpx.data.track.title
+import dev.samuelq.gpx.ui.BarInsets
 import dev.samuelq.gpx.ui.format.Formatters
 import dev.samuelq.gpx.ui.format.LocalFormatters
 import dev.samuelq.gpx.ui.format.spokenDuration
@@ -889,9 +890,3 @@ private val LeadingSlot = 24.dp
 
 /** A header's checkbox and the gap after it, which its rows are indented by. */
 private val CategoryIndent = LeadingSlot + 16.dp
-
-/** The bars' own insets, plus the cutout, which they leave out and landscape puts beside them. */
-private val BarInsets: WindowInsets
-    @Composable get() = TopAppBarDefaults.windowInsets.union(
-        WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal),
-    )

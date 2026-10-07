@@ -14,12 +14,16 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -57,6 +61,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
@@ -84,6 +89,7 @@ import dev.samuelq.gpx.R
 import dev.samuelq.gpx.core.model.UnitSystem
 import dev.samuelq.gpx.data.map.OfflineMap
 import dev.samuelq.gpx.data.settings.Settings
+import dev.samuelq.gpx.ui.BarInsets
 import dev.samuelq.gpx.ui.format.LocalFormatters
 import dev.samuelq.gpx.ui.format.tabularFigures
 import dev.samuelq.gpx.ui.isLargeText
@@ -193,9 +199,12 @@ fun SettingsScreen(
     }
 
     Scaffold(
+        // As in the library: the cutout sits beside the content in landscape.
+        contentWindowInsets = WindowInsets.safeDrawing,
         snackbarHost = { SnackbarHost(snackbarHostState, Modifier.readFirst()) },
         topBar = {
             TopAppBar(
+                windowInsets = BarInsets,
                 title = { Text(stringResource(R.string.settings_title), Modifier.semantics { heading() }) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -208,11 +217,18 @@ fun SettingsScreen(
             )
         },
     ) { padding ->
+        val layoutDirection = LocalLayoutDirection.current
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
+                .padding(top = padding.calculateTopPadding())
                 .verticalScroll(rememberScrollState())
+                // Inside the scroll, so the end scrolls clear of the navigation bar from behind it.
+                .padding(
+                    start = padding.calculateStartPadding(layoutDirection),
+                    end = padding.calculateEndPadding(layoutDirection),
+                    bottom = padding.calculateBottomPadding(),
+                )
                 .padding(vertical = 8.dp),
         ) {
             SectionHeading(stringResource(R.string.settings_section_maps))
