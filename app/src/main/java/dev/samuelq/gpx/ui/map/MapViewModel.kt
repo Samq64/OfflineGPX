@@ -43,6 +43,8 @@ import kotlinx.coroutines.flow.runningFold
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 
 /** One-shot messages; the screen resolves the words. */
 internal sealed interface MapMessage {
@@ -60,7 +62,8 @@ internal sealed interface MapMessage {
 internal data class MapUiState(
     /** In the list's order, reversed so its top is drawn last, on top. */
     val entities: List<TrackEntity> = emptyList(),
-    val geometry: Map<Long, LoadedTrack> = emptyMap(),
+    /** Just what's drawn, cut where analysis breaks it; a focused track's profile is read when focused. */
+    val geometry: Map<Long, TrackPoints> = emptyMap(),
     // Starts true: a read is already in flight, and the map frames once on the first
     // not-loading state, so starting false latched the camera on the basemap.
     val loading: Boolean = true,
@@ -209,14 +212,6 @@ class MapViewModel(
                 }.also { requested = TrackRef.Saved(it) }
             }
 
-            // A visible track is already parsed.
-            val cached = _state.value.geometry[id]
-            if (cached != null) {
-                _focused.value = FocusedTrack.Ready(cached)
-                repository.touch(id)
-                return@launch
-            }
-
             _focused.value = repository.open(id).fold(
                 onSuccess = FocusedTrack::Ready,
                 onFailure = { FocusedTrack.Failed(it.toTrackMessageRes()) },
@@ -224,15 +219,21 @@ class MapViewModel(
         }
     }
 
-    /** Parses only newly visible tracks, concurrently, and drops hidden ones, so toggles are cheap. */
+    /**
+     * Parses only newly visible tracks, a few at a time, and drops hidden ones, so toggles are cheap.
+     * Hundreds of hour-long tracks fit in a phone's heap when only their points are kept.
+     */
     private suspend fun loadMissing(entities: List<TrackEntity>) {
         val wanted = entities.map { it.id }.toSet()
         val missing = wanted - _state.value.geometry.keys
 
+        val loads = Semaphore(LOAD_PARALLELISM)
         val loaded = coroutineScope {
-            missing.map { id -> async { repository.geometry(id).getOrNull() } }.awaitAll()
+            missing.map { id ->
+                async { loads.withPermit { repository.geometry(id).getOrNull()?.profile?.points } }
+            }.awaitAll()
         }
-        val read = missing.zip(loaded).mapNotNull { (id, track) -> track?.let { id to it } }
+        val read = missing.zip(loaded).mapNotNull { (id, points) -> points?.let { id to it } }
 
         // Merged against the current state, not the pre-suspend one, so a concurrent rename survives.
         _state.update { current ->
@@ -310,3 +311,6 @@ class MapViewModel(
         }
     }
 }
+
+/** Enough to keep the disk busy without every track's buffers alive at once. */
+private const val LOAD_PARALLELISM = 4

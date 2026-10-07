@@ -377,7 +377,7 @@ fun MapScreen(
     val overlays = remember(state.entities, state.geometry, focusedTrack?.id, focusedColor, palette, trimRange) {
         // Colour from the row, not its position, so it's stable across taps.
         val drawable = state.entities.mapNotNull { row ->
-            state.geometry[row.id]?.toOverlay(palette.slot(row.colorIndex), row.bounds)
+            state.geometry[row.id]?.let { RouteOverlay(row.id, it, palette.slot(row.colorIndex), row.bounds) }
         }
         // Include the focused track even if hidden, so its readout has a line to go with.
         val unlisted = focusedTrack?.takeIf { focus -> drawable.none { it.trackId == focus.id } }
