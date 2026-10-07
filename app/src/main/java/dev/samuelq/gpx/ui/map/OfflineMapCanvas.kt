@@ -321,14 +321,19 @@ internal fun OfflineMapCanvas(
 
     // Tracks first, else the maps. Too far apart, the camera stays put and the screen says so.
     fun frameAll(): Boolean {
-        val usable = viewSize?.usable(insets) ?: return false
+        val size = viewSize ?: return false
+        val usable = size.usable(insets) ?: return false
         val maxScale = map.viewport().maxScale
         val tracks = extentOf(currentRoutes, currentLiveRoute, emptyList())
         val boxes = (currentRoutes + listOfNotNull(currentLiveRoute)).mapNotNull { it.bounds?.toBoundingBox() }
         spread = tracks != null && tooFarApart(tracks, boxes, usable, maxScale, speckPx)
         if (spread) return true
         val target = tracks ?: extentOf(emptyList(), null, basemaps) ?: return false
-        map.moveTo(fit(target, usable, insets, maxScale), currentClamp(), currentCover)
+        val position = fit(target, usable, insets, maxScale)
+        // Replacing the last framed view, as a framed track does: one left from following a
+        // recording elsewhere would stretch the clamp and pull this frame off centre.
+        framedView = position.visibleBox(size)
+        map.moveTo(position, currentClamp(), currentCover)
         hasFramed = true
         return true
     }

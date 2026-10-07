@@ -18,6 +18,7 @@ import dev.samuelq.gpx.ui.map.openLocationSettings
  * offered again. The only collector of [recorder]'s events, which are delivered once.
  *
  * @param onSaved opens the saved track.
+ * @param onDiscarded follows a recording thrown away, which leaves nothing to open.
  */
 @Composable
 fun RecordingOutcomes(
@@ -26,6 +27,7 @@ fun RecordingOutcomes(
     say: (message: String, openSettings: (() -> Unit)?) -> Unit,
     offerUndo: (message: String, onUndo: () -> Unit, onCommit: () -> Unit) -> Unit,
     onSaved: (id: Long) -> Unit,
+    onDiscarded: () -> Unit,
     recovery: RecoveryViewModel = viewModel(factory = RecoveryViewModel.Factory),
 ) {
     // Not context.getString: a long-lived collector would keep the old locale.
@@ -44,13 +46,16 @@ fun RecordingOutcomes(
         recorder.events.collect { event ->
             when (event) {
                 is RecordingEvent.Saved -> onSaved(event.id)
-                is RecordingEvent.Discarded -> event.recording?.let { recording ->
-                    offerUndo(
-                        discardedNamed(recording.label.name),
-                        { recovery.restoreDiscarded(recording) },
-                        { recovery.forgetDiscarded(recording) },
-                    )
-                } ?: say(resources.getString(R.string.record_discarded), null)
+                is RecordingEvent.Discarded -> {
+                    onDiscarded()
+                    event.recording?.let { recording ->
+                        offerUndo(
+                            discardedNamed(recording.label.name),
+                            { recovery.restoreDiscarded(recording) },
+                            { recovery.forgetDiscarded(recording) },
+                        )
+                    } ?: say(resources.getString(R.string.record_discarded), null)
+                }
                 is RecordingEvent.Failed -> say(
                     resources.getString(event.messageRes),
                     { context.openLocationSettings() }.takeIf { event.messageRes == R.string.record_location_off },

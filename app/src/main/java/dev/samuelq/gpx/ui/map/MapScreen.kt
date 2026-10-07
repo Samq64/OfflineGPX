@@ -276,11 +276,13 @@ fun MapScreen(
         }
     }
 
+    var showAllAfterRecording by remember { mutableStateOf(false) }
     RecordingOutcomes(
         recorder = recorder,
         say = ::say,
         offerUndo = { message, onUndo, onCommit -> offerUndo(message, onUndo, onCommit) },
         onSaved = { viewModel.focus(TrackRef.Saved(it)) },
+        onDiscarded = { showAllAfterRecording = true },
     )
 
     // --- The sheet -----------------------------------------------------------------
@@ -447,6 +449,18 @@ fun MapScreen(
         top = MapEdgePadding,
         bottom = MapEdgePadding + coveredHeight,
     )
+
+    // Else the camera stays where the discarded recording was, likely away from every track.
+    // Once its line and sheet are gone: the line clears apart from the state, and the clamp
+    // follows the sheet as it slides away, pulling a frame fitted any sooner off centre.
+    val traceCleared = trace.size == 0
+    val sheetGone = sheetCover == 0.dp && panelCover == 0.dp
+    LaunchedEffect(showAllAfterRecording, isRecording, traceCleared, sheetGone) {
+        if (showAllAfterRecording && !isRecording && traceCleared && sheetGone) {
+            showAllAfterRecording = false
+            mapController.showAllTracks()
+        }
+    }
 
     // Settled padding, so the frame isn't fitted to a screen the sheet is about to cover.
     val framePadding = PaddingValues(
