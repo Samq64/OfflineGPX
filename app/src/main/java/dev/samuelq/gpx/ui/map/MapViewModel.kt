@@ -1,10 +1,12 @@
 package dev.samuelq.gpx.ui.map
 
 import android.net.Uri
+import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import dev.samuelq.gpx.R
 import dev.samuelq.gpx.core.analysis.TrackAnalyzer
 import dev.samuelq.gpx.core.analysis.TrackProfile
 import dev.samuelq.gpx.core.model.TrackPoints
@@ -44,12 +46,8 @@ import kotlinx.coroutines.launch
 
 /** One-shot messages; the screen resolves the words. */
 internal sealed interface MapMessage {
-    data object RenameFailed : MapMessage
-    data object ImportFailed : MapMessage
-
-    data object EditFailed : MapMessage
-
-    data object Duplicated : MapMessage
+    /** Words alone, with nothing to act on. */
+    class Say(@param:StringRes val text: Int) : MapMessage
 
     /** Undone with [MapViewModel.show]. [name] is the track's, for the message. */
     class Hidden(val id: Long, val name: String) : MapMessage
@@ -179,7 +177,7 @@ class MapViewModel(
         viewModelScope.launch {
             repository.import(uri).fold(
                 onSuccess = { focus(TrackRef.Saved(it)) },
-                onFailure = { _messages.trySend(MapMessage.ImportFailed) },
+                onFailure = { _messages.trySend(MapMessage.Say(R.string.library_import_failed)) },
             )
         }
     }
@@ -187,7 +185,9 @@ class MapViewModel(
     /** Null leaves either as it is. The sheet reads the name off the row, so the row's update is all it needs. */
     fun rename(id: Long, name: String?, category: String?) {
         viewModelScope.launch {
-            repository.rename(id, name, category).onFailure { _messages.trySend(MapMessage.RenameFailed) }
+            repository.rename(id, name, category).onFailure {
+                _messages.trySend(MapMessage.Say(R.string.library_rename_failed))
+            }
         }
     }
 
@@ -276,14 +276,14 @@ class MapViewModel(
                     refresh(edit.id)
                     _messages.trySend(MapMessage.Edited(edit, name))
                 },
-                onFailure = { _messages.trySend(MapMessage.EditFailed) },
+                onFailure = { _messages.trySend(MapMessage.Say(R.string.track_edit_failed)) },
             )
         }
     }
 
     fun undoEdit(edit: TrackEdit) {
         viewModelScope.launch {
-            repository.undoEdit(edit).onFailure { _messages.trySend(MapMessage.EditFailed) }
+            repository.undoEdit(edit).onFailure { _messages.trySend(MapMessage.Say(R.string.track_edit_failed)) }
             refresh(edit.id)
         }
     }
@@ -296,9 +296,9 @@ class MapViewModel(
             repository.duplicate(id).fold(
                 onSuccess = {
                     focus(TrackRef.Saved(it))
-                    _messages.trySend(MapMessage.Duplicated)
+                    _messages.trySend(MapMessage.Say(R.string.library_duplicated))
                 },
-                onFailure = { _messages.trySend(MapMessage.EditFailed) },
+                onFailure = { _messages.trySend(MapMessage.Say(R.string.library_duplicate_failed)) },
             )
         }
     }

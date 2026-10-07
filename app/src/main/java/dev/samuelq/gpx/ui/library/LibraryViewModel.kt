@@ -1,6 +1,7 @@
 package dev.samuelq.gpx.ui.library
 
 import android.net.Uri
+import androidx.annotation.StringRes
 import androidx.compose.runtime.Stable
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
@@ -9,6 +10,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.navigation.toRoute
+import dev.samuelq.gpx.R
 import dev.samuelq.gpx.core.model.GeoBounds
 import dev.samuelq.gpx.data.db.TrackEntity
 import dev.samuelq.gpx.data.settings.SettingsRepository
@@ -37,17 +39,14 @@ import kotlinx.coroutines.launch
 
 sealed interface LibraryEvent {
     data class Open(val id: Long) : LibraryEvent
-    data object ImportFailed : LibraryEvent
+
+    /** Words alone, with nothing to act on. */
+    data class Say(@param:StringRes val text: Int) : LibraryEvent
 
     /** A multi-file import; a single file opens instead. */
     data class ImportedAll(val imported: Int, val requested: Int) : LibraryEvent
 
-    /** Failed outright; see [ExportedAll] for a partial one. */
-    data object ExportFailed : LibraryEvent
-
     data class ExportedAll(val written: Int, val requested: Int) : LibraryEvent
-    data object RenameFailed : LibraryEvent
-    data object DuplicateFailed : LibraryEvent
     data class Duplicated(val id: Long) : LibraryEvent
 
     /** [count] tracks, [name] if it was one; undone by restoring [before]. */
@@ -154,7 +153,7 @@ class LibraryViewModel(
             if (uris.size == 1) {
                 repository.import(uris.single()).fold(
                     onSuccess = { _events.send(LibraryEvent.Open(it)) },
-                    onFailure = { _events.send(LibraryEvent.ImportFailed) },
+                    onFailure = { _events.send(LibraryEvent.Say(R.string.library_import_failed)) },
                 )
                 return@launch
             }
@@ -176,7 +175,7 @@ class LibraryViewModel(
         viewModelScope.launch {
             repository.exportAll(names, folder).fold(
                 onSuccess = { _events.send(LibraryEvent.ExportedAll(it, names.size)) },
-                onFailure = { _events.send(LibraryEvent.ExportFailed) },
+                onFailure = { _events.send(LibraryEvent.Say(R.string.library_export_failed)) },
             )
             clearSelection()
         }
@@ -185,7 +184,9 @@ class LibraryViewModel(
     /** Null leaves either as it is. */
     fun rename(id: Long, name: String?, category: String?) {
         viewModelScope.launch {
-            repository.rename(id, name, category).onFailure { _events.send(LibraryEvent.RenameFailed) }
+            repository.rename(id, name, category).onFailure {
+                _events.send(LibraryEvent.Say(R.string.library_rename_failed))
+            }
         }
     }
 
@@ -198,7 +199,7 @@ class LibraryViewModel(
         viewModelScope.launch {
             repository.duplicate(id).fold(
                 onSuccess = { _events.send(LibraryEvent.Duplicated(it)) },
-                onFailure = { _events.send(LibraryEvent.DuplicateFailed) },
+                onFailure = { _events.send(LibraryEvent.Say(R.string.library_duplicate_failed)) },
             )
         }
     }

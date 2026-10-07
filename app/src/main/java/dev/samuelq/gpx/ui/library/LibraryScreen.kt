@@ -109,6 +109,7 @@ import dev.samuelq.gpx.ui.track.exportFileName
 import dev.samuelq.gpx.ui.track.shareTrackIntent
 import java.text.Collator
 import java.time.Instant
+import kotlinx.coroutines.launch
 
 /** Track management. Long-press starts a multi-selection. */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -190,7 +191,6 @@ fun LibraryScreen(
             message = ids.singleOrNull()?.let { id -> tracks.firstOrNull { it.id == id } }
                 ?.let { resources.getString(R.string.deleted_named, it.title) }
                 ?: resources.getQuantityString(R.plurals.library_deleted, ids.size, ids.size),
-            undoLabel = resources.getString(R.string.action_undo),
             onUndo = {
                 viewModel.undoDelete(ids)
                 reveal = ids.first()
@@ -209,7 +209,7 @@ fun LibraryScreen(
     ) { folder -> viewModel.finishExportAll(folder) }
 
     LaunchedEffect(viewModel) {
-        suspend fun say(message: String) = snackbarHostState.showSnackbar(message)
+        fun say(message: String) = launch { snackbars.say(message) }
         viewModel.events.collect { event ->
             when (event) {
                 is LibraryEvent.Open -> onOpenTrack(event.id)
@@ -217,7 +217,7 @@ fun LibraryScreen(
                     reveal = event.id
                     say(resources.getString(R.string.library_duplicated))
                 }
-                LibraryEvent.ImportFailed -> say(resources.getString(R.string.library_import_failed))
+                is LibraryEvent.Say -> say(resources.getString(event.text))
                 is LibraryEvent.ImportedAll -> say(
                     allOrSome(
                         event.imported,
@@ -226,7 +226,6 @@ fun LibraryScreen(
                         R.plurals.library_imported_some,
                     ),
                 )
-                LibraryEvent.ExportFailed -> say(resources.getString(R.string.library_export_failed))
                 is LibraryEvent.ExportedAll -> say(
                     allOrSome(
                         event.written,
@@ -235,14 +234,10 @@ fun LibraryScreen(
                         R.plurals.library_exported_some,
                     ),
                 )
-                LibraryEvent.RenameFailed -> say(resources.getString(R.string.library_rename_failed))
-                LibraryEvent.DuplicateFailed -> say(resources.getString(R.string.library_duplicate_failed))
                 is LibraryEvent.VisibilityChanged -> snackbars.offerUndo(
                     context = context,
                     message = visibilityMessage(resources, event),
-                    undoLabel = resources.getString(R.string.action_undo),
                     onUndo = { viewModel.restoreVisibility(event.before) },
-                    onCommit = {},
                 )
             }
         }

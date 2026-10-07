@@ -98,6 +98,7 @@ import dev.samuelq.gpx.ui.readFirst
 import dev.samuelq.gpx.ui.readableWidth
 import dev.samuelq.gpx.ui.screenSnackbars
 import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 
 private val ScreenPadding = 20.dp
 
@@ -157,7 +158,6 @@ fun SettingsScreen(
         snackbars.offerUndo(
             context = context,
             message = resources.getString(R.string.deleted_named, map.displayName),
-            undoLabel = resources.getString(R.string.action_undo),
             onUndo = { viewModel.undoDeleteMap(map) },
             onCommit = { viewModel.commitDeleteMap(map) },
         )
@@ -172,10 +172,7 @@ fun SettingsScreen(
     }
 
     LaunchedEffect(viewModel) {
-        viewModel.messages.collect { message ->
-            snackbarHostState.makeWay()
-            snackbarHostState.showSnackbar(resources.getString(message.text))
-        }
+        viewModel.messages.collect { message -> launch { snackbars.say(resources.getString(message.text)) } }
     }
 
     overlapping?.let { overlaps ->

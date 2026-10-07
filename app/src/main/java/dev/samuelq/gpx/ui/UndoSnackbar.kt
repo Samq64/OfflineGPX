@@ -14,6 +14,7 @@ import androidx.compose.ui.semantics.traversalIndex
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import dev.samuelq.gpx.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.yield
@@ -26,10 +27,22 @@ internal class Snackbars : ViewModel() {
     val host = SnackbarHostState()
 
     /** See [showUndo]. With a screen reader on it waits: reaching Undo takes swipes. */
-    fun offerUndo(context: Context, message: String, undoLabel: String, onUndo: () -> Unit, onCommit: () -> Unit) {
+    fun offerUndo(context: Context, message: String, onUndo: () -> Unit, onCommit: () -> Unit = {}) {
+        val undoLabel = context.getString(R.string.action_undo)
         val exploring = context.getSystemService(AccessibilityManager::class.java)?.isTouchExplorationEnabled == true
         // Dispatched, not immediate, so a newer message queues before a displaced undo resumes.
         viewModelScope.launch(Dispatchers.Main) { host.showUndo(message, undoLabel, exploring, onUndo, onCommit) }
+    }
+
+    /** Replaces rather than queues: a stale answer to a tap is misleading. An undo comes back after. */
+    suspend fun say(message: String, actionLabel: String? = null, onAction: () -> Unit = {}) {
+        host.makeWay()
+        val result = host.showSnackbar(
+            message,
+            actionLabel = actionLabel,
+            duration = if (actionLabel == null) SnackbarDuration.Short else SnackbarDuration.Long,
+        )
+        if (result == SnackbarResult.ActionPerformed) onAction()
     }
 }
 

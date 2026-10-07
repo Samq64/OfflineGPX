@@ -176,19 +176,14 @@ fun MapScreen(
     // Reported by the map, which keeps it.
     var tooFarApart by remember { mutableStateOf(false) }
 
-    // Replaces rather than queues: a stale answer to a tap is misleading. An undo comes back after.
     fun say(message: String, openSettings: (() -> Unit)? = null) = scope.launch {
-        snackbarHostState.makeWay()
-        val result = snackbarHostState.showSnackbar(
-            message,
-            actionLabel = openSettings?.let { resources.getString(R.string.action_settings) },
-            duration = if (openSettings == null) SnackbarDuration.Short else SnackbarDuration.Long,
-        )
-        if (result == SnackbarResult.ActionPerformed) openSettings?.invoke()
+        snackbars.say(message, openSettings?.let { resources.getString(R.string.action_settings) }) {
+            openSettings?.invoke()
+        }
     }
 
     fun offerUndo(message: String, onUndo: () -> Unit, onCommit: () -> Unit = {}) =
-        snackbars.offerUndo(context, message, resources.getString(R.string.action_undo), onUndo, onCommit)
+        snackbars.offerUndo(context, message, onUndo, onCommit)
 
     val requestRecording = rememberLocationRequest(
         LocationUse.Record,
@@ -258,14 +253,11 @@ fun MapScreen(
     LaunchedEffect(viewModel) {
         viewModel.messages.collect { message ->
             when (message) {
-                MapMessage.RenameFailed -> say(resources.getString(R.string.library_rename_failed))
-                MapMessage.ImportFailed -> say(resources.getString(R.string.library_import_failed))
+                is MapMessage.Say -> say(resources.getString(message.text))
                 is MapMessage.Hidden -> offerUndo(
                     resources.getString(R.string.track_hidden, message.name),
                     onUndo = { viewModel.show(message.id) },
                 )
-                MapMessage.EditFailed -> say(resources.getString(R.string.track_edit_failed))
-                MapMessage.Duplicated -> say(resources.getString(R.string.library_duplicated))
                 is MapMessage.Edited -> offerUndo(
                     resources.getString(R.string.track_trimmed, message.name),
                     onUndo = { viewModel.undoEdit(message.edit) },
