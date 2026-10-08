@@ -378,6 +378,8 @@ private fun MapsSection(
             modifier = Modifier.padding(horizontal = EdgePadding),
         )
 
+        Spacer(Modifier.height(8.dp))
+
         if (maps.isEmpty()) {
             Text(
                 text = stringResource(R.string.settings_maps_none),
