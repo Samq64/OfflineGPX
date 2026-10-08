@@ -10,24 +10,24 @@
     <string name="action_settings">Settings</string>
     <string name="action_undo">Undo</string>
 
-    <string name="app_name">O-Trace</string>
+    <string name="app_name">Offline GPX</string>
 
     <string name="axis_distance">Distance</string>
     <string name="axis_time">Time</string>
 
     <string name="chart_elevation">Elevation</string>
-    <string name="chart_elevation_empty">This trace has no elevation data.</string>
+    <string name="chart_elevation_empty">This track has no elevation data.</string>
     <string name="chart_gap">Gap %1$s</string>
     <string name="chart_no_point">No point selected</string>
     <string name="chart_point">%1$s, %2$s</string>
     <string name="chart_speed">Speed</string>
-    <string name="chart_speed_empty">This trace has no timestamps, so speed can\'t be computed.</string>
+    <string name="chart_speed_empty">This track has no timestamps, so speed can\'t be computed.</string>
     <!-- Spoken for a chart: its title and range, then the point it's on. -->
     <string name="chart_summary">%1$s chart, %2$s to %3$s</string>
     <!-- Not "Paused": a break is equally signal loss or an analyser cut, and naming one
          asserts a cause the app took care not to infer. -->
     <string name="chart_waiting">No movement yet</string>
-    <string name="chart_zoom_reset">Show whole trace</string>
+    <string name="chart_zoom_reset">Show whole track</string>
 
     <string name="color_blue">Blue</string>
     <string name="color_cyan">Cyan</string>
@@ -37,7 +37,7 @@
     <string name="color_purple">Purple</string>
     <string name="color_yellow">Yellow</string>
 
-    <!-- %1$s is a trace or map name. -->
+    <!-- %1$s is a track or map name. -->
     <string name="deleted_named">Deleted “%1$s”.</string>
 
 
@@ -46,35 +46,35 @@
     <string name="library_color_change">Change color</string>
     <string name="library_delete">Delete</string>
     <plurals name="library_deleted">
-        <item quantity="one">Deleted %d trace.</item>
-        <item quantity="other">Deleted %d traces.</item>
+        <item quantity="one">Deleted %d track.</item>
+        <item quantity="other">Deleted %d tracks.</item>
     </plurals>
     <!-- Not "files are read only when you pick them": import keeps a copy. -->
     <string name="library_empty_body">Record one, or import a .gpx file into this app\'s storage.</string>
-    <string name="library_empty_title">No traces yet</string>
+    <string name="library_empty_title">No tracks yet</string>
     <string name="library_export">Export</string>
     <string name="library_export_failed">Couldn\'t export to that folder.</string>
     <plurals name="library_exported_all">
-        <item quantity="one">Exported %1$d trace.</item>
-        <item quantity="other">Exported %1$d traces.</item>
+        <item quantity="one">Exported %1$d track.</item>
+        <item quantity="other">Exported %1$d tracks.</item>
     </plurals>
     <plurals name="library_exported_some">
-        <item quantity="one">Exported %1$d of %2$d trace. The rest couldn\'t be written there.</item>
-        <item quantity="other">Exported %1$d of %2$d traces. The rest couldn\'t be written there.</item>
+        <item quantity="one">Exported %1$d of %2$d track. The rest couldn\'t be written there.</item>
+        <item quantity="other">Exported %1$d of %2$d tracks. The rest couldn\'t be written there.</item>
     </plurals>
     <string name="library_filter_area">In this area</string>
     <string name="library_filter_empty">Nothing matches these filters.</string>
     <string name="library_filter_shown">Shown</string>
     <plurals name="library_hidden">
-        <item quantity="one">Hid %d trace.</item>
-        <item quantity="other">Hid %d traces.</item>
+        <item quantity="one">Hid %d track.</item>
+        <item quantity="other">Hid %d tracks.</item>
     </plurals>
     <string name="library_hide_selected">Hide on map</string>
-    <string name="library_import">Import trace</string>
+    <string name="library_import">Import track</string>
     <string name="library_import_failed">Couldn\'t import that file.</string>
     <plurals name="library_imported_all">
-        <item quantity="one">Imported %1$d trace.</item>
-        <item quantity="other">Imported %1$d traces.</item>
+        <item quantity="one">Imported %1$d track.</item>
+        <item quantity="other">Imported %1$d tracks.</item>
     </plurals>
     <plurals name="library_imported_some">
         <item quantity="one">Imported %1$d of %2$d file. The rest couldn\'t be read.</item>
@@ -83,15 +83,15 @@
     <string name="library_more">More options</string>
     <string name="library_open_on_map">Open on map</string>
     <string name="library_rename">Rename</string>
-    <string name="library_rename_failed">Couldn\'t rename that trace.</string>
-    <string name="library_rename_label">Trace name</string>
-    <string name="library_search">Search traces</string>
+    <string name="library_rename_failed">Couldn\'t rename that track.</string>
+    <string name="library_rename_label">Track name</string>
+    <string name="library_search">Search tracks</string>
     <string name="library_search_clear">Clear search</string>
     <string name="library_search_close">Close search</string>
     <string name="library_search_empty">Nothing matches “%1$s”.</string>
     <plurals name="library_search_found">
-        <item quantity="one">%d trace found</item>
-        <item quantity="other">%d traces found</item>
+        <item quantity="one">%d track found</item>
+        <item quantity="other">%d tracks found</item>
     </plurals>
     <!-- Spoken only. -->
     <string name="library_select">Select</string>
@@ -101,20 +101,20 @@
         <item quantity="other">%d selected</item>
     </plurals>
     <string name="library_share">Share</string>
-    <!-- Of the selected traces: "this" for one, "these" for more. -->
+    <!-- Of the selected tracks: "this" for one, "these" for more. -->
     <plurals name="library_show_only_selected">
         <item quantity="one">Show only this</item>
         <item quantity="other">Show only these</item>
     </plurals>
     <string name="library_show_selected">Show on map</string>
     <plurals name="library_shown">
-        <item quantity="one">Showed %d trace.</item>
-        <item quantity="other">Showed %d traces.</item>
+        <item quantity="one">Showed %d track.</item>
+        <item quantity="other">Showed %d tracks.</item>
     </plurals>
     <string name="library_shown_named">Showed “%1$s”.</string>
     <plurals name="library_shown_only">
-        <item quantity="one">Showing only %d trace.</item>
-        <item quantity="other">Showing only %d traces.</item>
+        <item quantity="one">Showing only %d track.</item>
+        <item quantity="other">Showing only %d tracks.</item>
     </plurals>
     <string name="library_shown_only_named">Showing only “%1$s”.</string>
     <string name="library_show_on_map">Show %1$s on map</string>
@@ -126,38 +126,38 @@
     <string name="library_sort_length">Length</string>
     <string name="library_sort_name">Name</string>
     <string name="library_sort_recent">Recent</string>
-    <string name="library_title">Traces</string>
+    <string name="library_title">Tracks</string>
     <string name="library_uncategorised">Uncategorized</string>
 
     <!-- Before Android asks for location; the reason for the use follows. -->
     <string name="location_why_title">Location access</string>
-    <string name="map_description">Map showing your traces. Open one by tapping its line or from the Traces list.</string>
-    <string name="map_empty_body">Start a recording, open a trace or import a map to get started.</string>
+    <string name="map_description">Map showing your tracks. Open one by tapping its line or from the Tracks list.</string>
+    <string name="map_empty_body">Start a recording, open a track or import a map to get started.</string>
     <string name="map_empty_title">Nothing to show</string>
-    <string name="map_hidden_hint">Show a trace from the list</string>
+    <string name="map_hidden_hint">Show a track from the list</string>
     <!-- Spoken only. -->
-    <string name="map_loading">Loading traces</string>
+    <string name="map_loading">Loading tracks</string>
     <string name="map_location_denied">Showing where you are needs location access.</string>
     <string name="map_location_off">Location is switched off.</string>
-    <string name="map_location_outside">You\'re outside your traces and maps.</string>
+    <string name="map_location_outside">You\'re outside your tracks and maps.</string>
     <string name="map_location_why">Your position on the map comes from GPS, which needs precise location.</string>
     <string name="map_follow_location">Follow my location</string>
     <string name="map_stop_following">Stop following my location</string>
     <string name="map_stop_location">Stop showing location</string>
-    <string name="map_none_shown">No traces shown</string>
+    <string name="map_none_shown">No tracks shown</string>
     <string name="map_precise_required">Showing where you are uses GPS, which needs precise location.</string>
     <string name="map_scale">Map scale: %1$s</string>
-    <string name="map_show_all">Show all traces</string>
-    <!-- How many of the imported traces are currently drawn on the map, not the library's total. -->
+    <string name="map_show_all">Show all tracks</string>
+    <!-- How many of the imported tracks are currently drawn on the map, not the library's total. -->
     <plurals name="map_shown">
-        <item quantity="one">%d trace shown</item>
-        <item quantity="other">%d traces shown</item>
+        <item quantity="one">%d track shown</item>
+        <item quantity="other">%d tracks shown</item>
     </plurals>
     <string name="map_zoom_in">Zoom in</string>
     <string name="map_zoom_out">Zoom out</string>
 
     <string name="record_add_waypoint">Add waypoint</string>
-    <string name="record_channel_description">Shown while a trace is being recorded.</string>
+    <string name="record_channel_description">Shown while a track is being recorded.</string>
     <string name="record_discard">Discard</string>
     <string name="record_discarded">Discarded the recording.</string>
     <!-- %1$s is the name the recording would have been saved as. -->
@@ -187,7 +187,7 @@
     <string name="record_start">Record</string>
     <string name="record_stop">Stop</string>
     <string name="record_stop_title">Stop recording</string>
-    <string name="record_stop_to_open">Stop recording to open a trace.</string>
+    <string name="record_stop_to_open">Stop recording to open a track.</string>
     <!-- Spoken for a disabled Save. -->
     <string name="record_too_short">Too short to save</string>
     <string name="record_waiting_for_fix">Waiting for a GPS fix…</string>
@@ -211,7 +211,7 @@
     <!-- %1$s is the version, e.g. 0.1.0; the commit follows it. -->
     <string name="settings_about_version">v%1$s</string>
     <!-- Spoken for the slider: the value, then the default. -->
-    <string name="settings_maps_explanation">Manage .map file imports. Without one, traces are drawn on a blank background.</string>
+    <string name="settings_maps_explanation">Manage .map file imports. Without one, tracks are drawn on a blank background.</string>
     <string name="settings_maps_export">Export</string>
     <string name="settings_maps_export_failed">Couldn\'t export that map.</string>
     <string name="settings_maps_exported">Map exported.</string>
@@ -254,7 +254,7 @@
 
     <string name="track_category">Category</string>
     <string name="track_close">Close</string>
-    <string name="track_edit_failed">Couldn\'t change that trace.</string>
+    <string name="track_edit_failed">Couldn\'t change that track.</string>
     <string name="track_error_empty">This GPX file has no track points.</string>
     <string name="track_error_invalid">This file isn\'t valid GPX.</string>
     <string name="track_error_title">Couldn\'t open this file</string>
@@ -262,14 +262,14 @@
     <string name="track_error_unreadable">It may have been moved, renamed or deleted.</string>
     <string name="track_hidden">Hid “%1$s”.</string>
     <string name="track_hide">Hide</string>
-    <string name="track_loading">Reading trace…</string>
-    <string name="track_manage">Manage this trace</string>
+    <string name="track_loading">Reading track…</string>
+    <string name="track_manage">Manage this track</string>
     <!-- Spoken only; names the button in a list of them. -->
     <string name="track_manage_named">Manage %1$s</string>
     <string name="track_trim">Trim</string>
     <string name="track_trimmed">Trimmed “%1$s”.</string>
 
-    <!-- What the trim keeps, from where to where along the trace. -->
+    <!-- What the trim keeps, from where to where along the track. -->
     <string name="trim_range">Keeping %1$s to %2$s</string>
     <string name="trim_title">Trim %1$s</string>
 
@@ -279,6 +279,6 @@
     <string name="waypoint_action_note">Waypoint %1$d: %2$s</string>
     <string name="waypoint_action_time">Waypoint %1$d, %2$s</string>
     <string name="waypoint_action_time_note">Waypoint %1$d, %2$s: %3$s</string>
-    <!-- Distance into the trace, then the time. -->
+    <!-- Distance into the track, then the time. -->
     <string name="waypoint_distance_time">%1$s (%2$s)</string>
 </resources>

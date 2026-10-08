@@ -96,7 +96,7 @@ class GpxWriter(private val newSerializer: () -> XmlSerializer = DEFAULT_SERIALI
     companion object {
         private const val ENCODING = "UTF-8"
         private const val NAMESPACE = "http://www.topografix.com/GPX/1/1"
-        private const val CREATOR = "O-Trace"
+        private const val CREATOR = "Offline GPX"
 
         private val TIMESTAMP: DateTimeFormatter = DateTimeFormatter.ISO_INSTANT
 
