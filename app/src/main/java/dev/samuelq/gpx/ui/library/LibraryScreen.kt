@@ -451,7 +451,7 @@ private fun SelectionBar(
         },
         actions = {
             IconButton(onClick = onExport) {
-                Icon(painterResource(R.drawable.ic_share), stringResource(R.string.library_export))
+                Icon(painterResource(R.drawable.ic_download), stringResource(R.string.library_export))
             }
             IconButton(onClick = onDelete) {
                 Icon(painterResource(R.drawable.ic_delete), stringResource(R.string.library_delete))
