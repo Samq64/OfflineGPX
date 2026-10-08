@@ -27,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -44,6 +45,7 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LibrariesScreen(onBack: () -> Unit) {
+    val resources = LocalResources.current
     val context = LocalContext.current
     val snackbars = screenSnackbars()
     val scope = rememberCoroutineScope()
@@ -76,7 +78,7 @@ fun LibrariesScreen(onBack: () -> Unit) {
             LIBRARIES.forEach { library ->
                 LibraryRow(library) {
                     if (!context.openUrl(library.url)) {
-                        scope.launch { snackbars.say(context.getString(R.string.settings_maps_no_browser)) }
+                        scope.launch { snackbars.say(resources.getString(R.string.settings_maps_no_browser)) }
                     }
                 }
             }
