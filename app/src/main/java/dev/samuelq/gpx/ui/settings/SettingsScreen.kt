@@ -378,17 +378,16 @@ private fun MapsSection(
             modifier = Modifier.padding(horizontal = EdgePadding),
         )
 
-        Spacer(Modifier.height(8.dp))
-
-        Row(
-            modifier = Modifier.padding(horizontal = EdgePadding - 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            TextButton(onClick = onImport, enabled = !importing) {
-                Text(stringResource(R.string.settings_maps_import))
-            }
-            TextButton(onClick = onOpenHelp) {
-                Text(stringResource(R.string.settings_maps_where))
+        if (maps.isEmpty()) {
+            Text(
+                text = stringResource(R.string.settings_maps_none),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = EdgePadding, vertical = 8.dp),
+            )
+        } else {
+            maps.forEach { map ->
+                MapRow(map = map, onExport = { onExport(map) }, onDelete = { onDelete(map) })
             }
         }
 
@@ -407,16 +406,15 @@ private fun MapsSection(
             }
         }
 
-        if (maps.isEmpty()) {
-            Text(
-                text = stringResource(R.string.settings_maps_none),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = EdgePadding, vertical = 8.dp),
-            )
-        } else {
-            maps.forEach { map ->
-                MapRow(map = map, onExport = { onExport(map) }, onDelete = { onDelete(map) })
+        Row(
+            modifier = Modifier.padding(horizontal = EdgePadding - 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            TextButton(onClick = onImport, enabled = !importing) {
+                Text(stringResource(R.string.settings_maps_import))
+            }
+            TextButton(onClick = onOpenHelp) {
+                Text(stringResource(R.string.settings_maps_where))
             }
         }
     }
