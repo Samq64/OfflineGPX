@@ -1,24 +1,34 @@
-# O-Trace
+# Offline GPX
 
-Record and manage GPX tracks (traces) without the `INTERNET` permission. Supports optional [Mapsforge](https://download.mapsforge.org) compatible files.
+Record and manage GPX tracks on Android without internet permission or access. Supports importing [Mapsforge](https://download.mapsforge.org) compatible files.
 
 ## Features
 
-- Record with support for waypoints, pausing and chart stats on the fly
-- Import and export traces as `.gpx` files
-- Speed and elevation charts with zoom support
-- Switch between viewing charts by distance or time
-- Trace trimming
-- Sort, filter and categorize traces
-- Bulk operation on traces
-- Multiple maps at once and traces on unmapped areas
-- 7 trace colours
+- Record tracks in the background with pausing, waypoints and live charts
+- Recordings survive most crashes
+- Speed and elevation charts by distance or time, with zoom
+- Import and export tracks as `.gpx` files compatible with other apps
+- Trim, search, sort and categorize tracks
+- Show, hide, export or delete many tracks at once
+- Maps are optional, tracks draw on a blank background without one
+- All maps share one canvas and don't need to be adjacent
 
 ## Non-features
 
 - Anything requiring internet access
 - External device integration
 - Map routing or searching
+
+## FAQ
+
+<details>
+  <summary>Is internet-based data collection possible?</summary>
+  Not through the app itself, which lacks the <code>INTERNET</code> permission and fails to build with it. Cloud backups are not allowed, only device-to-device transfers. However, recording needs system location on, so there is no guarantee that Android itself or other apps don't collect that data.
+</details>
+<details>
+  <summary>Was AI used?</summary>
+  Yes, a large portion of this codebase was written by Claude. However, a significant amount of time and human effort was put into polishing the user interface and ensuring the app stays lightweight with as few permissions as possible.
+</details>
 
 ## Building
 
@@ -71,7 +81,7 @@ app/ di/     AppContainer: manual wiring, no Hilt.
 
 ## License
 
-O-Trace is licensed under the GPLv3. See [LICENSE](LICENSE) for details.
+Offline GPX is licensed under the GPLv3. See [LICENSE](LICENSE) for details.
 
 Bundled libraries are credited within the app at Settings > Libraries
 

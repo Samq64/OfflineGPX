@@ -1,5 +1,3 @@
-# O-Trace
-
 A GPX recorder and manager for Android written in Kotlin and Compose with no INTERNET permission. Vector based `.map` files are imported manually by the user. Try to avoid unnecessary app permissions and large (1MB+) libraries. Keep code comments concise. When an emulator is available specify it every time to avoid touching physical devices. The emulator's app state does not matter.
 
 See README.md for the source layout and the build, test, coverage and style commands.

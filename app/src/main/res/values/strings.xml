@@ -207,7 +207,7 @@
     <!-- Spoken for a library row: "double tap to open website". -->
     <string name="settings_about_open_site">open website</string>
     <string name="settings_about_source">Source code</string>
-    <string name="settings_about_tagline">Record and manage GPX tracks without the internet permission.</string>
+    <string name="settings_about_tagline">Record and manage GPX tracks without internet permission or access.</string>
     <!-- %1$s is the version, e.g. 0.1.0; the commit follows it. -->
     <string name="settings_about_version">v%1$s</string>
     <!-- Spoken for the slider: the value, then the default. -->
