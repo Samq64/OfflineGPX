@@ -224,6 +224,8 @@
     <string name="settings_maps_imported">Map imported.</string>
     <string name="settings_maps_importing">Copying map…</string>
     <string name="settings_maps_manage_named">Manage %1$s</string>
+    <string name="settings_maps_name">Map name</string>
+    <string name="settings_maps_rename_failed">Couldn\'t rename that map.</string>
     <string name="settings_maps_no_browser">No app on this device can open a web page.</string>
     <string name="settings_maps_none">No maps imported.</string>
     <!-- A direct link to where the files are published, so an action, not a heading. -->

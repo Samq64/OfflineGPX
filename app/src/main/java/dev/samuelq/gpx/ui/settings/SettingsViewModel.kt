@@ -31,6 +31,7 @@ enum class SettingsMessage(@param:StringRes val text: Int) {
     MapAlreadyImported(R.string.settings_maps_failed_duplicate),
     MapExported(R.string.settings_maps_exported),
     MapExportFailed(R.string.settings_maps_export_failed),
+    MapRenameFailed(R.string.settings_maps_rename_failed),
     NoBrowser(R.string.settings_maps_no_browser),
 }
 
@@ -82,6 +83,12 @@ class SettingsViewModel(private val repository: SettingsRepository, private val 
             _messages.send(
                 if (mapStore.export(map, uri)) SettingsMessage.MapExported else SettingsMessage.MapExportFailed,
             )
+        }
+    }
+
+    fun renameMap(map: OfflineMap, name: String) {
+        viewModelScope.launch {
+            if (!mapStore.rename(map, name)) _messages.send(SettingsMessage.MapRenameFailed)
         }
     }
 

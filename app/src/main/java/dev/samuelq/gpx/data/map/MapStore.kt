@@ -8,6 +8,7 @@ import dev.samuelq.gpx.data.copyInto
 import dev.samuelq.gpx.data.displayName
 import dev.samuelq.gpx.data.size
 import dev.samuelq.gpx.data.uniqueFile
+import dev.samuelq.gpx.data.uniqueName
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
@@ -210,6 +211,14 @@ class MapStore(
         }
     }
 
+    /** Renames [map]'s file, numbered if taken. False if the rename failed. */
+    suspend fun rename(map: OfflineMap, name: String): Boolean = withContext(io) {
+        val target = renamed(map.file, name) ?: return@withContext false
+        readMaps[Key(target.path, target.lastModified())] = map.movedTo(target)
+        refresh()
+        true
+    }
+
     /** Hides [map] until [undoDelete] or [commitDelete]. */
     fun deleteLater(map: OfflineMap) {
         pendingDelete += map.file.name
@@ -229,9 +238,22 @@ class MapStore(
         }
     }
 
-    private companion object {
-        const val DIRECTORY = "maps"
+    internal companion object {
+        private const val DIRECTORY = "maps"
         const val EXTENSION = "map"
-        const val STAGING = "staging"
+        private const val STAGING = "staging"
     }
+}
+
+/**
+ * Moves [file] to [name] beside it, numbered if taken, keeping its mtime and so its place in
+ * the list. Null if the rename failed.
+ */
+internal fun renamed(file: File, name: String): File? {
+    val dir = file.parentFile ?: return null
+    val target = File(
+        dir,
+        uniqueName(name, MapStore.EXTENSION, fallback = "map") { it != file.name && File(dir, it).exists() },
+    )
+    return target.takeIf { it == file || file.renameTo(it) }
 }

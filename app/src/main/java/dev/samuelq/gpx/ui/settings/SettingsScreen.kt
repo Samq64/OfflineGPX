@@ -26,6 +26,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -36,6 +38,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -57,6 +60,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -73,8 +78,11 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -149,6 +157,19 @@ fun SettingsScreen(
         exporter.launch(map.file.name)
     }
 
+    // By filename, like exporting.
+    var renaming by rememberSaveable { mutableStateOf<String?>(null) }
+    maps.firstOrNull { it.file.name == renaming }?.let { map ->
+        RenameMapDialog(
+            initialName = map.displayName,
+            onDismiss = { renaming = null },
+            onConfirm = { name ->
+                renaming = null
+                viewModel.renameMap(map, name)
+            },
+        )
+    }
+
     // Undoable rather than confirmed: a mis-tap would cost re-fetching the file.
     fun deleteMap(map: OfflineMap) {
         viewModel.deleteMap(map)
@@ -204,6 +225,7 @@ fun SettingsScreen(
                 maps = maps,
                 importing = importing,
                 onImport = { importer.launch(MAP_MIME_TYPES) },
+                onRename = { renaming = it.file.name },
                 onExport = ::exportMap,
                 onDelete = ::deleteMap,
                 onOpenHelp = { openUrl(MAP_HELP_URL) },
@@ -366,6 +388,7 @@ private fun MapsSection(
     maps: List<OfflineMap>,
     importing: Boolean,
     onImport: () -> Unit,
+    onRename: (OfflineMap) -> Unit,
     onExport: (OfflineMap) -> Unit,
     onDelete: (OfflineMap) -> Unit,
     onOpenHelp: () -> Unit,
@@ -389,7 +412,12 @@ private fun MapsSection(
             )
         } else {
             maps.forEach { map ->
-                MapRow(map = map, onExport = { onExport(map) }, onDelete = { onDelete(map) })
+                MapRow(
+                    map = map,
+                    onRename = { onRename(map) },
+                    onExport = { onExport(map) },
+                    onDelete = { onDelete(map) },
+                )
             }
         }
 
@@ -424,7 +452,7 @@ private fun MapsSection(
 
 /** A row, not ListItem: that insets 16dp against this screen's 20. */
 @Composable
-private fun MapRow(map: OfflineMap, onExport: () -> Unit, onDelete: () -> Unit) {
+private fun MapRow(map: OfflineMap, onRename: () -> Unit, onExport: () -> Unit, onDelete: () -> Unit) {
     val size = android.text.format.Formatter.formatShortFileSize(LocalContext.current, map.sizeBytes)
 
     Row(
@@ -466,6 +494,13 @@ private fun MapRow(map: OfflineMap, onExport: () -> Unit, onDelete: () -> Unit) 
             }
             DropdownMenu(open, onDismissRequest = { open = false }) {
                 DropdownMenuItem(
+                    text = { Text(stringResource(R.string.library_rename)) },
+                    onClick = {
+                        open = false
+                        onRename()
+                    },
+                )
+                DropdownMenuItem(
                     text = { Text(stringResource(R.string.settings_maps_export)) },
                     onClick = {
                         open = false
@@ -482,6 +517,47 @@ private fun MapRow(map: OfflineMap, onExport: () -> Unit, onDelete: () -> Unit) 
             }
         }
     }
+}
+
+/** Renames the file, the only place a map's name is kept. */
+@Composable
+private fun RenameMapDialog(initialName: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+    var field by remember(initialName) {
+        mutableStateOf(TextFieldValue(initialName, selection = TextRange(0, initialName.length)))
+    }
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(focusRequester) { focusRequester.requestFocus() }
+
+    val name = field.text.trim()
+    val valid = name.isNotEmpty()
+    val confirm = {
+        when {
+            name == initialName -> onDismiss()
+            valid -> onConfirm(name)
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { DialogTitle(stringResource(R.string.library_rename)) },
+        text = {
+            OutlinedTextField(
+                value = field,
+                onValueChange = { field = it },
+                singleLine = true,
+                label = { Text(stringResource(R.string.settings_maps_name)) },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { confirm() }),
+                modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = confirm, enabled = valid) { Text(stringResource(R.string.action_save)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+        },
+    )
 }
 
 /**
