@@ -25,5 +25,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "OTrace"
+rootProject.name = "OfflineGPX"
 include(":app", ":core")

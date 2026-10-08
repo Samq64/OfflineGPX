@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Platform theme: Theme.Material3 would pull in the Material views library. -->
-    <style name="Theme.OTrace" parent="@android:style/Theme.Material.Light.NoActionBar">
+    <style name="Theme.OfflineGPX" parent="@android:style/Theme.Material.Light.NoActionBar">
         <item name="android:windowBackground">@color/window_background</item>
         <item name="android:windowLightStatusBar">true</item>
     </style>
