@@ -112,11 +112,11 @@ class AppFlowsTest {
 
         compose.onNodeWithContentDescription(string(R.string.library_title)).performClick()
         compose.waitUntil(5_000) {
-            compose.onAllNodes(hasContentDescription(targetContext.getString(R.string.track_manage_named, name)))
+            compose.onAllNodes(hasContentDescription(targetContext.getString(R.string.action_manage_named, name)))
                 .fetchSemanticsNodes().isNotEmpty()
         }
-        compose.onNodeWithContentDescription(targetContext.getString(R.string.track_manage_named, name)).performClick()
-        compose.onNodeWithText(string(R.string.library_delete)).performClick()
+        compose.onNodeWithContentDescription(targetContext.getString(R.string.action_manage_named, name)).performClick()
+        compose.onNodeWithText(string(R.string.action_delete)).performClick()
         // As a locale change does; the undo mustn't commit.
         scenario!!.recreate()
         compose.onNodeWithText(string(R.string.action_undo)).performClick()

@@ -19,20 +19,24 @@ import kotlin.math.roundToLong
  * SI to display strings; the only place units are applied. Numbers take the default locale
  * per call; dates are fixed at construction, so a locale or 12/24-hour change needs a new one.
  *
- * @param dateTimePattern and [timePattern] from the platform, which knows the 12/24-hour
- * setting; java.time's localized styles only know the locale's habit.
+ * @param dateTimePattern, [longDateTimePattern] and [timePattern] from the platform, which knows
+ * the 12/24-hour setting; java.time's localized styles only know the locale's habit.
  */
 @Immutable
 class Formatters(
     val units: UnitSystem,
     locale: Locale = Locale.getDefault(),
     dateTimePattern: String? = null,
+    longDateTimePattern: String? = null,
     timePattern: String? = null,
 ) {
     private val dateTimeFormat = patternOr(dateTimePattern, locale) {
         DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
     }
-    private val dateFormat = DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(locale)
+    private val longDateTimeFormat = patternOr(longDateTimePattern, locale) {
+        DateTimeFormatter.ofLocalizedDateTime(FormatStyle.LONG, FormatStyle.SHORT)
+    }
+    private val longDateFormat = DateTimeFormatter.ofLocalizedDate(FormatStyle.LONG).withLocale(locale)
     private val timeFormat = patternOr(timePattern, locale) {
         DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)
     }
@@ -40,8 +44,12 @@ class Formatters(
     fun dateTime(instant: Instant?, zone: ZoneId = ZoneId.systemDefault()): String =
         instant?.let { dateTimeFormat.withZone(zone).format(it) } ?: EMPTY
 
-    fun date(instant: Instant?, zone: ZoneId = ZoneId.systemDefault()): String =
-        instant?.let { dateFormat.withZone(zone).format(it) } ?: EMPTY
+    /** Month spelt out, where there's room for it. */
+    fun longDateTime(instant: Instant?, zone: ZoneId = ZoneId.systemDefault()): String =
+        instant?.let { longDateTimeFormat.withZone(zone).format(it) } ?: EMPTY
+
+    fun longDate(instant: Instant?, zone: ZoneId = ZoneId.systemDefault()): String =
+        instant?.let { longDateFormat.withZone(zone).format(it) } ?: EMPTY
 
     fun time(instant: Instant?, zone: ZoneId = ZoneId.systemDefault()): String =
         instant?.let { timeFormat.withZone(zone).format(it) } ?: EMPTY

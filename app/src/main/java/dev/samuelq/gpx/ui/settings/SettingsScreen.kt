@@ -489,26 +489,26 @@ private fun MapRow(map: OfflineMap, onRename: () -> Unit, onExport: () -> Unit, 
             IconButton(onClick = { open = true }) {
                 Icon(
                     painterResource(R.drawable.ic_more_vert),
-                    contentDescription = stringResource(R.string.settings_maps_manage_named, map.displayName),
+                    contentDescription = stringResource(R.string.action_manage_named, map.displayName),
                 )
             }
             DropdownMenu(open, onDismissRequest = { open = false }) {
                 DropdownMenuItem(
-                    text = { Text(stringResource(R.string.library_rename)) },
+                    text = { Text(stringResource(R.string.action_rename)) },
                     onClick = {
                         open = false
                         onRename()
                     },
                 )
                 DropdownMenuItem(
-                    text = { Text(stringResource(R.string.settings_maps_export)) },
+                    text = { Text(stringResource(R.string.action_export)) },
                     onClick = {
                         open = false
                         onExport()
                     },
                 )
                 DropdownMenuItem(
-                    text = { Text(stringResource(R.string.library_delete), color = MaterialTheme.colorScheme.error) },
+                    text = { Text(stringResource(R.string.action_delete), color = MaterialTheme.colorScheme.error) },
                     onClick = {
                         open = false
                         onDelete()
@@ -539,7 +539,7 @@ private fun RenameMapDialog(initialName: String, onDismiss: () -> Unit, onConfir
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { DialogTitle(stringResource(R.string.library_rename)) },
+        title = { DialogTitle(stringResource(R.string.action_rename)) },
         text = {
             OutlinedTextField(
                 value = field,

@@ -163,10 +163,10 @@ fun LibraryScreen(
     val layoutDirection = LocalLayoutDirection.current
 
     // Plural on the total: "1 of 3 tracks".
-    fun allOrSome(done: Int, requested: Int, all: Int, some: Int) = if (done == requested) {
+    fun allOrSome(done: Int, requested: Int, all: Int, some: () -> String) = if (done == requested) {
         resources.getQuantityString(all, done, done)
     } else {
-        resources.getQuantityString(some, requested, done, requested)
+        some()
     }
 
     var renaming by remember { mutableStateOf<TrackEntity?>(null) }
@@ -222,16 +222,21 @@ fun LibraryScreen(
                         event.imported,
                         event.requested,
                         R.plurals.library_imported_all,
-                        R.plurals.library_imported_some,
-                    ),
+                    ) { resources.getString(R.string.library_imported_some, event.imported, event.requested) },
                 )
                 is LibraryEvent.ExportedAll -> say(
                     allOrSome(
                         event.written,
                         event.requested,
                         R.plurals.library_exported_all,
-                        R.plurals.library_exported_some,
-                    ),
+                    ) {
+                        resources.getQuantityString(
+                            R.plurals.library_exported_some,
+                            event.requested,
+                            event.written,
+                            event.requested,
+                        )
+                    },
                 )
                 is LibraryEvent.VisibilityChanged -> snackbars.offerUndo(
                     context = context,
@@ -451,10 +456,10 @@ private fun SelectionBar(
         },
         actions = {
             IconButton(onClick = onExport) {
-                Icon(painterResource(R.drawable.ic_download), stringResource(R.string.library_export))
+                Icon(painterResource(R.drawable.ic_download), stringResource(R.string.action_export))
             }
             IconButton(onClick = onDelete) {
-                Icon(painterResource(R.drawable.ic_delete), stringResource(R.string.library_delete))
+                Icon(painterResource(R.drawable.ic_delete), stringResource(R.string.action_delete))
             }
             SelectionMenu(
                 count = count,
@@ -602,9 +607,9 @@ private fun TrackRow(
     val showOnMap = stringResource(R.string.library_show_on_map, title)
     val openLabel = stringResource(R.string.library_open_on_map)
     val selectLabel = stringResource(R.string.library_select)
-    val renameLabel = stringResource(R.string.library_rename)
+    val renameLabel = stringResource(R.string.action_rename)
     val shareLabel = stringResource(R.string.library_share)
-    val deleteLabel = stringResource(R.string.library_delete)
+    val deleteLabel = stringResource(R.string.action_delete)
 
     // Remembered: a DateTimeFormatter's first use loads locale data, janking the entry animation.
     // Null for an unnamed recording: its title is already the date.

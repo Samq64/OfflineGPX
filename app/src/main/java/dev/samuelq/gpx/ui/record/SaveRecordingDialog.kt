@@ -84,7 +84,7 @@ internal fun RecoveredRecordingDialog(
                 Column {
                     StatRow(distanceAndElapsed(stats.distanceMeters, stats.totalDurationSeconds))
                     val formatters = LocalFormatters.current
-                    val date = formatters.date(stats.startedAt)
+                    val date = formatters.longDate(stats.startedAt)
                     val time = formatters.time(stats.startedAt)
                     val body = stringResource(R.string.record_recovered_body, date, time)
                     Text(

@@ -52,7 +52,7 @@ fun TrackMenu(
         IconButton(onClick = { open = true }) {
             Icon(
                 painterResource(R.drawable.ic_more_vert),
-                trackTitle?.let { stringResource(R.string.track_manage_named, it) }
+                trackTitle?.let { stringResource(R.string.action_manage_named, it) }
                     ?: stringResource(R.string.track_manage),
             )
         }
@@ -63,10 +63,10 @@ fun TrackMenu(
                 onHide?.let { Item(R.string.track_hide, it) }
                 onTrim?.let { Item(R.string.track_trim, it) }
                 if (onHide != null || onTrim != null) HorizontalDivider()
-                Item(R.string.library_rename, onRename)
+                Item(R.string.action_rename, onRename)
                 Item(R.string.library_share, onShare)
                 HorizontalDivider()
-                Item(R.string.library_delete, onDelete, error = true)
+                Item(R.string.action_delete, onDelete, error = true)
             }
         }
     }

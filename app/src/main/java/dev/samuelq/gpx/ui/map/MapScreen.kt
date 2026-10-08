@@ -175,7 +175,7 @@ fun MapScreen(
     val tappedWaypointAt = remember { mutableStateOf(Offset.Zero) }
 
     fun say(message: String, openSettings: (() -> Unit)? = null) = scope.launch {
-        snackbars.say(message, openSettings?.let { resources.getString(R.string.action_settings) }) {
+        snackbars.say(message, openSettings?.let { resources.getString(R.string.settings_title) }) {
             openSettings?.invoke()
         }
     }

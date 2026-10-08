@@ -21,6 +21,7 @@ fun rememberSystemFormatters(units: UnitSystem): Formatters {
             units = units,
             locale = locale,
             dateTimePattern = DateFormat.getBestDateTimePattern(locale, "yMMMd$time"),
+            longDateTimePattern = DateFormat.getBestDateTimePattern(locale, "yMMMMd$time"),
             timePattern = DateFormat.getBestDateTimePattern(locale, time),
         )
     }

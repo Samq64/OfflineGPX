@@ -1,13 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <string name="action_back">Back</string>
     <string name="action_cancel">Cancel</string>
     <string name="action_continue">Continue</string>
+    <string name="action_delete">Delete</string>
     <string name="action_done">Done</string>
+    <string name="action_export">Export</string>
+    <!-- Spoken only; names a row's menu button. %1$s is a track or map name. -->
+    <string name="action_manage_named">Manage %1$s</string>
     <string name="action_not_now">Not now</string>
+    <string name="action_rename">Rename</string>
     <string name="action_retry">Try again</string>
     <string name="action_save">Save</string>
-    <string name="action_settings">Settings</string>
     <string name="action_undo">Undo</string>
 
     <string name="app_name">Offline GPX</string>
@@ -44,7 +48,6 @@
     <string name="library_clear_selection">Clear selection</string>
     <string name="library_color">Color: %1$s</string>
     <string name="library_color_change">Change color</string>
-    <string name="library_delete">Delete</string>
     <plurals name="library_deleted">
         <item quantity="one">Deleted %d track.</item>
         <item quantity="other">Deleted %d tracks.</item>
@@ -52,7 +55,6 @@
     <!-- Not "files are read only when you pick them": import keeps a copy. -->
     <string name="library_empty_body">Record one, or import a .gpx file into this app\'s storage.</string>
     <string name="library_empty_title">No tracks yet</string>
-    <string name="library_export">Export</string>
     <string name="library_export_failed">Couldn\'t export to that folder.</string>
     <plurals name="library_exported_all">
         <item quantity="one">Exported %1$d track.</item>
@@ -76,15 +78,12 @@
         <item quantity="one">Imported %1$d track.</item>
         <item quantity="other">Imported %1$d tracks.</item>
     </plurals>
-    <plurals name="library_imported_some">
-        <item quantity="one">Imported %1$d of %2$d file. The rest couldn\'t be read.</item>
-        <item quantity="other">Imported %1$d of %2$d files. The rest couldn\'t be read.</item>
-    </plurals>
+    <!-- Only for two or more files; one that fails says library_import_failed. -->
+    <string name="library_imported_some" tools:ignore="PluralsCandidate">Imported %1$d of %2$d files. The rest couldn\'t be read.</string>
     <string name="library_more">More options</string>
     <string name="library_open_on_map">Open on map</string>
-    <string name="library_rename">Rename</string>
     <string name="library_rename_failed">Couldn\'t rename that track.</string>
-    <string name="library_rename_label">Track name</string>
+    <string name="library_rename_label">Track name (optional)</string>
     <string name="library_search">Search tracks</string>
     <string name="library_search_clear">Clear search</string>
     <string name="library_search_close">Close search</string>
@@ -140,12 +139,11 @@
     <string name="map_location_denied">Showing where you are needs location access.</string>
     <string name="map_location_off">Location is switched off.</string>
     <string name="map_location_outside">You\'re outside your tracks and maps.</string>
-    <string name="map_location_why">Your position on the map comes from GPS, which needs precise location.</string>
+    <string name="map_location_why">Showing where you are uses GPS, which needs precise location.</string>
     <string name="map_follow_location">Follow my location</string>
     <string name="map_stop_following">Stop following my location</string>
     <string name="map_stop_location">Stop showing location</string>
     <string name="map_none_shown">No tracks shown</string>
-    <string name="map_precise_required">Showing where you are uses GPS, which needs precise location.</string>
     <string name="map_scale">Map scale: %1$s</string>
     <string name="map_show_all">Show all tracks</string>
     <!-- How many of the imported tracks are currently drawn on the map, not the library's total. -->
@@ -170,14 +168,13 @@
     <string name="record_location_off">Location is switched off. Turn it on to record.</string>
     <string name="record_location_why">Recording uses GPS, which needs precise location.</string>
     <!-- Appended to record_location_why from Android 13, where notifications need permission. -->
-    <string name="record_notifications_why">Notifications are optional. One shows the recording while it runs, with pause and stop.</string>
+    <string name="record_notifications_why">Notifications are recommended. One shows the recording while it runs, with pause and stop.</string>
     <string name="record_no_distance">That recording didn\'t go anywhere, so it wasn\'t saved.</string>
     <string name="record_nothing_recorded">Nothing recorded — no fix was accurate enough to use.</string>
     <string name="record_notifications_off">Notifications are off, so this recording only shows in the app.</string>
     <string name="record_notification_active">Recording</string>
     <string name="record_notification_paused">Recording paused</string>
     <string name="record_pause">Pause</string>
-    <string name="record_precise_required">Recording uses GPS, which needs precise location.</string>
     <string name="record_battery_explanation">Disabling battery optimizations may help prevent this in the future.</string>
     <string name="record_battery_open_app_info">Open app info</string>
     <!-- %1$s is the date, %2$s the time. -->
@@ -211,9 +208,7 @@
     <string name="settings_about_tagline">Record and manage GPX tracks without internet permission or access.</string>
     <!-- %1$s is the version, e.g. 0.1.0; the commit follows it. -->
     <string name="settings_about_version">v%1$s</string>
-    <!-- Spoken for the slider: the value, then the default. -->
     <string name="settings_maps_explanation">Manage .map file imports. Without one, tracks are drawn on a blank background.</string>
-    <string name="settings_maps_export">Export</string>
     <string name="settings_maps_export_failed">Couldn\'t export that map.</string>
     <string name="settings_maps_exported">Map exported.</string>
     <string name="settings_maps_failed_duplicate">That map is already imported.</string>
@@ -223,7 +218,6 @@
     <string name="settings_maps_import">Import map</string>
     <string name="settings_maps_imported">Map imported.</string>
     <string name="settings_maps_importing">Copying map…</string>
-    <string name="settings_maps_manage_named">Manage %1$s</string>
     <string name="settings_maps_name">Map name</string>
     <string name="settings_maps_rename_failed">Couldn\'t rename that map.</string>
     <string name="settings_maps_no_browser">No app on this device can open a web page.</string>
@@ -234,7 +228,7 @@
     <string name="settings_section_maps">Offline maps</string>
     <string name="settings_title">Settings</string>
     <string name="settings_units">Units</string>
-    <string name="settings_units_explanation">Display only. File content stays in metric.</string>
+    <string name="settings_units_explanation">Changes how values are shown. Files are always saved in metric.</string>
     <string name="settings_units_imperial">Imperial</string>
     <string name="settings_units_metric">Metric</string>
 
@@ -243,7 +237,7 @@
 
     <string name="stat_ascent">Ascent</string>
     <!-- Over moving time, not elapsed. -->
-    <string name="stat_avg_speed">Avg moving speed</string>
+    <string name="stat_avg_speed">Average moving speed</string>
     <string name="stat_descent">Descent</string>
     <string name="stat_elapsed">Elapsed</string>
     <string name="stat_moving">Moving</string>
@@ -255,7 +249,7 @@
     <!-- Spoken for a stat tile: label, then value. -->
     <string name="stat_spoken">%1$s: %2$s</string>
 
-    <string name="track_category">Category</string>
+    <string name="track_category">Category (optional)</string>
     <string name="track_close">Close</string>
     <string name="track_edit_failed">Couldn\'t change that track.</string>
     <string name="track_error_empty">This GPX file has no track points.</string>
@@ -267,8 +261,6 @@
     <string name="track_hide">Hide</string>
     <string name="track_loading">Reading track…</string>
     <string name="track_manage">Manage this track</string>
-    <!-- Spoken only; names the button in a list of them. -->
-    <string name="track_manage_named">Manage %1$s</string>
     <string name="track_trim">Trim</string>
     <string name="track_trimmed">Trimmed “%1$s”.</string>
 

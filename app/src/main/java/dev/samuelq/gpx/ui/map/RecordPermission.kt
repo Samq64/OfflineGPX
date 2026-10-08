@@ -48,12 +48,14 @@ internal fun Context.openNotificationSettings() {
     }
 }
 
-/** What location is asked for, why, which words a refusal gets, and whether notifications come too. */
+/**
+ * What location is asked for, why, which words a refusal gets, and whether notifications come
+ * too. [why] also answers a grant of approximate location only.
+ */
 internal enum class LocationUse(
     @param:StringRes val why: Int,
     @param:StringRes val off: Int,
     @param:StringRes val denied: Int,
-    @param:StringRes val preciseRequired: Int,
     val withNotifications: Boolean,
 ) {
     // Notifications are requested but not required; starting without them warns.
@@ -61,14 +63,12 @@ internal enum class LocationUse(
         R.string.record_location_why,
         R.string.record_location_off,
         R.string.record_location_denied,
-        R.string.record_precise_required,
         true,
     ),
     Show(
         R.string.map_location_why,
         R.string.map_location_off,
         R.string.map_location_denied,
-        R.string.map_precise_required,
         false,
     ),
     ;
@@ -165,7 +165,7 @@ internal fun rememberLocationRequest(
             granted[Manifest.permission.ACCESS_FINE_LOCATION] == true -> start()
             // Always to settings: its precise switch is easier to find than a second request.
             granted[Manifest.permission.ACCESS_COARSE_LOCATION] == true ->
-                say(resources.getString(use.preciseRequired), appSettings)
+                say(resources.getString(use.why), appSettings)
             else -> say(resources.getString(use.denied), appSettings.takeIf { settled })
         }
     }

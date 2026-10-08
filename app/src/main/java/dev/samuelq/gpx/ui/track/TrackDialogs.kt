@@ -58,7 +58,7 @@ fun TrackNameDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { DialogTitle(stringResource(R.string.library_rename)) },
+        title = { DialogTitle(stringResource(R.string.action_rename)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(

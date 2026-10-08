@@ -114,16 +114,26 @@ class FormattersTest {
 
     @Test
     fun `dates use the given pattern in the given zone`() {
-        val formatters = Formatters(UnitSystem.METRIC, en, dateTimePattern = "d MMM yyyy HH:mm", timePattern = "HH:mm")
+        val formatters = Formatters(
+            UnitSystem.METRIC,
+            en,
+            dateTimePattern = "d MMM yyyy HH:mm",
+            longDateTimePattern = "d MMMM yyyy HH:mm",
+            timePattern = "HH:mm",
+        )
         val at = Instant.parse("2026-05-01T23:30:00Z")
         val zone = ZoneId.of("Europe/Berlin")
 
         assertEquals("2 May 2026 01:30", formatters.dateTime(at, zone))
+        assertEquals("2 May 2026 01:30", formatters.longDateTime(at, zone))
         assertEquals("01:30", formatters.time(at, zone))
         // The date alone follows the locale, still in the given zone.
-        assertEquals("2 May 2026", formatters.date(at, zone))
+        assertEquals("2 May 2026", formatters.longDate(at, zone))
+        val september = Instant.parse("2026-09-03T08:00:00Z")
+        assertEquals("3 September 2026 08:00", formatters.longDateTime(september, ZoneOffset.UTC))
+        assertEquals("3 September 2026", formatters.longDate(september, ZoneOffset.UTC))
         assertEquals(Formatters.EMPTY, formatters.dateTime(null))
-        assertEquals(Formatters.EMPTY, formatters.date(null))
+        assertEquals(Formatters.EMPTY, formatters.longDate(null))
         assertEquals(Formatters.EMPTY, formatters.time(null))
     }
 

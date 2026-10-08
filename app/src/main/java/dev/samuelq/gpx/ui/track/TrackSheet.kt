@@ -158,7 +158,7 @@ fun TrackSheet(
 
         profile.stats.startedAt?.let {
             Text(
-                text = LocalFormatters.current.dateTime(it),
+                text = LocalFormatters.current.longDateTime(it),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = EdgePadding, vertical = 8.dp),
