@@ -173,6 +173,7 @@
     <string name="record_notifications_why">Notifications are optional. One shows the recording while it runs, with pause and stop.</string>
     <string name="record_no_distance">That recording didn\'t go anywhere, so it wasn\'t saved.</string>
     <string name="record_nothing_recorded">Nothing recorded — no fix was accurate enough to use.</string>
+    <string name="record_notifications_off">Notifications are off, so this recording only shows in the app.</string>
     <string name="record_notification_active">Recording</string>
     <string name="record_notification_paused">Recording paused</string>
     <string name="record_pause">Pause</string>

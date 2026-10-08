@@ -24,6 +24,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import dev.samuelq.gpx.R
+import dev.samuelq.gpx.data.record.canShowRecording
 import dev.samuelq.gpx.ui.DialogTitle
 
 /** The system's location switch. Not every build has the screen. */
@@ -38,6 +39,15 @@ internal fun Context.openAppDetails() {
     }
 }
 
+/** This app's notification settings, where its channels can be unblocked too. */
+internal fun Context.openNotificationSettings() {
+    runCatching {
+        startActivity(
+            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName),
+        )
+    }
+}
+
 /** What location is asked for, why, which words a refusal gets, and whether notifications come too. */
 internal enum class LocationUse(
     @param:StringRes val why: Int,
@@ -46,7 +56,7 @@ internal enum class LocationUse(
     @param:StringRes val preciseRequired: Int,
     val withNotifications: Boolean,
 ) {
-    // Notifications are requested but not required.
+    // Notifications are requested but not required; starting without them warns.
     Record(
         R.string.record_location_why,
         R.string.record_location_off,
@@ -132,7 +142,15 @@ internal fun rememberLocationRequest(
 
     // Also checked in the service, for location switched off in between; only this one can explain.
     val start = {
-        if (isGpsEnabled()) onGranted() else say(resources.getString(use.off)) { context.openLocationSettings() }
+        if (!isGpsEnabled()) {
+            say(resources.getString(use.off)) { context.openLocationSettings() }
+        } else {
+            onGranted()
+            // Each time, as otherwise only the location dot shows a recording outside the app.
+            if (use.withNotifications && !context.canShowRecording()) {
+                say(resources.getString(R.string.record_notifications_off)) { context.openNotificationSettings() }
+            }
+        }
     }
 
     val permissions = rememberLauncherForActivityResult(

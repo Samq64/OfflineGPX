@@ -6,6 +6,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.SystemClock
@@ -29,6 +30,19 @@ internal class NotificationContent(
     val totalSeconds: Double,
     val units: UnitSystem,
 )
+
+private const val CHANNEL_ID = "recording"
+
+/**
+ * The recording's notification would show: the app's notifications and its channel are on.
+ * Without it a forgotten recording can run unseen for hours.
+ */
+internal fun Context.canShowRecording(): Boolean {
+    val manager = getSystemService<NotificationManager>() ?: return false
+    // No channel yet means none was blocked.
+    return manager.areNotificationsEnabled() &&
+        manager.getNotificationChannel(CHANNEL_ID)?.importance != NotificationManager.IMPORTANCE_NONE
+}
 
 internal class RecordingNotifications(private val service: Service) {
 
@@ -159,7 +173,6 @@ internal class RecordingNotifications(private val service: Service) {
     }
 
     private companion object {
-        const val CHANNEL_ID = "recording"
         const val NOTIFICATION_ID = 1
 
         const val MIN_INTERVAL_MILLIS = 5_000L
