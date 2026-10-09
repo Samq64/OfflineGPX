@@ -105,9 +105,9 @@ class MapStore(
     private val directory: File
         get() = File(appContext.filesDir, DIRECTORY).apply { mkdirs() }
 
-    /** Inside [directory], so installing is a rename. `refresh()` skips directories. */
+    /** Never transferred, and on [directory]'s filesystem, so installing is an atomic rename. */
     private val staging: File
-        get() = File(directory, STAGING).apply { mkdirs() }
+        get() = File(appContext.noBackupFilesDir, STAGING).apply { mkdirs() }
 
     private val _maps = MutableStateFlow<List<OfflineMap>>(emptyList())
 
@@ -187,6 +187,8 @@ class MapStore(
     }
 
     private suspend fun install(staged: OfflineMap): MapImportResult {
+        // A map awaiting delete under this name gives way rather than numbering the new one.
+        if (pendingDelete.remove(staged.file.name)) File(directory, staged.file.name).delete()
         val destination = uniqueFile(directory, staged.file.name, EXTENSION, fallback = "map")
         if (!staged.file.renameTo(destination)) {
             staged.file.delete()
@@ -230,10 +232,10 @@ class MapStore(
         scope.launch { refresh() }
     }
 
+    /** Unless an import of the same name has already replaced it. */
     fun commitDelete(map: OfflineMap) {
         scope.launch(io) {
-            map.file.delete()
-            pendingDelete -= map.file.name
+            if (pendingDelete.remove(map.file.name)) map.file.delete()
             refresh()
         }
     }
@@ -241,7 +243,7 @@ class MapStore(
     internal companion object {
         private const val DIRECTORY = "maps"
         const val EXTENSION = "map"
-        private const val STAGING = "staging"
+        private const val STAGING = "map-staging"
     }
 }
 

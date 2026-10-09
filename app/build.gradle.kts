@@ -116,6 +116,9 @@ android {
         jacocoVersion = libs.versions.jacoco.get()
     }
 
+    // The JVM tests' map fixture, so a device test can import a real map too.
+    sourceSets.getByName("androidTest").resources.srcDir("src/test/resources")
+
     // Skip the dependency-metadata blob Play would embed.
     dependenciesInfo {
         includeInApk = false
