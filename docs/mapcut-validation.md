@@ -24,8 +24,9 @@ read back directly; all 539 are identical.
 
 | cut | source | output | range requests | upstream bytes |
 |---|---|---|---|---|
-| Andorra 8 × 8 km | 2.4 MB | 1.16 MB | 22 | 1.17 MB |
-| Berlin centre 5 × 5 km | 51.6 MB | 5.51 MB | 14 | 5.51 MB |
+| Andorra 8 × 8 km | 2.4 MB | 1.16 MB | 16 | 1.17 MB |
+| Berlin centre 5 × 5 km (`13.36,52.49 .. 13.44,52.535`) | 51.6 MB | 5.71 MB | 13 | 5.71 MB |
 
 Overfetch is negligible because one output row's tiles are contiguous upstream, so a row
-costs one request regardless of how wide it is.
+costs one request regardless of how wide it is. Each zoom interval's index is read in one
+request for all rows; the columns outside the box come along at 5 bytes a tile.

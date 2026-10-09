@@ -24,7 +24,7 @@ only real fix and is beyond what a prototype is for.
 Upstream is `download.mapsforge.org/maps/v5/`, which mirrors the Geofabrik tree
 (continent → country → sub-region), serves raw `.map` files, and — the part that matters —
 answers byte-range requests. So a cut is a **byte copy out of a bigger file**, never a
-re-encode: 5 × 5 km of central Berlin comes out of the 51.6 MB Berlin file in 14 range
+re-encode: 5 × 5 km of central Berlin comes out of the 51.6 MB Berlin file in 13 range
 requests with essentially no overfetch.
 
 Three properties of the format make that possible:
