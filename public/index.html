@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
   integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
 <style>
-  :root { color-scheme: dark; --bg:#14161a; --panel:#1c1f26; --line:#2c313b; --ink:#e6e8ec; --dim:#9aa3b2; --accent:#6ea8fe; }
+  :root { color-scheme: dark; --bg:#14161a; --panel:#1c1f26; --line:#2c313b; --ink:#e6e8ec; --dim:#9aa3b2; --accent:#6ea8fe; --select:#e4007c; }
   * { box-sizing: border-box; }
   /* dvh, not vh: a phone browser's address bar is part of the viewport by the vh
      definition and not by the one anybody means. */
@@ -43,6 +43,7 @@
   .meta { font-size:12px; color:var(--dim); }
   .meta b { color:var(--ink); font-weight:500; }
   code { font-size:11px; color:var(--dim); word-break:break-all; }
+  .handle { background:#fff; border:2px solid var(--select); border-radius:3px; }
 </style>
 </head>
 <body>
@@ -80,7 +81,6 @@ const $ = (id) => document.getElementById(id);
 let path = '';          // where we are in the upstream tree
 let source = null;      // the chosen .map and its bbox
 let sourceBox = null;   // its outline on the map
-let selection = null;   // the rectangle being cut
 let bbox = null;
 
 async function api(route, params) {
@@ -133,8 +133,8 @@ document.addEventListener('click', async (event) => {
 
 async function choose(mapPath) {
   // A selection drawn on the previous map means nothing on this one.
-  selection?.remove();
-  selection = null;
+  box = null;
+  render();
   bbox = null;
   $('selection').textContent = 'No area selected.';
   $('go').disabled = true;
@@ -142,9 +142,14 @@ async function choose(mapPath) {
   source = await api('/api/source', { path: mapPath });
   const b = source.bbox;
   sourceBox?.remove();
-  sourceBox = L.rectangle([[b.minLat, b.minLon], [b.maxLat, b.maxLon]],
-    { color: '#6ea8fe', weight: 1, fillOpacity: 0.04, dashArray: '4 3' }).addTo(map);
-  map.fitBounds(sourceBox.getBounds(), { padding: [30, 30] });
+  // Near-black dashes on a white edge: light enough tiles show the dark, dark ones the
+  // white. Unlike the selection's magenta, so the two never read as one box.
+  const bounds = [[b.minLat, b.minLon], [b.maxLat, b.maxLon]];
+  sourceBox = L.layerGroup([
+    L.rectangle(bounds, { color: '#fff', weight: 5, opacity: 0.9, fill: false, interactive: false }),
+    L.rectangle(bounds, { color: '#1b1f27', weight: 2.5, dashArray: '8 6', fill: false, interactive: false }),
+  ]).addTo(map);
+  map.fitBounds(bounds, { padding: [30, 30] });
 
   const zooms = source.intervals.map((i) => `z${i.min}-${i.max}`).join(', ');
   const requests = Object.assign(el('span', `header read in ${source.requests} range requests`),
@@ -155,27 +160,80 @@ async function choose(mapPath) {
   update();
 }
 
-// --- Drawing -----------------------------------------------------------------
+// --- Selection ---------------------------------------------------------------
 //
 // Pointer events rather than Leaflet's mouse ones: a touch screen sends a browser no
-// mousemove while a finger is down, so a drag-to-draw built on mousedown/mousemove/mouseup
+// mousemove while a finger is down, so a drag built on mousedown/mousemove/mouseup
 // works with a mouse and does nothing at all on a phone.
 
 const canvas = map.getContainer();
-let drawing = false, anchor = null;
+let drawing = false;
+let box = null;      // the selection as { w, s, e, n }
+let gesture = null;  // { mode, from, start } while a drag is under way
 
-function setDrawing(on) {
-  drawing = on;
+// Magenta, edged in white, over a dimmed outside: OSM's tiles have greens, blues, beiges
+// and pink roads but nothing this saturated, so it holds up on any of them.
+const SELECT = getComputedStyle(document.documentElement).getPropertyValue('--select').trim();
+const WORLD = [[-85, -540], [-85, 540], [85, 540], [85, -540]];
+const layers = L.layerGroup().addTo(map);
+const mask = L.polygon([WORLD], { stroke: false, fillColor: '#000', fillOpacity: 0.35, interactive: false });
+const casing = L.rectangle([[0, 0], [0, 0]], { color: '#fff', weight: 6, fill: false, interactive: false });
+const outline = L.rectangle([[0, 0], [0, 0]], { color: SELECT, weight: 2.5, fill: false, interactive: false });
+const HANDLES = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
+const handleIcon = L.divIcon({ className: 'handle', iconSize: [14, 14] });
+const handles = HANDLES.map((mode) =>
+  [mode, L.marker([0, 0], { icon: handleIcon, interactive: false, keyboard: false })]);
+const CURSORS = {
+  n: 'ns-resize', s: 'ns-resize', e: 'ew-resize', w: 'ew-resize',
+  nw: 'nwse-resize', se: 'nwse-resize', ne: 'nesw-resize', sw: 'nesw-resize', move: 'move',
+};
+
+// Halfway in Mercator, so an edge's handle sits at its middle on screen.
+const midLat = (s, n) =>
+  map.unproject(map.project([s, 0], 0).add(map.project([n, 0], 0)).divideBy(2), 0).lat;
+
+function render() {
+  if (!box) {
+    layers.clearLayers();
+    return;
+  }
+  const { w, s, e, n } = box;
+  const mid = { lat: midLat(s, n), lng: (w + e) / 2 };
+  mask.setLatLngs([WORLD, [[s, w], [n, w], [n, e], [s, e]]]);
+  casing.setBounds([[s, w], [n, e]]);
+  outline.setBounds([[s, w], [n, e]]);
+  for (const [mode, marker] of handles) {
+    const lat = mode.includes('n') ? n : mode.includes('s') ? s : mid.lat;
+    const lng = mode.includes('w') ? w : mode.includes('e') ? e : mid.lng;
+    marker.setLatLng([lat, lng]);
+  }
+  [mask, casing, outline, ...handles.map(([, marker]) => marker)].forEach((l) => layers.addLayer(l));
+}
+
+/** The map's own gestures would otherwise pan and pinch underneath the box. */
+function freeze(on) {
   document.body.classList.toggle('drawing', on);
-  $('draw').classList.toggle('on', on);
-  $('draw').textContent = on ? 'Drag on the map…' : 'Draw a rectangle';
-  // The map's own gestures would otherwise pan and pinch underneath the rectangle.
   map.dragging[on ? 'disable' : 'enable']();
   map.touchZoom[on ? 'disable' : 'enable']();
   map.doubleClickZoom[on ? 'disable' : 'enable']();
 }
 
+function setDrawing(on) {
+  drawing = on;
+  freeze(on);
+  canvas.style.cursor = on ? 'crosshair' : '';
+  $('draw').classList.toggle('on', on);
+  $('draw').textContent = on ? 'Drag on the map…' : box ? 'Draw a new rectangle' : 'Draw a rectangle';
+}
+
 $('draw').onclick = () => setDrawing(!drawing);
+
+const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+
+const pointIn = (event) => {
+  const rect = canvas.getBoundingClientRect();
+  return L.point(event.clientX - rect.left, event.clientY - rect.top);
+};
 
 /**
  * Where a pointer is, in the map's own coordinates, held inside the source file's own box.
@@ -184,46 +242,97 @@ $('draw').onclick = () => setDrawing(!drawing);
  * so a selection crossing it is a question already answered.
  */
 const at = (event) => {
-  const rect = canvas.getBoundingClientRect();
-  const point = map.containerPointToLatLng(L.point(event.clientX - rect.left, event.clientY - rect.top));
+  const point = map.containerPointToLatLng(pointIn(event));
   const b = source.bbox;
-  return L.latLng(
-    Math.min(Math.max(point.lat, b.minLat), b.maxLat),
-    Math.min(Math.max(point.lng, b.minLon), b.maxLon),
-  );
+  return L.latLng(clamp(point.lat, b.minLat, b.maxLat), clamp(point.lng, b.minLon, b.maxLon));
 };
 
+/**
+ * What a press at [event] would grab: an edge or corner within reach, else the inside to
+ * move it, else nothing. Reach is a fingertip for touch, but never more than a third of the
+ * box, so a small one can still be moved.
+ */
+function hit(event) {
+  if (!box) return null;
+  const p = pointIn(event);
+  const nw = map.latLngToContainerPoint([box.n, box.w]);
+  const se = map.latLngToContainerPoint([box.s, box.e]);
+  const reach = event.pointerType === 'mouse' ? 8 : 22;
+  const reachX = Math.min(reach, (se.x - nw.x) / 3);
+  const reachY = Math.min(reach, (se.y - nw.y) / 3);
+  if (p.x < nw.x - reach || p.x > se.x + reach || p.y < nw.y - reach || p.y > se.y + reach) return null;
+  const v = p.y <= nw.y + reachY ? 'n' : p.y >= se.y - reachY ? 's' : '';
+  const h = p.x <= nw.x + reachX ? 'w' : p.x >= se.x - reachX ? 'e' : '';
+  return v + h || 'move';
+}
+
+// Capturing, so a grab of the box never also reaches Leaflet as the start of a pan.
 canvas.addEventListener('pointerdown', (event) => {
-  if (!drawing || !event.isPrimary) return;
+  if (!source || !event.isPrimary) return;
+  const mode = drawing ? 'draw' : hit(event);
+  if (!mode) return;
   event.preventDefault();
+  event.stopPropagation();
   canvas.setPointerCapture(event.pointerId);
-  anchor = at(event);
-  selection?.remove();
-  selection = L.rectangle([anchor, anchor], { color: '#7ee787', weight: 2, fillOpacity: 0.12 }).addTo(map);
-});
+  if (!drawing) freeze(true);
+  const from = at(event);
+  const start = mode === 'draw' ? { w: from.lng, e: from.lng, s: from.lat, n: from.lat } : { ...box };
+  gesture = { mode, from, start };
+  if (mode === 'draw') {
+    box = start;
+    render();
+  }
+}, true);
 
 canvas.addEventListener('pointermove', (event) => {
-  if (!drawing || !anchor) return;
+  if (!gesture) {
+    if (!drawing) canvas.style.cursor = CURSORS[hit(event)] ?? '';
+    return;
+  }
   event.preventDefault();
-  selection.setBounds(L.latLngBounds(anchor, at(event)));
+  const p = at(event);
+  const { mode, from, start } = gesture;
+  if (mode === 'move') {
+    // The whole box stays inside the file's, not just the pointer.
+    const b = source.bbox;
+    const dLat = clamp(p.lat - from.lat, b.minLat - start.s, b.maxLat - start.n);
+    const dLng = clamp(p.lng - from.lng, b.minLon - start.w, b.maxLon - start.e);
+    box = { w: start.w + dLng, e: start.e + dLng, s: start.s + dLat, n: start.n + dLat };
+  } else {
+    // Drawing drags the corner opposite where the press was. An edge pulled past its
+    // opposite flips the box rather than inverting it.
+    const edges = mode === 'draw' ? 'se' : mode;
+    const next = { ...start };
+    if (edges.includes('n')) next.n = p.lat;
+    if (edges.includes('s')) next.s = p.lat;
+    if (edges.includes('e')) next.e = p.lng;
+    if (edges.includes('w')) next.w = p.lng;
+    box = {
+      w: Math.min(next.w, next.e), e: Math.max(next.w, next.e),
+      s: Math.min(next.s, next.n), n: Math.max(next.s, next.n),
+    };
+  }
+  render();
 });
 
 // Cancel counts as an end: a system gesture taking the pointer away mid-drag must not
-// leave the map stuck in drawing mode with no way back.
+// leave the map frozen with no way back.
 for (const type of ['pointerup', 'pointercancel']) {
-  canvas.addEventListener(type, (event) => {
-    if (!drawing || !anchor) return;
-    anchor = null;
-    const b = selection.getBounds();
+  canvas.addEventListener(type, () => {
+    if (!gesture) return;
+    const { mode, start } = gesture;
+    gesture = null;
     // A tap is not a rectangle. Easy to do by accident with a finger, and a zero-area cut
-    // is a request for an empty file.
-    if (b.getNorth() === b.getSouth() || b.getEast() === b.getWest()) {
-      selection.remove();
-      selection = null;
+    // is a request for an empty file. Drawing stays on for another try.
+    if (box.n === box.s || box.e === box.w) {
+      box = mode === 'draw' ? null : start;
+      render();
+      if (mode !== 'draw') freeze(false);
       return;
     }
-    setDrawing(false);
-    bbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map((n) => n.toFixed(6));
+    if (mode === 'draw') setDrawing(false);
+    else freeze(false);
+    bbox = [box.w, box.s, box.e, box.n].map((n) => n.toFixed(6));
     update();
   });
 }
@@ -234,7 +343,8 @@ function update() {
   const km = (a, b) => Math.abs(a - b) * 111.32;
   const width = km(e, w) * Math.cos(((n + s) / 2) * Math.PI / 180);
   $('selection').innerHTML =
-    `<b>${width.toFixed(1)} × ${km(n, s).toFixed(1)} km</b><br><code>${bbox.join(', ')}</code>`;
+    `<b>${width.toFixed(1)} × ${km(n, s).toFixed(1)} km</b><br><code>${bbox.join(', ')}</code>` +
+    '<br>Drag the box to move it, or its edges to resize.';
   $('go').disabled = !source;
 }
 
