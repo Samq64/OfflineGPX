@@ -142,14 +142,18 @@ async function choose(mapPath) {
   source = await api('/api/source', { path: mapPath });
   const b = source.bbox;
   sourceBox?.remove();
-  // Near-black dashes on a white edge: light enough tiles show the dark, dark ones the
-  // white. Unlike the selection's magenta, so the two never read as one box.
-  const bounds = [[b.minLat, b.minLon], [b.maxLat, b.maxLon]];
+  // The region's real outline where the server found one; the header's box takes in
+  // neighbours the file has no data for. Near-black dashes on a white edge: light tiles
+  // show the dark, dark ones the white. Unlike the selection's magenta, so the two never
+  // read as one shape.
+  const rings = source.outline ??
+    [[[b.minLat, b.minLon], [b.minLat, b.maxLon], [b.maxLat, b.maxLon], [b.maxLat, b.minLon]]];
+  const closed = rings.map((ring) => [...ring, ring[0]]);
   sourceBox = L.layerGroup([
-    L.rectangle(bounds, { color: '#fff', weight: 5, opacity: 0.9, fill: false, interactive: false }),
-    L.rectangle(bounds, { color: '#1b1f27', weight: 2.5, dashArray: '8 6', fill: false, interactive: false }),
+    L.polyline(closed, { color: '#fff', weight: 5, opacity: 0.9, interactive: false }),
+    L.polyline(closed, { color: '#1b1f27', weight: 2.5, dashArray: '8 6', interactive: false }),
   ]).addTo(map);
-  map.fitBounds(bounds, { padding: [30, 30] });
+  map.fitBounds(L.latLngBounds(rings.flat()), { padding: [30, 30] });
 
   const zooms = source.intervals.map((i) => `z${i.min}-${i.max}`).join(', ');
   const requests = Object.assign(el('span', `header read in ${source.requests} range requests`),

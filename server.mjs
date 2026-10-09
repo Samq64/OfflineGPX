@@ -12,12 +12,17 @@ import { cut, parseBbox, readHeader } from './lib/cut.mjs';
 import { HttpSource } from './lib/source.mjs';
 
 const ROOT = 'https://download.mapsforge.org/maps/v5/';
+// mapsforge builds from Geofabrik's extracts and mirrors its tree, so a file's real
+// outline is the matching Geofabrik .poly; the header only has a bounding box.
+const OUTLINES = 'https://download.geofabrik.de/';
 const here = dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT ?? 8787);
 
 // Directory listings change about weekly; the tree is re-read rarely and cheaply.
 const listings = new Map();
 const CACHE_MS = 60 * 60 * 1000;
+
+const outlines = new Map();
 
 // A cut is held in memory whole, so both its size and how many run at once are bounded.
 const MAX_EXTRACT_BYTES = 256 * 1024 * 1024;
@@ -46,6 +51,48 @@ async function list(path) {
   return value;
 }
 
+/**
+ * A region's outline as rings of [lat, lon], or null where Geofabrik has no matching
+ * polygon. Never fails the request: the bounding box is a fine fallback.
+ */
+async function outline(path) {
+  const cached = outlines.get(path);
+  if (cached && Date.now() - cached.at < CACHE_MS) return cached.value;
+
+  let value = null;
+  try {
+    const response = await fetch(OUTLINES + path.replace(/\.map$/, '.poly'), { signal: AbortSignal.timeout(30_000) });
+    if (response.ok) value = parsePoly(await response.text());
+  } catch {
+    // Unreachable or malformed: the box will do.
+  }
+  outlines.set(path, { at: Date.now(), value });
+  return value;
+}
+
+/**
+ * Osmosis polygon format: a name line, then rings of `lon lat` lines, each opened by a
+ * name (`!` for a hole) and closed by END, then a final END. Holes are kept as rings,
+ * since only the outline is drawn.
+ */
+function parsePoly(text) {
+  const rings = [];
+  let ring = null;
+  for (const line of text.split('\n').slice(1).map((l) => l.trim()).filter(Boolean)) {
+    if (line === 'END') {
+      if (ring) rings.push(ring);
+      ring = null;
+    } else if (ring) {
+      const [lon, lat] = line.split(/\s+/).map(Number);
+      if (!Number.isFinite(lon) || !Number.isFinite(lat)) return null;
+      ring.push([lat, lon]);
+    } else {
+      ring = [];
+    }
+  }
+  return rings.length ? rings : null;
+}
+
 const json = (response, body, status = 200) => {
   response.writeHead(status, { 'content-type': 'application/json' });
   response.end(JSON.stringify(body));
@@ -68,13 +115,14 @@ const routes = {
   async '/api/source'(url, response) {
     const path = safePath(url.searchParams.get('path'));
     const source = new HttpSource(ROOT + path);
-    const header = await readHeader(source);
+    const [header, rings] = await Promise.all([readHeader(source), outline(path)]);
     json(response, {
       path,
       bbox: {
         minLon: header.minLon, minLat: header.minLat,
         maxLon: header.maxLon, maxLat: header.maxLat,
       },
+      outline: rings,
       intervals: header.intervals.map((i) => ({ baseZoom: i.baseZoom, min: i.minZoom, max: i.maxZoom })),
       comment: header.comment ?? null,
       createdBy: header.createdBy ?? null,
