@@ -15,6 +15,7 @@ class TrackSortTest {
         started: Long? = null,
         opened: Long = 0,
         meters: Double = 0.0,
+        seconds: Double = 0.0,
         trackName: String? = null,
     ) = TrackEntity(
         id = id,
@@ -23,7 +24,7 @@ class TrackSortTest {
         trackName = trackName,
         startedAtEpochMillis = started,
         lastOpenedAtEpochMillis = opened,
-        summary = TrackSummary(2, meters, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+        summary = TrackSummary(2, meters, seconds, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
     )
 
     private fun List<TrackEntity>.ids(sort: TrackSort) = sortedFor(TrackOrder(sort)).map(TrackEntity::id)
@@ -41,9 +42,16 @@ class TrackSortTest {
     }
 
     @Test
-    fun `length is longest first and ties keep their order`() {
+    fun `distance is longest first and ties keep their order`() {
         val tracks = listOf(track(1, "a", meters = 5.0), track(2, "b", meters = 9.0), track(3, "c", meters = 5.0))
-        assertEquals(listOf(2L, 1L, 3L), tracks.ids(TrackSort.LENGTH))
+        assertEquals(listOf(2L, 1L, 3L), tracks.ids(TrackSort.DISTANCE))
+    }
+
+    @Test
+    fun `duration is longest first`() {
+        val tracks =
+            listOf(track(1, "a", seconds = 60.0), track(2, "b", seconds = 600.0), track(3, "c", seconds = 300.0))
+        assertEquals(listOf(2L, 3L, 1L), tracks.ids(TrackSort.DURATION))
     }
 
     @Test
@@ -55,10 +63,10 @@ class TrackSortTest {
     @Test
     fun `turned round, a sort runs the other way, ties included`() {
         val tracks = listOf(track(1, "a", meters = 5.0), track(2, "b", meters = 9.0), track(3, "c", meters = 5.0))
-        assertEquals(listOf(2L, 1L, 3L), tracks.sortedFor(TrackOrder(TrackSort.LENGTH)).map(TrackEntity::id))
+        assertEquals(listOf(2L, 1L, 3L), tracks.sortedFor(TrackOrder(TrackSort.DISTANCE)).map(TrackEntity::id))
         assertEquals(
             listOf(3L, 1L, 2L),
-            tracks.sortedFor(TrackOrder(TrackSort.LENGTH, descending = false)).map(TrackEntity::id),
+            tracks.sortedFor(TrackOrder(TrackSort.DISTANCE, descending = false)).map(TrackEntity::id),
         )
     }
 }

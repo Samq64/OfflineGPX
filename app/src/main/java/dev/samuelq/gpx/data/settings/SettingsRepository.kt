@@ -17,7 +17,8 @@ enum class TrackSort(
 ) {
     RECENT(true),
     DATE(true),
-    LENGTH(true),
+    DISTANCE(true),
+    DURATION(true),
     NAME(false),
 }
 

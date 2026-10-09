@@ -307,7 +307,8 @@ internal fun List<TrackEntity>.sortedFor(order: TrackOrder): List<TrackEntity> {
     val natural = when (order.sort) {
         TrackSort.RECENT -> this
         TrackSort.DATE -> sortedByDescending { it.startedAtEpochMillis ?: it.lastOpenedAtEpochMillis }
-        TrackSort.LENGTH -> sortedByDescending { it.distanceMeters }
+        TrackSort.DISTANCE -> sortedByDescending { it.distanceMeters }
+        TrackSort.DURATION -> sortedByDescending { it.totalSeconds }
         TrackSort.NAME -> {
             val collator = Collator.getInstance()
             sortedWith(compareBy(collator) { it.title })

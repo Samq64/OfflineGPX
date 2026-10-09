@@ -122,7 +122,8 @@
     <string name="library_sort_ascending">Ascending</string>
     <string name="library_sort_date">Date</string>
     <string name="library_sort_descending">Descending</string>
-    <string name="library_sort_length">Length</string>
+    <string name="library_sort_distance">Distance</string>
+    <string name="library_sort_duration">Duration</string>
     <string name="library_sort_name">Name</string>
     <string name="library_sort_recent">Recent</string>
     <string name="library_title">Tracks</string>

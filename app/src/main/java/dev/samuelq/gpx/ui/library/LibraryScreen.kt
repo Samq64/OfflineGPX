@@ -769,7 +769,8 @@ private val TrackSort.label: Int
     get() = when (this) {
         TrackSort.RECENT -> R.string.library_sort_recent
         TrackSort.DATE -> R.string.library_sort_date
-        TrackSort.LENGTH -> R.string.library_sort_length
+        TrackSort.DISTANCE -> R.string.library_sort_distance
+        TrackSort.DURATION -> R.string.library_sort_duration
         TrackSort.NAME -> R.string.library_sort_name
     }
 
