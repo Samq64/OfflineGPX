@@ -36,9 +36,8 @@
     <string name="color_blue">Blue</string>
     <string name="color_cyan">Cyan</string>
     <string name="color_green">Green</string>
-    <string name="color_orange">Orange</string>
-    <string name="color_pink">Pink</string>
-    <string name="color_purple">Purple</string>
+    <string name="color_magenta">Magenta</string>
+    <string name="color_red">Red</string>
     <string name="color_yellow">Yellow</string>
 
     <!-- %1$s is a track or map name. -->

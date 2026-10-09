@@ -19,10 +19,9 @@ See README.md for the source layout and the build, test, coverage and style comm
   one row per track with its stats and bounding box, and no geometry. Parsed points are
   cached in binary under `cacheDir`, which is regenerable and never backed up or shared. A
   saved track's name, category and colour come from its row only, and go into a file only on
-  its way out: export and share stream it through `GpxTrimmer`, writing gpx_style's RGB and
-  Garmin's nearest name for the colour. An import takes its file's `<name>`, else the file's
-  name, and its colour as the nearest slot by hue; after that, recordings and imports are
-  alike. An unnamed track is titled by its start. Files shared from other apps join the library;
+  its way out: export and share stream it through `GpxTrimmer`, writing the colour as the
+  slot's Garmin `DisplayColor` name. An import takes its file's `<name>`, else the file's name,
+  and a Garmin colour as its slot; after that, recordings and imports are alike. An unnamed track is titled by its start. Files shared from other apps join the library;
   MainActivity is singleTask so they reach the one instance.
 - Trim rewrites a file with `GpxTrimmer`, which streams it through and keeps
   everything but the points cut; `GpxWriter` writes only what the app reads. The original
@@ -32,9 +31,10 @@ See README.md for the source layout and the build, test, coverage and style comm
 - The render theme is generated at runtime in the mapsforge theme dialect, from the app's
   colours; it expects the tags of the v5 files at download.mapsforge.org. VTM widens lines
   1.4x per zoom above z12 and the theme divides that back out.
-- Data colours (charts, the seven route colours, the recording red) are fixed, checked for
-  contrast against the map and separation under simulated colour blindness. Chrome follows
-  Material You.
+- Data colours (charts, the six route colours) are fixed, checked for contrast against the
+  map and separation under simulated colour blindness; `tools/route_palette.py` searches the
+  route colours, one per Garmin hue. A recording is drawn in the slot it will be saved with.
+  Chrome follows Material You.
 - Analysis invariants: a `<trkseg>` break is lost signal, so distance, the speed window and
   drawn lines never span it. Speed is differentiated over ~10 s, ascent uses a 3 m
   hysteresis on smoothed elevation, average speed is over moving time, and long series are

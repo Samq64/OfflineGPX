@@ -13,3 +13,4 @@ captures/
 *.jks
 *.idsig
 .kotlin/
+__pycache__/

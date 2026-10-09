@@ -11,29 +11,21 @@ private val Blue400 = Color(0xFF3987E5)
 
 /** 3:1 on any wallpaper's sheet surface, as a chart mark needs, and apart from the blue under CVD. */
 private val Green = Color(0xFF25852A)
-private val GreenDark = Color(0xFF52B848)
+private val GreenDark = Color(0xFF6DB365)
 
 private val RoutePaletteLight = RouteColors.LIGHT.map { Color(it) }
 
 private val RoutePaletteDark = RouteColors.DARK.map { Color(it) }
 
-/** Names for the slots, alike in both themes. */
+/** Names for the slots, alike in both themes: Garmin's, which files carry. */
 val RouteColorNames = listOf(
-    R.string.color_cyan,
-    R.string.color_purple,
-    R.string.color_green,
+    R.string.color_red,
     R.string.color_yellow,
-    R.string.color_pink,
+    R.string.color_green,
+    R.string.color_cyan,
     R.string.color_blue,
-    R.string.color_orange,
+    R.string.color_magenta,
 ).also { check(it.size == TrackEntity.PALETTE_SIZE) }
-
-/** Slots round the colour wheel; the slots' own order is for assigning. */
-val RoutePickerOrder = listOf(4, 6, 3, 2, 0, 5, 1)
-    .also { check(it.sorted() == (0 until TrackEntity.PALETTE_SIZE).toList()) }
-
-private val RecordingLight = Color(0xFFBA0D01)
-private val RecordingDark = Color(0xFFDF2414)
 
 fun List<Color>.slot(index: Int): Color = this[index.mod(size)]
 
@@ -42,11 +34,6 @@ fun List<Color>.slot(index: Int): Color = this[index.mod(size)]
 @androidx.compose.runtime.ReadOnlyComposable
 fun routePalette(): List<Color> =
     if (androidx.compose.foundation.isSystemInDarkTheme()) RoutePaletteDark else RoutePaletteLight
-
-/** Not the scheme's error colour, which is wallpaper-derived and pale pink in dark mode. */
-@androidx.compose.runtime.Composable
-@androidx.compose.runtime.ReadOnlyComposable
-fun recordingColor(): Color = if (androidx.compose.foundation.isSystemInDarkTheme()) RecordingDark else RecordingLight
 
 /**
  * The series are fixed, not wallpaper-derived: their hues were checked for contrast and CVD

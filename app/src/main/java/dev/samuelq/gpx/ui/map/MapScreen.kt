@@ -90,7 +90,6 @@ import dev.samuelq.gpx.ui.record.RecordingOutcomes
 import dev.samuelq.gpx.ui.record.RecordingSheet
 import dev.samuelq.gpx.ui.record.RecordingViewModel
 import dev.samuelq.gpx.ui.screenSnackbars
-import dev.samuelq.gpx.ui.theme.recordingColor
 import dev.samuelq.gpx.ui.theme.routePalette
 import dev.samuelq.gpx.ui.theme.slot
 import dev.samuelq.gpx.ui.track.FocusedTrack
@@ -143,7 +142,8 @@ fun MapScreen(
     val position by location.position.collectAsStateWithLifecycle()
 
     val palette = routePalette()
-    val liveColor = recordingColor()
+    val recordingSlot by viewModel.recordingSlot.collectAsStateWithLifecycle()
+    val liveColor = palette.slot(recordingSlot)
     val density = LocalDensity.current
 
     val snackbars = screenSnackbars()
@@ -602,6 +602,7 @@ fun MapScreen(
                 SheetSubject.Recording -> (recording.value as? RecordingState.Active)?.let { active ->
                     RecordingSheet(
                         state = active,
+                        color = liveColor,
                         profile = live,
                         maxHeight = maxHeight,
                         selectedIndex = screen.selectedIndex,

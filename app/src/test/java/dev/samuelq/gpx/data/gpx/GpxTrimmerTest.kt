@@ -368,41 +368,43 @@ class GpxTrimmerTest {
         assertEquals(1, Regex("<trkseg").findAll(trimmed).count(), trimmed)
     }
 
-    private fun recolour(xml: String, rgb: Int): String {
+    private fun recolour(xml: String, color: String): String {
         val out = ByteArrayOutputStream()
-        trimmer.trim(xml.byteInputStream(), out, color = rgb)
+        trimmer.trim(xml.byteInputStream(), out, color = color)
         return out.toString(Charsets.UTF_8)
     }
 
-    private fun colorOf(xml: String): Int? = parser.parse(xml.byteInputStream()).lineColor
+    private fun colorOf(xml: String): String? = parser.parse(xml.byteInputStream()).displayColor
 
     @Test
     fun `a colour goes in its own extensions before the segments, after the type`() {
-        val out = recolour(gpx("<name>Ride</name><type>running</type>"), 0x2A95B9)
-        assertEquals(0x2A95B9, colorOf(out))
+        val out = recolour(gpx("<name>Ride</name><type>running</type>"), "Cyan")
+        assertEquals("Cyan", colorOf(out))
         assertTrue(
             out.indexOf(
                 "</type>",
             ) < out.indexOf("<extensions") && out.indexOf("</extensions>") < out.indexOf("<trkseg"),
             out,
         )
-        assertTrue(">2A95B9</gpx_style:color>" in out && "<gpxx:DisplayColor>" in out, out)
-        assertEquals(0x2A95B9, colorOf(recolour("<gpx><trk></trk></gpx>", 0x2A95B9)))
+        assertFalse("gpx_style" in out, out)
+        assertEquals("Cyan", colorOf(recolour("<gpx><trk></trk></gpx>", "Cyan")))
     }
 
     @Test
     fun `a colour joins the track's extensions, replacing other apps' colours and keeping the rest`() {
         val styled = source.replace(
             "<extensions><hr:device>",
-            """<extensions xmlns:gpxx="${GpxColors.GARMIN_NAMESPACE}" xmlns:osmand="https://osmand.net">""" +
+            """<extensions xmlns:gpxx="${GpxColors.GARMIN_NAMESPACE}" xmlns:osmand="https://osmand.net" """ +
+                """xmlns:gpx_style="http://www.topografix.com/GPX/gpx_style/0/2">""" +
                 "<gpxx:TrackExtension><gpxx:DisplayColor>Red</gpxx:DisplayColor></gpxx:TrackExtension>" +
-                "<osmand:color>#ffff0000</osmand:color><hr:device>",
+                "<osmand:color>#ffff0000</osmand:color>" +
+                "<gpx_style:line><gpx_style:color>ff0000</gpx_style:color></gpx_style:line><hr:device>",
         )
-        val out = recolour(styled, 0x098745)
-        assertEquals(0x098745, colorOf(out))
+        val out = recolour(styled, "Green")
+        assertEquals("Green", colorOf(out))
         // A new one before the segments, the stripped one after them, and two on points.
         assertEquals(4, Regex("<extensions").findAll(out).count(), out)
-        assertFalse(">Red<" in out || "ffff0000" in out, out)
+        assertFalse(">Red<" in out || "ff0000" in out, out)
         assertTrue("<hr:device>Watch</hr:device>" in out, out)
     }
 
@@ -410,8 +412,8 @@ class GpxTrimmerTest {
     fun `colours only the first track`() {
         val second = "<trk><extensions><gpxx:TrackExtension xmlns:gpxx=\"${GpxColors.GARMIN_NAMESPACE}\">" +
             "<gpxx:DisplayColor>Red</gpxx:DisplayColor></gpxx:TrackExtension></extensions><trkseg/></trk>"
-        val out = recolour(gpx("").replace("</trk>", "</trk>$second"), 0x3851A3)
-        assertEquals(0x3851A3, colorOf(out))
+        val out = recolour(gpx("").replace("</trk>", "</trk>$second"), "Blue")
+        assertEquals("Blue", colorOf(out))
         assertTrue(">Red<" in out, out)
     }
 }

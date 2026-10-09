@@ -90,6 +90,11 @@ class TrackRepository(
         all.mapNotNull { it.category }.distinctBy { it.lowercase(Locale.ROOT) }.sortedWith(collator)
     }
 
+    /** The slot the next new track gets, so a recording is drawn in it while under way. */
+    val nextColorSlot: Flow<Int> = dao.observeByRecent().map { all ->
+        leastUsedSlot(all.map { ColorUse(it.colorIndex, it.visible) }, TrackEntity.PALETTE_SIZE)
+    }
+
     /** The last saved recording's, which the next one is offered. */
     val lastRecordingCategory: Flow<String?> = settings.lastRecordingCategory
 
@@ -119,7 +124,7 @@ class TrackRepository(
                     TrackAnalyzer.analyze(track),
                     name = track.name ?: arrivedAs.withoutGpxSuffix().asTrackName(),
                     category = categoryAsSpelt(track.type),
-                    colorIndex = track.lineColor?.let(RouteColors::slotOf),
+                    colorIndex = track.displayColor?.let(RouteColors::slotOf),
                 )
                 insert(entity, staged, track)
             } finally {
@@ -262,7 +267,7 @@ class TrackRepository(
         // Blank removes the file's own.
         name = entity.trackName.orEmpty(),
         type = entity.category.orEmpty(),
-        color = RouteColors.rgb(entity.colorIndex),
+        color = RouteColors.garminName(entity.colorIndex),
     )
 
     /** Like [open] but without touching the sort order, for drawing. */

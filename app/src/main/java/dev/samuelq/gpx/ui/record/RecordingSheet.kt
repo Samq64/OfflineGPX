@@ -40,6 +40,7 @@ import androidx.compose.ui.MotionDurationScale
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.painterResource
@@ -60,7 +61,6 @@ import dev.samuelq.gpx.ui.EdgePadding
 import dev.samuelq.gpx.ui.format.Formatters
 import dev.samuelq.gpx.ui.format.LocalFormatters
 import dev.samuelq.gpx.ui.format.spokenDuration
-import dev.samuelq.gpx.ui.theme.recordingColor
 import dev.samuelq.gpx.ui.track.ProfileSheet
 import dev.samuelq.gpx.ui.track.Stat
 import dev.samuelq.gpx.ui.track.StatRow
@@ -70,6 +70,8 @@ import dev.samuelq.gpx.ui.track.distanceAndElapsed
 @Composable
 fun RecordingSheet(
     state: RecordingState.Active,
+    /** The line's on the map. */
+    color: Color,
     /** Null until the recording has moved; the sheet shows empty charts meanwhile. */
     profile: TrackProfile?,
     maxHeight: Dp,
@@ -97,7 +99,7 @@ fun RecordingSheet(
         onPeekHeightChange = onPeekHeightChange,
         pointCount = state.pointCount,
     ) {
-        RecordingHeader(state, onPause, onResume, onStop, onAddWaypoint)
+        RecordingHeader(state, color, onPause, onResume, onStop, onAddWaypoint)
     }
 }
 
@@ -105,6 +107,7 @@ fun RecordingSheet(
 @Composable
 private fun RecordingHeader(
     state: RecordingState.Active,
+    color: Color,
     onPause: () -> Unit,
     onResume: () -> Unit,
     onStop: () -> Unit,
@@ -143,7 +146,7 @@ private fun RecordingHeader(
 
         // Like a track's title: what's happening, then the numbers, then controls.
         Row(verticalAlignment = Alignment.CenterVertically) {
-            RecordingDot(paused = state.paused)
+            RecordingDot(color, paused = state.paused)
             Spacer(Modifier.width(8.dp))
             Text(
                 text = listOfNotNull(status, waypointCount).joinToString(Formatters.SEPARATOR),
@@ -239,7 +242,7 @@ private fun WaypointDialog(number: Int, onDismiss: () -> Unit, onConfirm: (name:
 
 /** Pulses while recording, unless animations are off. */
 @Composable
-private fun RecordingDot(paused: Boolean) {
+private fun RecordingDot(color: Color, paused: Boolean) {
     // Compose's own scale, which follows the setting; at zero an infinite pulse would stop dim.
     var animate by remember { mutableStateOf(true) }
     LaunchedEffect(Unit) {
@@ -268,6 +271,6 @@ private fun RecordingDot(paused: Boolean) {
                 }
             }
             .clip(CircleShape)
-            .background(recordingColor()),
+            .background(color),
     )
 }

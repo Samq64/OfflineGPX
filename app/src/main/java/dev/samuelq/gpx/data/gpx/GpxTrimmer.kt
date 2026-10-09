@@ -28,8 +28,8 @@ class GpxTrimmer(
      * @param name replaces the first `<trk>`'s name, or is added as its first child; blank
      *   removes it, null leaves it.
      * @param type the same for the first `<trk>`'s type, added where the schema orders it.
-     * @param color 0xRRGGBB for the first `<trk>`, written as gpx_style's and Garmin's. Any colour
-     *   extension already there goes, so none contradicts it; null leaves them.
+     * @param color a Garmin `DisplayColor` name for the first `<trk>`. Any colour extension
+     *   already there goes, so none contradicts it; null leaves them.
      */
     fun trim(
         input: InputStream,
@@ -38,7 +38,7 @@ class GpxTrimmer(
         keepWaypoint: ((index: Int) -> Boolean)? = null,
         name: String? = null,
         type: String? = null,
-        color: Int? = null,
+        color: String? = null,
     ) {
         val parser = newPullParser().apply {
             setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, true)
@@ -77,7 +77,7 @@ class GpxTrimmer(
         /** Likewise. */
         private var newType: String?,
         /** Likewise. */
-        private var newColor: Int?,
+        private var newColor: String?,
     ) {
         private val path = ArrayList<String>()
         private var skipDepth = 0
@@ -226,22 +226,16 @@ class GpxTrimmer(
             xml.text(text).endTag(namespace, tag)
         }
 
-        /** [newColor]'s extensions, in an `<extensions>` of the track's own if [wrapped]. */
+        /** [newColor] as Garmin's extension, in an `<extensions>` of the track's own if [wrapped]. */
         private fun writeColor(wrapped: Boolean) {
-            val rgb = newColor ?: return
+            val color = newColor ?: return
             colorDue = false
             newColor = null
             if (wrapped) xml.startTag(trackNamespace, TAG_EXTENSIONS)
-            xml.setPrefix(STYLE_PREFIX, GpxColors.STYLE_NAMESPACE)
-            xml.startTag(GpxColors.STYLE_NAMESPACE, GpxColors.STYLE_LINE)
-            xml.startTag(GpxColors.STYLE_NAMESPACE, GpxColors.STYLE_COLOR)
-                .text(GpxColors.hex(rgb))
-                .endTag(GpxColors.STYLE_NAMESPACE, GpxColors.STYLE_COLOR)
-            xml.endTag(GpxColors.STYLE_NAMESPACE, GpxColors.STYLE_LINE)
             xml.setPrefix(GARMIN_PREFIX, GpxColors.GARMIN_NAMESPACE)
             xml.startTag(GpxColors.GARMIN_NAMESPACE, GpxColors.GARMIN_TRACK)
             xml.startTag(GpxColors.GARMIN_NAMESPACE, GpxColors.GARMIN_COLOR)
-                .text(GpxColors.garminName(rgb))
+                .text(color)
                 .endTag(GpxColors.GARMIN_NAMESPACE, GpxColors.GARMIN_COLOR)
             xml.endTag(GpxColors.GARMIN_NAMESPACE, GpxColors.GARMIN_TRACK)
             if (wrapped) xml.endTag(trackNamespace, TAG_EXTENSIONS)
@@ -347,7 +341,6 @@ class GpxTrimmer(
         const val TAG_EXTENSIONS = "extensions"
         const val ATTR_LAT = "lat"
         const val ATTR_LON = "lon"
-        const val STYLE_PREFIX = "gpx_style"
         const val GARMIN_PREFIX = "gpxx"
 
         val ROOT_PATH = listOf("gpx")

@@ -33,8 +33,8 @@ public data class Track(
     val type: String? = null,
     /** Unordered. */
     val waypoints: List<Waypoint> = emptyList(),
-    /** A `<trk>` line colour extension's, as 0xRRGGBB. */
-    val lineColor: Int? = null,
+    /** The first `<trk>`'s Garmin `DisplayColor` name, as written. */
+    val displayColor: String? = null,
 ) {
     val isEmpty: Boolean get() = points.size == 0
 }

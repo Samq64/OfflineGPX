@@ -348,42 +348,29 @@ class GpxParserTest {
           <trk><extensions>$extensions</extensions><trkseg><trkpt lat="1" lon="1"/></trkseg></trk>
         </gpx>
         """.trimIndent(),
-    ).lineColor
+    ).displayColor
 
     @Test
-    fun `reads a track's colour from gpx_style, OsmAnd or Garmin, preferring the exact ones`() {
-        val garmin = "<gpxx:TrackExtension><gpxx:DisplayColor>DarkCyan</gpxx:DisplayColor></gpxx:TrackExtension>"
-        val osmAnd = "<osmand:color>#80ff8800</osmand:color>"
-        val style = "<gpx_style:line><gpx_style:color>2a95b9</gpx_style:color></gpx_style:line>"
-        assertEquals(0x008080, colored(garmin))
-        assertEquals(0xFF8800, colored(garmin + osmAnd))
-        assertEquals(0x2A95B9, colored(garmin + osmAnd + style))
-        assertNull(
-            colored("<gpxx:TrackExtension><gpxx:DisplayColor>Transparent</gpxx:DisplayColor></gpxx:TrackExtension>"),
-        )
-        assertNull(colored("<gpx_style:line><gpx_style:color>red</gpx_style:color></gpx_style:line>"))
+    fun `reads a track's Garmin colour name, ignoring other apps' colours`() {
+        val garmin = "<gpxx:TrackExtension><gpxx:Extensions/>" +
+            "<gpxx:DisplayColor> DarkCyan </gpxx:DisplayColor></gpxx:TrackExtension>"
+        val others = "<gpx_style:line><gpx_style:color>2a95b9</gpx_style:color></gpx_style:line>" +
+            "<osmand:color>#80ff8800</osmand:color><other xmlns=\"urn:x\"><color>000000</color></other><gpxx:Other/>"
+        assertEquals("DarkCyan", colored(others + garmin))
+        assertNull(colored(others))
     }
 
     @Test
-    fun `a colour is found among other extensions, and the first track's wins`() {
-        val line = "<gpx_style:line><gpx_style:width>3</gpx_style:width>" +
-            "<gpx_style:color>2a95b9</gpx_style:color></gpx_style:line>"
-        val garmin = "<gpxx:TrackExtension><gpxx:Extensions/>" +
-            "<gpxx:DisplayColor>Red</gpxx:DisplayColor></gpxx:TrackExtension>"
-        val others = "<other xmlns=\"urn:x\"><color>000000</color></other><osmand:width>3</osmand:width>" +
-            "<gpx_style:text/><gpxx:Other/>"
-        assertEquals(0x2A95B9, colored(others + line))
-        assertEquals(0xFF0000, colored(garmin))
-
+    fun `the first track's colour wins`() {
         val laps = parse(
             """
             <gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1" xmlns:gpxx="http://www.garmin.com/xmlschemas/GpxExtensions/v3">
-              <trk><number>1</number><extensions>$garmin</extensions><trkseg><trkpt lat="1" lon="1"/></trkseg></trk>
+              <trk><number>1</number><extensions><gpxx:TrackExtension><gpxx:DisplayColor>Red</gpxx:DisplayColor></gpxx:TrackExtension></extensions><trkseg><trkpt lat="1" lon="1"/></trkseg></trk>
               <trk><extensions><gpxx:TrackExtension><gpxx:DisplayColor>Blue</gpxx:DisplayColor></gpxx:TrackExtension></extensions></trk>
             </gpx>
             """.trimIndent(),
         )
-        assertEquals(0xFF0000, laps.lineColor)
+        assertEquals("Red", laps.displayColor)
     }
 }
 

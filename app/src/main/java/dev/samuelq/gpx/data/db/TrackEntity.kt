@@ -39,7 +39,7 @@ data class TrackEntity(
     val totalSeconds: Double get() = summary.totalSeconds
 
     companion object {
-        const val PALETTE_SIZE = 7
+        const val PALETTE_SIZE = 6
     }
 }
 

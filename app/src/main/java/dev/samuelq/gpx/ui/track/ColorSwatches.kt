@@ -30,7 +30,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.samuelq.gpx.R
 import dev.samuelq.gpx.ui.theme.RouteColorNames
-import dev.samuelq.gpx.ui.theme.RoutePickerOrder
 import dev.samuelq.gpx.ui.theme.routePalette
 import dev.samuelq.gpx.ui.theme.slot
 
@@ -70,13 +69,14 @@ val ColorDotSize = 20.dp
 @Composable
 internal fun ColorSwatches(colorIndex: Int, onPick: (Int) -> Unit, modifier: Modifier = Modifier) {
     val palette = routePalette()
-    // Seven 48dp targets need about 380dp; narrower windows get two rows.
+    // Six 48dp targets need about 330dp; narrower windows get two rows.
     val windowWidth = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp() }
     FlowRow(
         modifier = modifier.padding(horizontal = 8.dp),
-        maxItemsInEachRow = if (windowWidth >= 380.dp) RoutePickerOrder.size else 4,
+        maxItemsInEachRow = if (windowWidth >= 330.dp) palette.size else palette.size / 2,
     ) {
-        RoutePickerOrder.forEach { index ->
+        // Slots are in wheel order.
+        palette.indices.forEach { index ->
             val color = palette[index]
             val isSelected = index == colorIndex.mod(palette.size)
             val label = stringResource(RouteColorNames[index])
