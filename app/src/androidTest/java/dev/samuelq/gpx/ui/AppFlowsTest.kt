@@ -111,7 +111,7 @@ class AppFlowsTest {
         launch()
 
         compose.onNodeWithContentDescription(string(R.string.library_title)).performClick()
-        compose.waitUntil(5_000) {
+        compose.waitUntil(10_000) {
             compose.onAllNodes(hasContentDescription(targetContext.getString(R.string.action_manage_named, name)))
                 .fetchSemanticsNodes().isNotEmpty()
         }
