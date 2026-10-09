@@ -1,7 +1,6 @@
 package dev.samuelq.gpx.data.gpx
 
 import dev.samuelq.gpx.core.model.Track
-import dev.samuelq.gpx.core.model.bounds
 import java.io.OutputStream
 import java.time.format.DateTimeFormatter
 import org.xmlpull.v1.XmlSerializer
@@ -32,17 +31,9 @@ class GpxWriter(private val newSerializer: () -> XmlSerializer = DEFAULT_SERIALI
         xml.attribute(null, "creator", CREATOR)
 
         val points = track.points
-        // Waypoints are dropped at a fix, so the points' box holds them too.
-        val bounds = points.bounds()
-        if (bounds != null) {
+        if (points.size > 0 && points.hasTime(0)) {
             xml.startTag(NAMESPACE, "metadata")
-            if (points.hasTime(0)) xml.textTag("time", timestamp(points.timeMillis(0)))
-            xml.startTag(NAMESPACE, "bounds")
-            xml.attribute(null, "minlat", format(bounds.southLatitude))
-            xml.attribute(null, "minlon", format(bounds.westLongitude))
-            xml.attribute(null, "maxlat", format(bounds.northLatitude))
-            xml.attribute(null, "maxlon", format(bounds.eastLongitude))
-            xml.endTag(NAMESPACE, "bounds")
+            xml.textTag("time", timestamp(points.timeMillis(0)))
             xml.endTag(NAMESPACE, "metadata")
         }
 

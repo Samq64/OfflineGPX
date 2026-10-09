@@ -16,8 +16,7 @@ class RouteOverlay(
     val color: Color,
     knownBounds: GeoBounds? = null,
 ) {
-    /** Measured once, lazily, unless known. `PUBLICATION`, not a lock: a race just computes it twice. */
-    val bounds: GeoBounds? by lazy(LazyThreadSafetyMode.PUBLICATION) { knownBounds ?: points.bounds() }
+    val bounds: GeoBounds? = knownBounds ?: points.bounds()
 
     /** Each segment's `[from, to)` range. */
     inline fun forEachRun(block: (from: Int, to: Int) -> Unit) {

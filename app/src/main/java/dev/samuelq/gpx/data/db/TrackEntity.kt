@@ -37,8 +37,7 @@ data class TrackEntity(
     /** Null is uncategorised. */
     val category: String? = null,
 ) {
-    val bounds: GeoBounds
-        get() = with(summary) { GeoBounds(southLatitude, westLongitude, northLatitude, eastLongitude) }
+    val bounds: GeoBounds get() = summary.bounds
 
     // What the list sorts and shows by.
     val distanceMeters: Double get() = summary.distanceMeters
@@ -59,11 +58,7 @@ data class TrackSummary(
     val averageSpeedMps: Double,
     val ascentMeters: Double,
     val descentMeters: Double,
-
-    val southLatitude: Double,
-    val westLongitude: Double,
-    val northLatitude: Double,
-    val eastLongitude: Double,
+    @Embedded val bounds: GeoBounds,
 )
 
 /** The columns a file's contents decide, written alone so a concurrent rename or recolour survives. */

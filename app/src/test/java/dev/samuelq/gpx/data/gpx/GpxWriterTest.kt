@@ -34,15 +34,9 @@ class GpxWriterTest {
     }
 
     @Test
-    fun `labels waypoints with name and bounds the points`() {
+    fun `labels waypoints with name`() {
         val xml = write()
         assertTrue("<name>Summit</name>" in xml, xml)
-        assertTrue(
-            Regex(
-                """<bounds minlat="47.100000" minlon="8.500000" maxlat="47.300000" maxlon="8.600000"""",
-            ).containsMatchIn(xml),
-            xml,
-        )
     }
 
     @Test

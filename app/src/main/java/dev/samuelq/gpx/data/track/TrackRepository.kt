@@ -466,7 +466,6 @@ class TrackRepository(
 
     private fun summaryOf(track: Track, profile: TrackProfile): TrackSummary {
         val stats = profile.stats
-        val bounds = checkNotNull(track.points.bounds()) { "Summarising an empty track" }
         return TrackSummary(
             pointCount = stats.pointCount,
             distanceMeters = stats.distanceMeters,
@@ -475,10 +474,7 @@ class TrackRepository(
             averageSpeedMps = stats.averageSpeedMps,
             ascentMeters = stats.ascentMeters,
             descentMeters = stats.descentMeters,
-            southLatitude = bounds.southLatitude,
-            westLongitude = bounds.westLongitude,
-            northLatitude = bounds.northLatitude,
-            eastLongitude = bounds.eastLongitude,
+            bounds = checkNotNull(track.points.bounds()) { "Summarising an empty track" },
         )
     }
 

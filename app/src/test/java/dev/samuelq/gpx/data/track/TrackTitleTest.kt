@@ -1,5 +1,6 @@
 package dev.samuelq.gpx.data.track
 
+import dev.samuelq.gpx.core.model.GeoBounds
 import dev.samuelq.gpx.data.db.TrackEntity
 import dev.samuelq.gpx.data.db.TrackSummary
 import dev.samuelq.gpx.ui.track.trackTitle
@@ -43,7 +44,7 @@ class TrackTitleTest {
         trackName = trackName,
         startedAtEpochMillis = startedAt,
         lastOpenedAtEpochMillis = 0,
-        summary = TrackSummary(2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+        summary = TrackSummary(2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, GeoBounds(0.0, 0.0, 0.0, 0.0)),
     )
 
     @Test

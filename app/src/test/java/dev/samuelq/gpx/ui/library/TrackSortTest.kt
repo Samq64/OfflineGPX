@@ -1,5 +1,6 @@
 package dev.samuelq.gpx.ui.library
 
+import dev.samuelq.gpx.core.model.GeoBounds
 import dev.samuelq.gpx.data.db.TrackEntity
 import dev.samuelq.gpx.data.db.TrackSummary
 import dev.samuelq.gpx.data.settings.TrackOrder
@@ -24,7 +25,7 @@ class TrackSortTest {
         trackName = trackName,
         startedAtEpochMillis = started,
         lastOpenedAtEpochMillis = opened,
-        summary = TrackSummary(2, meters, seconds, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+        summary = TrackSummary(2, meters, seconds, 0.0, 0.0, 0.0, 0.0, GeoBounds(0.0, 0.0, 0.0, 0.0)),
     )
 
     private fun List<TrackEntity>.ids(sort: TrackSort) = sortedFor(TrackOrder(sort)).map(TrackEntity::id)

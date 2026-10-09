@@ -17,7 +17,7 @@ class LibraryListingTest {
         trackName = null,
         startedAtEpochMillis = null,
         lastOpenedAtEpochMillis = 0,
-        summary = TrackSummary(2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+        summary = TrackSummary(2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, GeoBounds(0.0, 0.0, 0.0, 0.0)),
         category = category,
     )
 

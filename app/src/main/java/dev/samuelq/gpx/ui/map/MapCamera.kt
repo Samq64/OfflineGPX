@@ -60,7 +60,7 @@ internal fun screenPosition(point: TrackPoint, position: MapPosition, width: Int
  * nothing). Null when there's neither.
  */
 internal fun extentOf(routes: List<RouteOverlay>, liveRoute: RouteOverlay?, basemaps: List<OfflineMap>): BoundingBox? {
-    // From each route's cached bounds, so a growing recording doesn't re-walk every position.
+    // Saved tracks' bounds come from their rows, so only the recording is walked each fix.
     val tracks = (routes + listOfNotNull(liveRoute)).mapNotNull {
         it.bounds?.toBoundingBox()?.extendMargin(TRACK_MARGIN_FACTOR)
     }
