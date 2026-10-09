@@ -342,6 +342,7 @@ for (const type of ['pointerup', 'pointercancel']) {
 }
 
 function update() {
+  saveUrl();
   if (!bbox) return;
   const [w, s, e, n] = bbox.map(Number);
   const km = (a, b) => Math.abs(a - b) * 111.32;
@@ -420,7 +421,45 @@ $('go').onclick = async () => {
   $('go').disabled = false;
 };
 
-browse('').catch((error) => { $('status').textContent = error.message; });
+// --- Link -------------------------------------------------------------------
+//
+// The region and the selection, so a link or a reload comes back to the same box. In the
+// fragment, which never reaches the server, and replaced rather than pushed, so Back
+// leaves the page instead of stepping through every drag.
+
+function saveUrl() {
+  const params = new URLSearchParams();
+  if (source) params.set('map', source.path);
+  if (source && bbox) params.set('box', bbox.join(','));
+  const hash = params.size ? `#${params.toString().replaceAll('%2F', '/').replaceAll('%2C', ',')}` : '';
+  history.replaceState(null, '', location.pathname + location.search + hash);
+}
+
+/** Opens the region and box a link names. Never starts an extract. */
+async function restore() {
+  const params = new URLSearchParams(location.hash.slice(1));
+  const mapPath = params.get('map');
+  await browse(mapPath ? mapPath.split('/').slice(0, -1).join('/') : '');
+  if (!mapPath) return;
+  await choose(mapPath);
+  const [w, s, e, n] = (params.get('box') ?? '').split(',').map(Number);
+  if (![w, s, e, n].every(Number.isFinite)) return saveUrl();
+  // Held inside the file's box, as a drawn one is.
+  const b = source.bbox;
+  const next = {
+    w: clamp(Math.min(w, e), b.minLon, b.maxLon), e: clamp(Math.max(w, e), b.minLon, b.maxLon),
+    s: clamp(Math.min(s, n), b.minLat, b.maxLat), n: clamp(Math.max(s, n), b.minLat, b.maxLat),
+  };
+  if (next.w === next.e || next.s === next.n) return saveUrl();
+  box = next;
+  render();
+  setDrawing(false);
+  bbox = [box.w, box.s, box.e, box.n].map((v) => v.toFixed(6));
+  update();
+  map.fitBounds([[box.s, box.w], [box.n, box.e]], { padding: [40, 40] });
+}
+
+restore().catch((error) => { $('status').textContent = error.message; });
 </script>
 </body>
 </html>
