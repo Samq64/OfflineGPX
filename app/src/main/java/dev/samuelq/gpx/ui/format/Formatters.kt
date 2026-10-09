@@ -1,7 +1,6 @@
 package dev.samuelq.gpx.ui.format
 
 import androidx.compose.runtime.Immutable
-import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.text.TextStyle
 import dev.samuelq.gpx.core.model.UnitSystem
 import java.time.Instant
@@ -200,9 +199,6 @@ class Formatters(
                 ?: style().withLocale(locale)
     }
 }
-
-/** Static: units change so rarely that observing them isn't worth paying for. */
-internal val LocalFormatters = staticCompositionLocalOf { Formatters.Metric }
 
 /** Equal-width digits for numbers that redraw in place; gappy at large display sizes. */
 fun TextStyle.tabularFigures(): TextStyle = copy(fontFeatureSettings = "tnum")

@@ -133,6 +133,7 @@ class FormattersTest {
         assertEquals("3 September 2026 08:00", formatters.longDateTime(september, ZoneOffset.UTC))
         assertEquals("3 September 2026", formatters.longDate(september, ZoneOffset.UTC))
         assertEquals(Formatters.EMPTY, formatters.dateTime(null))
+        assertEquals(Formatters.EMPTY, formatters.longDateTime(null))
         assertEquals(Formatters.EMPTY, formatters.longDate(null))
         assertEquals(Formatters.EMPTY, formatters.time(null))
     }
@@ -147,7 +148,16 @@ class FormattersTest {
     }
 
     @Test
+    fun `dates default to the system zone`() {
+        val formatters = Formatters(UnitSystem.METRIC, en, longDateTimePattern = "d MMMM yyyy HH:mm")
+        val at = Instant.parse("2026-05-01T23:30:00Z")
+
+        assertEquals(formatters.longDateTime(at, ZoneId.systemDefault()), formatters.longDateTime(at))
+    }
+
+    @Test
     fun `display units per SI unit`() {
+        assertEquals(UnitSystem.IMPERIAL, imperial.units)
         assertEquals(3.6f, metric.speedPerMps, 1e-6f)
         assertEquals(2.2369363f, imperial.speedPerMps, 1e-6f)
         assertEquals(1f, metric.elevationPerMeter)
@@ -177,6 +187,7 @@ class FormattersTest {
     fun `a zero step gets one decimal`() {
         assertEquals("5.0 km", metric.distanceAxisFor(0f, en)(5000f))
         assertEquals("36.0 km/h", metric.speedAxisFor(Float.NaN, en)(10f))
+        assertEquals("5.0 km", metric.distanceAxisFor(Float.POSITIVE_INFINITY, en)(5000f))
     }
 
     @Test
