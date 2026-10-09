@@ -116,6 +116,8 @@ import kotlinx.coroutines.launch
 fun SettingsScreen(
     onBack: () -> Unit,
     onOpenLibraries: () -> Unit,
+    /** Back to the map, framing the file named. */
+    onShowMap: (String) -> Unit,
     /** Opens the map file picker on arrival. */
     importMapOnOpen: Boolean = false,
     viewModel: SettingsViewModel = viewModel(factory = SettingsViewModel.Factory),
@@ -225,6 +227,7 @@ fun SettingsScreen(
                 maps = maps,
                 importing = importing,
                 onImport = { importer.launch(MAP_MIME_TYPES) },
+                onShow = { onShowMap(it.file.name) },
                 onRename = { renaming = it.file.name },
                 onExport = ::exportMap,
                 onDelete = ::deleteMap,
@@ -388,6 +391,7 @@ private fun MapsSection(
     maps: List<OfflineMap>,
     importing: Boolean,
     onImport: () -> Unit,
+    onShow: (OfflineMap) -> Unit,
     onRename: (OfflineMap) -> Unit,
     onExport: (OfflineMap) -> Unit,
     onDelete: (OfflineMap) -> Unit,
@@ -414,6 +418,7 @@ private fun MapsSection(
             maps.forEach { map ->
                 MapRow(
                     map = map,
+                    onShow = { onShow(map) },
                     onRename = { onRename(map) },
                     onExport = { onExport(map) },
                     onDelete = { onDelete(map) },
@@ -452,12 +457,19 @@ private fun MapsSection(
 
 /** A row, not ListItem: that insets 16dp against this screen's 20. */
 @Composable
-private fun MapRow(map: OfflineMap, onRename: () -> Unit, onExport: () -> Unit, onDelete: () -> Unit) {
+private fun MapRow(
+    map: OfflineMap,
+    onShow: () -> Unit,
+    onRename: () -> Unit,
+    onExport: () -> Unit,
+    onDelete: () -> Unit,
+) {
     val size = android.text.format.Formatter.formatShortFileSize(LocalContext.current, map.sizeBytes)
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clickable(onClickLabel = stringResource(R.string.settings_maps_show), onClick = onShow)
             .padding(horizontal = EdgePadding, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),

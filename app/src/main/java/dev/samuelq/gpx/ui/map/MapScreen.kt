@@ -80,6 +80,7 @@ import dev.samuelq.gpx.core.analysis.TrackProfile
 import dev.samuelq.gpx.core.model.GeoBounds
 import dev.samuelq.gpx.core.model.UnitSystem
 import dev.samuelq.gpx.core.model.Waypoint
+import dev.samuelq.gpx.data.map.OfflineMap
 import dev.samuelq.gpx.data.record.RecordingState
 import dev.samuelq.gpx.data.track.editableName
 import dev.samuelq.gpx.data.track.title
@@ -113,6 +114,9 @@ import kotlinx.coroutines.launch
 fun MapScreen(
     pendingFocus: TrackRef?,
     onFocusConsumed: () -> Unit,
+    /** A map's file name, from settings. */
+    pendingMap: String?,
+    onMapConsumed: () -> Unit,
     /** With the area the map last showed, for the list to filter to. */
     onOpenList: (area: GeoBounds?) -> Unit,
     onOpenSettings: () -> Unit,
@@ -244,6 +248,18 @@ fun MapScreen(
             if (!screen.open(it)) say(resources.getString(R.string.record_stop_to_open))
             onFocusConsumed()
         }
+    }
+
+    var framingMap by remember { mutableStateOf<OfflineMap?>(null) }
+    LaunchedEffect(pendingMap, basemaps) {
+        val name = pendingMap ?: return@LaunchedEffect
+        if (basemaps.isEmpty()) return@LaunchedEffect
+        basemaps.firstOrNull { it.file.name == name }?.let {
+            // Else the next fix pulls the camera back.
+            screen.stopFollowing()
+            framingMap = it
+        }
+        onMapConsumed()
     }
 
     LaunchedEffect(isRecording) {
@@ -706,6 +722,8 @@ fun MapScreen(
                     frameTrackId = frameTrackId,
                     framePadding = framePadding,
                     onFramed = { screen.framing = null },
+                    frameMap = framingMap,
+                    onMapFramed = { framingMap = null },
                     sheetHeight = sheetCover,
                     panelWidth = panelCover,
                     // Distinct from land so ground no file covers reads as empty.

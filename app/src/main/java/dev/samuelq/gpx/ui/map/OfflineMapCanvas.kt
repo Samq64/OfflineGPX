@@ -102,6 +102,9 @@ internal fun OfflineMapCanvas(
     /** [contentPadding] as it will be once the sheet or panel has settled. */
     framePadding: PaddingValues,
     onFramed: () -> Unit,
+    /** A map to frame once, then [onMapFramed]. */
+    frameMap: OfflineMap?,
+    onMapFramed: () -> Unit,
     /** Bottom covered by a sheet; panning is clamped to its top edge. */
     sheetHeight: Dp,
     /** The same for the landscape side panel. */
@@ -472,6 +475,16 @@ internal fun OfflineMapCanvas(
         }
         hasFramed = true
         framed()
+    }
+
+    // Last, so a map asked for from settings wins over the remembered camera.
+    LaunchedEffect(map, frameMap, frameInsets, viewSize) {
+        val target = frameMap?.bounds ?: return@LaunchedEffect
+        val size = viewSize ?: return@LaunchedEffect
+        val usable = size.usable(frameInsets) ?: return@LaunchedEffect
+        frameTo(fit(target, usable, frameInsets, map.viewport().maxScale), size)
+        hasFramed = true
+        onMapFramed()
     }
 
     // Nudge the least distance rather than re-centring, so scrubbing doesn't pan the map constantly.

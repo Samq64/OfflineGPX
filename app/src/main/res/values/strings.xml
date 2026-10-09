@@ -223,6 +223,7 @@
     <string name="settings_maps_rename_failed">Couldn\'t rename that map.</string>
     <string name="settings_maps_no_browser">No app on this device can open a web page.</string>
     <string name="settings_maps_none">No maps imported.</string>
+    <string name="settings_maps_show">Show on map</string>
     <!-- A direct link to where the files are published, so an action, not a heading. -->
     <string name="settings_maps_where">Get maps</string>
     <string name="settings_section_about">About</string>

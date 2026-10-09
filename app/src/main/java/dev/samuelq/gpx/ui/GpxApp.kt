@@ -63,10 +63,15 @@ fun GpxApp(incomingTrack: Uri?, onIncomingTrackHandled: () -> Unit) {
                 val pending by entry.savedStateHandle
                     .getStateFlow<Any?>(FocusRequest.KEY, null)
                     .collectAsStateWithLifecycle()
+                val pendingMap by entry.savedStateHandle
+                    .getStateFlow<String?>(SHOW_MAP_KEY, null)
+                    .collectAsStateWithLifecycle()
 
                 MapScreen(
                     pendingFocus = pending?.let(FocusRequest::decode),
                     onFocusConsumed = { entry.savedStateHandle[FocusRequest.KEY] = null },
+                    pendingMap = pendingMap,
+                    onMapConsumed = { entry.savedStateHandle[SHOW_MAP_KEY] = null },
                     onOpenList = { area -> navController.open(LibraryRoute(area)) },
                     onOpenSettings = { navController.open(SettingsRoute()) },
                     onImportMap = { navController.open(SettingsRoute(importMap = true)) },
@@ -85,6 +90,7 @@ fun GpxApp(incomingTrack: Uri?, onIncomingTrackHandled: () -> Unit) {
                 SettingsScreen(
                     onBack = dropUnlessResumed { navController.popBackStack() },
                     onOpenLibraries = { navController.open(LibrariesRoute) },
+                    onShowMap = { name -> navController.backToMap(SHOW_MAP_KEY, name) },
                     importMapOnOpen = entry.toRoute<SettingsRoute>().importMap,
                 )
             }
@@ -133,9 +139,14 @@ private object FocusRequest {
     }
 }
 
+/** A map's file name to frame. */
+private const val SHOW_MAP_KEY = "showMap"
+
+private fun NavController.focusOnMap(request: Any) = backToMap(FocusRequest.KEY, request)
+
 /** A pop, not a navigate: the map is always on the stack. */
-private fun NavController.focusOnMap(request: Any) {
-    getBackStackEntry(MapRoute).savedStateHandle[FocusRequest.KEY] = request
+private fun NavController.backToMap(key: String, value: Any) {
+    getBackStackEntry(MapRoute).savedStateHandle[key] = value
     popBackStack(MapRoute, inclusive = false)
 }
 
