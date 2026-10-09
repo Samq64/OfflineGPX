@@ -78,10 +78,12 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.samuelq.gpx.R
 import dev.samuelq.gpx.core.analysis.TrackProfile
 import dev.samuelq.gpx.core.model.GeoBounds
+import dev.samuelq.gpx.core.model.UnitSystem
 import dev.samuelq.gpx.core.model.Waypoint
 import dev.samuelq.gpx.data.record.RecordingState
 import dev.samuelq.gpx.data.track.editableName
 import dev.samuelq.gpx.data.track.title
+import dev.samuelq.gpx.ui.format.LocalFormatters
 import dev.samuelq.gpx.ui.makeWay
 import dev.samuelq.gpx.ui.record.RecordingOutcomes
 import dev.samuelq.gpx.ui.record.RecordingSheet
@@ -707,10 +709,11 @@ fun MapScreen(
                     sheetHeight = sheetCover,
                     panelWidth = panelCover,
                     // Distinct from land so ground no file covers reads as empty.
-                    basemapColors = BasemapColors(
+                    basemapStyle = BasemapStyle(
                         background = MaterialTheme.colorScheme.surfaceContainerLow,
                         land = MaterialTheme.colorScheme.surfaceContainerLowest,
                         label = MaterialTheme.colorScheme.onSurface,
+                        contourLabels = LocalFormatters.current.units == UnitSystem.METRIC,
                     ),
                     onScaleChange = { metersPerPixel.doubleValue = it },
                     // Resume where the camera was left rather than re-fitting.

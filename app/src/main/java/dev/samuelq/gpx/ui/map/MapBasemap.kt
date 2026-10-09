@@ -33,8 +33,11 @@ internal class Basemap(
     val all: List<Layer> get() = listOfNotNull(land, outline, tiles, labels, mask)
 }
 
-/** The colours a basemap is drawn in, from the app theme. */
-internal data class BasemapColors(val background: Color, val land: Color, val label: Color)
+/**
+ * How a basemap is drawn: colours from the app theme, and [contourLabels] off in imperial,
+ * since files store heights in metres and the theme can't convert.
+ */
+internal data class BasemapStyle(val background: Color, val land: Color, val label: Color, val contourLabels: Boolean)
 
 /**
  * Puts [maps] under the routes. [onAttached] hears each stage, so a build cancelled halfway
@@ -42,7 +45,7 @@ internal data class BasemapColors(val background: Color, val land: Color, val la
  */
 internal suspend fun Map.attachBasemap(
     maps: List<OfflineMap>,
-    colors: BasemapColors,
+    style: BasemapStyle,
     density: Density,
     onAttached: (Basemap) -> Unit,
 ) {
@@ -54,10 +57,11 @@ internal suspend fun Map.attachBasemap(
             ThemeLoader.load(
                 GeneratedRenderTheme(
                     MapRenderTheme.xml(
-                        land = colors.land,
-                        label = colors.label,
-                        background = colors.background,
+                        land = style.land,
+                        label = style.label,
+                        background = style.background,
                         textScale = density.fontScale,
+                        contourLabels = style.contourLabels,
                     ),
                 ),
             )
@@ -71,12 +75,12 @@ internal suspend fun Map.attachBasemap(
     layers().add(outline, LayerGroup.Outline.ordinal)
     onAttached(Basemap(land, outline, null, null, null, null))
 
-    val landStyle = Style.builder().fillColor(colors.land.toArgb()).fillAlpha(1f)
+    val landStyle = Style.builder().fillColor(style.land.toArgb()).fillAlpha(1f)
         .strokeColor(TRANSPARENT).build()
     // Solid: a dashed edge read as a railway.
     val outlineStyle = with(density) {
         Style.builder()
-            .strokeColor(colors.label.copy(alpha = COVERAGE_OPACITY).toArgb())
+            .strokeColor(style.label.copy(alpha = COVERAGE_OPACITY).toArgb())
             .strokeWidth(COVERAGE_WIDTH_DP.dp.toPx())
             .fixed(true)
             .build()
@@ -89,7 +93,7 @@ internal suspend fun Map.attachBasemap(
     outline.update()
 
     if (theme == null) {
-        MapRenderer.setBackgroundColor(colors.background.toArgb())
+        MapRenderer.setBackgroundColor(style.background.toArgb())
         updateMap(true)
         return
     }
@@ -110,7 +114,7 @@ internal suspend fun Map.attachBasemap(
     layers().add(labels, LayerGroup.Labels.ordinal)
     layers().add(mask, LayerGroup.Mask.ordinal)
     onAttached(Basemap(land, outline, tiles, labels, mask, theme))
-    outsideDrawables(maps, colors.background).forEach { mask.add(it) }
+    outsideDrawables(maps, style.background).forEach { mask.add(it) }
     mask.update()
     // Also clears to map-background-outside.
     setTheme(theme)

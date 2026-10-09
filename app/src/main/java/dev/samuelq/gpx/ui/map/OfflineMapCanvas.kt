@@ -106,7 +106,7 @@ internal fun OfflineMapCanvas(
     sheetHeight: Dp,
     /** The same for the landscape side panel. */
     panelWidth: Dp,
-    basemapColors: BasemapColors,
+    basemapStyle: BasemapStyle,
     onScaleChange: (metersPerPixel: Double) -> Unit,
     /** Kept centred through zooms while followed; centring on each new one is the caller's. */
     followed: TrackPoint?,
@@ -217,10 +217,10 @@ internal fun OfflineMapCanvas(
 
     // New files, colours or font scale need a new theme and data source; the only reason to
     // rebuild tiles. Font scale changes without recreating the activity.
-    LaunchedEffect(map, basemaps, basemapColors, density.fontScale) {
+    LaunchedEffect(map, basemaps, basemapStyle, density.fontScale) {
         basemap?.let(map::detach)
         basemap = null
-        map.attachBasemap(basemaps, basemapColors, density) { basemap = it }
+        map.attachBasemap(basemaps, basemapStyle, density) { basemap = it }
     }
 
     val routeStyles = remember(density) { RouteStyles(density) }
@@ -240,8 +240,8 @@ internal fun OfflineMapCanvas(
     }
 
     // Per colour, not per selection: a new bitmap per scrub frame is a texture upload per frame.
-    val symbols = remember(markerColor, puckColor, basemapColors.land, density) {
-        MarkerSymbols(markerColor, puckColor, basemapColors.land, density)
+    val symbols = remember(markerColor, puckColor, basemapStyle.land, density) {
+        MarkerSymbols(markerColor, puckColor, basemapStyle.land, density)
     }
 
     LaunchedEffect(

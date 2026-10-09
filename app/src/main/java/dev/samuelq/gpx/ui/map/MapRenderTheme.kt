@@ -13,8 +13,17 @@ import java.util.Locale
  */
 object MapRenderTheme {
 
-    /** @param textScale the user's font scale, which VTM's fixed label sizes don't follow. */
-    fun xml(land: Color, label: Color, background: Color, textScale: Float = 1f): String {
+    /**
+     * @param textScale the user's font scale, which VTM's fixed label sizes don't follow.
+     * @param contourLabels whether to print heights, which files store in metres.
+     */
+    fun xml(
+        land: Color,
+        label: Color,
+        background: Color,
+        textScale: Float = 1f,
+        contourLabels: Boolean = true,
+    ): String {
         // Derived colours move away from the background, not toward black, or roads vanish in dark mode.
         val dark = background.luminance() < DARK_THRESHOLD
 
@@ -28,10 +37,11 @@ object MapRenderTheme {
             // Rules paint in document order, so this is the stacking order.
             sea(land, dark)
             vegetation(dark)
+            contours(dark)
             water(dark)
             buildings(land, dark)
             roads(land, dark)
-            labels(label, background, textScale)
+            labels(label, background, textScale, contourLabels, dark)
 
             append("</rendertheme>")
         }
@@ -60,6 +70,24 @@ object MapRenderTheme {
         area("leisure", "park|garden|golf_course|nature_reserve|pitch|playground|dog_park", green)
         area("boundary", "protected_area|national_park", green)
         area("tourism", "camp_site", green)
+    }
+
+    /**
+     * pyhgtmap's tags, which OpenAndroMaps files carry; mapsforge.org files have no contours.
+     * Faint and under the water, so they read as ground rather than as ways.
+     */
+    private fun StringBuilder.contours(dark: Boolean) {
+        val stroke = contourBrown(dark, if (dark) 0x99 else 0x66)
+        zoomedLine(
+            selector = """<rule e="way" k="contour_ext" v="elevation_major">""",
+            stroke = stroke,
+            stops = listOf(12 to 0.4f, 15 to 0.9f, 18 to 1.4f),
+        )
+        zoomedLine(
+            selector = """<rule e="way" k="contour_ext" v="elevation_medium|elevation_minor">""",
+            stroke = stroke,
+            stops = listOf(14 to 0.3f, 15 to 0.5f, 18 to 0.8f),
+        )
     }
 
     /** Areas and lines separately: a river given to an area renderer fills its course into a blob. */
@@ -124,7 +152,22 @@ object MapRenderTheme {
     // --- Names -----------------------------------------------------------------------
 
     /** Collisions are settled by `priority`, higher winning, not by document order. */
-    private fun StringBuilder.labels(label: Color, background: Color, scale: Float) {
+    private fun StringBuilder.labels(
+        label: Color,
+        background: Color,
+        scale: Float,
+        contourLabels: Boolean,
+        dark: Boolean,
+    ) {
+        // Lowest priority: a height is the first thing to give way.
+        if (contourLabels) {
+            append("""<rule e="way" k="contour_ext" v="elevation_major" zoom-min="14">""")
+            append(
+                """<pathText k="ele" font-size="${fontSize(10, scale)}" priority="0" """ +
+                    """fill="${contourBrown(dark, 0xFF)}" stroke="${background.css()}" stroke-width="2.0"/></rule>""",
+            )
+        }
+
         caption("natural", "water", label, background, minZoom = 10, size = fontSize(12, scale), priority = 10)
         caption(
             "place",
@@ -223,6 +266,10 @@ object MapRenderTheme {
      * a mid-tone brown outshone them all.
      */
     private fun pathBrown(dark: Boolean) = if (dark) "#6b4f3e" else "#a8785f"
+
+    /** Atlas brown, `#aarrggbb`. Lighter in dark mode, where roads step toward white. */
+    private fun contourBrown(dark: Boolean, alpha: Int) =
+        String.format(Locale.ROOT, "#%02x%s", alpha, if (dark) "b08a68" else "8b5a2b")
 
     /** Below this background luminance, derived colours move toward white. */
     private const val DARK_THRESHOLD = 0.35f

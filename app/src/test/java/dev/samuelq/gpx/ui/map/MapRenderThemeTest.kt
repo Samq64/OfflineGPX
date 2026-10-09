@@ -6,6 +6,7 @@ import java.io.InputStream
 import java.lang.reflect.Proxy
 import kotlin.test.Test
 import kotlin.test.assertContains
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import org.oscim.backend.CanvasAdapter
 import org.oscim.backend.canvas.Bitmap
@@ -62,6 +63,21 @@ class MapRenderThemeTest {
     @Test
     fun `the dark theme is a theme VTM accepts`() {
         assertNotNull(parse(darkXml))
+    }
+
+    @Test
+    fun `contour heights are labelled only when asked`() {
+        assertContains(lightXml, """k="contour_ext"""")
+        assertContains(lightXml, """k="ele"""")
+        val unlabelled = MapRenderTheme.xml(
+            land = Color(0xFFF4F1EC),
+            label = Color(0xFF1B1B1F),
+            background = Color(0xFFE8E4DE),
+            contourLabels = false,
+        )
+        assertNotNull(parse(unlabelled))
+        assertContains(unlabelled, """k="contour_ext"""")
+        assertFalse(unlabelled.contains("""k="ele""""))
     }
 
     /** A misspelled key still parses, so each key's presence is asserted. */
