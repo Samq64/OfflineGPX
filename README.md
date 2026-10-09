@@ -3,10 +3,10 @@
 Record and manage rides, runs and hikes on an offline map, with no internet permission at all. Tracks are standard GPX files, and maps are optional [Mapsforge](https://download.mapsforge.org) files you import yourself.
 
 <p>
-  <img src="docs/screenshots/1-map.png" alt="Tracks on an offline map" width="24%">
-  <img src="docs/screenshots/2-charts.png" alt="A track's stats with speed and elevation charts" width="24%">
-  <img src="docs/screenshots/3-list.png" alt="The track library grouped by category" width="24%">
-  <img src="docs/screenshots/4-recording.png" alt="Recording a track" width="24%">
+  <img src="docs/screenshots/map.png" alt="Tracks on an offline map" width="24%">
+  <img src="docs/screenshots/recording.png" alt="Recording a track" width="24%">
+  <img src="docs/screenshots/charts.png" alt="A track's stats with speed and elevation charts" width="24%">
+  <img src="docs/screenshots/list.png" alt="The track library grouped by category" width="24%">
 </p>
 
 ## Features
