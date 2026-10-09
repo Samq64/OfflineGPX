@@ -1,6 +1,13 @@
-# Offline GPX
+# <img src="docs/icon.svg" alt="" width="48" height="48" align="top"> Offline GPX
 
-Record and manage GPX tracks on Android without internet permission or access. Supports importing [Mapsforge](https://download.mapsforge.org) compatible files.
+Record and manage rides, runs and hikes on an offline map, with no internet permission at all. Tracks are standard GPX files, and maps are optional [Mapsforge](https://download.mapsforge.org) files you import yourself.
+
+<p>
+  <img src="docs/screenshots/1-map.png" alt="Tracks on an offline map" width="24%">
+  <img src="docs/screenshots/2-charts.png" alt="A track's stats with speed and elevation charts" width="24%">
+  <img src="docs/screenshots/3-list.png" alt="The track library grouped by category" width="24%">
+  <img src="docs/screenshots/4-recording.png" alt="Recording a track" width="24%">
+</p>
 
 ## Features
 
@@ -77,6 +84,7 @@ app/ data/   gpx (streaming parser/writer/trimmer), db (Room), map (MapStore, .m
 app/ ui/     map (MapScreen, VTM canvas, layers, generated render theme), track (sheet),
              chart (hand-rolled Canvas charts), library, record, settings, format, theme, nav.
 app/ di/     AppContainer: manual wiring, no Hilt.
+docs/        README icon and screenshots.
 ```
 
 ## License

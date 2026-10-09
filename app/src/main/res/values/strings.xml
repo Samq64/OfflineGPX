@@ -205,7 +205,7 @@
     <!-- Spoken for a library row: "double tap to open website". -->
     <string name="settings_about_open_site">open website</string>
     <string name="settings_about_source">Source code</string>
-    <string name="settings_about_tagline">Record and manage GPX tracks without internet permission or access.</string>
+    <string name="settings_about_tagline">Record and manage rides, runs and hikes on an offline map, with no internet permission at all.</string>
     <!-- %1$s is the version, e.g. 0.1.0; the commit follows it. -->
     <string name="settings_about_version">v%1$s</string>
     <string name="settings_maps_explanation">Manage .map file imports. Without one, tracks are drawn on a blank background.</string>

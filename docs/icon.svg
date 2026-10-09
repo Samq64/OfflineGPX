@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="18 18 72 72" width="96" height="96">
+  <!-- app/src/main/res/drawable/ic_launcher_{background,foreground}.xml in the launcher's circle mask -->
+  <clipPath id="mask"><circle cx="54" cy="54" r="36"/></clipPath>
+  <g clip-path="url(#mask)">
+    <path d="M0,0 H108 V108 H0 Z" fill="#D5E9CF"/>
+    <path d="M-10,-10 L120,-10 L120,12 C108,16 100,24 88,24 C78,24 72,21 60,25 C46,30 40,44 26,46 C14,48 4,44 -10,46 Z" fill="#A6CBE3"/>
+    <path d="M-77.6,99.9 L185.6,4.1 M54,52 L101.9,183.6" stroke="#B3B3B3" stroke-width="9" fill="none"/>
+    <path d="M101.9,183.6 L54,52 L-77.6,99.9" stroke="#3851A3" stroke-width="8.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    <circle cx="60.8" cy="70.8" r="11" fill="#FFFFFF"/>
+    <circle cx="60.8" cy="70.8" r="7.5" fill="#3851A3"/>
+  </g>
+</svg>
