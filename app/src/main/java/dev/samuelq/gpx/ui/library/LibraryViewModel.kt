@@ -255,12 +255,11 @@ class LibraryViewModel(
     }
 }
 
-/** Checks the title, the filename and the category: a renamed import still answers to its filename. */
+/** Checks the title and the category. */
 private fun TrackEntity.matches(query: String): Boolean {
     val needle = query.trim()
     if (needle.isEmpty()) return true
     return title.contains(needle, ignoreCase = true) ||
-        displayName.contains(needle, ignoreCase = true) ||
         category?.contains(needle, ignoreCase = true) == true
 }
 
@@ -306,7 +305,7 @@ internal fun List<TrackEntity>.sections(): List<Section> = buildList {
 internal fun List<TrackEntity>.sortedFor(order: TrackOrder): List<TrackEntity> {
     val natural = when (order.sort) {
         TrackSort.RECENT -> this
-        TrackSort.DATE -> sortedByDescending { it.startedAtEpochMillis ?: it.lastOpenedAtEpochMillis }
+        TrackSort.DATE -> sortedByDescending { it.startedAtEpochMillis }
         TrackSort.DISTANCE -> sortedByDescending { it.distanceMeters }
         TrackSort.DURATION -> sortedByDescending { it.totalSeconds }
         TrackSort.NAME -> {

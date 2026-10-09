@@ -12,8 +12,6 @@ import java.io.File
 class LoadedTrack(
     /** The `tracks` row. */
     val id: Long,
-    /** The filename. */
-    val displayName: String,
     val track: Track,
     val profile: TrackProfile,
 ) {
@@ -32,6 +30,11 @@ sealed class TrackLoadException(message: String, cause: Throwable? = null) : Exc
 
     /** No track points, e.g. waypoint-only files. */
     class Empty(message: String) : TrackLoadException(message)
+
+    /** A point without a time, e.g. a planned route: speed, duration and the title need them. */
+    class Untimed(message: String) : TrackLoadException(message)
+
+    class TooLarge(message: String, cause: Throwable? = null) : TrackLoadException(message, cause)
 }
 
 /** What undoing a trim needs: the replaced file and row. */

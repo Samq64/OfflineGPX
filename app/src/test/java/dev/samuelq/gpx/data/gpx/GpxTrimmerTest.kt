@@ -185,8 +185,9 @@ class GpxTrimmerTest {
     fun `a blank name removes the track's`() {
         val out = rename(source, " ")
         assertFalse("Ride" in out, out)
-        // Falling back to the metadata's, as an unnamed track does.
-        assertEquals("Kept metadata", nameOf(out))
+        assertNull(nameOf(out))
+        // Only the track's: the metadata's is left as it was.
+        assertTrue("<name>Kept metadata</name>" in out, out)
     }
 
     @Test
@@ -236,42 +237,40 @@ class GpxTrimmerTest {
     }
 
     @Test
-    fun `route points are cut by the same indices`() {
-        val route = """
-            <gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1"><rte>
-              <rtept lat="1" lon="1"/><rtept lon="2"/><rtept lat="3" lon="3"/>
-            </rte></gpx>
+    fun `unreadable and stray points get no index, as in the parser`() {
+        val doc = """
+            <gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1"><trk>
+              <extensions><trkpt lat="8" lon="8"/></extensions>
+              <trkseg>
+                <trkpt lon="1"/><trkpt lat="91" lon="1"/><trkpt lat="2" lon="2"/><trkpt lat="3" lon="3"/>
+              </trkseg>
+            </trk></gpx>
         """.trimIndent()
         val out = ByteArrayOutputStream()
-        trimmer.trim(route.byteInputStream(), out, keepPoint = { it == 1 })
+        trimmer.trim(doc.byteInputStream(), out, keepPoint = { it == 1 })
 
-        val track = parser.parse(out.toString(Charsets.UTF_8).byteInputStream())
+        val written = out.toString(Charsets.UTF_8)
+        assertTrue("lat=\"8\"" in written, written)
+        val track = parser.parse(written.byteInputStream())
         assertEquals(listOf(3.0), track.points.indices.map(track.points::latitude))
     }
 
     @Test
-    fun `beside a track, route points are kept and not counted`() {
+    fun `route points are kept whole and not counted`() {
         val doc = """
             <gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
               <rte><rtept lat="9" lon="9"/></rte>
               <trk><trkseg><trkpt lat="1" lon="1"/><trkpt lat="2" lon="2"/></trkseg></trk>
             </gpx>
         """.trimIndent()
-        assertTrue(trimmer.hasTrackPoints(doc.byteInputStream()))
 
         val out = ByteArrayOutputStream()
-        trimmer.trim(doc.byteInputStream(), out, keepPoint = { it == 1 }, countRoutes = false)
+        trimmer.trim(doc.byteInputStream(), out, keepPoint = { it == 1 })
 
         val written = out.toString(Charsets.UTF_8)
         assertTrue("lat=\"9\"" in written)
         val track = parser.parse(written.byteInputStream())
         assertEquals(listOf(2.0), track.points.indices.map(track.points::latitude))
-    }
-
-    @Test
-    fun `a file with only unreadable track points counts as having none`() {
-        val doc = """<gpx><rte><rtept lat="1" lon="1"/></rte><trk><trkseg><trkpt lat="x"/></trkseg></trk></gpx>"""
-        assertFalse(trimmer.hasTrackPoints(doc.byteInputStream()))
     }
 
     @Test
@@ -321,20 +320,6 @@ class GpxTrimmerTest {
     }
 
     @Test
-    fun `a capped segment's excess has no index, as in the parser`() {
-        val cap = GpxParser.MAX_POINTS_PER_SEGMENT
-        val asked = ArrayList<Int>()
-        trimmer.trim(oversizedGpx(cap + 2), java.io.OutputStream.nullOutputStream(), keepPoint = {
-            asked += it
-            true
-        })
-
-        // The segment's last two points are past the cap; the next segment's point follows on.
-        assertEquals(cap + 1, asked.size)
-        assertEquals(cap, asked.last())
-    }
-
-    @Test
     fun `namespaced attributes such as the schema location survive`() {
         val doc = """
             <gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1"
@@ -357,8 +342,14 @@ class GpxTrimmerTest {
     @Test
     fun `a blank name adds nothing to a track without one`() {
         val out = rename(gpx(""), " ")
-        assertEquals("Not the track name", nameOf(out))
-        assertEquals(1, Regex("<name>").findAll(out).count(), out)
+        assertNull(nameOf(out))
+        assertEquals(
+            listOf("Not the track name"),
+            Regex("<name>([^<]*)</name>").findAll(out).map {
+                it.groupValues[1]
+            }.toList(),
+            out,
+        )
     }
 
     @Test

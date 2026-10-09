@@ -1,5 +1,6 @@
 package dev.samuelq.gpx.data.gpx
 
+import dev.samuelq.gpx.BuildConfig
 import dev.samuelq.gpx.core.model.Track
 import java.io.OutputStream
 import java.time.format.DateTimeFormatter
@@ -13,7 +14,8 @@ internal fun String.xmlSafe(): String = filterNot {
 }
 
 /**
- * Writes a [Track] as GPX 1.1, the on-disk format for recordings.
+ * Writes a [Track]'s points and waypoints as GPX 1.1, the on-disk format for recordings. Its
+ * name and type are the row's, added on the way out like any track's.
  *
  * @param newSerializer injected for plain-JVM tests, like [GpxParser]'s parser.
  */
@@ -22,7 +24,6 @@ class GpxWriter(private val newSerializer: () -> XmlSerializer = DEFAULT_SERIALI
     fun write(track: Track, out: OutputStream) {
         val xml = newSerializer()
         xml.setOutput(out, ENCODING)
-        xml.setFeature("http://xmlpull.org/v1/doc/features.html#indent-output", true)
         xml.startDocument(ENCODING, null)
 
         xml.setPrefix("", NAMESPACE)
@@ -48,9 +49,8 @@ class GpxWriter(private val newSerializer: () -> XmlSerializer = DEFAULT_SERIALI
             xml.endTag(NAMESPACE, "wpt")
         }
 
+        // No name or type: the row holds them, and they go in on the way out.
         xml.startTag(NAMESPACE, "trk")
-        track.name?.takeIf(String::isNotBlank)?.let { xml.textTag("name", it) }
-        track.type?.takeIf(String::isNotBlank)?.let { xml.textTag("type", it) }
 
         for (segment in 0 until points.segmentCount) {
             xml.startTag(NAMESPACE, "trkseg")
@@ -87,7 +87,9 @@ class GpxWriter(private val newSerializer: () -> XmlSerializer = DEFAULT_SERIALI
     companion object {
         private const val ENCODING = "UTF-8"
         private const val NAMESPACE = "http://www.topografix.com/GPX/1/1"
-        private const val CREATOR = "Offline GPX"
+
+        /** Unique where the app's name is generic; GPX allows any string. */
+        private const val CREATOR = BuildConfig.APPLICATION_ID
 
         private val TIMESTAMP: DateTimeFormatter = DateTimeFormatter.ISO_INSTANT
 

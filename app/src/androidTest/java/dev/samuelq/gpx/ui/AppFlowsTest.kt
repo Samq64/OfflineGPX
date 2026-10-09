@@ -74,7 +74,7 @@ class AppFlowsTest {
     fun viewIntentImportsTheTrack() {
         val name = "Shared ${System.nanoTime()}"
         // Under a FileProvider root, as another app's content URI would arrive.
-        val file = File(TrackFiles.importsDir(targetContext), "incoming-${System.nanoTime()}.gpx")
+        val file = File(TrackFiles.dir(targetContext), "incoming-${System.nanoTime()}.gpx")
         file.writeText(sampleGpx(name = name))
         val uri = FileProvider.getUriForFile(targetContext, "${targetContext.packageName}.fileprovider", file)
 

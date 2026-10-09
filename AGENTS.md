@@ -15,13 +15,14 @@ See README.md for the source layout and the build, test, coverage and style comm
   whose geoid map is bundled.
 - VTM is on JitPack only; `settings.gradle.kts` lets JitPack serve that group and nothing
   else. Its SVG decoder is excluded since the theme draws no symbols.
-- A track is a `.gpx` file in app-private storage; Room holds one row per track with its
-  stats and bounding box, and no geometry. Rows store paths relative to `filesDir` so a
-  device transfer still resolves. Parsed points are cached in binary under `cacheDir`, which
-  is regenerable and never backed up or shared. A saved track's name and colour come from
-  its row only. The colour goes into a file only on its way out: export and share stream it
-  through `GpxTrimmer`, writing gpx_style's RGB and Garmin's nearest name. An import takes a
-  file's colour as the nearest slot by hue. Files shared from other apps join the library;
+- A track is a `.gpx` file in app-private storage, `filesDir/tracks/<row id>.gpx`; Room holds
+  one row per track with its stats and bounding box, and no geometry. Parsed points are
+  cached in binary under `cacheDir`, which is regenerable and never backed up or shared. A
+  saved track's name, category and colour come from its row only, and go into a file only on
+  its way out: export and share stream it through `GpxTrimmer`, writing gpx_style's RGB and
+  Garmin's nearest name for the colour. An import takes its file's `<name>`, else the file's
+  name, and its colour as the nearest slot by hue; after that, recordings and imports are
+  alike. An unnamed track is titled by its start. Files shared from other apps join the library;
   MainActivity is singleTask so they reach the one instance.
 - Trim rewrites a file with `GpxTrimmer`, which streams it through and keeps
   everything but the points cut; `GpxWriter` writes only what the app reads. The original

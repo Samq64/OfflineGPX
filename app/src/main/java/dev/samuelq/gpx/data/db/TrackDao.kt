@@ -1,10 +1,10 @@
 package dev.samuelq.gpx.data.db
 
 import androidx.room.Dao
+import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
-import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -20,8 +20,18 @@ interface TrackDao {
     @Query("SELECT * FROM tracks WHERE id = :id")
     suspend fun byId(id: Long): TrackEntity?
 
-    @Upsert
-    suspend fun upsert(track: TrackEntity): Long
+    @Query("SELECT * FROM tracks")
+    suspend fun all(): List<TrackEntity>
+
+    @Insert
+    suspend fun insert(track: TrackEntity): Long
+
+    /**
+     * Inserts [track] and hands its id to [place] before committing, so a [place] that throws
+     * leaves no row. A crash before the commit rolls the id back too, for the next insert to reuse.
+     */
+    @Transaction
+    suspend fun insert(track: TrackEntity, place: (id: Long) -> Unit): Long = insert(track).also(place)
 
     @Query("UPDATE tracks SET lastOpenedAtEpochMillis = :at WHERE id = :id")
     suspend fun touch(id: Long, at: Long)
@@ -38,14 +48,8 @@ interface TrackDao {
     @Query("UPDATE tracks SET category = :category WHERE id = :id")
     suspend fun setCategory(id: Long, category: String?)
 
-    @Query("UPDATE tracks SET location = :location WHERE id = :id")
-    suspend fun setLocation(id: Long, location: String)
-
     @Query("DELETE FROM tracks WHERE id IN (:ids)")
     suspend fun delete(ids: List<Long>)
-
-    @Query("SELECT * FROM tracks WHERE displayName = :displayName")
-    suspend fun byDisplayName(displayName: String): List<TrackEntity>
 
     @Query("SELECT * FROM tracks WHERE id IN (:ids)")
     suspend fun byIds(ids: List<Long>): List<TrackEntity>

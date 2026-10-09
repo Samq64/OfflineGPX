@@ -18,8 +18,9 @@ import java.time.Instant
  * Parsed tracks in a binary form that reads far faster than GPX, one file per row. Only a
  * cache: in [dir] under cacheDir, so the system may clear it and a device transfer skips it.
  *
- * Valid while the GPX's size and modification time match what was cached. The name isn't
- * kept, since the row is the source of truth for it.
+ * Valid while the GPX's size and modification time match what was cached. Holds what's read
+ * from the file after import: points, waypoints and the description. Not the name, type or
+ * colour, which the row holds, nor accuracy, which a GPX file doesn't.
  */
 internal class TrackCache(private val dir: File) {
 
@@ -45,21 +46,6 @@ internal class TrackCache(private val dir: File) {
         }.onFailure { Log.d(TAG, "Could not cache $id", it) }
     }
 
-    /** After [source] was rewritten in a way the cache doesn't hold, such as its name. */
-    fun restamp(id: Long, source: File) {
-        val file = fileFor(id)
-        if (!file.exists()) return
-        runCatching {
-            val bytes = file.readBytes()
-            ByteBuffer.wrap(bytes).apply {
-                position(STAMP_OFFSET)
-                putLong(source.length())
-                putLong(source.lastModified())
-            }
-            writeAtomically(file) { it.write(bytes) }
-        }.onFailure { file.delete() }
-    }
-
     fun delete(id: Long) {
         fileFor(id).delete()
     }
@@ -76,7 +62,6 @@ internal class TrackCache(private val dir: File) {
         private const val TAG = "TrackCache"
         private const val MAGIC = 0x47505843 // "GPXC"
         private const val VERSION = 1
-        private const val STAMP_OFFSET = 8
 
         fun encode(track: Track, stamp: Stamp): ByteArray {
             val points = track.points
@@ -106,7 +91,6 @@ internal class TrackCache(private val dir: File) {
                     writeDouble(points.longitude(i))
                     writeFloat(points.elevation(i))
                     writeLong(points.timeMillis(i))
-                    writeFloat(points.accuracy(i))
                 }
             }
             return bytes.toByteArray()
@@ -139,12 +123,12 @@ internal class TrackCache(private val dir: File) {
                     points.startSegment()
                     segment++
                 }
-                points.add(buffer.double, buffer.double, buffer.float, buffer.long, buffer.float)
+                points.add(buffer.double, buffer.double, buffer.float, buffer.long)
             }
             return Track(name = null, points = points.build(), description = description, waypoints = waypoints)
         }
 
-        private const val BYTES_PER_POINT = 8 + 8 + 4 + 8 + 4
+        private const val BYTES_PER_POINT = 8 + 8 + 4 + 8
 
         private fun DataOutputStream.writeString(value: String?) {
             if (value == null) {

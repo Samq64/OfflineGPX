@@ -8,8 +8,7 @@
         <exclude domain="sharedpref" />
     </cloud-backup>
     <device-transfer>
-        <include domain="file" path="imports" />
-        <include domain="file" path="recordings" />
+        <include domain="file" path="tracks" />
         <include domain="file" path="maps" />
         <include domain="database" path="." />
         <include domain="sharedpref" path="settings.xml" />

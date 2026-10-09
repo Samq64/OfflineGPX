@@ -19,11 +19,12 @@ import dev.samuelq.gpx.data.displayName
 import dev.samuelq.gpx.data.gpx.GPX_MIME_TYPE
 import dev.samuelq.gpx.data.gpx.GpxParseException
 import dev.samuelq.gpx.data.gpx.GpxParser
+import dev.samuelq.gpx.data.gpx.GpxTooLargeException
 import dev.samuelq.gpx.data.gpx.GpxTrimmer
 import dev.samuelq.gpx.data.gpx.GpxWriter
 import dev.samuelq.gpx.data.runCancellable
 import dev.samuelq.gpx.data.sameBytes
-import dev.samuelq.gpx.data.uniqueFile
+import dev.samuelq.gpx.data.settings.SettingsRepository
 import dev.samuelq.gpx.data.uniqueName
 import dev.samuelq.gpx.data.writeAtomically
 import java.io.File
@@ -32,8 +33,6 @@ import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.text.Collator
-import java.time.Instant
-import java.time.ZoneId
 import java.util.Locale
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -52,6 +51,7 @@ import kotlinx.coroutines.withContext
 class TrackRepository(
     context: Context,
     private val dao: TrackDao,
+    private val settings: SettingsRepository,
     /** Outlives any screen, so deletes and edits finish once asked for. */
     private val scope: CoroutineScope,
     /** For file and database work; a parameter so tests can substitute one. */
@@ -63,9 +63,6 @@ class TrackRepository(
     private val trimmer = GpxTrimmer()
 
     private val appContext = context.applicationContext
-
-    private val recordingsDir: File get() = TrackFiles.recordingsDir(appContext)
-    private val importsDir: File get() = TrackFiles.importsDir(appContext)
 
     /** Parsed tracks on disk; what's drawn is held in memory by the map, not here. */
     private val cache = TrackCache(File(appContext.cacheDir, "tracks"))
@@ -93,62 +90,65 @@ class TrackRepository(
         all.mapNotNull { it.category }.distinctBy { it.lowercase(Locale.ROOT) }.sortedWith(collator)
     }
 
-    /** The latest recording's, which the next one is offered. */
-    val lastRecordingCategory: Flow<String?> = tracks.map { all ->
-        all.filter(TrackFiles::isRecording).maxByOrNull(TrackEntity::id)?.category
-    }
+    /** The last saved recording's, which the next one is offered. */
+    val lastRecordingCategory: Flow<String?> = settings.lastRecordingCategory
 
     /**
-     * Copies [uri] into app-private storage and indexes it. Returns the row id.
+     * Copies [uri] into app-private storage and indexes it. Returns the row id. Named by its
+     * `<name>`, else by the file it arrived as; from then on only the row is.
      *
-     * @param reuseIdentical returns the existing row instead when an import of the same name has
-     *   the same bytes, so opening a shared file twice doesn't add it twice. A deliberate import
-     *   always copies.
+     * @param reuseIdentical returns the existing row instead when a track's file has the same
+     *   bytes, so opening a shared file twice doesn't add it twice. A deliberate import always copies.
      */
     suspend fun import(uri: Uri, reuseIdentical: Boolean = false): Result<Long> = withContext(io) {
         runCancellable {
-            val displayName = displayNameOf(uri)
-            val destination = uniqueFile(importsDir, displayName, "gpx", fallback = "track")
-
-            // Deleted again on any failure, so nothing unindexed is left behind.
+            val arrivedAs = displayNameOf(uri)
+            val staged = stagedFile()
+            // Gone once moved in; deleted on any failure, so nothing unindexed is left behind.
             try {
-                if (!appContext.contentResolver.copyInto(uri, destination)) {
+                if (!appContext.contentResolver.copyInto(uri, staged)) {
                     throw TrackLoadException.Unreadable("No provider could open $uri")
                 }
-                if (reuseIdentical) {
-                    identicalImport(destination, displayName)?.let { existing ->
-                        destination.delete()
-                        return@runCancellable existing
-                    }
+                if (reuseIdentical) identicalTrack(staged)?.let { return@runCancellable it }
+                val track = parse(staged.inputStream(), arrivedAs)
+                if (!track.points.let { points -> (0 until points.size).all(points::hasTime) }) {
+                    throw TrackLoadException.Untimed("Points without times in $arrivedAs")
                 }
-                val track = parse(destination.inputStream(), displayName)
-                val category = categoryAsSpelt(track.type)
                 val entity = newEntity(
-                    destination,
-                    displayName,
                     track,
                     TrackAnalyzer.analyze(track),
-                    category,
+                    name = track.name ?: arrivedAs.withoutGpxSuffix().asTrackName(),
+                    category = categoryAsSpelt(track.type),
                     colorIndex = track.lineColor?.let(RouteColors::slotOf),
                 )
-                val id = dao.upsert(entity)
-                cache.write(id, destination, track)
-                id
-            } catch (e: Throwable) {
-                destination.delete()
-                throw e
+                insert(entity, staged, track)
+            } finally {
+                staged.delete()
             }
         }.recoverFailure()
     }
 
-    /** A live import named [displayName] whose file matches [copy] byte for byte. */
-    private suspend fun identicalImport(copy: File, displayName: String): Long? {
+    /** A live track whose file matches [copy] byte for byte. A rename leaves the file as it came. */
+    private suspend fun identicalTrack(copy: File): Long? {
         val pending = pendingDelete.value
-        return dao.byDisplayName(displayName)
-            .filter { it.id !in pending && it.location != TrackFiles.location(appContext, copy) }
-            .firstOrNull { sameBytes(fileOf(it), copy) }
+        val length = copy.length()
+        return dao.all()
+            .filter { it.id !in pending }
+            .firstOrNull { fileOf(it).length() == length && sameBytes(fileOf(it), copy) }
             ?.id
     }
+
+    /** Indexes [staged] as a new track, moving it in within the transaction that adds its row. */
+    private suspend fun insert(entity: TrackEntity, staged: File, track: Track): Long {
+        val id = dao.insert(entity) { id ->
+            // Over any file a rolled-back insert left under this id.
+            if (!staged.renameTo(fileOf(id))) throw IOException("Could not move the track into place")
+        }
+        cache.write(id, fileOf(id), track)
+        return id
+    }
+
+    private fun stagedFile(): File = File.createTempFile("track", ".gpx", TrackFiles.stagingDir(appContext))
 
     /** Loads a saved track and moves it to the top of the recent order. */
     suspend fun open(id: Long): Result<LoadedTrack> = withContext(io) {
@@ -166,19 +166,15 @@ class TrackRepository(
         runCancellable {
             val profile = analyzed ?: TrackAnalyzer.analyze(track)
             val typed = track.copy(type = categoryAsSpelt(track.type))
-            val startedAt = profile.stats.startedAt ?: Instant.now()
-            // Numbered if taken: local time repeats an hour when the clocks go back.
-            val file = uniqueFile(
-                recordingsDir,
-                TrackFiles.STAMP.format(startedAt.atZone(ZoneId.systemDefault())),
-                "gpx",
-                fallback = "recording",
-            )
-
-            // Unnamed unless given one: it's titled by when it started.
-            writeAtomically(file) { writer.write(typed, it) }
-
-            dao.upsert(newEntity(file, file.name, typed, profile, typed.type)).also { cache.write(it, file, typed) }
+            val staged = stagedFile()
+            try {
+                writeAtomically(staged) { writer.write(typed, it) }
+                // Unnamed unless given one: it's titled by when it started.
+                insert(newEntity(typed, profile, name = typed.name, category = typed.type), staged, typed)
+                    .also { settings.setLastRecordingCategory(typed.type) }
+            } finally {
+                staged.delete()
+            }
         }.recoverFailure()
     }
 
@@ -230,7 +226,7 @@ class TrackRepository(
                 fileOf(entity).inputStream().use { writeOut(entity, it, sink) }
             } != null
         } catch (e: Exception) {
-            Log.d(TAG, "Could not export ${entity.displayName}", e)
+            Log.d(TAG, "Could not export track ${entity.id}", e)
             false
         }
 
@@ -241,27 +237,33 @@ class TrackRepository(
     }
 
     /**
-     * A copy of the track's file to share, carrying its colour, or the file itself if the copy
-     * fails. Kept until the next launch, since the recipient may read it late.
+     * A copy of the track's file to share, carrying its name, category and colour, or the file
+     * itself if the copy fails. Kept until the next launch, since the recipient may read it late.
      */
     suspend fun fileToShare(entity: TrackEntity): File = withContext(io) {
         val file = fileOf(entity)
         val dir = File(sharedDir, entity.id.toString())
-        val copy = File(dir, exportFileName(entity.trackName, entity.displayName))
+        val copy = File(dir, entity.exportFileName)
         runCancellable {
             dir.deleteRecursively()
             dir.mkdirs()
             writeAtomically(copy) { output -> file.inputStream().use { writeOut(entity, it, output) } }
             copy
         }.getOrElse { e ->
-            Log.d(TAG, "Sharing ${entity.displayName} without its colour", e)
+            Log.d(TAG, "Sharing track ${entity.id} as stored", e)
             file
         }
     }
 
-    /** The stored file as it leaves the app: the colour lives in the row, so it goes in here. */
-    private fun writeOut(entity: TrackEntity, input: InputStream, output: OutputStream) =
-        trimmer.trim(input, output, color = RouteColors.rgb(entity.colorIndex))
+    /** The stored file as it leaves the app: name, category and colour live in the row, so they go in here. */
+    private fun writeOut(entity: TrackEntity, input: InputStream, output: OutputStream) = trimmer.trim(
+        input,
+        output,
+        // Blank removes the file's own.
+        name = entity.trackName.orEmpty(),
+        type = entity.category.orEmpty(),
+        color = RouteColors.rgb(entity.colorIndex),
+    )
 
     /** Like [open] but without touching the sort order, for drawing. */
     suspend fun geometry(id: Long): Result<LoadedTrack> = withContext(io) {
@@ -272,8 +274,8 @@ class TrackRepository(
     private fun load(entity: TrackEntity): LoadedTrack {
         val file = fileOf(entity)
         val track = cache.read(entity.id, file)
-            ?: parse(file.inputStream(), entity.displayName).also { cache.write(entity.id, file, it) }
-        return LoadedTrack(entity.id, entity.displayName, track, TrackAnalyzer.analyze(track))
+            ?: parse(file.inputStream(), file.name).also { cache.write(entity.id, file, it) }
+        return LoadedTrack(entity.id, track, TrackAnalyzer.analyze(track))
     }
 
     /** Bytes of each track's file, by id; a stat, not a parse. */
@@ -284,55 +286,15 @@ class TrackRepository(
     suspend fun touch(id: Long) = dao.touch(id, System.currentTimeMillis())
 
     /**
-     * Renames a track and its file, and sets its category; null leaves either as it is. A
-     * blank [name] clears it, and the file goes back to the name it arrived as; a blank
-     * [category] makes it uncategorised.
+     * Renames a track and sets its category; null leaves either as it is. A blank [name] clears
+     * it, titling the track by its start; a blank [category] makes it uncategorised. The row's
+     * alone: [writeOut] puts both in a file as it leaves.
      */
     suspend fun rename(id: Long, name: String?, category: String? = null): Result<Unit> = withContext(io) {
         runCancellable {
-            if (name == null && category == null) return@runCancellable
-            val newName = name?.asTrackName()
-            val newCategory = categoryAsSpelt(category, except = id)
-            val entity = entity(id)
-            // Written into the file since export is a byte copy.
-            val file = fileOf(entity)
-            writeAtomically(file) { output ->
-                file.inputStream().use {
-                    trimmer.trim(
-                        it,
-                        output,
-                        name = name?.let {
-                            newName.orEmpty()
-                        },
-                        type = category?.let { newCategory.orEmpty() },
-                    )
-                }
-            }
-            // The cache holds neither, so the rewrite leaves it current.
-            cache.restamp(id, file)
-            if (category != null) dao.setCategory(id, newCategory)
-            if (name != null) {
-                dao.setTrackName(id, newName)
-                moveTo(id, file, newName ?: entity.displayName)
-            }
+            if (category != null) dao.setCategory(id, categoryAsSpelt(category, except = id))
+            if (name != null) dao.setTrackName(id, name.asTrackName())
         }.recoverFailure()
-    }
-
-    /**
-     * Renames [file] after [name], numbered if taken. In place, so atomic; a rename that fails
-     * leaves the old name, which still works.
-     */
-    private suspend fun moveTo(id: Long, file: File, name: String) {
-        val dir = file.parentFile ?: return
-        val target =
-            File(dir, uniqueName(name, "gpx", fallback = "track") { it != file.name && File(dir, it).exists() })
-        if (target == file || !file.renameTo(target)) return
-        try {
-            dao.setLocation(id, TrackFiles.location(appContext, target))
-        } catch (e: Throwable) {
-            target.renameTo(file)
-            throw e
-        }
     }
 
     suspend fun setVisible(id: Long, visible: Boolean) = dao.setVisible(id, visible)
@@ -386,13 +348,11 @@ class TrackRepository(
     /** Puts the file and row back as they were before [edit]. */
     suspend fun undoEdit(edit: TrackEdit): Result<Unit> = withContext(io) {
         runCancellable {
-            // Where it is now: a rename since moves the file.
-            writeAtomically(fileOf(dao.byId(edit.id) ?: edit.before)) { output ->
+            writeAtomically(fileOf(edit.id)) { output ->
                 edit.backup.inputStream().use { it.copyTo(output) }
             }
             // Only what the edit changed, so a recolour since survives the undo.
-            dao.setSummary(SummaryUpdate(edit.id, edit.before.startedAtEpochMillis, edit.before.summary))
-            dao.setTrackName(edit.id, edit.before.trackName)
+            dao.setSummary(SummaryUpdate(edit.id, edit.before.summary))
             cache.delete(edit.id)
             edit.backup.delete()
             Unit
@@ -404,11 +364,19 @@ class TrackRepository(
         scope.launch(io) { edit.backup.delete() }
     }
 
-    /** At launch: an undo from a previous process can no longer be taken, nor a share still be read. */
+    /**
+     * At launch: an undo from a previous process can no longer be taken, nor a share still be read,
+     * nor an import or recording it was staging be finished.
+     */
     fun purgeAtLaunch() {
+        val launchedAt = System.currentTimeMillis()
         scope.launch(io) {
             editsDir.listFiles().orEmpty().forEach(File::delete)
             sharedDir.deleteRecursively()
+            // Older than this process only: an import from the launching intent may be staging already.
+            TrackFiles.stagingDir(appContext).listFiles().orEmpty()
+                .filter { it.lastModified() < launchedAt }
+                .forEach(File::delete)
         }
     }
 
@@ -425,7 +393,6 @@ class TrackRepository(
                     output,
                     keepPoint = { it in keep },
                     keepWaypoint = { it in waypoints },
-                    countRoutes = !file.inputStream().use(trimmer::hasTrackPoints),
                 )
             }
         }
@@ -444,48 +411,43 @@ class TrackRepository(
         dao.byId(id) ?: throw TrackLoadException.Unreadable("No track with id $id")
 
     private suspend fun newEntity(
-        file: File,
-        displayName: String,
         track: Track,
         profile: TrackProfile,
+        name: String?,
         category: String?,
         colorIndex: Int? = null,
     ) = TrackEntity(
         colorIndex = colorIndex ?: leastUsedSlot(dao.colorUsage(), TrackEntity.PALETTE_SIZE),
-        location = TrackFiles.location(appContext, file),
-        displayName = displayName,
-        trackName = track.name,
-        startedAtEpochMillis = profile.stats.startedAt?.toEpochMilli(),
+        trackName = name,
         lastOpenedAtEpochMillis = System.currentTimeMillis(),
         summary = summaryOf(track, profile),
         category = category,
     )
 
     private fun summaryUpdate(id: Long, track: Track, profile: TrackProfile) =
-        SummaryUpdate(id, profile.stats.startedAt?.toEpochMilli(), summaryOf(track, profile))
+        SummaryUpdate(id, summaryOf(track, profile))
 
     private fun summaryOf(track: Track, profile: TrackProfile): TrackSummary {
         val stats = profile.stats
         return TrackSummary(
-            pointCount = stats.pointCount,
+            // Imports are refused without times and recordings always have them, as does any part of either.
+            startedAtEpochMillis = checkNotNull(stats.startedAt) { "A track without a start" }.toEpochMilli(),
             distanceMeters = stats.distanceMeters,
             totalSeconds = stats.totalDurationSeconds,
-            movingSeconds = stats.movingDurationSeconds,
-            averageSpeedMps = stats.averageSpeedMps,
-            ascentMeters = stats.ascentMeters,
-            descentMeters = stats.descentMeters,
             bounds = checkNotNull(track.points.bounds()) { "Summarising an empty track" },
         )
     }
 
-    /** Reads [stream], closing it. */
-    private fun parse(stream: InputStream, displayName: String): Track {
+    /** Reads [stream], closing it; [source] names it in errors. */
+    private fun parse(stream: InputStream, source: String): Track {
         val track: Track = stream.use(parser::parse)
-        if (track.isEmpty) throw TrackLoadException.Empty("No track points in $displayName")
+        if (track.isEmpty) throw TrackLoadException.Empty("No track points in $source")
         return track
     }
 
-    private fun fileOf(entity: TrackEntity) = TrackFiles.file(appContext, entity.location)
+    private fun fileOf(entity: TrackEntity) = fileOf(entity.id)
+
+    private fun fileOf(id: Long) = TrackFiles.file(appContext, id)
 
     private fun deleteFile(entity: TrackEntity) {
         runCatching { fileOf(entity).delete() }
@@ -501,11 +463,12 @@ class TrackRepository(
         /** Long enough to cover a rotation or a trip to another screen and back. */
         const val SHARE_GRACE_MILLIS = 5_000L
 
-        /** Maps the read failures onto the three the UI has messages for. */
+        /** Maps the read failures onto those the UI has messages for. */
         fun <T> Result<T>.recoverFailure(): Result<T> = recoverCatching { e ->
             throw when (e) {
                 is TrackLoadException -> e
                 is GpxParseException -> TrackLoadException.Invalid(e.message ?: "Not valid GPX", e)
+                is GpxTooLargeException -> TrackLoadException.TooLarge(e.message ?: "Too many points", e)
                 is FileNotFoundException -> TrackLoadException.Unreadable("File no longer exists", e)
                 // A temporary URI grant can be revoked mid-read.
                 is SecurityException ->
@@ -514,7 +477,7 @@ class TrackRepository(
                 is IOException ->
                     TrackLoadException.Unreadable(e.message ?: "Could not read the file", e)
 
-                is OutOfMemoryError -> TrackLoadException.Unreadable("This file is too large", e)
+                is OutOfMemoryError -> TrackLoadException.TooLarge("Out of memory", e)
                 else -> e
             }
         }

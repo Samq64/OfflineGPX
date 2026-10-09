@@ -21,8 +21,8 @@ class GpxParserTest {
             """
             <?xml version="1.0" encoding="UTF-8"?>
             <gpx version="1.1" creator="test" xmlns="http://www.topografix.com/GPX/1/1">
-              <metadata><name>Morning ride</name></metadata>
               <trk>
+                <name>Morning ride</name>
                 <trkseg>
                   <trkpt lat="47.1" lon="8.5"><ele>430.2</ele><time>2026-05-01T08:00:00Z</time></trkpt>
                   <trkpt lat="47.2" lon="8.6"><ele>451.0</ele><time>2026-05-01T08:00:10Z</time></trkpt>
@@ -70,21 +70,18 @@ class GpxParserTest {
     }
 
     @Test
-    fun `falls back to a route when there is no track`() {
+    fun `a route alone is no track`() {
         val track = parse(
             """
             <gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1"><rte>
               <name>Planned</name>
               <rtept lat="47.0" lon="8.0"><ele>400</ele></rtept>
-              <rtept lat="47.1" lon="8.1"><ele>420</ele></rtept>
             </rte></gpx>
             """.trimIndent(),
         )
 
-        assertEquals("Planned", track.name)
-        assertEquals(2, track.points.size)
-        assertEquals(1, track.points.segmentCount)
-        assertNull(track.points[0].time)
+        assertNull(track.name)
+        assertTrue(track.isEmpty)
     }
 
     @Test
@@ -219,7 +216,7 @@ class GpxParserTest {
     }
 
     @Test
-    fun `the first track's name and description win, over the metadata's`() {
+    fun `the first track's name and description win, and the metadata's name is ignored`() {
         val track = parse(
             """
             <gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
@@ -238,22 +235,7 @@ class GpxParserTest {
     }
 
     @Test
-    fun `without a track, every route is read, named by the first`() {
-        val track = parse(
-            """
-            <gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
-              <rte><name>Out</name><rtept lat="1" lon="1"/></rte>
-              <rte><name>Back</name><rtept lat="2" lon="2"/></rte>
-            </gpx>
-            """.trimIndent(),
-        )
-
-        assertEquals("Out", track.name)
-        assertEquals(2, track.points.segmentCount)
-    }
-
-    @Test
-    fun `a route beside a track is left out, so the track keeps its timing`() {
+    fun `a route beside a track is left out, name and all`() {
         val track = parse(
             """
             <gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
@@ -266,23 +248,23 @@ class GpxParserTest {
             """.trimIndent(),
         )
 
-        assertEquals("Plan", track.name)
+        assertNull(track.name)
         assertEquals(listOf(2.0, 2.1), track.points.indices.map(track.points::latitude))
         assertTrue(track.points.indices.all(track.points::hasTime))
     }
 
     @Test
-    fun `falls back to the metadata name, and skips a route's unreadable points`() {
+    fun `skips unreadable points`() {
         val track = parse(
             """
             <gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
               <metadata><name>Metadata</name></metadata>
-              <rte><rtept lat="x" lon="3"/><rtept lat="4" lon="4"><extensions/></rtept></rte>
+              <trk><trkseg><trkpt lat="x" lon="3"/><trkpt lat="4" lon="4"><extensions/></trkpt></trkseg></trk>
             </gpx>
             """.trimIndent(),
         )
 
-        assertEquals("Metadata", track.name)
+        assertNull(track.name)
         assertEquals(1, track.points.size)
     }
 
@@ -329,18 +311,15 @@ class GpxParserTest {
     }
 
     @Test
-    fun `a segment is capped, and later segments still read`() {
-        val cap = GpxParser.MAX_POINTS_PER_SEGMENT
-        val track = parser.parse(oversizedGpx(cap + 2))
-
-        assertEquals(2, track.points.segmentCount)
-        assertEquals(cap + 1, track.points.size)
-        assertEquals(cap, track.points.segmentStart(1))
-        assertEquals(50.0, track.points.latitude(cap))
+    fun `more points than the cap, in any segment, is too large`() {
+        // The fixture adds one point in a segment of its own.
+        val cap = GpxParser.MAX_POINTS
+        assertEquals(cap, parser.parse(oversizedGpx(cap - 1)).points.size)
+        assertFailsWith<GpxTooLargeException> { parser.parse(oversizedGpx(cap)) }
     }
 
     @Test
-    fun `unknown children of a route or segment are skipped`() {
+    fun `unknown children of a segment, and routes, are skipped`() {
         val track = parse(
             """
             <gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">

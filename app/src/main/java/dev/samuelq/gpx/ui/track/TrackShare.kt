@@ -14,7 +14,7 @@ fun Context.shareTrack(track: TrackEntity, file: File) {
     val send = Intent(Intent.ACTION_SEND).apply {
         type = GPX_MIME_TYPE
         putExtra(Intent.EXTRA_STREAM, uri)
-        putExtra(Intent.EXTRA_TITLE, exportFileName(track.trackName, track.displayName))
+        putExtra(Intent.EXTRA_TITLE, track.exportFileName)
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
     startActivity(Intent.createChooser(send, null))

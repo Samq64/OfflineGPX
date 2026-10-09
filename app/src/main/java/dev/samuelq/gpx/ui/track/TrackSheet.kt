@@ -106,6 +106,8 @@ class TrimControls(
 fun TrackSheet(
     loaded: LoadedTrack,
     title: String,
+    /** The row's, like [title]; null before a new import's row arrives. */
+    startedAtEpochMillis: Long?,
     routeColor: Color,
     maxHeight: Dp,
     selectedIndex: Int?,
@@ -156,9 +158,9 @@ fun TrackSheet(
             modifier = Modifier.padding(start = EdgePadding, end = 8.dp),
         )
 
-        profile.stats.startedAt?.let {
+        startedAtEpochMillis?.let {
             Text(
-                text = LocalFormatters.current.longDateTime(it),
+                text = LocalFormatters.current.longDateTime(Instant.ofEpochMilli(it)),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = EdgePadding, vertical = 8.dp),

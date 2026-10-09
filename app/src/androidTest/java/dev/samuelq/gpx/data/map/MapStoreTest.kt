@@ -21,7 +21,7 @@ class MapStoreTest {
     /** Through a content URI, whose provider reports the size the import reserves room for. */
     @Test
     fun aSizedFileGetsRoomAndIsThenRead() {
-        val file = File(TrackFiles.importsDir(targetContext), "not-a-map-${System.nanoTime()}.map")
+        val file = File(TrackFiles.dir(targetContext), "not-a-map-${System.nanoTime()}.map")
         file.writeBytes(ByteArray(64 * 1024) { it.toByte() })
         val uri = FileProvider.getUriForFile(targetContext, "${targetContext.packageName}.fileprovider", file)
         try {

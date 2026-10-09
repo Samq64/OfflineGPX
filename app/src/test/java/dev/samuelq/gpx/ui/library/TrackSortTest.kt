@@ -13,19 +13,15 @@ class TrackSortTest {
     private fun track(
         id: Long,
         name: String,
-        started: Long? = null,
+        started: Long = 0,
         opened: Long = 0,
         meters: Double = 0.0,
         seconds: Double = 0.0,
-        trackName: String? = null,
     ) = TrackEntity(
         id = id,
-        location = "tracks/$id.gpx",
-        displayName = name,
-        trackName = trackName,
-        startedAtEpochMillis = started,
+        trackName = name,
         lastOpenedAtEpochMillis = opened,
-        summary = TrackSummary(2, meters, seconds, 0.0, 0.0, 0.0, 0.0, GeoBounds(0.0, 0.0, 0.0, 0.0)),
+        summary = TrackSummary(started, meters, seconds, GeoBounds(0.0, 0.0, 0.0, 0.0)),
     )
 
     private fun List<TrackEntity>.ids(sort: TrackSort) = sortedFor(TrackOrder(sort)).map(TrackEntity::id)
@@ -37,8 +33,8 @@ class TrackSortTest {
     }
 
     @Test
-    fun `date is newest first and falls back to when it was opened`() {
-        val tracks = listOf(track(1, "a", started = 100), track(2, "b", opened = 300), track(3, "c", started = 200))
+    fun `date is newest first`() {
+        val tracks = listOf(track(1, "a", started = 100), track(2, "b", started = 300), track(3, "c", started = 200))
         assertEquals(listOf(2L, 3L, 1L), tracks.ids(TrackSort.DATE))
     }
 
@@ -57,7 +53,7 @@ class TrackSortTest {
 
     @Test
     fun `name sorts by title ignoring case`() {
-        val tracks = listOf(track(1, "zeta.gpx"), track(2, "x.gpx", trackName = "alpha"), track(3, "Beta.gpx"))
+        val tracks = listOf(track(1, "zeta"), track(2, "alpha"), track(3, "Beta"))
         assertEquals(listOf(2L, 3L, 1L), tracks.ids(TrackSort.NAME))
     }
 

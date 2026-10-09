@@ -103,7 +103,6 @@ import dev.samuelq.gpx.ui.track.TrackSheetLoading
 import dev.samuelq.gpx.ui.track.TrackSheetPeekHeight
 import dev.samuelq.gpx.ui.track.TrimControls
 import dev.samuelq.gpx.ui.track.shareTrack
-import dev.samuelq.gpx.ui.track.trackTitle
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
@@ -160,15 +159,11 @@ fun MapScreen(
     var preferTimeAxis by rememberSaveable { mutableStateOf(false) }
 
     val focusedTrack = (focused as? FocusedTrack.Ready)?.track
-    // Name and colour are the row's; the file's name stands in until a new import's row arrives.
+    // Name and colour are the row's, blank for the moment before a new import's row arrives.
     val openList = { onOpenList(viewModel.lastCamera?.area) }
     val focusedRow = focusedTrack?.let { state.entity(it.id) }
     val focusedColor = palette.slot(focusedRow?.colorIndex ?: 0)
-    val focusedTitle = when {
-        focusedRow != null -> focusedRow.title
-        focusedTrack != null -> trackTitle(focusedTrack.track.name, focusedTrack.displayName)
-        else -> ""
-    }
+    val focusedTitle = focusedRow?.title.orEmpty()
     // The recording takes the sheet over; other tracks wait until it stops.
     val subject = when {
         isRecording -> SheetSubject.Recording
@@ -523,7 +518,7 @@ fun MapScreen(
 
     // Null until a new import's row arrives.
     val actions = focusedTrack?.let { state.entity(it.id) }?.let { entity ->
-        remember(entity.id, entity.trackName, entity.displayName, entity.location, entity.colorIndex, screen) {
+        remember(entity.id, entity.trackName, entity.startedAtEpochMillis, entity.category, entity.colorIndex, screen) {
             TrackActions(
                 onRename = { screen.renamingId = entity.id },
                 onShare = { scope.launch { context.shareTrack(entity, viewModel.fileToShare(entity)) } },
@@ -578,6 +573,7 @@ fun MapScreen(
                     is FocusedTrack.Ready -> TrackSheet(
                         loaded = focused.track,
                         title = sheetTitle,
+                        startedAtEpochMillis = state.entity(focused.track.id)?.startedAtEpochMillis,
                         routeColor = sheetColor,
                         maxHeight = maxHeight,
                         selectedIndex = screen.selectedIndex,

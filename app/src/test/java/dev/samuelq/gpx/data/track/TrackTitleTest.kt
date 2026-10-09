@@ -3,7 +3,6 @@ package dev.samuelq.gpx.data.track
 import dev.samuelq.gpx.core.model.GeoBounds
 import dev.samuelq.gpx.data.db.TrackEntity
 import dev.samuelq.gpx.data.db.TrackSummary
-import dev.samuelq.gpx.ui.track.trackTitle
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.util.Locale
@@ -12,6 +11,8 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class TrackTitleTest {
 
@@ -38,50 +39,37 @@ class TrackTitleTest {
         0,
     ).atZone(ZoneId.of("America/Toronto")).toInstant().toEpochMilli()
 
-    private fun row(location: String, trackName: String? = null, startedAt: Long? = started) = TrackEntity(
-        location = location,
-        displayName = location.substringAfterLast('/'),
+    private fun row(trackName: String? = null) = TrackEntity(
         trackName = trackName,
-        startedAtEpochMillis = startedAt,
         lastOpenedAtEpochMillis = 0,
-        summary = TrackSummary(2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, GeoBounds(0.0, 0.0, 0.0, 0.0)),
+        summary = TrackSummary(started, 0.0, 0.0, GeoBounds(0.0, 0.0, 0.0, 0.0)),
     )
 
     @Test
     fun `a name wins`() {
-        assertEquals("Commute", row("recordings/2024-05-04T180000.gpx", "Commute").title)
-        assertEquals("Commute", row("imports/ride.gpx", " Commute ").editableName.trim())
-        assertEquals("Commute.gpx", exportFileName("Commute", "ride.gpx"))
+        assertEquals("Commute", row("Commute").title)
+        assertEquals("Commute", row(" Commute ").editableName.trim())
+        assertEquals("Commute.gpx", row("Commute").exportFileName)
+        assertEquals("ride.gpx", row("ride.gpx").exportFileName)
+        assertEquals("Mon_Tue.gpx", row("Mon/Tue").exportFileName)
+        assertFalse(row("Commute").isTitledByStart)
     }
 
     @Test
-    fun `an unnamed recording is titled by its start, whatever its file is called`() {
-        for (file in listOf(
-            "2024-05-04T180000.gpx",
-            "2024-05-04T180000 (2).gpx",
-            "2024-05-04T180000 (copy).gpx",
-            "Renamed-1.gpx",
-        )) {
-            assertEquals("4 May 2024, 18:00", row("recordings/$file").title, file)
-            assertEquals("4 May 2024, 18:00", row("recordings/$file", trackName = " ").titleStem, file)
-            assertEquals("", row("recordings/$file", trackName = " ").editableName, file)
+    fun `an unnamed track is titled by its start and exported under its stamp`() {
+        for (unnamed in listOf(null, " ")) {
+            assertEquals("4 May 2024, 18:00", row(unnamed).title)
+            assertEquals("", row(unnamed).editableName)
+            assertTrue(row(unnamed).isTitledByStart)
+            // The stamp sorts, where the localised date wouldn't.
+            assertEquals("2024-05-04T180000.gpx", row(unnamed).exportFileName)
         }
-        // Without a start, the filename's stamp stands in.
-        assertEquals("4 May 2024, 18:00", row("recordings/2024-05-04T180000 (2).gpx", startedAt = null).title)
-        // Exported under the stamp, which sorts.
-        assertEquals("2024-05-04T180000.gpx", exportFileName(null, "2024-05-04T180000.gpx"))
     }
 
     @Test
-    fun `an unnamed import keeps its filename`() {
-        assertEquals("ride.gpx", row("imports/ride.gpx").title)
-        assertEquals("ride", row("imports/ride.gpx").editableName)
-        assertEquals("ride.gpx", exportFileName(null, "ride.gpx"))
-    }
-
-    @Test
-    fun `before its row, a recording is titled off its stamp`() {
-        assertEquals("4 May 2024, 18:00", trackTitle(null, "2024-05-04T180000.gpx"))
-        assertEquals("2024-13-04T180000.gpx", trackTitle(null, "2024-13-04T180000.gpx"))
+    fun `an import is named after its file without the extension`() {
+        assertEquals("ride", "ride.gpx".withoutGpxSuffix())
+        assertEquals("ride", "ride.GPX".withoutGpxSuffix())
+        assertEquals("ride.xml", "ride.xml".withoutGpxSuffix())
     }
 }

@@ -99,13 +99,11 @@ class RecordingServiceTest {
 
     private fun active(): RecordingState.Active? = controller.state.value as? RecordingState.Active
 
-    private fun recordings(): List<TrackEntity> = runBlocking {
-        container.trackRepository.tracks.first().filter { it.location.startsWith("recordings/") }
-    }
+    private fun tracks(): List<TrackEntity> = runBlocking { container.trackRepository.tracks.first() }
 
     @Test
     fun recordPauseWaypointAndSave() {
-        val before = recordings().map { it.id }.toSet()
+        val before = tracks().map { it.id }.toSet()
 
         controller.start()
         waitFor(message = "active") { active() != null }
@@ -131,15 +129,15 @@ class RecordingServiceTest {
         controller.stop(TrackLabel("Service ride", " Commute "))
         waitFor(message = "idle") { controller.state.value == RecordingState.Idle }
 
-        val saved = recordings().filter { it.id !in before }
+        val saved = tracks().filter { it.id !in before }
         assertEquals(1, saved.size)
         assertEquals("Service ride", saved.single().trackName)
         assertEquals("Commute", saved.single().category)
         assertEquals("Commute", runBlocking { container.trackRepository.lastRecordingCategory.first() })
         val track = runBlocking { container.trackRepository.geometry(saved.single().id).getOrThrow() }.track
-        // Written into the file, so an export keeps it; the cache holds no type.
-        val file = TrackFiles.file(targetContext, saved.single().location)
-        assertEquals("Commute", file.inputStream().use(GpxParser()::parse).type)
+        // And in what's shared.
+        val shared = runBlocking { container.trackRepository.fileToShare(saved.single()) }
+        assertEquals("Commute", shared.inputStream().use(GpxParser()::parse).type)
         // The pause is a segment break.
         assertEquals(2, track.points.segmentCount)
         assertEquals("Bench", track.waypoints.single().name)
@@ -149,19 +147,19 @@ class RecordingServiceTest {
 
     @Test
     fun aFailedSaveIsOfferedForRecoveryAtOnce() {
-        val recordingsDir = TrackFiles.recordingsDir(targetContext)
+        val tracksDir = TrackFiles.dir(targetContext)
         controller.start()
         waitFor(message = "active") { active() != null }
         pushFixes(6)
         waitFor(message = "points") { (active()?.pointCount ?: 0) >= 5 }
 
         // Unwritable, so the save fails as a full disk would.
-        assertTrue(recordingsDir.setWritable(false))
+        assertTrue(tracksDir.setWritable(false))
         try {
             controller.stop(TrackLabel("", ""))
             waitFor(message = "idle") { controller.state.value == RecordingState.Idle }
         } finally {
-            recordingsDir.setWritable(true)
+            tracksDir.setWritable(true)
         }
 
         val recovery = container.recordingRecovery
@@ -171,12 +169,12 @@ class RecordingServiceTest {
 
     @Test
     fun tooShortARideIsNotSaved() {
-        val before = recordings().size
+        val before = tracks().size
         controller.start()
         waitFor(message = "active") { active() != null }
         controller.stop(TrackLabel("", ""))
         waitFor(message = "idle") { controller.state.value == RecordingState.Idle }
-        assertEquals(before, recordings().size)
+        assertEquals(before, tracks().size)
     }
 
     @Test
@@ -187,10 +185,10 @@ class RecordingServiceTest {
         pushFixes(4)
         waitFor(message = "points") { (active()?.pointCount ?: 0) >= 3 }
 
-        val before = recordings().size
+        val before = tracks().size
         controller.discard(TrackLabel("Undone", ""))
         waitFor(message = "idle") { controller.state.value == RecordingState.Idle }
-        assertEquals(before, recordings().size)
+        assertEquals(before, tracks().size)
 
         // The event may be taken by the UI, so set aside again from a fresh log instead.
         val log = java.io.File(targetContext.cacheDir, "discard.wal")

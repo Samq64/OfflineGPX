@@ -28,8 +28,6 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import dev.samuelq.gpx.R
-import dev.samuelq.gpx.data.db.TrackEntity
-import dev.samuelq.gpx.data.track.TrackFiles
 import dev.samuelq.gpx.ui.DialogTitle
 
 /** Opens with the name selected, so the first keystroke replaces it. */
@@ -133,7 +131,3 @@ fun CategoryField(
         }
     }
 }
-
-/** Before a track's row arrives; see [TrackEntity.title] for after. */
-fun trackTitle(trackName: String?, displayName: String): String =
-    trackName?.takeIf(String::isNotBlank) ?: TrackFiles.recordedAt(displayName) ?: displayName

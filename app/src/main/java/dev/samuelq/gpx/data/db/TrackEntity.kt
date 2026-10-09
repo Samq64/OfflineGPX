@@ -2,27 +2,19 @@ package dev.samuelq.gpx.data.db
 
 import androidx.room.Embedded
 import androidx.room.Entity
-import androidx.room.Index
 import androidx.room.PrimaryKey
 import dev.samuelq.gpx.core.model.GeoBounds
 
 /**
- * One row per track, holding its summary so files are only read to draw or chart them.
- * [location] is the GPX file's path under filesDir.
+ * One row per track, holding its summary so files are only read to draw or chart them. Its
+ * file is named by [id]; see [dev.samuelq.gpx.data.track.TrackFiles].
  */
-@Entity(
-    tableName = "tracks",
-    // Catches a naming bug rather than silently overwriting a row.
-    indices = [Index(value = ["location"], unique = true)],
-)
+@Entity(tableName = "tracks")
 data class TrackEntity(
+    /** AUTOINCREMENT, so an id, and with it a file name, is never reused once committed. */
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val location: String,
-    /** The filename; fallback when the file has no `<name>`. */
-    val displayName: String,
+    /** The row's alone, like the colour; null is titled by when it started. */
     val trackName: String?,
-
-    val startedAtEpochMillis: Long?,
 
     /** Last import, record or open; orders the list and the map's stacking. */
     val lastOpenedAtEpochMillis: Long,
@@ -40,6 +32,8 @@ data class TrackEntity(
     val bounds: GeoBounds get() = summary.bounds
 
     // What the list sorts and shows by.
+    val startedAtEpochMillis: Long get() = summary.startedAtEpochMillis
+
     val distanceMeters: Double get() = summary.distanceMeters
 
     val totalSeconds: Double get() = summary.totalSeconds
@@ -49,17 +43,17 @@ data class TrackEntity(
     }
 }
 
-/** The whole TrackStats but its start, and the bounds, so a list or a framing never has to read the file. */
+/**
+ * The columns a track's points decide: what the list shows and sorts by and the map frames by,
+ * so neither has to read the file. The sheet's fuller stats are analysed from the points.
+ */
 data class TrackSummary(
-    val pointCount: Int,
+    /** Every point has a time: an import without them is refused. */
+    val startedAtEpochMillis: Long,
     val distanceMeters: Double,
     val totalSeconds: Double,
-    val movingSeconds: Double,
-    val averageSpeedMps: Double,
-    val ascentMeters: Double,
-    val descentMeters: Double,
     @Embedded val bounds: GeoBounds,
 )
 
-/** The columns a file's contents decide, written alone so a concurrent rename or recolour survives. */
-data class SummaryUpdate(val id: Long, val startedAtEpochMillis: Long?, @Embedded val summary: TrackSummary)
+/** Written alone, so a rename or recolour meanwhile survives a trim or its undo. */
+data class SummaryUpdate(val id: Long, @Embedded val summary: TrackSummary)

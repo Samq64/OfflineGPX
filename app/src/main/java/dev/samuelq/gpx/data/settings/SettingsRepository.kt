@@ -61,6 +61,15 @@ class SettingsRepository(context: Context) {
 
     fun setUnits(units: UnitSystem) = update { putString(KEY_UNITS, units.name) }
 
+    /** The category the last saved recording had, which the next one is offered. */
+    private val _lastRecordingCategory = MutableStateFlow(prefs.getString(KEY_LAST_RECORDING_CATEGORY, null))
+    val lastRecordingCategory: StateFlow<String?> = _lastRecordingCategory.asStateFlow()
+
+    fun setLastRecordingCategory(category: String?) {
+        prefs.edit { putString(KEY_LAST_RECORDING_CATEGORY, category) }
+        _lastRecordingCategory.value = category
+    }
+
     private inline fun update(crossinline edits: SharedPreferences.Editor.() -> Unit) {
         prefs.edit { edits() }
         _settings.value = read()
@@ -78,5 +87,6 @@ class SettingsRepository(context: Context) {
         const val KEY_UNITS = "units"
         const val KEY_TRACK_SORT = "track_sort"
         const val KEY_TRACK_SORT_DESCENDING = "track_sort_descending"
+        const val KEY_LAST_RECORDING_CATEGORY = "last_recording_category"
     }
 }

@@ -8,6 +8,7 @@ import java.io.ByteArrayOutputStream
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.kxml2.io.KXmlParser
 import org.kxml2.io.KXmlSerializer
@@ -18,19 +19,26 @@ class GpxWriterTest {
     private val parser = GpxParser { KXmlParser() }
 
     private val track = Track(
-        name = "Ride\u0001 home",
+        name = "Ride home",
+        type = "Commute",
         points = TrackPointsBuilder().apply {
             startSegment()
             add(TrackPoint(47.1, 8.6))
             add(TrackPoint(47.3, 8.5))
         }.build(),
-        waypoints = listOf(Waypoint(TrackPoint(47.3, 8.5), "Summit")),
+        waypoints = listOf(Waypoint(TrackPoint(47.3, 8.5), "Sum\u0001mit")),
     )
 
     private fun write(): String {
         val out = ByteArrayOutputStream()
         writer.write(track, out)
         return out.toString(Charsets.UTF_8)
+    }
+
+    /** About a quarter of a recording is indentation otherwise. */
+    @Test
+    fun `writes no indentation`() {
+        assertFalse(Regex(">\\s+<").containsMatchIn(write()))
     }
 
     @Test
@@ -40,21 +48,18 @@ class GpxWriterTest {
     }
 
     @Test
-    fun `writes the type after the name, and it reads back`() {
-        val out = ByteArrayOutputStream()
-        writer.write(track.copy(type = "Commute"), out)
-        val xml = out.toString(Charsets.UTF_8)
-        assertTrue(xml.indexOf("<type>Commute</type>") in xml.indexOf("</name>")..xml.indexOf("<trkseg>"), xml)
-        assertEquals("Commute", parser.parse(xml.byteInputStream()).type)
-        assertFalse("<type>" in write(), "untyped")
-        val blank = ByteArrayOutputStream().also { writer.write(track.copy(type = " "), it) }
-        assertFalse("<type>" in blank.toString(Charsets.UTF_8), "blank")
+    fun `leaves the name and type to the row`() {
+        val xml = write()
+        assertFalse("Ride home" in xml, xml)
+        assertFalse("<type>" in xml, xml)
+        val read = parser.parse(xml.byteInputStream())
+        assertNull(read.name)
+        assertNull(read.type)
     }
 
     @Test
     fun `drops characters XML can't hold, so the file reads back`() {
         val read = parser.parse(write().byteInputStream())
-        assertEquals("Ride home", read.name)
         assertEquals("Summit", read.waypoints.single().name)
     }
 

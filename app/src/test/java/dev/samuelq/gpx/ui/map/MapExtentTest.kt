@@ -93,7 +93,6 @@ class MapExtentTest {
         val track = dev.samuelq.gpx.core.model.Track(name = null, points = points)
         val loaded = dev.samuelq.gpx.data.track.LoadedTrack(
             id = 9,
-            displayName = "a.gpx",
             track = track,
             profile = dev.samuelq.gpx.core.analysis.TrackAnalyzer.analyze(track),
         )

@@ -22,9 +22,8 @@ class GpxTrimmer(
 ) {
 
     /**
-     * @param keepPoint null keeps every point and the bounds.
-     * @param countRoutes false where the file has track points: the parser ignores route points
-     *   then, so they're kept and not counted; see [hasTrackPoints].
+     * @param keepPoint null keeps every track point and the bounds. Routes, which the parser
+     *   doesn't read, are kept whole.
      * @param keepWaypoint null keeps every waypoint.
      * @param name replaces the first `<trk>`'s name, or is added as its first child; blank
      *   removes it, null leaves it.
@@ -40,7 +39,6 @@ class GpxTrimmer(
         name: String? = null,
         type: String? = null,
         color: Int? = null,
-        countRoutes: Boolean = true,
     ) {
         val parser = newPullParser().apply {
             setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, true)
@@ -56,28 +54,8 @@ class GpxTrimmer(
             name,
             type,
             color,
-            countRoutes,
         )
             .run()
-    }
-
-    /** Whether [input] has a track point the parser would read, which decides `countRoutes`. */
-    fun hasTrackPoints(input: InputStream): Boolean {
-        val parser = newPullParser().apply {
-            setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, true)
-            setInput(input, null)
-        }
-        val path = ArrayList<String>()
-        while (true) {
-            when (parser.next()) {
-                XmlPullParser.START_TAG -> {
-                    if (parser.name == TAG_TRKPT && path == TRKSEG_PATH && parser.isReadablePoint()) return true
-                    path += parser.name
-                }
-                XmlPullParser.END_TAG -> path.removeAt(path.lastIndex)
-                XmlPullParser.END_DOCUMENT -> return false
-            }
-        }
     }
 
     /** A start tag held back until something inside it is kept. */
@@ -100,7 +78,6 @@ class GpxTrimmer(
         private var newType: String?,
         /** Likewise. */
         private var newColor: Int?,
-        private val countRoutes: Boolean,
     ) {
         private val path = ArrayList<String>()
         private var skipDepth = 0
@@ -111,7 +88,6 @@ class GpxTrimmer(
         /** The open `<trkseg>`, until its first kept point. */
         private var pendingSegment: StartTag? = null
         private var pointIndex = 0
-        private var segmentPoints = 0
         private var waypointIndex = 0
 
         /** Inside the first `<trk>`, before its first child. */
@@ -179,7 +155,7 @@ class GpxTrimmer(
                 return
             }
             val keep = when {
-                (name == TAG_TRKPT && path == TRKSEG_PATH) || (name == TAG_RTEPT && path == RTE_PATH) -> point()
+                name == TAG_TRKPT && path == TRKSEG_PATH -> point()
                 name == TAG_WPT && path == ROOT_PATH ->
                     keepWaypoint == null || (readable() && keepWaypoint(waypointIndex++))
                 // Wider than what's left; optional, so dropped rather than recomputed ahead of the points.
@@ -194,7 +170,6 @@ class GpxTrimmer(
                 return
             }
             if (name == TAG_TRKSEG && path == TRK_PATH) {
-                segmentPoints = 0
                 pendingSegment = capture()
                 path += name
                 return
@@ -274,10 +249,7 @@ class GpxTrimmer(
 
         private fun point(): Boolean {
             val keepPoint = keepPoint ?: return true
-            if (path == RTE_PATH && !countRoutes) return true
             if (!readable()) return false
-            // Only a track segment is capped, as in the parser.
-            if (path == TRKSEG_PATH && segmentPoints++ >= GpxParser.MAX_POINTS_PER_SEGMENT) return false
             return keepPoint(pointIndex++)
         }
 
@@ -368,8 +340,6 @@ class GpxTrimmer(
         const val TAG_TRK = "trk"
         const val TAG_TRKSEG = "trkseg"
         const val TAG_TRKPT = "trkpt"
-        const val TAG_RTE = "rte"
-        const val TAG_RTEPT = "rtept"
         const val TAG_WPT = "wpt"
         const val TAG_BOUNDS = "bounds"
         const val TAG_NAME = "name"
@@ -385,6 +355,5 @@ class GpxTrimmer(
         val TRK_PATH = listOf("gpx", TAG_TRK)
         val TRKSEG_PATH = listOf("gpx", TAG_TRK, TAG_TRKSEG)
         val TRK_EXTENSIONS_PATH = listOf("gpx", TAG_TRK, TAG_EXTENSIONS)
-        val RTE_PATH = listOf("gpx", TAG_RTE)
     }
 }

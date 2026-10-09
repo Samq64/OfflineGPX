@@ -17,9 +17,12 @@ import org.xmlpull.v1.XmlPullParserFactory
 
 class GpxParseException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
+/** More points than [GpxParser.MAX_POINTS]: refused whole rather than cut short. */
+class GpxTooLargeException(message: String) : Exception(message)
+
 /**
- * Streaming, tolerant GPX reader: anything unrecognised is skipped; only a non-GPX
- * document is an error.
+ * Streaming, tolerant GPX reader of tracks: anything unrecognised, routes included, is skipped;
+ * only a non-GPX document, or one too large, is an error.
  *
  * @param newPullParser injected for plain-JVM tests, where framework xmlpull is stubbed.
  */
@@ -49,11 +52,8 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
 
     private fun readGpx(parser: XmlPullParser): Track {
         val points = TrackPointsBuilder()
-        val routePoints = TrackPointsBuilder()
         val waypoints = mutableListOf<Waypoint>()
         var trackName: String? = null
-        var routeName: String? = null
-        var metadataName: String? = null
         var trackDescription: String? = null
         var trackType: String? = null
         var lineColor: Int? = null
@@ -61,13 +61,6 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
         forEachChild(parser) {
             when (parser.name) {
                 TAG_WPT -> readWaypoint(parser)?.let(waypoints::add)
-
-                TAG_METADATA -> forEachChild(parser) {
-                    when (parser.name) {
-                        TAG_NAME -> metadataName = readLabel(parser)
-                        else -> skip(parser)
-                    }
-                }
 
                 TAG_TRK -> forEachChild(parser) {
                     when (parser.name) {
@@ -82,25 +75,13 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
                     }
                 }
 
-                // Untimed, so shown only without a track, whose timing they'd void.
-                TAG_RTE -> {
-                    routePoints.startSegment()
-                    forEachChild(parser) {
-                        when (parser.name) {
-                            TAG_NAME -> readLabel(parser).let { if (routeName == null) routeName = it }
-                            TAG_RTEPT -> readPoint(parser)?.let(routePoints::add)
-                            else -> skip(parser)
-                        }
-                    }
-                }
-
                 else -> skip(parser)
             }
         }
 
         return Track(
-            name = trackName ?: routeName ?: metadataName,
-            points = if (points.size > 0) points.build() else routePoints.build(),
+            name = trackName,
+            points = points.build(),
             description = trackDescription,
             type = trackType,
             waypoints = waypoints,
@@ -177,19 +158,12 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
 
     /** Appends one `<trkseg>` to [points] as a segment of its own. */
     private fun readSegment(parser: XmlPullParser, points: TrackPointsBuilder) {
-        val depth = parser.depth
-        var count = 0
         points.startSegment()
         forEachChild(parser) {
             when (parser.name) {
                 TAG_TRKPT -> readPoint(parser)?.let {
-                    if (count++ < MAX_POINTS_PER_SEGMENT) {
-                        points.add(it)
-                    } else {
-                        // Non-local return, leaving the parser on this <trkseg>'s END_TAG.
-                        skipRest(parser, depth)
-                        return
-                    }
+                    if (points.size >= MAX_POINTS) throw GpxTooLargeException("Over $MAX_POINTS track points")
+                    points.add(it)
                 }
 
                 else -> skip(parser)
@@ -242,16 +216,6 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
         }
     }
 
-    /** Consumes the rest of the element at [depth], so later tracks still get parsed. */
-    private fun skipRest(parser: XmlPullParser, depth: Int) {
-        while (true) {
-            when (parser.next()) {
-                XmlPullParser.END_TAG -> if (parser.depth <= depth) return
-                XmlPullParser.END_DOCUMENT -> return
-            }
-        }
-    }
-
     private fun readText(parser: XmlPullParser): String {
         var text = ""
         if (parser.next() == XmlPullParser.TEXT) {
@@ -266,15 +230,12 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
 
     companion object {
         /** OOM guard; over 11 days at 1 Hz. */
-        internal const val MAX_POINTS_PER_SEGMENT = 1_000_000
+        internal const val MAX_POINTS = 1_000_000
 
         private const val TAG_GPX = "gpx"
-        private const val TAG_METADATA = "metadata"
         private const val TAG_TRK = "trk"
         private const val TAG_TRKSEG = "trkseg"
         private const val TAG_TRKPT = "trkpt"
-        private const val TAG_RTE = "rte"
-        private const val TAG_RTEPT = "rtept"
         private const val TAG_WPT = "wpt"
         private const val TAG_NAME = "name"
         private const val TAG_DESC = "desc"

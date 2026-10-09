@@ -2,11 +2,11 @@
   "formatVersion": 1,
   "database": {
     "version": 1,
-    "identityHash": "be2b39adabfac2698134859985e03b07",
+    "identityHash": "e2b1694554eefae1a78ce64e4e504f84",
     "entities": [
       {
         "tableName": "tracks",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `location` TEXT NOT NULL, `displayName` TEXT NOT NULL, `trackName` TEXT, `startedAtEpochMillis` INTEGER, `lastOpenedAtEpochMillis` INTEGER NOT NULL, `visible` INTEGER NOT NULL, `colorIndex` INTEGER NOT NULL, `category` TEXT, `pointCount` INTEGER NOT NULL, `distanceMeters` REAL NOT NULL, `totalSeconds` REAL NOT NULL, `movingSeconds` REAL NOT NULL, `averageSpeedMps` REAL NOT NULL, `ascentMeters` REAL NOT NULL, `descentMeters` REAL NOT NULL, `southLatitude` REAL NOT NULL, `westLongitude` REAL NOT NULL, `northLatitude` REAL NOT NULL, `eastLongitude` REAL NOT NULL)",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `trackName` TEXT, `lastOpenedAtEpochMillis` INTEGER NOT NULL, `visible` INTEGER NOT NULL, `colorIndex` INTEGER NOT NULL, `category` TEXT, `startedAtEpochMillis` INTEGER NOT NULL, `distanceMeters` REAL NOT NULL, `totalSeconds` REAL NOT NULL, `southLatitude` REAL NOT NULL, `westLongitude` REAL NOT NULL, `northLatitude` REAL NOT NULL, `eastLongitude` REAL NOT NULL)",
         "fields": [
           {
             "fieldPath": "id",
@@ -15,26 +15,9 @@
             "notNull": true
           },
           {
-            "fieldPath": "location",
-            "columnName": "location",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "displayName",
-            "columnName": "displayName",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
             "fieldPath": "trackName",
             "columnName": "trackName",
             "affinity": "TEXT"
-          },
-          {
-            "fieldPath": "startedAtEpochMillis",
-            "columnName": "startedAtEpochMillis",
-            "affinity": "INTEGER"
           },
           {
             "fieldPath": "lastOpenedAtEpochMillis",
@@ -60,8 +43,8 @@
             "affinity": "TEXT"
           },
           {
-            "fieldPath": "summary.pointCount",
-            "columnName": "pointCount",
+            "fieldPath": "summary.startedAtEpochMillis",
+            "columnName": "startedAtEpochMillis",
             "affinity": "INTEGER",
             "notNull": true
           },
@@ -78,49 +61,25 @@
             "notNull": true
           },
           {
-            "fieldPath": "summary.movingSeconds",
-            "columnName": "movingSeconds",
-            "affinity": "REAL",
-            "notNull": true
-          },
-          {
-            "fieldPath": "summary.averageSpeedMps",
-            "columnName": "averageSpeedMps",
-            "affinity": "REAL",
-            "notNull": true
-          },
-          {
-            "fieldPath": "summary.ascentMeters",
-            "columnName": "ascentMeters",
-            "affinity": "REAL",
-            "notNull": true
-          },
-          {
-            "fieldPath": "summary.descentMeters",
-            "columnName": "descentMeters",
-            "affinity": "REAL",
-            "notNull": true
-          },
-          {
-            "fieldPath": "summary.southLatitude",
+            "fieldPath": "summary.bounds.southLatitude",
             "columnName": "southLatitude",
             "affinity": "REAL",
             "notNull": true
           },
           {
-            "fieldPath": "summary.westLongitude",
+            "fieldPath": "summary.bounds.westLongitude",
             "columnName": "westLongitude",
             "affinity": "REAL",
             "notNull": true
           },
           {
-            "fieldPath": "summary.northLatitude",
+            "fieldPath": "summary.bounds.northLatitude",
             "columnName": "northLatitude",
             "affinity": "REAL",
             "notNull": true
           },
           {
-            "fieldPath": "summary.eastLongitude",
+            "fieldPath": "summary.bounds.eastLongitude",
             "columnName": "eastLongitude",
             "affinity": "REAL",
             "notNull": true
@@ -131,23 +90,12 @@
           "columnNames": [
             "id"
           ]
-        },
-        "indices": [
-          {
-            "name": "index_tracks_location",
-            "unique": true,
-            "columnNames": [
-              "location"
-            ],
-            "orders": [],
-            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_tracks_location` ON `${TABLE_NAME}` (`location`)"
-          }
-        ]
+        }
       }
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'be2b39adabfac2698134859985e03b07')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'e2b1694554eefae1a78ce64e4e504f84')"
     ]
   }
 }

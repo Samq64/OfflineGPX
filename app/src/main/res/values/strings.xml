@@ -255,6 +255,8 @@
     <string name="track_close">Close</string>
     <string name="track_edit_failed">Couldn\'t change that track.</string>
     <string name="track_error_empty">This GPX file has no track points.</string>
+    <string name="track_error_untimed">This GPX file is missing timestamps.</string>
+    <string name="track_error_too_large">This GPX file is too large.</string>
     <string name="track_error_invalid">This file isn\'t valid GPX.</string>
     <string name="track_error_title">Couldn\'t open this file</string>
     <!-- Under track_error_title, which already says it couldn't be opened. -->

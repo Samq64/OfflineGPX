@@ -24,5 +24,7 @@ sealed interface FocusedTrack {
 fun Throwable.toTrackMessageRes(): Int = when (this) {
     is TrackLoadException.Invalid -> R.string.track_error_invalid
     is TrackLoadException.Empty -> R.string.track_error_empty
+    is TrackLoadException.Untimed -> R.string.track_error_untimed
+    is TrackLoadException.TooLarge -> R.string.track_error_too_large
     else -> R.string.track_error_unreadable
 }

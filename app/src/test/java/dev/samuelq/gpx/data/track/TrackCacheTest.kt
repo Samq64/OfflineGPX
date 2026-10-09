@@ -32,14 +32,17 @@ class TrackCacheTest {
     )
 
     @Test
-    fun `a track survives the round trip, all but its name`() {
+    fun `a track survives the round trip, all but its name and accuracy`() {
         val decoded = assertNotNull(TrackCache.decode(ByteBuffer.wrap(TrackCache.encode(track, stamp)), stamp))
 
         assertNull(decoded.name)
         assertEquals(track.description, decoded.description)
         assertEquals(track.waypoints, decoded.waypoints)
         assertEquals(track.points.segmentStarts().toList(), decoded.points.segmentStarts().toList())
-        assertEquals(track.points.indices.map(track.points::get), decoded.points.indices.map(decoded.points::get))
+        assertEquals(
+            track.points.indices.map { track.points[it].copy(accuracyMeters = null) },
+            decoded.points.indices.map(decoded.points::get),
+        )
     }
 
     @Test
@@ -77,25 +80,6 @@ class TrackCacheTest {
         cache.write(7, source, track)
         source.writeText("<gpx><trk/></gpx>")
         assertNull(cache.read(7, source))
-    }
-
-    @Test
-    fun `restamping keeps an entry valid after a rewrite it doesn't hold`() {
-        cache.write(7, source, track)
-        source.writeText("<gpx><metadata/></gpx>")
-        source.setLastModified(2_000_000)
-        cache.restamp(7, source)
-        assertEquals(track.description, cache.read(7, source)?.description)
-
-        cache.restamp(8, source)
-        assertFalse(File(dir, "8.bin").exists(), "no entry, nothing to restamp")
-    }
-
-    @Test
-    fun `an entry too short to restamp is dropped`() {
-        entry.writeBytes(ByteArray(4))
-        cache.restamp(7, source)
-        assertFalse(entry.exists())
     }
 
     /** As a crash mid-write or an older format would leave. */

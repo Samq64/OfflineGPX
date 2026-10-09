@@ -27,7 +27,9 @@ class AppContainer(context: Context) {
 
     private val database by lazy { GpxDatabase.create(appContext) }
 
-    val trackRepository by lazy { TrackRepository(appContext, database.trackDao(), applicationScope) }
+    val trackRepository by lazy {
+        TrackRepository(appContext, database.trackDao(), settingsRepository, applicationScope)
+    }
 
     val locationSource = LocationSource(appContext)
 

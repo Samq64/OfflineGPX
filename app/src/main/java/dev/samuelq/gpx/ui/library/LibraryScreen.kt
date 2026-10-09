@@ -264,7 +264,7 @@ fun LibraryScreen(
                     onExport = {
                         viewModel.beginExportAll(
                             tracks.filter { it.id in selection }
-                                .associate { it.id to exportFileName(it.trackName, it.displayName) },
+                                .associate { it.id to it.exportFileName },
                         )
                         folderExporter.launch(null)
                     },
@@ -614,8 +614,7 @@ private fun TrackRow(
     // Remembered: a DateTimeFormatter's first use loads locale data, janking the entry animation.
     // Null for an unnamed recording: its title is already the date.
     val date = remember(track, formatters) {
-        val recorded = track.startedAtEpochMillis ?: track.lastOpenedAtEpochMillis
-        formatters.dateTime(Instant.ofEpochMilli(recorded)).takeUnless { track.isTitledByStart }
+        formatters.dateTime(Instant.ofEpochMilli(track.startedAtEpochMillis)).takeUnless { track.isTitledByStart }
     }
     val summary = remember(track, sizeBytes, formatters) {
         listOfNotNull(
