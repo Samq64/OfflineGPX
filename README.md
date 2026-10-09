@@ -40,7 +40,7 @@ Record and manage rides, runs and hikes on an offline map, with no internet perm
 ## Building
 
 Needs the Android SDK (`sdk.dir` in `local.properties`, or `ANDROID_HOME`) and any JDK 17+
-to start Gradle, which then fetches the JDK 25 it builds with. Runs on Android 12 or later.
+to start Gradle, which then builds with an installed JDK 25 or fetches one. Runs on Android 12 or later.
 
 ```sh
 ./gradlew :app:assembleDebug     # app/build/outputs/apk/debug/app-debug.apk
@@ -56,6 +56,12 @@ apksigner sign --ks release.jks --out app-release.apk \
 
 The build fails if any dependency adds a network permission to the merged manifest
 (`CheckNoNetworkPermissions` in `app/build.gradle.kts`).
+
+Dependencies are checked against `gradle/verification-metadata.xml`. After changing one, refresh it with:
+
+```sh
+./gradlew --write-verification-metadata sha256 check :app:assembleRelease :app:connectedDebugAndroidTest
+```
 
 ## Testing
 
@@ -91,8 +97,9 @@ docs/        README icon and screenshots.
 
 Offline GPX is licensed under the GPLv3. See [LICENSE](LICENSE) for details.
 
-Bundled libraries are credited within the app at Settings > Libraries
+Bundled libraries are credited within the app at Settings > Libraries.
 
-`app/src/test/resources/andorra-fragment.map` is cut from a mapsforge extract of
-OpenStreetMap data, © OpenStreetMap contributors, available under the
-[Open Database License](https://opendatacommons.org/licenses/odbl/).
+The test fixture `app/src/test/resources/andorra-fragment.map`, which is not part of
+the app, contains map data © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright),
+available under the [Open Database License](https://opendatacommons.org/licenses/odbl/).
+It is cut from a mapsforge extract.

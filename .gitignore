@@ -12,3 +12,4 @@ captures/
 *.keystore
 *.jks
 *.idsig
+.kotlin/
