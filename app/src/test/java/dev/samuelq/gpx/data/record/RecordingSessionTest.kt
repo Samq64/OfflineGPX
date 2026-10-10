@@ -256,4 +256,13 @@ class RecordingSessionTest {
         session.locationOff = true
         assertEquals(RecordingStatus.LOCATION_OFF, session.state().status)
     }
+
+    @Test
+    fun `the colour slot is published`() {
+        val session = session()
+        session.colorSlot = 3
+        assertEquals(3, session.colorSlot)
+        assertEquals(3, session.state().colorSlot)
+        assertFalse(session.locationOff)
+    }
 }
