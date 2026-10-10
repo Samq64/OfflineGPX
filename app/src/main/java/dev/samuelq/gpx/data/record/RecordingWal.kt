@@ -14,18 +14,20 @@ import java.util.Base64
 import java.util.zip.CRC32
 
 /**
- * Append-only recording log, one flushed line per fix, so a crash mid-ride stays
+ * Append-only recording log, one flushed line per fix, so a crash mid-recording stays
  * recoverable (a half-written GPX would not be).
  *
  * ```
+ * V,<version>*<crc>                                            the format, the first line
  * <epochMillis>,<lat>,<lon>,[<ele>],[<accuracyMeters>]*<crc>   a fix
  * -*<crc>                                                      a segment break
  * W,<epochMillis>,<lat>,<lon>,[<ele>],[<base64 name>]*<crc>    a waypoint
- * C,<Garmin colour name>*<crc>                                  the line's colour; the last holds
+ * C,<Garmin colour name>*<crc>                                 the line's colour; the last holds
  * ```
  *
  * The CRC-32 of the line before the `*` drops one a power cut tore or storage corrupted.
- * Base64 keeps commas and newlines in names from breaking the format.
+ * Base64 keeps commas and newlines in names from breaking the format. A log from a newer
+ * [VERSION], which an update may change the format for, isn't read.
  */
 class RecordingWal private constructor(val file: File, private val writer: BufferedWriter) : Closeable {
 
@@ -61,12 +63,17 @@ class RecordingWal private constructor(val file: File, private val writer: Buffe
         private const val WAYPOINT = "W"
         private const val WAYPOINT_PREFIX = "$WAYPOINT,"
         private const val COLOR_PREFIX = "C,"
+        private const val VERSION_PREFIX = "V,"
+        private const val VERSION = 1
         private const val CHECK = '*'
 
         /** Opens [file] for appending, never truncating. */
         fun open(file: File): RecordingWal {
             file.parentFile?.mkdirs()
-            return RecordingWal(file, FileWriter(file, true).buffered())
+            val fresh = file.length() == 0L
+            return RecordingWal(file, FileWriter(file, true).buffered()).apply {
+                if (fresh) writeLine("$VERSION_PREFIX$VERSION")
+            }
         }
 
         private fun checksum(line: String): String =
@@ -88,13 +95,17 @@ class RecordingWal private constructor(val file: File, private val writer: Buffe
             val waypoints = mutableListOf<Waypoint>()
             var color: String? = null
 
-            file.forEachLine { line ->
-                val text = verified(line.trim()) ?: return@forEachLine
-                when {
-                    text == BREAK -> points.startSegment()
-                    text.startsWith(WAYPOINT_PREFIX) -> parseWaypoint(text)?.let(waypoints::add)
-                    text.startsWith(COLOR_PREFIX) -> color = text.removePrefix(COLOR_PREFIX)
-                    else -> parsePoint(text)?.let(points::add)
+            file.useLines { lines ->
+                for (line in lines) {
+                    val text = verified(line.trim()) ?: continue
+                    when {
+                        text.startsWith(VERSION_PREFIX) ->
+                            if (text.removePrefix(VERSION_PREFIX).toIntOrNull() != VERSION) return null
+                        text == BREAK -> points.startSegment()
+                        text.startsWith(WAYPOINT_PREFIX) -> parseWaypoint(text)?.let(waypoints::add)
+                        text.startsWith(COLOR_PREFIX) -> color = text.removePrefix(COLOR_PREFIX)
+                        else -> parsePoint(text)?.let(points::add)
+                    }
                 }
             }
             if (points.size == 0) return null

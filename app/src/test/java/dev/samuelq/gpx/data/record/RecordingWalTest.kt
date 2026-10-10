@@ -68,6 +68,17 @@ class RecordingWalTest {
             it.append(TrackPoint(1.1, 2.1, time = at.plusSeconds(1)))
         }
         assertEquals(2, RecordingWal.recover(file)?.points?.size)
+        assertEquals(1, file.readLines().count { it.startsWith("V,") })
+    }
+
+    @Test
+    fun `a log from a newer version isn't read`() {
+        val file = File(dir, "newer.wal").apply {
+            writeText(listOf("V,2", "1000,51.5,-0.1,,").joinToString("\n") { "$it*${crc(it)}" })
+        }
+        assertNull(RecordingWal.recover(file))
+        file.writeText(listOf("V,x", "1000,51.5,-0.1,,").joinToString("\n") { "$it*${crc(it)}" })
+        assertNull(RecordingWal.recover(file))
     }
 
     @Test
@@ -157,7 +168,7 @@ class RecordingWalTest {
         writeThree(file)
         val lines = file.readLines().toMutableList()
         // One digit of the latitude changed, as a bad sector might: still a valid number.
-        lines[1] = lines[1].replaceFirst("51.6", "51.9")
+        lines[2] = lines[2].replaceFirst("51.6", "51.9")
         file.writeText(lines.joinToString("\n", postfix = "\n"))
 
         val track = assertNotNull(RecordingWal.recover(file))
