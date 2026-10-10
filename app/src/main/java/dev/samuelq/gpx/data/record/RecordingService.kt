@@ -115,7 +115,7 @@ class RecordingService : Service() {
 
         // Set aside any unsaved ride for recovery so this one starts from an empty log.
         if (!container.recordingRecovery.claim()) {
-            abandon(R.string.record_save_failed)
+            abandon(R.string.record_start_failed)
             return
         }
 

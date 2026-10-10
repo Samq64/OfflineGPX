@@ -73,12 +73,13 @@
     <string name="library_hide_selected">Hide on map</string>
     <string name="library_import">Import track</string>
     <string name="library_import_failed">Couldn\'t import that file.</string>
+    <string name="library_import_none">Couldn\'t import those files.</string>
     <plurals name="library_imported_all">
         <item quantity="one">Imported %1$d track.</item>
         <item quantity="other">Imported %1$d tracks.</item>
     </plurals>
-    <!-- Only for two or more files; one that fails says library_import_failed. -->
-    <string name="library_imported_some" tools:ignore="PluralsCandidate">Imported %1$d of %2$d files. The rest couldn\'t be read.</string>
+    <!-- Only for two or more files, some imported; otherwise library_import_failed or _none. -->
+    <string name="library_imported_some" tools:ignore="PluralsCandidate">Imported %1$d of %2$d files. The rest couldn\'t be imported.</string>
     <string name="library_more">More options</string>
     <string name="library_open_on_map">Open on map</string>
     <string name="library_rename_failed">Couldn\'t rename that track.</string>
@@ -183,6 +184,7 @@
     <string name="record_resume">Resume</string>
     <string name="record_save_failed">Couldn\'t save that recording. It\'s still on the device.</string>
     <string name="record_start">Record</string>
+    <string name="record_start_failed">Couldn\'t start recording. An earlier unsaved one is in the way.</string>
     <string name="record_stop">Stop</string>
     <string name="record_stop_title">Stop recording</string>
     <string name="record_stop_to_open">Stop recording to open a track.</string>

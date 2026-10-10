@@ -158,7 +158,13 @@ class LibraryViewModel(
                 return@launch
             }
             val imported = uris.count { repository.import(it).isSuccess }
-            _events.send(LibraryEvent.ImportedAll(imported, uris.size))
+            _events.send(
+                if (imported == 0) {
+                    LibraryEvent.Say(R.string.library_import_none)
+                } else {
+                    LibraryEvent.ImportedAll(imported, uris.size)
+                },
+            )
         }
     }
 
@@ -174,7 +180,15 @@ class LibraryViewModel(
         if (folder == null || names.isEmpty()) return
         viewModelScope.launch {
             repository.exportAll(names, folder).fold(
-                onSuccess = { _events.send(LibraryEvent.ExportedAll(it, names.size)) },
+                onSuccess = { written ->
+                    _events.send(
+                        if (written == 0) {
+                            LibraryEvent.Say(R.string.library_export_failed)
+                        } else {
+                            LibraryEvent.ExportedAll(written, names.size)
+                        },
+                    )
+                },
                 onFailure = { _events.send(LibraryEvent.Say(R.string.library_export_failed)) },
             )
             clearSelection()
