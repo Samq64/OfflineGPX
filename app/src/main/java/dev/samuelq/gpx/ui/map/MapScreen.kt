@@ -164,7 +164,7 @@ fun MapScreen(
     // Name and colour are the row's, blank for the moment before a new import's row arrives.
     val openList = { onOpenList(viewModel.lastCamera?.area) }
     val focusedRow = focusedTrack?.let { state.entity(it.id) }
-    val focusedColor = palette.slot(focusedRow?.colorIndex ?: 0)
+    val focusedColor = palette.slot(focusedRow?.color?.ordinal ?: 0)
     val focusedTitle = focusedRow?.title.orEmpty()
     // The recording takes the sheet over; other tracks wait until it stops.
     val subject = when {
@@ -392,7 +392,7 @@ fun MapScreen(
     val overlays = remember(state.entities, state.geometry, focusedTrack?.id, focusedColor, palette, trimRange) {
         // Colour from the row, not its position, so it's stable across taps.
         val drawable = state.entities.mapNotNull { row ->
-            state.geometry[row.id]?.let { RouteOverlay(row.id, it, palette.slot(row.colorIndex), row.bounds) }
+            state.geometry[row.id]?.let { RouteOverlay(row.id, it, palette.slot(row.color.ordinal), row.bounds) }
         }
         // Include the focused track even if hidden, so its readout has a line to go with.
         val unlisted = focusedTrack?.takeIf { focus -> drawable.none { it.trackId == focus.id } }
@@ -520,7 +520,7 @@ fun MapScreen(
 
     // Null until a new import's row arrives.
     val actions = focusedTrack?.let { state.entity(it.id) }?.let { entity ->
-        remember(entity.id, entity.trackName, entity.startedAtEpochMillis, entity.category, entity.colorIndex, screen) {
+        remember(entity.id, entity.trackName, entity.startedAtEpochMillis, entity.category, entity.color, screen) {
             TrackActions(
                 onRename = { screen.renamingId = entity.id },
                 onShare = { scope.launch { context.shareTrack(entity, viewModel.fileToShare(entity)) } },
@@ -539,7 +539,7 @@ fun MapScreen(
                     )
                 },
                 onTrim = { screen.startTrim(focusedTrack.profile.points.size) },
-                colorIndex = entity.colorIndex,
+                colorIndex = entity.color.ordinal,
                 onColor = { viewModel.setColor(entity.id, it) },
             )
         }

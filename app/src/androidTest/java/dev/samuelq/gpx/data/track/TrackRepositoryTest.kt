@@ -388,8 +388,8 @@ class TrackRepositoryTest {
     fun colourWrapsAndSizesAreFileLengths() {
         val id = importSample()
         runBlocking {
-            repository.setColor(id, TrackEntity.PALETTE_SIZE + 2)
-            assertEquals(2, row(id).colorIndex)
+            repository.setColor(id, RouteColor.entries.size + 2)
+            assertEquals(RouteColor.Green, row(id).color)
             repository.setVisible(listOf(id), false)
             assertFalse(row(id).visible)
             assertEquals(mapOf(id to fileOf(id).length()), repository.fileSizes(listOf(row(id))))

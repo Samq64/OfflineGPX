@@ -90,10 +90,8 @@ class TrackRepository(
         all.mapNotNull { it.category }.distinctBy { it.lowercase(Locale.ROOT) }.sortedWith(collator)
     }
 
-    /** The slot a new track gets unless it brings one. */
-    suspend fun nextColorSlot(): Int = withContext(io) {
-        leastUsedSlot(dao.colorUsage(), TrackEntity.PALETTE_SIZE)
-    }
+    /** The colour a new track gets unless it brings one. */
+    suspend fun nextColor(): RouteColor = withContext(io) { leastUsed(dao.colorUsage()) }
 
     /** The last saved recording's, which the next one is offered. */
     val lastRecordingCategory: Flow<String?> = settings.lastRecordingCategory
@@ -124,7 +122,7 @@ class TrackRepository(
                     TrackAnalyzer.analyze(track),
                     name = track.name ?: arrivedAs.withoutGpxSuffix().asTrackName(),
                     category = categoryAsSpelt(track.type),
-                    colorIndex = track.displayColor?.let(RouteColors::slotOf),
+                    color = track.displayColor?.let(RouteColor::ofGarmin),
                 )
                 insert(entity, staged, track)
             } finally {
@@ -183,7 +181,7 @@ class TrackRepository(
                     profile,
                     name = typed.name,
                     category = typed.type,
-                    colorIndex = typed.displayColor?.let(RouteColors::slotOf),
+                    color = typed.displayColor?.let(RouteColor::ofGarmin),
                 )
                 insert(entity, staged, typed)
                     .also { settings.setLastRecordingCategory(typed.type) }
@@ -277,7 +275,7 @@ class TrackRepository(
         // Blank removes the file's own.
         name = entity.trackName.orEmpty(),
         type = entity.category.orEmpty(),
-        color = RouteColors.garminName(entity.colorIndex),
+        color = entity.color.name,
     )
 
     /** Like [open] but without touching the sort order, for drawing. */
@@ -324,7 +322,7 @@ class TrackRepository(
         dao.setVisibility(shown.map { it.key }, hidden.map { it.key })
     }
 
-    suspend fun setColor(id: Long, colorIndex: Int) = dao.setColor(id, colorIndex.mod(TrackEntity.PALETTE_SIZE))
+    suspend fun setColor(id: Long, slot: Int) = dao.setColor(id, RouteColor.at(slot))
 
     /** Hides [ids] until [undoDelete] or [commitDelete]. */
     fun deleteLater(ids: Collection<Long>) = pendingDelete.update { it + ids }
@@ -437,9 +435,9 @@ class TrackRepository(
         profile: TrackProfile,
         name: String?,
         category: String?,
-        colorIndex: Int? = null,
+        color: RouteColor? = null,
     ) = TrackEntity(
-        colorIndex = colorIndex ?: leastUsedSlot(dao.colorUsage(), TrackEntity.PALETTE_SIZE),
+        color = color ?: leastUsed(dao.colorUsage()),
         trackName = name,
         lastOpenedAtEpochMillis = System.currentTimeMillis(),
         summary = summaryOf(track, profile),
@@ -506,17 +504,13 @@ class TrackRepository(
     }
 }
 
-/**
- * Of the first [size] palette slots, the one fewest visible tracks use, then fewest overall,
- * then the lowest. Slots past [size] aren't counted.
- */
-internal fun leastUsedSlot(usage: List<ColorUse>, size: Int): Int {
-    val shown = IntArray(size)
-    val all = IntArray(size)
+/** The colour fewest visible tracks use, then fewest overall, then the first. */
+internal fun leastUsed(usage: List<ColorUse>): RouteColor {
+    val shown = IntArray(RouteColor.entries.size)
+    val all = IntArray(RouteColor.entries.size)
     usage.forEach { use ->
-        val slot = use.colorIndex.takeIf { it in 0 until size } ?: return@forEach
-        all[slot]++
-        if (use.visible) shown[slot]++
+        all[use.color.ordinal]++
+        if (use.visible) shown[use.color.ordinal]++
     }
-    return (0 until size).minWith(compareBy({ shown[it] }, { all[it] }))
+    return RouteColor.entries.minWith(compareBy({ shown[it.ordinal] }, { all[it.ordinal] }))
 }

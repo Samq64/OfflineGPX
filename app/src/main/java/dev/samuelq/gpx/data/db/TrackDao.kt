@@ -5,16 +5,17 @@ import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
+import dev.samuelq.gpx.data.track.RouteColor
 import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface TrackDao {
 
-    /** The app's only ordering; the map walks it backwards so the list's top is drawn on top. */
+    /** Most recently opened first; the list and map re-sort it by the chosen sort. */
     @Query("SELECT * FROM tracks ORDER BY lastOpenedAtEpochMillis DESC")
     fun observeByRecent(): Flow<List<TrackEntity>>
 
-    @Query("SELECT colorIndex, visible FROM tracks")
+    @Query("SELECT color, visible FROM tracks")
     suspend fun colorUsage(): List<ColorUse>
 
     @Query("SELECT * FROM tracks WHERE id = :id")
@@ -67,8 +68,8 @@ interface TrackDao {
     @Query("UPDATE tracks SET visible = :visible WHERE id = :id")
     suspend fun setVisible(id: Long, visible: Boolean)
 
-    @Query("UPDATE tracks SET colorIndex = :colorIndex WHERE id = :id")
-    suspend fun setColor(id: Long, colorIndex: Int)
+    @Query("UPDATE tracks SET color = :color WHERE id = :id")
+    suspend fun setColor(id: Long, color: RouteColor)
 
     @Query("UPDATE tracks SET visible = :visible WHERE id IN (:ids)")
     suspend fun setVisible(ids: List<Long>, visible: Boolean)
@@ -85,5 +86,5 @@ interface TrackDao {
     suspend fun showOnly(ids: List<Long>)
 }
 
-/** For picking the next palette slot. */
-data class ColorUse(val colorIndex: Int, val visible: Boolean)
+/** For picking the next colour. */
+data class ColorUse(val color: RouteColor, val visible: Boolean)

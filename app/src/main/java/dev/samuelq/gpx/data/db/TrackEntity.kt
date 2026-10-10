@@ -4,6 +4,7 @@ import androidx.room.Embedded
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import dev.samuelq.gpx.core.model.GeoBounds
+import dev.samuelq.gpx.data.track.RouteColor
 
 /**
  * One row per track, holding its summary so files are only read to draw or chart them. Its
@@ -22,7 +23,7 @@ data class TrackEntity(
     val visible: Boolean = true,
 
     /** Assigned once so a track's colour only changes when the user picks another. */
-    val colorIndex: Int = 0,
+    val color: RouteColor = RouteColor.Red,
 
     @Embedded val summary: TrackSummary,
 
@@ -37,10 +38,6 @@ data class TrackEntity(
     val distanceMeters: Double get() = summary.distanceMeters
 
     val totalSeconds: Double get() = summary.totalSeconds
-
-    companion object {
-        const val PALETTE_SIZE = 6
-    }
 }
 
 /**

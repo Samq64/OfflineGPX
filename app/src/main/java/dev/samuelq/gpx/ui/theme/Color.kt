@@ -3,7 +3,7 @@ package dev.samuelq.gpx.ui.theme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.ui.graphics.Color
 import dev.samuelq.gpx.R
-import dev.samuelq.gpx.data.db.TrackEntity
+import dev.samuelq.gpx.data.track.RouteColor
 import dev.samuelq.gpx.data.track.RouteColors
 
 private val Blue450 = Color(0xFF2A78D6)
@@ -25,7 +25,7 @@ val RouteColorNames = listOf(
     R.string.color_cyan,
     R.string.color_blue,
     R.string.color_magenta,
-).also { check(it.size == TrackEntity.PALETTE_SIZE) }
+).also { check(it.size == RouteColor.entries.size) }
 
 fun List<Color>.slot(index: Int): Color = this[index.mod(size)]
 

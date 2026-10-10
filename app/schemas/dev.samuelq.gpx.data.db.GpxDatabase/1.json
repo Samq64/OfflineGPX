@@ -2,11 +2,11 @@
   "formatVersion": 1,
   "database": {
     "version": 1,
-    "identityHash": "e2b1694554eefae1a78ce64e4e504f84",
+    "identityHash": "f2cf0ff3531fdead74e3b905a8c97e07",
     "entities": [
       {
         "tableName": "tracks",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `trackName` TEXT, `lastOpenedAtEpochMillis` INTEGER NOT NULL, `visible` INTEGER NOT NULL, `colorIndex` INTEGER NOT NULL, `category` TEXT, `startedAtEpochMillis` INTEGER NOT NULL, `distanceMeters` REAL NOT NULL, `totalSeconds` REAL NOT NULL, `southLatitude` REAL NOT NULL, `westLongitude` REAL NOT NULL, `northLatitude` REAL NOT NULL, `eastLongitude` REAL NOT NULL)",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `trackName` TEXT, `lastOpenedAtEpochMillis` INTEGER NOT NULL, `visible` INTEGER NOT NULL, `color` TEXT NOT NULL, `category` TEXT, `startedAtEpochMillis` INTEGER NOT NULL, `distanceMeters` REAL NOT NULL, `totalSeconds` REAL NOT NULL, `southLatitude` REAL NOT NULL, `westLongitude` REAL NOT NULL, `northLatitude` REAL NOT NULL, `eastLongitude` REAL NOT NULL)",
         "fields": [
           {
             "fieldPath": "id",
@@ -32,9 +32,9 @@
             "notNull": true
           },
           {
-            "fieldPath": "colorIndex",
-            "columnName": "colorIndex",
-            "affinity": "INTEGER",
+            "fieldPath": "color",
+            "columnName": "color",
+            "affinity": "TEXT",
             "notNull": true
           },
           {
@@ -95,7 +95,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'e2b1694554eefae1a78ce64e4e504f84')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'f2cf0ff3531fdead74e3b905a8c97e07')"
     ]
   }
 }

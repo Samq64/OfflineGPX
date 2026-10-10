@@ -1,6 +1,5 @@
 package dev.samuelq.gpx.data.track
 
-import dev.samuelq.gpx.data.db.TrackEntity
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -8,23 +7,26 @@ import kotlin.test.assertNull
 class RouteColorsTest {
 
     @Test
-    fun `each slot leaves and returns as its Garmin name`() {
-        (0 until TrackEntity.PALETTE_SIZE).forEach { slot ->
-            assertEquals(slot, RouteColors.slotOf(RouteColors.garminName(slot)))
-        }
-        assertEquals("Red", RouteColors.garminName(TrackEntity.PALETTE_SIZE))
+    fun `each colour leaves and returns as its Garmin name`() {
+        RouteColor.entries.forEach { assertEquals(it, RouteColor.ofGarmin(it.name)) }
     }
 
     @Test
-    fun `either shade of a hue is its slot`() {
-        assertEquals(RouteColors.slotOf("Cyan"), RouteColors.slotOf("DarkCyan"))
-        assertEquals(RouteColors.slotOf("Magenta"), RouteColors.slotOf(" DarkMagenta "))
+    fun `any index wraps to a colour`() {
+        assertEquals(RouteColor.Red, RouteColor.at(RouteColor.entries.size))
+        assertEquals(RouteColor.Magenta, RouteColor.at(-1))
     }
 
     @Test
-    fun `greys, Transparent and unknown names match no slot`() {
+    fun `either shade of a hue is its colour`() {
+        assertEquals(RouteColor.Cyan, RouteColor.ofGarmin("DarkCyan"))
+        assertEquals(RouteColor.Magenta, RouteColor.ofGarmin(" DarkMagenta "))
+    }
+
+    @Test
+    fun `greys, Transparent and unknown names match no colour`() {
         listOf("Black", "DarkGray", "LightGray", "White", "Transparent", "Orange", "").forEach {
-            assertNull(RouteColors.slotOf(it), it)
+            assertNull(RouteColor.ofGarmin(it), it)
         }
     }
 }

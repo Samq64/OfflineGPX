@@ -687,7 +687,7 @@ private fun TrackRow(
                     // The row toggles, so it's one stop that says what's selected.
                     Checkbox(checked = selected, onCheckedChange = null)
                 } else {
-                    ColorDot(track.colorIndex, onColor)
+                    ColorDot(track.color.ordinal, onColor)
                 }
             }
             Spacer(Modifier.width(16.dp))

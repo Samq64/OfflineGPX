@@ -11,8 +11,7 @@ import dev.samuelq.gpx.R
 import dev.samuelq.gpx.core.analysis.TrackAnalyzer
 import dev.samuelq.gpx.core.model.TrackPoint
 import dev.samuelq.gpx.core.model.TrackPoints
-import dev.samuelq.gpx.data.db.TrackEntity
-import dev.samuelq.gpx.data.track.RouteColors
+import dev.samuelq.gpx.data.track.RouteColor
 import dev.samuelq.gpx.data.track.TrackLabel
 import java.io.IOException
 import java.time.Instant
@@ -121,8 +120,8 @@ class RecordingService : Service() {
         }
 
         wal = RecordingWal.open(container.recordingRecovery.liveLog)
-        // Fixed now, so recolouring other tracks mid-ride doesn't move it.
-        setColor(container.trackRepository.nextColorSlot())
+        // Fixed now, so recolouring other tracks mid-recording doesn't move it.
+        setColor(container.trackRepository.nextColor().ordinal)
 
         publish()
         startTicker()
@@ -210,8 +209,9 @@ class RecordingService : Service() {
 
     private fun setColor(slot: Int) {
         val session = session ?: return
-        session.colorSlot = slot.mod(TrackEntity.PALETTE_SIZE)
-        wal?.appendColor(RouteColors.garminName(session.colorSlot))
+        val color = RouteColor.at(slot)
+        session.colorSlot = color.ordinal
+        wal?.appendColor(color.name)
         publish()
     }
 

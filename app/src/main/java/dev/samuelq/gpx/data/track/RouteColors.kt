@@ -1,10 +1,7 @@
 package dev.samuelq.gpx.data.track
 
-import dev.samuelq.gpx.data.db.TrackEntity
-
 /**
- * The route palettes as ARGB, one slot per hue Garmin's `DisplayColor` names, so a colour
- * leaves and returns as that name. In wheel order, which is also the order slots are assigned.
+ * The route palettes as ARGB, indexed by [RouteColor.ordinal].
  *
  * From `tools/route_palette.py`: each within 8° of its pure sRGB hue, at least 2.5:1 against
  * map land (1.75:1 against water and vegetation), and apart from each other by 25 CIEDE2000
@@ -19,7 +16,7 @@ object RouteColors {
         0xFF07A4A4,
         0xFF2773EE,
         0xFF79028D,
-    ).map(Long::toInt).also { check(it.size == TrackEntity.PALETTE_SIZE) }
+    ).map(Long::toInt).also { check(it.size == RouteColor.entries.size) }
 
     val DARK: List<Int> = listOf(
         0xFFE66E6F,
@@ -28,15 +25,30 @@ object RouteColors {
         0xFF16E1D6,
         0xFF73A3FC,
         0xFFB853AC,
-    ).map(Long::toInt).also { check(it.size == TrackEntity.PALETTE_SIZE) }
+    ).map(Long::toInt).also { check(it.size == RouteColor.entries.size) }
+}
 
-    /** What a file records for each slot. */
-    private val GARMIN_NAMES = listOf("Red", "Yellow", "Green", "Cyan", "Blue", "Magenta")
-        .also { check(it.size == TrackEntity.PALETTE_SIZE) }
+/**
+ * A track's colour, one per hue Garmin's `DisplayColor` names. Stored and exported by name, so
+ * entries may be reordered or added but never renamed. In wheel order, the order they're assigned.
+ */
+enum class RouteColor {
+    Red,
+    Yellow,
+    Green,
+    Cyan,
+    Blue,
+    Magenta,
+    ;
 
-    fun garminName(slot: Int): String = GARMIN_NAMES[slot.mod(GARMIN_NAMES.size)]
+    companion object {
+        /** Wraps, so any index picks one. */
+        fun at(slot: Int): RouteColor = entries[slot.mod(entries.size)]
 
-    /** Either shade of a hue's name; null for the greys, Transparent or anything unknown. */
-    fun slotOf(garminName: String): Int? =
-        GARMIN_NAMES.indexOf(garminName.trim().removePrefix("Dark")).takeIf { it >= 0 }
+        /** Either shade of a hue's name; null for the greys, Transparent or anything unknown. */
+        fun ofGarmin(name: String): RouteColor? {
+            val hue = name.trim().removePrefix("Dark")
+            return entries.firstOrNull { it.name == hue }
+        }
+    }
 }
