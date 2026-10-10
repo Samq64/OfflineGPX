@@ -42,7 +42,6 @@
     <!-- %1$s is a track or map name. -->
     <string name="deleted_named">Deleted “%1$s”.</string>
 
-
     <string name="library_clear_selection">Clear selection</string>
     <string name="library_color">Color: %1$s</string>
     <string name="library_color_change">Change color</string>
@@ -235,7 +234,6 @@
     <string name="settings_units_metric">Metric</string>
 
     <string name="sheet_drag_handle">Drag handle</string>
-
 
     <string name="stat_ascent">Ascent</string>
     <!-- Over moving time, not elapsed. -->

@@ -590,26 +590,13 @@ private fun SectionHeading(text: String) {
 }
 
 @Composable
-private fun Setting(title: String, explanation: String, value: String? = null, control: @Composable () -> Unit) {
+private fun Setting(title: String, explanation: String, control: @Composable () -> Unit) {
     Column(Modifier.fillMaxWidth().padding(horizontal = EdgePadding, vertical = 8.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Bottom,
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-            )
-            if (value != null) {
-                Text(
-                    text = value,
-                    style = MaterialTheme.typography.titleMedium.tabularFigures(),
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            }
-        }
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
         Text(
             text = explanation,
             style = MaterialTheme.typography.bodySmall,

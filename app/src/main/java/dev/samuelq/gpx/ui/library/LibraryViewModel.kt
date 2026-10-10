@@ -223,10 +223,9 @@ class LibraryViewModel(
         viewModelScope.launch {
             val all = repository.tracks.first()
             // Every track for show only, which may hide any of them.
-            val before = all.filter { change == BulkVisibility.SHOW_ONLY || it.id in ids }.associate {
-                it.id to
-                    it.visible
-            }
+            val before = all
+                .filter { change == BulkVisibility.SHOW_ONLY || it.id in ids }
+                .associate { it.id to it.visible }
             when (change) {
                 BulkVisibility.SHOW -> repository.setVisible(ids, true)
                 BulkVisibility.HIDE -> repository.setVisible(ids, false)
