@@ -176,8 +176,8 @@
     <string name="record_pause">Pause</string>
     <string name="record_battery_explanation">Disabling battery optimizations may help keep recordings running.</string>
     <string name="record_battery_open_app_info">Open app info</string>
-    <!-- %1$s is the date, %2$s the time. -->
-    <string name="record_recovered_body">A recording started on %1$s at %2$s wasn\'t saved before the app closed.</string>
+    <!-- %1$s is the date, %2$s the time of the last point recorded. -->
+    <string name="record_recovered_body">The app closed during a recording, last updated on %1$s at %2$s. It wasn\'t saved.</string>
     <string name="record_recovered_title">Unsaved recording</string>
     <string name="record_resume">Resume</string>
     <string name="record_save_failed">Couldn\'t save that recording. It\'s still on the device.</string>

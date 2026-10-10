@@ -40,6 +40,7 @@ import dev.samuelq.gpx.ui.format.LocalFormatters
 import dev.samuelq.gpx.ui.track.CategoryField
 import dev.samuelq.gpx.ui.track.StatRow
 import dev.samuelq.gpx.ui.track.distanceAndElapsed
+import java.time.Instant
 
 /** The categories in use, and the one a new recording gets unless changed: the last one's. */
 internal class CategoryChoice(val all: List<String>, val default: String)
@@ -79,13 +80,15 @@ internal fun RecoveredRecordingDialog(
     key(recording) {
         SaveRecordingDialog(
             title = stringResource(R.string.record_recovered_title),
-            // Laid out like Stop's, plus when it started and why it's being asked about.
+            // Laid out like Stop's, plus when it was last written and why it's being asked about.
             summary = {
                 Column {
                     StatRow(distanceAndElapsed(stats.distanceMeters, stats.totalDurationSeconds))
                     val formatters = LocalFormatters.current
-                    val date = formatters.longDate(stats.startedAt)
-                    val time = formatters.time(stats.startedAt)
+                    // The last fix: the nearest to the crash the log holds. Every fix has a time.
+                    val lastFix = recording.track.points.let { Instant.ofEpochMilli(it.timeMillis(it.size - 1)) }
+                    val date = formatters.longDate(lastFix)
+                    val time = formatters.time(lastFix)
                     val body = stringResource(R.string.record_recovered_body, date, time)
                     Text(
                         buildAnnotatedString {
