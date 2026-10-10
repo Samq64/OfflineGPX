@@ -339,8 +339,8 @@ private fun ProfileDetails(
     @Composable
     fun Profile(
         @StringRes title: Int,
-        @StringRes empty: Int,
-        available: Boolean,
+        /** Shown instead when the track lacks the series. */
+        @StringRes unavailable: Int?,
         y: FloatArray,
         color: Color,
         perUnit: Float,
@@ -352,8 +352,8 @@ private fun ProfileDetails(
             title = stringResource(title),
             modifier = Modifier.padding(horizontal = EdgePadding),
         ) {
-            if (!available) {
-                Unavailable(stringResource(empty))
+            if (unavailable != null) {
+                Unavailable(stringResource(unavailable))
                 return@ChartSection
             }
             val series = remember(profile, useTimeAxis, color) {
@@ -389,8 +389,8 @@ private fun ProfileDetails(
 
     Profile(
         title = R.string.chart_speed,
-        empty = R.string.chart_speed_empty,
-        available = profile.hasTime,
+        // Imports without times are refused.
+        unavailable = null,
         y = profile.speedMps,
         color = chartColors.speed,
         perUnit = formatters.speedPerMps,
@@ -403,8 +403,7 @@ private fun ProfileDetails(
 
     Profile(
         title = R.string.chart_elevation,
-        empty = R.string.chart_elevation_empty,
-        available = profile.hasElevation,
+        unavailable = R.string.chart_elevation_empty.takeUnless { profile.hasElevation },
         y = profile.elevationMeters,
         color = chartColors.elevation,
         perUnit = formatters.elevationPerMeter,

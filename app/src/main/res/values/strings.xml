@@ -25,7 +25,6 @@
     <string name="chart_no_point">No point selected</string>
     <string name="chart_point">%1$s, %2$s</string>
     <string name="chart_speed">Speed</string>
-    <string name="chart_speed_empty">This track has no timestamps, so speed can\'t be computed.</string>
     <!-- Spoken for a chart: its title and range, then the point it's on. -->
     <string name="chart_summary">%1$s chart, %2$s to %3$s</string>
     <!-- Not "Paused": a break is equally signal loss or an analyser cut, and naming one
