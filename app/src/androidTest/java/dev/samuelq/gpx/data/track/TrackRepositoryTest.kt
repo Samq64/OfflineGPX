@@ -314,6 +314,33 @@ class TrackRepositoryTest {
         waitFor(message = "backup deleted") { !edit.backup.exists() }
     }
 
+    /** As a crash mid-delete, or an undo after one, leaves: a file without a row. */
+    @Test
+    fun launchSweepsFilesWithoutARow() {
+        val kept = importSample()
+        val orphan = TrackFiles.file(targetContext, 9_000_000).apply {
+            writeText(sampleGpx())
+            setLastModified(0)
+        }
+        val staged = File(TrackFiles.stagingDir(targetContext), "leftover.gpx").apply {
+            writeText(sampleGpx())
+            setLastModified(0)
+        }
+        // Written after the launch, as by an import from the launching intent still moving in.
+        val fresh = TrackFiles.file(targetContext, 9_000_001).apply {
+            writeText(sampleGpx())
+            setLastModified(System.currentTimeMillis() + 60_000)
+        }
+        try {
+            repository.purgeAtLaunch()
+            waitFor(message = "swept") { !orphan.exists() && !staged.exists() }
+            assertTrue(fileOf(kept).exists())
+            assertTrue(fresh.exists())
+        } finally {
+            fresh.delete()
+        }
+    }
+
     @Test
     fun deleteIsHiddenUntilCommittedOrUndone() {
         val id = importSample()

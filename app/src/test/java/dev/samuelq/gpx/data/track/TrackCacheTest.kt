@@ -107,6 +107,20 @@ class TrackCacheTest {
     }
 
     @Test
+    fun `retain drops older entries whose row is gone`() {
+        cache.write(7, source, track)
+        cache.write(8, source, track)
+        cache.write(9, source, track)
+        File(dir, "8.bin").setLastModified(1_000)
+        File(dir, "7.bin").setLastModified(1_000)
+        cache.retain(setOf(7), before = 2_000)
+        assertTrue(File(dir, "7.bin").exists(), "its row is there")
+        assertFalse(File(dir, "8.bin").exists(), "its row is gone")
+        assertTrue(File(dir, "9.bin").exists(), "newer than the launch")
+        assertTrue(source.exists(), "not an entry")
+    }
+
+    @Test
     fun `another format or version is rejected`() {
         val bytes = TrackCache.encode(track, stamp)
         val badMagic = bytes.copyOf().also { it[0] = 0 }

@@ -2,7 +2,7 @@ package dev.samuelq.gpx.data.track
 
 import dev.samuelq.gpx.core.analysis.TrackProfile
 import dev.samuelq.gpx.core.model.Track
-import dev.samuelq.gpx.data.db.TrackEntity
+import dev.samuelq.gpx.data.db.TrackSummary
 import java.io.File
 
 /**
@@ -37,5 +37,5 @@ sealed class TrackLoadException(message: String, cause: Throwable? = null) : Exc
     class TooLarge(message: String, cause: Throwable? = null) : TrackLoadException(message, cause)
 }
 
-/** What undoing a trim needs: the replaced file and row. */
-class TrackEdit internal constructor(val id: Long, internal val backup: File, internal val before: TrackEntity)
+/** What undoing a trim needs: the replaced file and summary. */
+class TrackEdit internal constructor(val id: Long, internal val backup: File, internal val before: TrackSummary)

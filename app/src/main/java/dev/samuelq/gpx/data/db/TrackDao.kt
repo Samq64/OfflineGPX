@@ -23,6 +23,9 @@ interface TrackDao {
     @Query("SELECT * FROM tracks")
     suspend fun all(): List<TrackEntity>
 
+    @Query("SELECT id FROM tracks")
+    suspend fun ids(): List<Long>
+
     @Insert
     suspend fun insert(track: TrackEntity): Long
 
@@ -38,6 +41,13 @@ interface TrackDao {
 
     @Update(entity = TrackEntity::class)
     suspend fun setSummary(summary: SummaryUpdate)
+
+    /** Writes [summary] and runs [place] before committing, as [insert] does. */
+    @Transaction
+    suspend fun setSummary(summary: SummaryUpdate, place: () -> Unit) {
+        setSummary(summary)
+        place()
+    }
 
     @Query("UPDATE tracks SET trackName = :name WHERE id = :id")
     suspend fun setTrackName(id: Long, name: String?)

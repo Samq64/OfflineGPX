@@ -46,6 +46,13 @@ internal class TrackCache(private val dir: File) {
         }.onFailure { Log.d(TAG, "Could not cache $id", it) }
     }
 
+    /** Drops entries older than [before] whose row is gone, as a crash mid-delete leaves. */
+    fun retain(ids: Set<Long>, before: Long) {
+        dir.listFiles().orEmpty()
+            .filter { it.lastModified() < before && it.name.removeSuffix(".bin").toLongOrNull() !in ids }
+            .forEach(File::delete)
+    }
+
     fun delete(id: Long) {
         fileFor(id).delete()
     }

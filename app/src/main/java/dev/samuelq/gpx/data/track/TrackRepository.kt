@@ -145,15 +145,18 @@ class TrackRepository(
 
     /** Indexes [staged] as a new track, moving it in within the transaction that adds its row. */
     private suspend fun insert(entity: TrackEntity, staged: File, track: Track): Long {
-        val id = dao.insert(entity) { id ->
-            // Over any file a rolled-back insert left under this id.
-            if (!staged.renameTo(fileOf(id))) throw IOException("Could not move the track into place")
-        }
+        // Over any file a rolled-back insert left under this id.
+        val id = dao.insert(entity) { id -> moveInto(staged, fileOf(id)) }
         cache.write(id, fileOf(id), track)
         return id
     }
 
     private fun stagedFile(): File = File.createTempFile("track", ".gpx", TrackFiles.stagingDir(appContext))
+
+    /** Atomic, both being on one filesystem; inside a transaction, so its row changes with it. */
+    private fun moveInto(from: File, to: File) {
+        if (!from.renameTo(to)) throw IOException("Could not move the track into place")
+    }
 
     /** Loads a saved track and moves it to the top of the recent order. */
     suspend fun open(id: Long): Result<LoadedTrack> = withContext(io) {
@@ -344,23 +347,26 @@ class TrackRepository(
 
             val file = fileOf(entity)
             val backup = backUp(file, id)
-            val track = rewrite(file, loaded, from..to)
-            dao.setSummary(summaryUpdate(id, track, TrackAnalyzer.analyze(track)))
-            TrackEdit(id, backup, entity)
+            val staged = stagedFile()
+            try {
+                val track = trimmed(file, staged, loaded, from..to)
+                dao.setSummary(summaryUpdate(id, track, TrackAnalyzer.analyze(track))) { moveInto(staged, file) }
+                cache.write(id, file, track)
+            } catch (e: Throwable) {
+                backup.delete()
+                throw e
+            } finally {
+                staged.delete()
+            }
+            TrackEdit(id, backup, entity.summary)
         }.recoverFailure()
     }
 
-    /** Puts the file and row back as they were before [edit]. */
+    /** Puts the file and summary back as they were before [edit]; the rest of the row is left. */
     suspend fun undoEdit(edit: TrackEdit): Result<Unit> = withContext(io) {
         runCancellable {
-            writeAtomically(fileOf(edit.id)) { output ->
-                edit.backup.inputStream().use { it.copyTo(output) }
-            }
-            // Only what the edit changed, so a recolour since survives the undo.
-            dao.setSummary(SummaryUpdate(edit.id, edit.before.summary))
+            dao.setSummary(SummaryUpdate(edit.id, edit.before)) { moveInto(edit.backup, fileOf(edit.id)) }
             cache.delete(edit.id)
-            edit.backup.delete()
-            Unit
         }.recoverFailure()
     }
 
@@ -371,27 +377,33 @@ class TrackRepository(
 
     /**
      * At launch: an undo from a previous process can no longer be taken, nor a share still be read,
-     * nor an import or recording it was staging be finished.
+     * nor an import or recording it was staging be finished. A track file or cache entry without
+     * a row, as a crash mid-delete or an undo after one leaves, goes too.
      */
     fun purgeAtLaunch() {
         val launchedAt = System.currentTimeMillis()
         scope.launch(io) {
             editsDir.listFiles().orEmpty().forEach(File::delete)
             sharedDir.deleteRecursively()
-            // Older than this process only: an import from the launching intent may be staging already.
+            // Older than this process only: an import from the launching intent may be under way.
             TrackFiles.stagingDir(appContext).listFiles().orEmpty()
                 .filter { it.lastModified() < launchedAt }
                 .forEach(File::delete)
+            val ids = dao.ids().toSet()
+            TrackFiles.dir(appContext).listFiles().orEmpty()
+                .filter { it.lastModified() < launchedAt && it.name.removeSuffix(".gpx").toLongOrNull() !in ids }
+                .forEach(File::delete)
+            cache.retain(ids, before = launchedAt)
         }
     }
 
     private fun backUp(file: File, id: Long): File =
         File(editsDir, "$id-${System.currentTimeMillis()}.gpx").also { file.copyTo(it, overwrite = true) }
 
-    /** Rewrites [file] to its points [keep], with the waypoints nearest them. Cached, and returned. */
-    private fun rewrite(file: File, loaded: LoadedTrack, keep: IntRange): Track {
+    /** Writes [file]'s points [keep], with the waypoints nearest them, to [into]; returned parsed. */
+    private fun trimmed(file: File, into: File, loaded: LoadedTrack, keep: IntRange): Track {
         val waypoints = loaded.track.waypoints.indices.filter { loaded.waypointIndices[it] in keep }.toSet()
-        writeAtomically(file) { output ->
+        writeAtomically(into) { output ->
             file.inputStream().use { input ->
                 trimmer.trim(
                     input,
@@ -401,9 +413,7 @@ class TrackRepository(
                 )
             }
         }
-        val track = parse(file.inputStream(), file.name)
-        cache.write(loaded.id, file, track)
-        return track
+        return parse(into.inputStream(), file.name)
     }
 
     /** [category] trimmed, in the spelling another track already gives it: categories ignore case. */
