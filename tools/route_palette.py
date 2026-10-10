@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Searches the six route colours, one per Garmin hue, for RouteColors.
 
-Each slot stays within HUE_WINDOW of its sRGB primary's OKLCh hue, so it reads as that name.
+Each slot stays within HUE_WINDOW of its pure sRGB hue in OKLCh, so it reads as that name.
 A palette must clear CONTRAST against the map's land, water and vegetation, and keep its slots
 apart by CIEDE2000 under normal vision and simulated protanopia, deuteranopia and tritanopia
 (Machado 2009, full severity). Of the palettes that do, the most vivid wins, short of neon.
@@ -15,7 +15,7 @@ import random
 NAMES = ["red", "yellow", "green", "cyan", "blue", "magenta"]
 HUE_WINDOW = 8.0
 MIN_CHROMA = 0.08
-# Past these a line reads as neon on the map.
+# Past this a line reads as neon on the map.
 MAX_CHROMA = 0.20
 
 # Land is surfaceContainerLowest: tone 100 in light, tone 4 in dark, whatever the wallpaper.
@@ -37,7 +37,7 @@ THEMES = {
         "max_lightness": 0.85,
     },
 }
-CONTRAST = {"land": 3.0, "water": 2.0, "vegetation": 2.0}
+CONTRAST = {"land": 2.5, "water": 1.75, "vegetation": 1.75}
 
 CVD = {
     "protan": ((0.152286, 1.052583, -0.204868), (0.114503, 0.786281, 0.099216), (-0.003882, -0.048116, 1.051998)),
@@ -205,7 +205,7 @@ def search(theme, restarts=40, seed=1):
     for name, pool in zip(NAMES, pools):
         if not pool:
             raise SystemExit(f"No {name} clears the contrast targets")
-    # Thinned for speed, keeping the most vivid of each lightness.
+    # Thinned for speed to the most vivid.
     pools = [sorted(p, key=lambda c: -c.chroma)[:600] for p in pools]
     best, best_score = None, None
     for _ in range(restarts):
