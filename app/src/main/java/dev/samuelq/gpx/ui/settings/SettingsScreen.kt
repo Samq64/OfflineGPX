@@ -293,10 +293,9 @@ private fun linkStyles() = TextLinkStyles(
 /** The commit hash, when the build has one, links to the history up to it. */
 @Composable
 private fun AppHeader(onOpenCommit: (String) -> Unit) {
-    val described = BuildConfig.GIT_HASH
-    val hash = described.removeSuffix(DIRTY)
+    val hash = BuildConfig.GIT_HASH
     val version = stringResource(R.string.settings_about_version, BuildConfig.VERSION_NAME) +
-        if (described.isEmpty()) "" else " · $described"
+        if (hash.isEmpty()) "" else " · $hash"
     val link = linkStyles()
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -310,7 +309,7 @@ private fun AppHeader(onOpenCommit: (String) -> Unit) {
                 text = buildAnnotatedString {
                     append(version)
                     if (hash.isNotEmpty()) {
-                        val at = version.length - described.length
+                        val at = version.length - hash.length
                         addLink(LinkAnnotation.Clickable(hash, link) { onOpenCommit(hash) }, at, at + hash.length)
                     }
                 },
@@ -348,9 +347,6 @@ private fun AppIcon() {
 }
 
 private val IconSize = 56.dp
-
-/** Marks a build with uncommitted changes; not part of the commit link. */
-private const val DIRTY = "-dirty"
 
 /** Buttons rather than inline links, for full-size touch targets. */
 @Composable

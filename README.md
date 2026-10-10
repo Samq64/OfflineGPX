@@ -48,8 +48,8 @@ to start Gradle, which then builds with an installed JDK 21 or fetches one. Runs
 ```
 
 The release build is minified but unsigned; sign it with your own key. F-Droid rebuilds each
-release and ships it only if it matches the signed APK on GitHub, so build that one clean: an
-incremental build can carry a stale baseline profile.
+release with Debian's OpenJDK 21 and ships it only if it matches the signed APK on GitHub, so
+build that one clean and with the same JDK: an incremental build can carry a stale baseline profile.
 
 ```sh
 ./gradlew clean :app:assembleRelease --no-build-cache
