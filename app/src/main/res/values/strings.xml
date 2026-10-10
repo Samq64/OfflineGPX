@@ -136,7 +136,7 @@
     <!-- Spoken only. -->
     <string name="map_loading">Loading tracks</string>
     <string name="map_location_denied">Showing where you are needs location access.</string>
-    <string name="map_location_off">Location is switched off.</string>
+    <string name="map_location_off">Location is off.</string>
     <string name="map_location_outside">You\'re outside your tracks and maps.</string>
     <string name="map_location_why">Showing where you are uses GPS, which needs precise location.</string>
     <string name="map_follow_location">Follow my location</string>
@@ -163,8 +163,8 @@
     <!-- The recording stays up, so not "nothing is being recorded" - that read as stopped,
          which is the one thing that didn't happen. -->
     <string name="record_location_is_off">Location is off</string>
-    <string name="record_location_lost">Location switched off. Still recording, but no new points.</string>
-    <string name="record_location_off">Location is switched off. Turn it on to record.</string>
+    <string name="record_location_lost">Location is off. Still recording, but no new points.</string>
+    <string name="record_location_off">Location is off. Turn it on to record.</string>
     <string name="record_location_why">Recording uses GPS, which needs precise location.</string>
     <!-- Appended to record_location_why from Android 13, where notifications need permission. -->
     <string name="record_notifications_why">Notifications are recommended. One shows the recording while it runs, with pause and stop.</string>
@@ -174,10 +174,10 @@
     <string name="record_notification_active">Recording</string>
     <string name="record_notification_paused">Recording paused</string>
     <string name="record_pause">Pause</string>
-    <string name="record_battery_explanation">Disabling battery optimizations may help prevent this in the future.</string>
+    <string name="record_battery_explanation">Disabling battery optimizations may help keep recordings running.</string>
     <string name="record_battery_open_app_info">Open app info</string>
     <!-- %1$s is the date, %2$s the time. -->
-    <string name="record_recovered_body">The app was closed before the recording started on %1$s at %2$s was saved.</string>
+    <string name="record_recovered_body">A recording started on %1$s at %2$s wasn\'t saved before the app closed.</string>
     <string name="record_recovered_title">Unsaved recording</string>
     <string name="record_resume">Resume</string>
     <string name="record_save_failed">Couldn\'t save that recording. It\'s still on the device.</string>
@@ -201,7 +201,7 @@
 
     <string name="settings_about_libraries">Libraries</string>
     <string name="settings_about_issues">Report an issue</string>
-    <string name="settings_about_licence">Licence (GPL-3.0)</string>
+    <string name="settings_about_licence">License (GPLv3+)</string>
     <!-- Spoken for a library row: "double tap to open website". -->
     <string name="settings_about_open_site">open website</string>
     <string name="settings_about_source">Source code</string>

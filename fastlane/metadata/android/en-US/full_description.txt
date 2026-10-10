@@ -5,10 +5,10 @@
 <li>Record tracks in the background with pausing, waypoints and live charts</li>
 <li>Recordings survive most crashes</li>
 <li>Speed and elevation charts by distance or time, with zoom</li>
-<li>Import and export tracks as .gpx files compatible with other apps</li>
+<li>Import and export recorded tracks as .gpx files compatible with other apps (not planned routes)</li>
 <li>Trim, search, sort and categorize tracks</li>
 <li>Show, hide, export or delete many tracks at once</li>
-<li>Maps are optional, tracks draw on a blank background without one</li>
+<li>Maps are optional; without one, tracks draw on a blank background</li>
 <li>All maps share one canvas and don't need to be adjacent</li>
 </ul>
 
@@ -19,4 +19,4 @@
 <li>Map routing or searching</li>
 </ul>
 
-<p>Cloud backups are disabled; only device-to-device transfers are allowed. Recording needs system location on, so Android itself or other apps may still collect location data.</p>
+<p>Android's cloud backup is disabled; only device-to-device transfers are allowed, which some backup apps such as Seedvault can also use. Recording needs system location on, so Android itself or other apps may still collect location data.</p>

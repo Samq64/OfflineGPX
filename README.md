@@ -14,10 +14,10 @@ Record and manage rides, runs and hikes on an offline map, with no internet perm
 - Record tracks in the background with pausing, waypoints and live charts
 - Recordings survive most crashes
 - Speed and elevation charts by distance or time, with zoom
-- Import and export tracks as `.gpx` files compatible with other apps
+- Import and export recorded tracks as `.gpx` files compatible with other apps (not planned routes)
 - Trim, search, sort and categorize tracks
 - Show, hide, export or delete many tracks at once
-- Maps are optional, tracks draw on a blank background without one
+- Maps are optional; without one, tracks draw on a blank background
 - All maps share one canvas and don't need to be adjacent
 
 ## Non-features
@@ -30,7 +30,7 @@ Record and manage rides, runs and hikes on an offline map, with no internet perm
 
 <details>
   <summary>Is internet-based data collection possible?</summary>
-  Not through the app itself, which lacks the <code>INTERNET</code> permission and fails to build with it. Cloud backups are not allowed, only device-to-device transfers. However, recording needs system location on, so there is no guarantee that Android itself or other apps don't collect that data.
+  Not through the app itself, which lacks the <code>INTERNET</code> permission and fails to build with it. Android's cloud backup is disabled and only device-to-device transfers are allowed, though some backup apps, such as Seedvault, can use the device-to-device path and store your data wherever they're set to. However, recording needs system location on, so there is no guarantee that Android itself or other apps don't collect that data.
 </details>
 <details>
   <summary>Was AI used?</summary>
@@ -60,7 +60,8 @@ apksigner sign --ks release.jks --out offline-gpx-<version>.apk \
 The build fails if any dependency adds a network permission to the merged manifest
 (`CheckNoNetworkPermissions` in `app/build.gradle.kts`).
 
-Dependencies are checked against `gradle/verification-metadata.xml`. After changing one, refresh it with:
+Dependencies are checked against `gradle/verification-metadata.xml`. After changing one, refresh it
+with a device or emulator connected:
 
 ```sh
 ./gradlew --write-verification-metadata sha256 check :app:assembleRelease :app:connectedDebugAndroidTest
