@@ -96,6 +96,8 @@ private val LIBRARIES = listOf(
     Library("AndroidX", "Apache-2.0", "https://developer.android.com/jetpack/androidx"),
     Library("JTS", "EDL-1.0", "https://github.com/locationtech/jts"),
     Library("Kotlin", "Apache-2.0", "https://kotlinlang.org"),
+    Library("kotlinx.coroutines", "Apache-2.0", "https://github.com/Kotlin/kotlinx.coroutines"),
+    Library("kotlinx.serialization", "Apache-2.0", "https://github.com/Kotlin/kotlinx.serialization"),
     // Copied in as vector drawables.
     Library("Material Symbols", "Apache-2.0", "https://github.com/google/material-design-icons"),
     // Bundled inside core-location-altitude.
