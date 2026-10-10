@@ -21,7 +21,7 @@ See README.md for the source layout and the build, test, coverage and style comm
   saved track's name, category and colour come from its row only, and go into a file only on
   its way out: export and share stream it through `GpxTrimmer`, writing the colour as the
   slot's Garmin `DisplayColor` name. An import takes its file's `<name>`, else the file's name,
-  and a Garmin colour as its slot; after that, recordings and imports are alike. An unnamed track is titled by its start. Files shared from other apps join the library;
+  its `<type>` as category, and a Garmin colour as its slot; after that, recordings and imports are alike. An unnamed track is titled by its start. Files shared from other apps join the library;
   MainActivity is singleTask so they reach the one instance.
 - Trim rewrites a file with `GpxTrimmer`, which streams it through and keeps
   everything but the points cut; `GpxWriter` writes only what the app reads. The original
@@ -48,3 +48,8 @@ See README.md for the source layout and the build, test, coverage and style comm
 xmlpull classes are stubs.
 `connectedDebugAndroidTest` runs on every attached device, so prefix it with
 `ANDROID_SERIAL=<emulator>`.
+
+## Shell
+
+The shell is zsh: an unmatched glob is an error, not passed through. Quote globs meant for the
+command, such as `grep --include='*.kt'` and `--tests '*Wal*'`.
