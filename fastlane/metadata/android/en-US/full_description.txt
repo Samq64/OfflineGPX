@@ -1,0 +1,22 @@
+<p>Record and manage rides, runs and hikes on an offline map, with no internet permission at all. Tracks are standard GPX files, and maps are optional <a href="https://download.mapsforge.org">Mapsforge</a> files you import yourself.</p>
+
+<p><b>Features</b></p>
+<ul>
+<li>Record tracks in the background with pausing, waypoints and live charts</li>
+<li>Recordings survive most crashes</li>
+<li>Speed and elevation charts by distance or time, with zoom</li>
+<li>Import and export tracks as .gpx files compatible with other apps</li>
+<li>Trim, search, sort and categorize tracks</li>
+<li>Show, hide, export or delete many tracks at once</li>
+<li>Maps are optional, tracks draw on a blank background without one</li>
+<li>All maps share one canvas and don't need to be adjacent</li>
+</ul>
+
+<p><b>Non-features</b></p>
+<ul>
+<li>Anything requiring internet access</li>
+<li>External device integration</li>
+<li>Map routing or searching</li>
+</ul>
+
+<p>Cloud backups are disabled; only device-to-device transfers are allowed. Recording needs system location on, so Android itself or other apps may still collect location data.</p>

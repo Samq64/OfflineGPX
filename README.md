@@ -3,10 +3,10 @@
 Record and manage rides, runs and hikes on an offline map, with no internet permission at all. Tracks are standard GPX files, and maps are optional [Mapsforge](https://download.mapsforge.org) files you import yourself.
 
 <p>
-  <img src="docs/screenshots/map.png" alt="Tracks on an offline map" width="24%">
-  <img src="docs/screenshots/recording.png" alt="Recording a track" width="24%">
-  <img src="docs/screenshots/charts.png" alt="A track's stats with speed and elevation charts" width="24%">
-  <img src="docs/screenshots/list.png" alt="The track library grouped by category" width="24%">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1_map.png" alt="Tracks on an offline map" width="24%">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/2_recording.png" alt="Recording a track" width="24%">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/3_charts.png" alt="A track's stats with speed and elevation charts" width="24%">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/4_list.png" alt="The track library grouped by category" width="24%">
 </p>
 
 ## Features
@@ -40,17 +40,20 @@ Record and manage rides, runs and hikes on an offline map, with no internet perm
 ## Building
 
 Needs the Android SDK (`sdk.dir` in `local.properties`, or `ANDROID_HOME`) and any JDK 17+
-to start Gradle, which then builds with an installed JDK 25 or fetches one. Runs on Android 12 or later.
+to start Gradle, which then builds with an installed JDK 21 or fetches one. Runs on Android 12 or later.
 
 ```sh
 ./gradlew :app:assembleDebug     # app/build/outputs/apk/debug/app-debug.apk
 ./gradlew :app:assembleRelease   # app/build/outputs/apk/release/app-release-unsigned.apk
 ```
 
-The release build is minified but unsigned; sign it with your own key:
+The release build is minified but unsigned; sign it with your own key. F-Droid rebuilds each
+release and ships it only if it matches the signed APK on GitHub, so build that one clean: an
+incremental build can carry a stale baseline profile.
 
 ```sh
-apksigner sign --ks release.jks --out app-release.apk \
+./gradlew clean :app:assembleRelease --no-build-cache
+apksigner sign --ks release.jks --out offline-gpx-<version>.apk \
     app/build/outputs/apk/release/app-release-unsigned.apk
 ```
 
@@ -90,12 +93,13 @@ app/ data/   gpx (streaming parser/writer/trimmer), db (Room), map (MapStore, .m
 app/ ui/     map (MapScreen, VTM canvas, layers, generated render theme), track (sheet),
              chart (hand-rolled Canvas charts), library, record, settings, format, theme, nav.
 app/ di/     AppContainer: manual wiring, no Hilt.
-docs/        README icon and screenshots.
+docs/        README icon.
+fastlane/    F-Droid listing and screenshots.
 ```
 
 ## License
 
-Offline GPX is licensed under the GPLv3. See [LICENSE](LICENSE) for details.
+Offline GPX is licensed under the GPLv3 or any later version. See [LICENSE](LICENSE) for details.
 
 Bundled libraries are credited within the app at Settings > Libraries.
 
