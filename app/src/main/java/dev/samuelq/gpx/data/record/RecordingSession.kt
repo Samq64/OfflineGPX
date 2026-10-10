@@ -46,6 +46,9 @@ internal class RecordingSession(private val clock: () -> Long) {
     private var pausedAt: Long? = null
     private var heldAt: Long? = null
 
+    /** The route palette slot it's drawn in and will be saved with. */
+    var colorSlot = 0
+
     /** Set by the service as the provider goes and comes back. */
     var locationOff = false
 
@@ -175,6 +178,7 @@ internal class RecordingSession(private val clock: () -> Long) {
         accuracyLimitMeters = FixFilter.MAX_ACCURACY_METERS,
         waypoints = waypoints.toList(),
         locationOff = locationOff,
+        colorSlot = colorSlot,
     )
 
     private companion object {

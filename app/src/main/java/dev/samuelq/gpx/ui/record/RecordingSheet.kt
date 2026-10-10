@@ -1,13 +1,6 @@
 package dev.samuelq.gpx.ui.record
 
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -17,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalIconButton
@@ -33,15 +25,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.MotionDurationScale
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
@@ -61,6 +48,7 @@ import dev.samuelq.gpx.ui.EdgePadding
 import dev.samuelq.gpx.ui.format.Formatters
 import dev.samuelq.gpx.ui.format.LocalFormatters
 import dev.samuelq.gpx.ui.format.spokenDuration
+import dev.samuelq.gpx.ui.track.ColorDot
 import dev.samuelq.gpx.ui.track.ProfileSheet
 import dev.samuelq.gpx.ui.track.Stat
 import dev.samuelq.gpx.ui.track.StatRow
@@ -71,7 +59,8 @@ import dev.samuelq.gpx.ui.track.distanceAndElapsed
 fun RecordingSheet(
     state: RecordingState.Active,
     /** The line's on the map. */
-    color: Color,
+    colorSlot: Int,
+    onColor: (Int) -> Unit,
     /** Null until the recording has moved; the sheet shows empty charts meanwhile. */
     profile: TrackProfile?,
     maxHeight: Dp,
@@ -99,7 +88,7 @@ fun RecordingSheet(
         onPeekHeightChange = onPeekHeightChange,
         pointCount = state.pointCount,
     ) {
-        RecordingHeader(state, color, onPause, onResume, onStop, onAddWaypoint)
+        RecordingHeader(state, colorSlot, onColor, onPause, onResume, onStop, onAddWaypoint)
     }
 }
 
@@ -107,7 +96,8 @@ fun RecordingSheet(
 @Composable
 private fun RecordingHeader(
     state: RecordingState.Active,
-    color: Color,
+    colorSlot: Int,
+    onColor: (Int) -> Unit,
     onPause: () -> Unit,
     onResume: () -> Unit,
     onStop: () -> Unit,
@@ -146,15 +136,16 @@ private fun RecordingHeader(
 
         // Like a track's title: what's happening, then the numbers, then controls.
         Row(verticalAlignment = Alignment.CenterVertically) {
-            RecordingDot(color, paused = state.paused)
-            Spacer(Modifier.width(8.dp))
+            // Where a track's sheet has it, so stopping doesn't move it.
+            ColorDot(colorSlot, onColor)
+            Spacer(Modifier.width(12.dp))
             Text(
                 text = listOfNotNull(status, waypointCount).joinToString(Formatters.SEPARATOR),
                 modifier = Modifier.semantics {
                     liveRegion = LiveRegionMode.Polite
                     contentDescription = listOfNotNull(spokenStatus, waypointCount).joinToString(", ")
                 },
-                style = MaterialTheme.typography.labelLarge,
+                style = MaterialTheme.typography.titleMedium,
                 color = if ((poorSignal != null && waiting) || state.status == RecordingStatus.LOCATION_OFF) {
                     MaterialTheme.colorScheme.error
                 } else {
@@ -237,40 +228,5 @@ private fun WaypointDialog(number: Int, onDismiss: () -> Unit, onConfirm: (name:
         dismissButton = {
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
         },
-    )
-}
-
-/** Pulses while recording, unless animations are off. */
-@Composable
-private fun RecordingDot(color: Color, paused: Boolean) {
-    // Compose's own scale, which follows the setting; at zero an infinite pulse would stop dim.
-    var animate by remember { mutableStateOf(true) }
-    LaunchedEffect(Unit) {
-        val scale = coroutineContext[MotionDurationScale] ?: return@LaunchedEffect
-        snapshotFlow { scale.scaleFactor > 0f }.collect { animate = it }
-    }
-    val transition = rememberInfiniteTransition(label = "recording")
-    val pulse = transition.animateFloat(
-        initialValue = 1f,
-        targetValue = 0.25f,
-        animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
-        label = "pulse",
-    )
-
-    Box(
-        Modifier
-            .size(10.dp)
-            // Read at draw time, so the pulse doesn't recompose every frame.
-            .graphicsLayer {
-                alpha = if (paused) {
-                    0.35f
-                } else if (animate) {
-                    pulse.value
-                } else {
-                    1f
-                }
-            }
-            .clip(CircleShape)
-            .background(color),
     )
 }

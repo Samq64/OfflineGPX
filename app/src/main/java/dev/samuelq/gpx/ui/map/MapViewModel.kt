@@ -129,10 +129,6 @@ class MapViewModel(
      */
     val screenKept = MapScreenState.Kept()
 
-    /** A recording's colour while under way, which it keeps once saved. */
-    val recordingSlot: StateFlow<Int> = repository.nextColorSlot
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
-
     /** For the rename dialog to suggest. */
     val categories: StateFlow<List<String>> = repository.categories
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())

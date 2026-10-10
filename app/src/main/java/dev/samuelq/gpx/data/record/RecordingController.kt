@@ -33,6 +33,8 @@ sealed interface RecordingState {
         val waypoints: List<Waypoint>,
         /** Switched off mid-ride; recording resumes when it's back. */
         val locationOff: Boolean,
+        /** The route palette slot it's drawn in and will be saved with. */
+        val colorSlot: Int,
     ) : RecordingState {
         /** Shared by the sheet and the notification, so they agree. */
         val status: RecordingStatus
@@ -132,6 +134,10 @@ class RecordingController(context: Context, private val locationSource: Location
     /** [name] may be blank. */
     fun addWaypoint(name: String) = send(RecordingService.ACTION_WAYPOINT) {
         putExtra(RecordingService.EXTRA_WAYPOINT_NAME, name)
+    }
+
+    fun setColor(slot: Int) = send(RecordingService.ACTION_COLOR) {
+        putExtra(RecordingService.EXTRA_COLOR, slot)
     }
 
     private fun send(action: String, extras: Intent.() -> Unit = {}) {

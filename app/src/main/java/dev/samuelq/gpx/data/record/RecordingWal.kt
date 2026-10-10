@@ -21,6 +21,7 @@ import java.util.zip.CRC32
  * <epochMillis>,<lat>,<lon>,[<ele>],[<accuracyMeters>]*<crc>   a fix
  * -*<crc>                                                      a segment break
  * W,<epochMillis>,<lat>,<lon>,[<ele>],[<base64 name>]*<crc>    a waypoint
+ * C,<Garmin colour name>*<crc>                                  the line's colour; the last holds
  * ```
  *
  * The CRC-32 of the line before the `*` drops one a power cut tore or storage corrupted.
@@ -45,6 +46,8 @@ class RecordingWal private constructor(val file: File, private val writer: Buffe
         writeLine("$WAYPOINT,${point.time?.toEpochMilli() ?: 0},${point.latitude},${point.longitude},$elevation,$name")
     }
 
+    fun appendColor(garminName: String) = writeLine("$COLOR_PREFIX$garminName")
+
     private fun writeLine(line: String) {
         writer.write("$line$CHECK${checksum(line)}")
         writer.newLine()
@@ -57,6 +60,7 @@ class RecordingWal private constructor(val file: File, private val writer: Buffe
         private const val BREAK = "-"
         private const val WAYPOINT = "W"
         private const val WAYPOINT_PREFIX = "$WAYPOINT,"
+        private const val COLOR_PREFIX = "C,"
         private const val CHECK = '*'
 
         /** Opens [file] for appending, never truncating. */
@@ -82,17 +86,19 @@ class RecordingWal private constructor(val file: File, private val writer: Buffe
 
             val points = TrackPointsBuilder()
             val waypoints = mutableListOf<Waypoint>()
+            var color: String? = null
 
             file.forEachLine { line ->
                 val text = verified(line.trim()) ?: return@forEachLine
                 when {
                     text == BREAK -> points.startSegment()
                     text.startsWith(WAYPOINT_PREFIX) -> parseWaypoint(text)?.let(waypoints::add)
+                    text.startsWith(COLOR_PREFIX) -> color = text.removePrefix(COLOR_PREFIX)
                     else -> parsePoint(text)?.let(points::add)
                 }
             }
             if (points.size == 0) return null
-            return Track(name = null, points = points.build(), waypoints = waypoints)
+            return Track(name = null, points = points.build(), waypoints = waypoints, displayColor = color)
         }
 
         private fun parsePoint(line: String): TrackPoint? {

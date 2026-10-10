@@ -142,7 +142,9 @@ fun MapScreen(
     val position by location.position.collectAsStateWithLifecycle()
 
     val palette = routePalette()
-    val recordingSlot by viewModel.recordingSlot.collectAsStateWithLifecycle()
+    val recordingSlot by remember {
+        derivedStateOf { (recording.value as? RecordingState.Active)?.colorSlot ?: 0 }
+    }
     val liveColor = palette.slot(recordingSlot)
     val density = LocalDensity.current
 
@@ -602,7 +604,8 @@ fun MapScreen(
                 SheetSubject.Recording -> (recording.value as? RecordingState.Active)?.let { active ->
                     RecordingSheet(
                         state = active,
-                        color = liveColor,
+                        colorSlot = active.colorSlot,
+                        onColor = recorder::setColor,
                         profile = live,
                         maxHeight = maxHeight,
                         selectedIndex = screen.selectedIndex,

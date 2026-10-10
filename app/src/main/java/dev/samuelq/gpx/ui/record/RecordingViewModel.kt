@@ -47,6 +47,7 @@ class RecordingViewModel(private val controller: RecordingController, tracks: Tr
     fun stop(label: TrackLabel) = controller.stop(label)
     fun discard(label: TrackLabel) = controller.discard(label)
     fun addWaypoint(name: String) = controller.addWaypoint(name)
+    fun setColor(slot: Int) = controller.setColor(slot)
 
     companion object {
         private const val SHARE_GRACE_MILLIS = 5_000L

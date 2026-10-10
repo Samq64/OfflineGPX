@@ -90,9 +90,9 @@ class TrackRepository(
         all.mapNotNull { it.category }.distinctBy { it.lowercase(Locale.ROOT) }.sortedWith(collator)
     }
 
-    /** The slot the next new track gets, so a recording is drawn in it while under way. */
-    val nextColorSlot: Flow<Int> = dao.observeByRecent().map { all ->
-        leastUsedSlot(all.map { ColorUse(it.colorIndex, it.visible) }, TrackEntity.PALETTE_SIZE)
+    /** The slot a new track gets unless it brings one. */
+    suspend fun nextColorSlot(): Int = withContext(io) {
+        leastUsedSlot(dao.colorUsage(), TrackEntity.PALETTE_SIZE)
     }
 
     /** The last saved recording's, which the next one is offered. */
@@ -178,7 +178,14 @@ class TrackRepository(
             try {
                 writeAtomically(staged) { writer.write(typed, it) }
                 // Unnamed unless given one: it's titled by when it started.
-                insert(newEntity(typed, profile, name = typed.name, category = typed.type), staged, typed)
+                val entity = newEntity(
+                    typed,
+                    profile,
+                    name = typed.name,
+                    category = typed.type,
+                    colorIndex = typed.displayColor?.let(RouteColors::slotOf),
+                )
+                insert(entity, staged, typed)
                     .also { settings.setLastRecordingCategory(typed.type) }
             } finally {
                 staged.delete()

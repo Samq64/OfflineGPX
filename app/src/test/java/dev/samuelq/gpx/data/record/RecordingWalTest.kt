@@ -49,6 +49,17 @@ class RecordingWalTest {
     }
 
     @Test
+    fun `the last colour logged is the track's`() {
+        val file = walFile()
+        RecordingWal.open(file).use { wal ->
+            wal.appendColor("Red")
+            wal.append(TrackPoint(1.0, 2.0, time = at))
+            wal.appendColor("Blue")
+        }
+        assertEquals("Blue", RecordingWal.recover(file)?.displayColor)
+    }
+
+    @Test
     fun `reopening appends rather than truncating`() {
         val file = walFile()
         RecordingWal.open(file).use { it.append(TrackPoint(1.0, 2.0, time = at)) }

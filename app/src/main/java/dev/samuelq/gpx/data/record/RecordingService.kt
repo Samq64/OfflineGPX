@@ -11,6 +11,8 @@ import dev.samuelq.gpx.R
 import dev.samuelq.gpx.core.analysis.TrackAnalyzer
 import dev.samuelq.gpx.core.model.TrackPoint
 import dev.samuelq.gpx.core.model.TrackPoints
+import dev.samuelq.gpx.data.db.TrackEntity
+import dev.samuelq.gpx.data.track.RouteColors
 import dev.samuelq.gpx.data.track.TrackLabel
 import java.io.IOException
 import java.time.Instant
@@ -85,6 +87,7 @@ class RecordingService : Service() {
                     ACTION_STOP -> stop(save = true, label = intent.label())
                     ACTION_DISCARD -> stop(save = false, label = intent.label())
                     ACTION_WAYPOINT -> addWaypoint(intent.getStringExtra(EXTRA_WAYPOINT_NAME) ?: "")
+                    ACTION_COLOR -> setColor(intent.getIntExtra(EXTRA_COLOR, 0))
                 }
                 // By id, so a START queued behind a stop still gets its recording.
                 if (session == null) stopSelf(startId)
@@ -118,6 +121,8 @@ class RecordingService : Service() {
         }
 
         wal = RecordingWal.open(container.recordingRecovery.liveLog)
+        // Fixed now, so recolouring other tracks mid-ride doesn't move it.
+        setColor(container.trackRepository.nextColorSlot())
 
         publish()
         startTicker()
@@ -200,6 +205,13 @@ class RecordingService : Service() {
     private fun addWaypoint(name: String) {
         val waypoint = session?.addWaypoint(name, Instant.now()) ?: return
         wal?.appendWaypoint(waypoint)
+        publish()
+    }
+
+    private fun setColor(slot: Int) {
+        val session = session ?: return
+        session.colorSlot = slot.mod(TrackEntity.PALETTE_SIZE)
+        wal?.appendColor(RouteColors.garminName(session.colorSlot))
         publish()
     }
 
@@ -333,9 +345,11 @@ class RecordingService : Service() {
         internal const val ACTION_STOP = "dev.samuelq.gpx.RECORD_STOP"
         internal const val ACTION_DISCARD = "dev.samuelq.gpx.RECORD_DISCARD"
         internal const val ACTION_WAYPOINT = "dev.samuelq.gpx.RECORD_WAYPOINT"
+        internal const val ACTION_COLOR = "dev.samuelq.gpx.RECORD_COLOR"
         internal const val EXTRA_NAME = "name"
         internal const val EXTRA_CATEGORY = "category"
         internal const val EXTRA_WAYPOINT_NAME = "waypoint_name"
+        internal const val EXTRA_COLOR = "color"
 
         private const val TAG = "RecordingService"
 
