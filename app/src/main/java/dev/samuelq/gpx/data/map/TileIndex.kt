@@ -4,7 +4,10 @@ import java.io.File
 import java.io.RandomAccessFile
 import org.oscim.tiling.source.mapfile.header.SubFileParameter
 
-/** A sub-file's index: one 5-byte entry per tile, row by row, a water flag over a 39-bit offset. Only the flag is read. */
+/**
+ * A sub-file's index: one 5-byte entry per tile, row by row, a water flag over a 39-bit offset.
+ * Only the flag is read.
+ */
 internal class TileIndex(file: File, private val subFile: SubFileParameter) : AutoCloseable {
     private val handle = RandomAccessFile(file, "r")
 

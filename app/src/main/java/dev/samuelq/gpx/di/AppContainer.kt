@@ -33,7 +33,7 @@ class AppContainer(context: Context) {
 
     val locationSource = LocationSource(appContext)
 
-    /** Held here so state outlives any screen during a ride. */
+    /** Held here so state outlives any screen during a recording. */
     val recordingController = RecordingController(appContext, locationSource)
 
     val recordingRecovery by lazy { RecordingRecovery(appContext, trackRepository, applicationScope) }

@@ -51,7 +51,7 @@ class RecordingService : Service() {
 
     private val notifications = RecordingNotifications(this)
 
-    /** Non-null while paused too, so a START then can't reopen the WAL over the ride. */
+    /** Non-null while paused too, so a START then can't reopen the WAL over the recording. */
     private var session: RecordingSession? = null
     private var collection: Job? = null
     private var wal: RecordingWal? = null
@@ -113,7 +113,7 @@ class RecordingService : Service() {
             return
         }
 
-        // Set aside any unsaved ride for recovery so this one starts from an empty log.
+        // Set aside any unsaved recording for recovery so this one starts from an empty log.
         if (!container.recordingRecovery.claim()) {
             abandon(R.string.record_start_failed)
             return
@@ -161,7 +161,7 @@ class RecordingService : Service() {
         notifications.remove()
     }
 
-    /** Keeps recording, but says so since it otherwise looks like standing still. On the main thread. */
+    /** Keeps recording, but says so since it otherwise looks like standing still. Called on the main thread. */
     private fun onLocationAvailable(available: Boolean) {
         scope.launch {
             val session = session ?: return@launch
@@ -187,7 +187,7 @@ class RecordingService : Service() {
         // Otherwise the ticker publishes: fixes come about as often, but out of step with it.
     }
 
-    /** While Stop's dialog is up, so the ride ends when Stop was tapped, not answered. */
+    /** While Stop's dialog is up, so the recording ends when Stop was tapped, not answered. */
     private fun hold() {
         val session = session ?: return
         session.hold(Instant.now())?.let { wal?.append(it) }

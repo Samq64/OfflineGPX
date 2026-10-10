@@ -78,7 +78,7 @@ internal enum class LocationUse(
 }
 
 /**
- * Invoked like the lambda it replaced. Without permission it first says why, through
+ * A `() -> Unit`, so callers invoke it directly. Without permission it first says why, through
  * [LocationRationale], then asks.
  */
 internal class LocationRequest(
@@ -146,7 +146,7 @@ internal fun rememberLocationRequest(
             say(resources.getString(use.off)) { context.openLocationSettings() }
         } else {
             onGranted()
-            // Each time, as otherwise only the location dot shows a recording outside the app.
+            // Each time, as otherwise only the status bar's location indicator shows a recording outside the app.
             if (use.withNotifications && !context.canShowRecording()) {
                 say(resources.getString(R.string.record_notifications_off)) { context.openNotificationSettings() }
             }

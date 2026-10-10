@@ -12,7 +12,7 @@ import java.time.Duration
 import java.time.Instant
 
 /**
- * One ride's running numbers and route for the UI; the WAL is the record of truth.
+ * One recording's running numbers and route for the UI; the WAL is the record of truth.
  * Thresholds are fixed for the run so both halves of a track mean the same thing.
  *
  * @param clock monotonic milliseconds.
@@ -27,7 +27,7 @@ internal class RecordingSession(private val clock: () -> Long) {
         private set
     private var pointCount = 0
 
-    /** Kept through a pause, so a waypoint can still be dropped where the ride stopped. */
+    /** Kept through a pause, so a waypoint can still be dropped where the recording stopped. */
     private var lastPoint: TrackPoint? = null
 
     /** What the next point's distance is measured from; a pause clears it so the gap isn't bridged. */
@@ -36,7 +36,7 @@ internal class RecordingSession(private val clock: () -> Long) {
     private var lastAccuracyMeters: Double? = null
     private val waypoints = mutableListOf<Waypoint>()
 
-    /** First logged point, on [clock]; the ride starts where its data does. */
+    /** First logged point, on [clock]; the recording starts where its data does. */
     private var startedAt: Long? = null
 
     private val tracePoints = TrackPointsBuilder()
@@ -94,7 +94,7 @@ internal class RecordingSession(private val clock: () -> Long) {
 
     /**
      * Lost signal, which the saved track's analysis won't count as travel either. Its floor
-     * only: the analysis also scales with the median interval, which a ride has yet to show.
+     * only: the analysis also scales with the median interval, which a recording has yet to show.
      */
     private fun isGap(from: TrackPoint, to: TrackPoint): Boolean {
         val seconds = Duration.between(from.time ?: return false, to.time ?: return false).seconds
@@ -108,7 +108,7 @@ internal class RecordingSession(private val clock: () -> Long) {
     }
 
     /**
-     * The last point again at [at], so the log ends when the ride stood still rather than
+     * The last point again at [at], so the log ends where it stood still rather than
      * at the last fix to move. Null if paused or there is nothing to repeat.
      */
     private fun closeAt(at: Instant): TrackPoint? {
@@ -161,7 +161,7 @@ internal class RecordingSession(private val clock: () -> Long) {
         return waypoint
     }
 
-    /** A snapshot sharing the builder's arrays, so publishing doesn't copy the ride. */
+    /** A snapshot sharing the builder's arrays, so publishing doesn't copy the recording. */
     fun trace(): TrackPoints {
         tracePublishedAt = tracePoints.size
         return tracePoints.snapshot()

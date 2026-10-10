@@ -16,7 +16,7 @@ public data class TrackPoint(
 public fun isValidCoordinate(latitude: Double, longitude: Double): Boolean =
     latitude in -90.0..90.0 && longitude in -180.0..180.0
 
-/** A GPX `<wpt>`: a note at the last known position, not a fix of its own. */
+/** A GPX `<wpt>`; a recorded one sits at the last known position, not a fix of its own. */
 public data class Waypoint(
     val point: TrackPoint,
     /** The `<name>`, else the `<desc>` or `<cmt>`. */
@@ -27,13 +27,13 @@ public data class Waypoint(
 public data class Track(
     val name: String?,
     val points: TrackPoints,
-    /** The `<trk><desc>`. */
+    /** The first `<trk><desc>` found. */
     val description: String? = null,
-    /** The `<trk><type>`, which the app keeps as the category. */
+    /** The first `<trk><type>` found, which the app keeps as the category. */
     val type: String? = null,
     /** Unordered. */
     val waypoints: List<Waypoint> = emptyList(),
-    /** The first `<trk>`'s Garmin `DisplayColor` name, as written. */
+    /** The first Garmin `DisplayColor` name found among the `<trk>`s, as written. */
     val displayColor: String? = null,
 ) {
     val isEmpty: Boolean get() = points.size == 0

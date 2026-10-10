@@ -81,7 +81,7 @@ private fun niceStep(range: Float, targetTicks: Int, quarters: Boolean = false):
     return factor * magnitude
 }
 
-/** Seconds, minutes and hours divide by 60 and 24, not 10, so 1-2-5 lands on 0:33:20. */
+/** Seconds, minutes and hours divide by 60 and 24, not 10, where plain 1-2-5 would land on 0:33:20. */
 private val TimeSteps = floatArrayOf(
     1f, 2f, 5f, 10f, 15f, 30f,
     60f, 120f, 300f, 600f, 900f, 1800f,
@@ -99,7 +99,7 @@ private fun timeStep(range: Float, targetTicks: Int): Float {
 }
 
 /**
- * Min to max of the recorded values, or 0 to max with [fromZero]. Computed by the caller
+ * Min to max of the recorded values, or 0 to max with [fromZero]. Separate from the chart
  * because axis label precision depends on the step.
  */
 fun ChartSeries.yScale(perUnit: Float = 1f, fromZero: Boolean = false): Scale {
@@ -120,7 +120,7 @@ fun ChartSeries.yScale(perUnit: Float = 1f, fromZero: Boolean = false): Scale {
     return endTickScale(min, max, perUnit)
 }
 
-/** Gaps between ticks the series is cut into, about. */
+/** About how many intervals the y range is cut into. */
 private const val Y_INTERVALS = 4
 
 /** An inner tick nearer an end than this many steps would crowd its label. */

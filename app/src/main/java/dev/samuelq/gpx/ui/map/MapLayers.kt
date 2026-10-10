@@ -56,7 +56,7 @@ internal class TapDetector(
     private var scaling = false
     private var scaledY = 0f
 
-    // Set by a second finger; cleared by the next first one.
+    // Set by a second finger or a cancel; cleared by the next first one.
     private var pinched = false
     private var dragged = false
 
@@ -138,7 +138,7 @@ internal class RouteStyles(density: Density) {
             .strokeWidth(width)
             .cap(org.oscim.backend.canvas.Paint.Cap.ROUND)
             .fixed(true)
-            // A long ride has far more positions than pixels.
+            // A long track has far more positions than pixels.
             .generalization(Style.GENERALIZATION_SMALL)
             .build()
     }

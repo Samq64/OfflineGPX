@@ -22,7 +22,7 @@ class GpxTooLargeException(message: String) : Exception(message)
 
 /**
  * Streaming, tolerant GPX reader of tracks: anything unrecognised, routes included, is skipped;
- * only a non-GPX document, or one too large, is an error.
+ * only malformed or non-GPX XML, or a document too large, is an error.
  *
  * @param newPullParser injected for plain-JVM tests, where framework xmlpull is stubbed.
  */

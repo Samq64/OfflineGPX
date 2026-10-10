@@ -61,7 +61,7 @@ class OfflineMap(
         sizeBytes == other.sizeBytes
 
     companion object {
-        /** Null unless a mapsforge map file VTM reads. Not a debug build, whose index has a signature. */
+        /** Null unless a mapsforge map file VTM reads. Not a debug file, whose index has a signature. */
         internal fun read(file: File): OfflineMap? {
             val header = try {
                 readMapFileHeader(file)
@@ -96,7 +96,7 @@ class MapStore(
     context: Context,
     /** Outlives Settings, so deletes after an undo lapses still finish. */
     private val scope: CoroutineScope,
-    /** For file and database work; a parameter so tests can substitute one. */
+    /** For file work; a parameter so tests can substitute one. */
     private val io: CoroutineDispatcher = Dispatchers.IO,
 ) {
 

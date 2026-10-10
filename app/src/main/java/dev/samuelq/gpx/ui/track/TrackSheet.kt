@@ -81,7 +81,7 @@ import java.time.ZoneId
 /** Peek height before a track loads, and the minimum after. */
 val TrackSheetPeekHeight = 128.dp
 
-/** Null for a track opened via intent, which has no library row to act on. */
+/** Null until a new import's row arrives. */
 @Immutable
 class TrackActions(
     val onRename: () -> Unit,
@@ -446,7 +446,8 @@ private fun TrimHeader(title: String, profile: TrackProfile, trim: TrimControls,
             }
         }
 
-        // From the cumulative series: a break adds nothing to either, so a difference is exact.
+        // From the cumulative series: distance is flat across a break and elapsed is wall-clock, so a
+        // difference is exact.
         StatRow(
             distanceAndElapsed(
                 (profile.distanceMeters[end] - profile.distanceMeters[first]).toDouble(),

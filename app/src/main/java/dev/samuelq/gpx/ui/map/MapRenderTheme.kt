@@ -30,8 +30,7 @@ object MapRenderTheme {
         return buildString {
             append("""<?xml version="1.0" encoding="UTF-8"?>""")
             append("""<rendertheme xmlns="http://mapsforge.org/renderTheme" version="6" """)
-            // Transparent: the land underneath shows through only where the file has data. Outside is
-            // what VTM clears the screen to.
+            // Outside is what VTM clears the screen to.
             append("""map-background="#00000000" map-background-outside="${background.css()}">""")
 
             // Rules paint in document order, so this is the stacking order.
@@ -238,7 +237,7 @@ object MapRenderTheme {
 
     /**
      * [width] with VTM's own growth divided out: its tile loader widens lines 1.4x per zoom
-     * above 12, which on per-zoom widths drew z18 streets six times too wide.
+     * above 12, which on per-zoom widths drew high-zoom streets several times too wide.
      */
     internal fun unscaled(zoom: Int, width: Float): Float = Math.round(
         width / Math.pow(VTM_STROKE_INCREASE, (zoom - VTM_STROKE_MIN_ZOOM).coerceAtLeast(0).toDouble()).toFloat() *

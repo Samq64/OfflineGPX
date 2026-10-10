@@ -115,7 +115,7 @@ private val BackPreviewShrinkY = 24.dp
 internal val DragHandleHeight = 20.dp
 
 /**
- * Half the Material handle, which spends 44 of 48dp on padding; the whole sheet drags anyway.
+ * Under half the Material handle, which spends 44 of 48dp on padding; the whole sheet drags anyway.
  * In the sheet's content rather than the scaffold's slot, so a back preview scales it with the
  * sheet; the expand and collapse the slot would add are added here instead.
  */

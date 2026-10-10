@@ -45,7 +45,7 @@ fun StatRow(stats: List<Stat>, modifier: Modifier = Modifier) {
     }
 }
 
-/** Value over label, read as one stop label first; apart, the value comes unlabelled. */
+/** Value over label, read as one stop, label first; apart, the value comes unlabelled. */
 @Composable
 private fun StatCell(stat: Stat, valueStyle: TextStyle, modifier: Modifier = Modifier) {
     val spoken = stringResource(R.string.stat_spoken, stat.label, stat.spoken)

@@ -15,7 +15,7 @@ internal fun String.xmlSafe(): String = filterNot {
 
 /**
  * Writes a [Track]'s points and waypoints as GPX 1.1, the on-disk format for recordings. Its
- * name and type are the row's, added on the way out like any track's.
+ * name, type and colour are the row's, added on the way out like any track's.
  *
  * @param newSerializer injected for plain-JVM tests, like [GpxParser]'s parser.
  */
@@ -49,7 +49,7 @@ class GpxWriter(private val newSerializer: () -> XmlSerializer = DEFAULT_SERIALI
             xml.endTag(NAMESPACE, "wpt")
         }
 
-        // No name or type: the row holds them, and they go in on the way out.
+        // No name, type or colour: the row holds them, and they go in on the way out.
         xml.startTag(NAMESPACE, "trk")
 
         for (segment in 0 until points.segmentCount) {

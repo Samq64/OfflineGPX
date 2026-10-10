@@ -9,8 +9,8 @@ import org.xmlpull.v1.XmlSerializer
 
 /**
  * Copies a GPX document keeping only some of its points and waypoints, and optionally renaming
- * its first track or setting its type or colour. Everything else passes through: extensions, metadata, comments,
- * other apps' data. [GpxWriter] would keep only what the app reads.
+ * its first track or setting its type or colour. Everything else passes through: extensions,
+ * metadata, comments, other apps' data. [GpxWriter] would keep only what the app reads.
  *
  * Points are counted as [GpxParser] reads them, so an index here is one in the parsed track.
  * When cutting, unreadable points and waypoints, which have no index, are dropped. A segment

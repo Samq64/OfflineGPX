@@ -58,7 +58,7 @@ import dev.samuelq.gpx.ui.track.distanceAndElapsed
 @Composable
 fun RecordingSheet(
     state: RecordingState.Active,
-    /** The line's on the map. */
+    /** The slot it's drawn in and will be saved with. */
     colorSlot: Int,
     onColor: (Int) -> Unit,
     /** Null until the recording has moved; the sheet shows empty charts meanwhile. */
@@ -169,7 +169,7 @@ private fun RecordingHeader(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            // Apart from pause and stop: it marks the ride rather than controlling it.
+            // Apart from pause and stop: it marks the recording rather than controlling it.
             // Disabled, not hidden, before the first fix so the layout doesn't shift.
             OutlinedButton(onClick = { addingWaypoint = true }, enabled = state.lastPoint != null) {
                 Text(stringResource(R.string.record_add_waypoint))

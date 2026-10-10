@@ -22,11 +22,11 @@ import kotlinx.coroutines.withContext
 /** A recording left unsaved by a crash, read back and waiting to be saved or discarded. */
 class AbandonedRecording(internal val file: File, val track: Track, val profile: TrackProfile)
 
-/** A ride discarded moments ago, kept on disk until its undo lapses. */
+/** A recording discarded moments ago, kept on disk until its undo lapses. */
 class DiscardedRecording internal constructor(internal val file: File, val label: TrackLabel)
 
 /**
- * The live recording log, plus rides never cleanly stopped: those are claimed out of the
+ * The live recording log, plus recordings never cleanly stopped: those are claimed out of the
  * live log's way and offered to the user until saved or discarded.
  */
 class RecordingRecovery(
@@ -34,12 +34,12 @@ class RecordingRecovery(
     private val tracks: TrackRepository,
     /** Outlives any screen, so deletes after an undo lapses still finish. */
     private val scope: CoroutineScope,
-    /** For file and database work; a parameter so tests can substitute one. */
+    /** For file work; a parameter so tests can substitute one. */
     private val io: CoroutineDispatcher = Dispatchers.IO,
 ) {
     private val appContext = context.applicationContext
 
-    // no_backup: a ride in progress on the old phone isn't a crash on the new one.
+    // no_backup: a recording in progress on the old phone isn't a crash on the new one.
     private val dir: File get() = File(appContext.noBackupFilesDir, "recording").apply { mkdirs() }
 
     val liveLog: File get() = File(dir, LIVE_LOG)

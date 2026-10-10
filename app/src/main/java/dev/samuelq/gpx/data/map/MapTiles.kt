@@ -415,7 +415,7 @@ private fun MapElement.key(): Long {
 /** Of a sea rectangle's width. */
 private const val FEATURE_INSET = 0.1f
 
-/** Land polygons are cut on the grid with a little overlap; measured at 0.0005°. */
+/** Land polygons are cut on the grid with a little overlap; measured at 0.0005°, allowed 4x that. */
 private const val GRID_OVERLAP_DEGREES = 0.002
 
 private const val FNV_OFFSET = -0x340d631b7bdddcdbL

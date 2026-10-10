@@ -118,7 +118,7 @@ fun MapScreen(
     /** With the area the map last showed, for the list to filter to. */
     onOpenList: (area: GeoBounds?) -> Unit,
     onOpenSettings: () -> Unit,
-    /** Straight to the file picker; the import itself, with its merge prompt, lives in settings. */
+    /** Straight to the file picker; the import itself lives in settings. */
     onImportMap: () -> Unit,
     viewModel: MapViewModel = viewModel(factory = MapViewModel.Factory),
     recorder: RecordingViewModel = viewModel(factory = RecordingViewModel.Factory),
@@ -161,8 +161,8 @@ fun MapScreen(
     var preferTimeAxis by rememberSaveable { mutableStateOf(false) }
 
     val focusedTrack = (focused as? FocusedTrack.Ready)?.track
-    // Name and colour are the row's, blank for the moment before a new import's row arrives.
     val openList = { onOpenList(viewModel.lastCamera?.area) }
+    // Name and colour are the row's, blank for the moment before a new import's row arrives.
     val focusedRow = focusedTrack?.let { state.entity(it.id) }
     val focusedColor = palette.slot(focusedRow?.color?.ordinal ?: 0)
     val focusedTitle = focusedRow?.title.orEmpty()
@@ -545,11 +545,7 @@ fun MapScreen(
         }
     }
 
-    // Shared by the sheet and the side panel.
-    // From a pin tap, or the sheet's screen reader actions.
-    // A lambda, not a local fun: Compose keeps a `::` reference from the first composition,
-    // still writing the state of a track no longer focused.
-    // Only the charted route's waypoints have a chart position.
+    // Shared by the sheet and the side panel. Only the charted route's waypoints have a chart position.
     val chartedFor: (Waypoint) -> TrackProfile? = { waypoint ->
         if (isRecording) {
             live?.takeIf { waypoint in liveWaypoints }
@@ -557,6 +553,8 @@ fun MapScreen(
             focusedTrack?.takeIf { waypoint in it.track.waypoints }?.profile
         }
     }
+    // From a pin tap, or the sheet's screen reader actions. A lambda, not a local fun: Compose keeps
+    // a `::` reference from the first composition, still writing the state of a track no longer focused.
     val selectWaypoint: (Waypoint) -> Unit = { waypoint ->
         screen.selectWaypoint(waypoint, chartedFor(waypoint)?.indexOf(waypoint.point)?.takeIf { it >= 0 })
     }
@@ -734,9 +732,9 @@ fun MapScreen(
                         contourLabels = LocalFormatters.current.units == UnitSystem.METRIC,
                     ),
                     onScaleChange = { metersPerPixel.doubleValue = it },
-                    // Resume where the camera was left rather than re-fitting.
                     followed = followed,
                     onDrag = screen::stopFollowing,
+                    // Resume where the camera was left rather than re-fitting.
                     initialCamera = viewModel.lastCamera,
                     onCameraChange = { viewModel.lastCamera = it },
                     modifier = Modifier.fillMaxSize(),

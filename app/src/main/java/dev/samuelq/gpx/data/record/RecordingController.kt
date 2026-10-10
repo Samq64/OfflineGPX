@@ -31,7 +31,7 @@ sealed interface RecordingState {
         val accuracyLimitMeters: Double,
         /** Oldest first. */
         val waypoints: List<Waypoint>,
-        /** Switched off mid-ride; recording resumes when it's back. */
+        /** Switched off mid-recording; recording resumes when it's back. */
         val locationOff: Boolean,
         /** The route palette slot it's drawn in and will be saved with. */
         val colorSlot: Int,
@@ -104,7 +104,7 @@ class RecordingController(context: Context, private val locationSource: Location
     fun pause() = send(RecordingService.ACTION_PAUSE)
     fun resume() = send(RecordingService.ACTION_RESUME)
 
-    /** Asks first, holding the ride where it is; nothing stops until [stop] or [discard]. */
+    /** Asks first, holding the recording where it is; nothing stops until [stop] or [discard]. */
     fun requestStop() {
         if (_state.value !is RecordingState.Active || _stopRequested.value) return
         _stopRequested.value = true

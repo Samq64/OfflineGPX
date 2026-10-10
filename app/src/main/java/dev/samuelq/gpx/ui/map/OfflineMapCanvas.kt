@@ -228,7 +228,7 @@ internal fun OfflineMapCanvas(
 
     val routeStyles = remember(density) { RouteStyles(density) }
 
-    // Built off the main thread: a long ride is hundreds of thousands of coordinates.
+    // Built off the main thread: a long track is hundreds of thousands of coordinates.
     LaunchedEffect(routeLayer, routes, focusedTrackId) {
         val built = withContext(Dispatchers.Default) { routes.toLines(routeStyles, focusedTrackId) }
         routeLayer.replaceWith(built)
@@ -351,9 +351,9 @@ internal fun OfflineMapCanvas(
         return true
     }
 
-    // Centred in the uncovered part; with zoomIn, zooming in if too far out to place it. Admitted to the
-    // clamp like a framed track, but only if some of the extent would show: a blank view
-    // says nothing about where the user is.
+    // Centred in the uncovered part; with zoomIn, zooming in if too far out to place it. Admitted
+    // to the clamp like a framed track, but only if some of the extent would show: a blank view says
+    // nothing about where the user is.
     fun centreOn(point: TrackPoint, zoomIn: Boolean, camera: MapPosition = map.mapPosition): CentreResult {
         val size = viewSize?.takeIf { it.usable(insets) != null } ?: return CentreResult.NotLaidOut
         camera.setPosition(point.latitude, point.longitude)

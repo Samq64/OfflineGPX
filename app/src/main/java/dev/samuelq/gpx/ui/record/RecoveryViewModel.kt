@@ -78,7 +78,7 @@ class RecoveryViewModel(private val recovery: RecordingRecovery) : ViewModel() {
 
     fun forgetAbandoned(recording: AbandonedRecording) = recovery.forget(recording)
 
-    /** Undoes a Stop dialog's discard: saves the ride and opens it, as Save would have. */
+    /** Undoes a Stop dialog's discard: saves the recording and opens it, as Save would have. */
     fun restoreDiscarded(recording: DiscardedRecording) {
         viewModelScope.launch {
             recovery.restore(recording).fold(

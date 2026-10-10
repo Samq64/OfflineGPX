@@ -15,7 +15,7 @@ import kotlinx.coroutines.flow.Flow
 
 /**
  * What becomes of a recording: saved, discarded with an undo, failed, or left by a crash and
- * offered again. The only collector of [recorder]'s events, which are delivered once.
+ * offered again. The only collector of [events], which are delivered once.
  *
  * @param onSaved opens the saved track.
  * @param onDiscarded follows a recording thrown away, which leaves nothing to open.

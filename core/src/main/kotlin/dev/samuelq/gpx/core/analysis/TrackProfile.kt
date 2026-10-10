@@ -12,7 +12,7 @@ public data class TrackStats(
     val distanceMeters: Double,
     /** Wall-clock span from first to last point. */
     val totalDurationSeconds: Double,
-    /** Time spent above [TrackAnalyzer.MOVING_SPEED_THRESHOLD_MPS]. */
+    /** Time spent at or above [TrackAnalyzer.MOVING_SPEED_THRESHOLD_MPS]. */
     val movingDurationSeconds: Double,
     /** Over moving time; zero without any, as the sheet shows it beside moving time. */
     val averageSpeedMps: Double,
