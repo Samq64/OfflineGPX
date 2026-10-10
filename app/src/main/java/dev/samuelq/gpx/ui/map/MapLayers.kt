@@ -149,11 +149,12 @@ internal class RouteStyles(density: Density) {
  *
  * [focusedId]'s route is told apart by more than its colour, which repeats past six tracks
  * and is the only difference to some colour vision: it's drawn on top and the rest are dimmed.
- * Not wider, which would cover more of the map under it.
+ * Not wider, which would cover more of the map under it. While recording, all of them are
+ * dimmed: the recording is in a layer of its own above.
  */
 internal fun List<RouteOverlay>.toLines(styles: RouteStyles, focusedId: Long? = null): List<LineDrawable> {
     val out = ArrayList<LineDrawable>()
-    val focusing = focusedId != null && any { it.trackId == focusedId }
+    val focusing = focusedId == LIVE_TRACK_ID || (focusedId != null && any { it.trackId == focusedId })
     forEachIndexed { index, route ->
         val focused = focusing && route.trackId == focusedId
         // Within one priority VTM orders by spatial index, not insertion, so each route gets its own.
