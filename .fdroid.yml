@@ -12,14 +12,10 @@ Repo: https://github.com/Samq64/OfflineGPX.git
 Binaries: https://github.com/Samq64/OfflineGPX/releases/download/v%v/offline-gpx-%v.apk
 
 Builds:
-  - versionName: 0.1.0
-    versionCode: 1
-    commit: v0.1.0
+  - versionName: 0.1.1
+    versionCode: 2
+    commit: 7798f227dc0df1f7899051318e2a2945d3ca5f67
     subdir: app
-    sudo:
-      - apt-get update
-      - apt-get install -y openjdk-21-jdk-headless
-      - update-alternatives --auto java
     gradle:
       - yes
 
@@ -27,5 +23,5 @@ AllowedAPKSigningKeys: fe69a4bae0e3ed1b9272845863c6c5bab9a4621a6017fe2e6159160e8
 
 AutoUpdateMode: Version
 UpdateCheckMode: Tags
-CurrentVersion: 0.1.0
-CurrentVersionCode: 1
+CurrentVersion: 0.1.1
+CurrentVersionCode: 2
