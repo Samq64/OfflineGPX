@@ -2,12 +2,15 @@ package dev.samuelq.gpx.ui
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import androidx.core.content.FileProvider
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -48,6 +51,13 @@ class AppFlowsTest {
             ActivityScenario.launch(MainActivity::class.java)
         } else {
             ActivityScenario.launch(intent)
+        }
+    }
+
+    /** The library is newest first, so a test track can sit below the fold of a full device. */
+    private fun scrollLibraryTo(matcher: SemanticsMatcher) {
+        compose.waitUntil(10_000) {
+            runCatching { compose.onNode(hasScrollToNodeAction()).performScrollToNode(matcher) }.isSuccess
         }
     }
 
@@ -94,9 +104,7 @@ class AppFlowsTest {
 
         // In the library too.
         compose.onNodeWithContentDescription(string(R.string.library_title)).performClick()
-        compose.waitUntil(5_000) {
-            compose.onAllNodes(hasText(name), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
-        }
+        scrollLibraryTo(hasText(name))
     }
 
     @Test
@@ -111,11 +119,9 @@ class AppFlowsTest {
         launch()
 
         compose.onNodeWithContentDescription(string(R.string.library_title)).performClick()
-        compose.waitUntil(10_000) {
-            compose.onAllNodes(hasContentDescription(targetContext.getString(R.string.action_manage_named, name)))
-                .fetchSemanticsNodes().isNotEmpty()
-        }
-        compose.onNodeWithContentDescription(targetContext.getString(R.string.action_manage_named, name)).performClick()
+        val manage = targetContext.getString(R.string.action_manage_named, name)
+        scrollLibraryTo(hasContentDescription(manage))
+        compose.onNodeWithContentDescription(manage).performClick()
         compose.onNodeWithText(string(R.string.action_delete)).performClick()
         // As a locale change does; the undo mustn't commit.
         scenario!!.recreate()

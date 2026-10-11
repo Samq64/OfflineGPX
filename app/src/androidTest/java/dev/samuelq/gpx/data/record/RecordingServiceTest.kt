@@ -232,10 +232,15 @@ class RecordingServiceTest {
     @Test
     fun uselessLogsAreDropped() {
         val recovery = container.recordingRecovery
+        // Other tests and real crashes may leave recordings; only this one's must go.
+        val earlier = runBlocking {
+            assertTrue(recovery.claim())
+            recovery.abandoned().map { it.file }
+        }
         RecordingWal.open(recovery.liveLog).use { wal -> wal.append(walkNorth(1).single()) }
         runBlocking {
             assertTrue(recovery.claim())
-            assertTrue(recovery.abandoned().isEmpty())
+            assertEquals(earlier, recovery.abandoned().map { it.file })
             val log = java.io.File(targetContext.cacheDir, "short.wal").apply { writeText("") }
             assertEquals(null, recovery.setAside(log, TrackLabel("x", "")))
             assertTrue(!log.exists())
