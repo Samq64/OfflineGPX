@@ -118,7 +118,7 @@ android {
     }
 
     // The JVM tests' map fixture, so a device test can import a real map too.
-    sourceSets.getByName("androidTest").resources.srcDir("src/test/resources")
+    sourceSets.getByName("androidTest").resources.directories.add("src/test/resources")
 
     // Skip the dependency-metadata blob Play would embed.
     dependenciesInfo {
