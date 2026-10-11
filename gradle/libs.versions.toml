@@ -2,7 +2,7 @@
 # AGP 9.4 supports up to API 37 and requires Gradle 9.1+ and JDK 17+.
 agp = "9.4.1"
 # Only for the Compose compiler plugin; AGP 9 has Kotlin built in.
-kotlin = "2.4.20"
+kotlin = "2.4.21"
 
 compileSdk = "37"
 minSdk = "31"
