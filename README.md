@@ -53,8 +53,7 @@ build that one clean and with the same JDK: an incremental build can carry a sta
 
 ```sh
 ./gradlew clean :app:assembleRelease --no-build-cache
-apksigner sign --ks release.jks --out offline-gpx-<version>.apk \
-    app/build/outputs/apk/release/app-release-unsigned.apk
+apksigner sign --ks release.jks --alignment-preserved --v1-signing-enabled false --out offline-gpx-<version>.apk app/build/outputs/apk/release/app-release-unsigned.apk
 ```
 
 The build fails if any dependency adds a network permission to the merged manifest
