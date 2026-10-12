@@ -55,9 +55,7 @@ abstract class CheckNoNetworkPermissions : DefaultTask() {
 /** The built commit, shown beside the version. Empty outside a git checkout. */
 val gitHash: String = runCatching {
     providers.exec {
-        // The hash alone, at a fixed length: git's default grows with the repo, and a fresh clone
-        // must print the same. No --dirty: F-Droid's build edits the tree.
-        commandLine("git", "describe", "--always", "--abbrev=12", "--exclude=*")
+        commandLine("git", "describe", "--always", "--abbrev=8", "--exclude=*")
         isIgnoreExitValue = true
     }.standardOutput.asText.get().trim()
 }.getOrDefault("")
