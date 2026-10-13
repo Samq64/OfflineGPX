@@ -35,6 +35,8 @@ public data class Track(
     val waypoints: List<Waypoint> = emptyList(),
     /** The first Garmin `DisplayColor` name found among the `<trk>`s, as written. */
     val displayColor: String? = null,
+    /** Read from `<rte>`s, the file having no track points; the name, type and colour are theirs. */
+    val isRoute: Boolean = false,
 ) {
     val isEmpty: Boolean get() = points.size == 0
 }

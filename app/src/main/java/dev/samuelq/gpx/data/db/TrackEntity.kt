@@ -14,7 +14,7 @@ import dev.samuelq.gpx.data.track.RouteColor
 data class TrackEntity(
     /** AUTOINCREMENT, so an id, and with it a file name, is never reused once committed. */
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    /** The row's alone, like the colour; null is titled by when it started. */
+    /** The row's alone, like the colour; null is titled by when it started, so only a timed track's is. */
     val trackName: String?,
 
     /** Last import, record or open; orders the list and the map's stacking. */
@@ -33,7 +33,7 @@ data class TrackEntity(
     val bounds: GeoBounds get() = summary.bounds
 
     // What the list sorts and shows by.
-    val startedAtEpochMillis: Long get() = summary.startedAtEpochMillis
+    val startedAtEpochMillis: Long? get() = summary.startedAtEpochMillis
 
     val distanceMeters: Double get() = summary.distanceMeters
 
@@ -45,8 +45,8 @@ data class TrackEntity(
  * so neither has to read the file. The sheet's fuller stats are analysed from the points.
  */
 data class TrackSummary(
-    /** Every point has a time: an import without them is refused. */
-    val startedAtEpochMillis: Long,
+    /** Null unless every point has a time, as the analysis needs; a planned route has none. */
+    val startedAtEpochMillis: Long?,
     val distanceMeters: Double,
     val totalSeconds: Double,
     @Embedded val bounds: GeoBounds,

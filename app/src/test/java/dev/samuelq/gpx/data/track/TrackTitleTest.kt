@@ -39,11 +39,17 @@ class TrackTitleTest {
         0,
     ).atZone(ZoneId.of("America/Toronto")).toInstant().toEpochMilli()
 
-    private fun row(trackName: String? = null) = TrackEntity(
+    private fun row(trackName: String? = null, startedAt: Long? = started) = TrackEntity(
         trackName = trackName,
         lastOpenedAtEpochMillis = 0,
-        summary = TrackSummary(started, 0.0, 0.0, GeoBounds(0.0, 0.0, 0.0, 0.0)),
+        summary = TrackSummary(startedAt, 0.0, 0.0, GeoBounds(0.0, 0.0, 0.0, 0.0)),
     )
+
+    @Test
+    fun `an untimed track's export is named even without a name`() {
+        assertEquals("Plan", row("Plan", startedAt = null).title)
+        assertEquals("track.gpx", row(startedAt = null).exportFileName)
+    }
 
     @Test
     fun `a name wins`() {

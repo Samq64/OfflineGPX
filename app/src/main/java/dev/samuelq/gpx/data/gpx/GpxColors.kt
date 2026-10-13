@@ -8,6 +8,7 @@ package dev.samuelq.gpx.data.gpx
 internal object GpxColors {
     const val GARMIN_NAMESPACE = "http://www.garmin.com/xmlschemas/GpxExtensions/v3"
     const val GARMIN_TRACK = "TrackExtension"
+    const val GARMIN_ROUTE = "RouteExtension"
     const val GARMIN_COLOR = "DisplayColor"
 
     /** A `<trk><extensions>` child that sets the line colour, which a new colour replaces whole. */

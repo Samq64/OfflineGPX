@@ -134,16 +134,6 @@ class TrackRepositoryTest {
             ).exceptionOrNull()
             assertIs<TrackLoadException.Empty>(waypointsOnly)
 
-            val untimed = sampleGpx().replace(Regex("<time>[^<]*</time>"), "")
-            assertIs<TrackLoadException.Untimed>(
-                repository.import(Uri.fromFile(fixture("untimed.gpx", untimed))).exceptionOrNull(),
-            )
-            // One point without a time is enough.
-            val partly = sampleGpx().replaceFirst(Regex("<time>[^<]*</time>"), "")
-            assertIs<TrackLoadException.Untimed>(
-                repository.import(Uri.fromFile(fixture("partly.gpx", partly))).exceptionOrNull(),
-            )
-
             val missing = repository.import(Uri.fromFile(File(targetContext.cacheDir, "missing.gpx"))).exceptionOrNull()
             assertIs<TrackLoadException.Unreadable>(missing)
         }
@@ -179,6 +169,59 @@ class TrackRepositoryTest {
         assertTrue(row(id).isTitledByStart)
         assertNull(shared(id).name)
         assertEquals(20, shared(id).points.size)
+    }
+
+    @Test
+    fun untimedImportsHaveNoStartAndKeepAName() {
+        // One point without a time is enough.
+        val partly = importSample(sampleGpx().replaceFirst(Regex("<time>[^<]*</time>"), ""))
+        assertNull(row(partly).startedAtEpochMillis)
+        assertEquals(0.0, row(partly).totalSeconds)
+
+        val unnamed = sampleGpx(name = null).replace(Regex("<time>[^<]*</time>"), "")
+        val id = importSample(unnamed, name = "Planned.gpx")
+        assertEquals("Planned", row(id).trackName)
+        // Blank would leave it no title, so it's ignored.
+        runBlocking { repository.rename(id, " ").getOrThrow() }
+        assertEquals("Planned", row(id).trackName)
+        assertEquals("Planned", row(id).title)
+        // Kept as it came.
+        assertEquals(unnamed, fileOf(id).readText())
+    }
+
+    @Test
+    fun routesAreStoredAsTracks() {
+        val route = """<?xml version="1.0" encoding="UTF-8"?>
+            <gpx version="1.1" creator="test" xmlns="http://www.topografix.com/GPX/1/1"
+                xmlns:gpxx="http://www.garmin.com/xmlschemas/GpxExtensions/v3">
+              <wpt lat="51.5" lon="-0.1"><name>Start</name></wpt>
+              <rte>
+                <name>Loop</name>
+                <type>Hiking</type>
+                <extensions><gpxx:RouteExtension><gpxx:DisplayColor>DarkBlue</gpxx:DisplayColor></gpxx:RouteExtension></extensions>
+                <rtept lat="51.5" lon="-0.1"><ele>10</ele></rtept>
+                <rtept lat="51.501" lon="-0.1"/>
+              </rte>
+              <rte><rtept lat="51.502" lon="-0.1"/></rte>
+            </gpx>"""
+        val id = importSample(route)
+        val row = row(id)
+        assertEquals("Loop", row.trackName)
+        assertEquals("Hiking", row.category)
+        assertEquals(RouteColor.Blue, row.color)
+        assertNull(row.startedAtEpochMillis)
+
+        val stored = fileOf(id).readText()
+        assertFalse("<rte" in stored)
+        // Written as a recording is, without indentation.
+        assertFalse("\n " in stored)
+        val track = parsed(id)
+        assertFalse(track.isRoute)
+        assertEquals(3, track.points.size)
+        assertEquals(2, track.points.segmentCount)
+        assertEquals("Start", track.waypoints.single().name)
+        // The row's name goes out, as any track's.
+        assertEquals("Loop", shared(id).name)
     }
 
     @Test
@@ -282,7 +325,7 @@ class TrackRepositoryTest {
         val edit = runBlocking { repository.trim(id, 5, 14).getOrThrow() }
         // Ten points two seconds apart, from the sixth.
         assertEquals(18.0, row(id).totalSeconds)
-        assertEquals(before.startedAtEpochMillis + 10_000, row(id).startedAtEpochMillis)
+        assertEquals(before.startedAtEpochMillis!! + 10_000, row(id).startedAtEpochMillis)
         assertEquals(10, loaded(id).track.points.size)
         // The waypoint by point 15 is outside what's kept.
         assertTrue(loaded(id).track.waypoints.isEmpty())

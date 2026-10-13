@@ -389,8 +389,7 @@ private fun ProfileDetails(
 
     Profile(
         title = R.string.chart_speed,
-        // Imports without times are refused.
-        unavailable = null,
+        unavailable = R.string.chart_speed_empty.takeUnless { profile.hasTime },
         y = profile.speedMps,
         color = chartColors.speed,
         perUnit = formatters.speedPerMps,

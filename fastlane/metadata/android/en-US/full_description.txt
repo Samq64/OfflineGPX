@@ -5,7 +5,7 @@
 <li>Record tracks in the background with pausing, waypoints and live charts</li>
 <li>Recordings survive most crashes</li>
 <li>Speed and elevation charts by distance or time, with zoom</li>
-<li>Import and export recorded tracks as .gpx files compatible with other apps (not planned routes)</li>
+<li>Import and export .gpx tracks compatible with other apps</li>
 <li>Trim, search, sort and categorize tracks</li>
 <li>Show, hide, export or delete many tracks at once</li>
 <li>Maps are optional; without one, tracks draw on a blank background</li>

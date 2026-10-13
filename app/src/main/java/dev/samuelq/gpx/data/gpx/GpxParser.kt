@@ -21,8 +21,9 @@ class GpxParseException(message: String, cause: Throwable? = null) : Exception(m
 class GpxTooLargeException(message: String) : Exception(message)
 
 /**
- * Streaming, tolerant GPX reader of tracks: anything unrecognised, routes included, is skipped;
- * only malformed or non-GPX XML, or a document too large, is an error.
+ * Streaming, tolerant GPX reader of tracks: anything unrecognised is skipped; only malformed or
+ * non-GPX XML, or a document too large, is an error. Routes are read only from a file without
+ * track points, as untimed plans beside a recording would void its timing.
  *
  * @param newPullParser injected for plain-JVM tests, where framework xmlpull is stubbed.
  */
@@ -52,11 +53,16 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
 
     private fun readGpx(parser: XmlPullParser): Track {
         val points = TrackPointsBuilder()
+        val routePoints = TrackPointsBuilder()
         val waypoints = mutableListOf<Waypoint>()
         var trackName: String? = null
         var trackDescription: String? = null
         var trackType: String? = null
         var displayColor: String? = null
+        var routeName: String? = null
+        var routeDescription: String? = null
+        var routeType: String? = null
+        var routeColor: String? = null
 
         forEachChild(parser) {
             when (parser.name) {
@@ -68,10 +74,28 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
                         TAG_NAME -> readLabel(parser).let { if (trackName == null) trackName = it }
                         TAG_DESC -> readLabel(parser).let { if (trackDescription == null) trackDescription = it }
                         TAG_TYPE -> readLabel(parser).let { if (trackType == null) trackType = it }
-                        TAG_EXTENSIONS -> readDisplayColor(parser).let { if (displayColor == null) displayColor = it }
+                        TAG_EXTENSIONS -> readDisplayColor(parser, GpxColors.GARMIN_TRACK)
+                            .let { if (displayColor == null) displayColor = it }
 
                         TAG_TRKSEG -> readSegment(parser, points)
                         else -> skip(parser)
+                    }
+                }
+
+                // A segment each, as nothing says the next starts where the last ended.
+                TAG_RTE -> {
+                    routePoints.startSegment()
+                    forEachChild(parser) {
+                        when (parser.name) {
+                            TAG_NAME -> readLabel(parser).let { if (routeName == null) routeName = it }
+                            TAG_DESC -> readLabel(parser).let { if (routeDescription == null) routeDescription = it }
+                            TAG_TYPE -> readLabel(parser).let { if (routeType == null) routeType = it }
+                            TAG_EXTENSIONS -> readDisplayColor(parser, GpxColors.GARMIN_ROUTE)
+                                .let { if (routeColor == null) routeColor = it }
+
+                            TAG_RTEPT -> readPoint(parser)?.let { routePoints.addCapped(it) }
+                            else -> skip(parser)
+                        }
                     }
                 }
 
@@ -79,6 +103,17 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
             }
         }
 
+        if (points.size == 0 && routePoints.size > 0) {
+            return Track(
+                name = routeName,
+                points = routePoints.build(),
+                description = routeDescription,
+                type = routeType,
+                waypoints = waypoints,
+                displayColor = routeColor,
+                isRoute = true,
+            )
+        }
         return Track(
             name = trackName,
             points = points.build(),
@@ -89,11 +124,11 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
         )
     }
 
-    /** From a `<trk><extensions>`, Garmin's `DisplayColor` name. */
-    private fun readDisplayColor(parser: XmlPullParser): String? {
+    /** From a `<trk>` or `<rte>`'s `<extensions>`, Garmin's `DisplayColor` name under [element]. */
+    private fun readDisplayColor(parser: XmlPullParser, element: String): String? {
         var name: String? = null
         forEachChild(parser) {
-            if (parser.namespace == GpxColors.GARMIN_NAMESPACE && parser.name == GpxColors.GARMIN_TRACK) {
+            if (parser.namespace == GpxColors.GARMIN_NAMESPACE && parser.name == element) {
                 forEachChild(parser) {
                     if (parser.name == GpxColors.GARMIN_COLOR) name = readLabel(parser) else skip(parser)
                 }
@@ -137,14 +172,15 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
         points.startSegment()
         forEachChild(parser) {
             when (parser.name) {
-                TAG_TRKPT -> readPoint(parser)?.let {
-                    if (points.size >= MAX_POINTS) throw GpxTooLargeException("Over $MAX_POINTS track points")
-                    points.add(it)
-                }
-
+                TAG_TRKPT -> readPoint(parser)?.let { points.addCapped(it) }
                 else -> skip(parser)
             }
         }
+    }
+
+    private fun TrackPointsBuilder.addCapped(point: TrackPoint) {
+        if (size >= MAX_POINTS) throw GpxTooLargeException("Over $MAX_POINTS points")
+        add(point)
     }
 
     /** Null if lat/lon are unusable. */
@@ -212,6 +248,8 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
         private const val TAG_TRK = "trk"
         private const val TAG_TRKSEG = "trkseg"
         private const val TAG_TRKPT = "trkpt"
+        private const val TAG_RTE = "rte"
+        private const val TAG_RTEPT = "rtept"
         private const val TAG_WPT = "wpt"
         private const val TAG_NAME = "name"
         private const val TAG_DESC = "desc"

@@ -413,6 +413,7 @@ fun LibraryScreen(
         TrackNameDialog(
             initialName = track.editableName,
             initialCategory = track.category.orEmpty(),
+            nameRequired = track.startedAtEpochMillis == null,
             categories = categories,
             onDismiss = { renaming = null },
             onConfirm = { name, category ->
@@ -612,9 +613,10 @@ private fun TrackRow(
     val deleteLabel = stringResource(R.string.action_delete)
 
     // Remembered: a DateTimeFormatter's first use loads locale data, janking the entry animation.
-    // Null for an unnamed recording: its title is already the date.
+    // Null for an unnamed recording, whose title is already the date, or an untimed track.
     val date = remember(track, formatters) {
-        formatters.dateTime(Instant.ofEpochMilli(track.startedAtEpochMillis)).takeUnless { track.isTitledByStart }
+        val start = track.startedAtEpochMillis.takeUnless { track.isTitledByStart }
+        start?.let { formatters.dateTime(Instant.ofEpochMilli(it)) }
     }
     val summary = remember(track, sizeBytes, formatters) {
         listOfNotNull(

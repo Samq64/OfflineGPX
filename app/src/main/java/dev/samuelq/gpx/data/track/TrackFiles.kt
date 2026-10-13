@@ -26,9 +26,9 @@ object TrackFiles {
     internal val STAMP: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HHmmss", Locale.ROOT)
 }
 
-/** What a track is called: its name, else when it started. */
+/** What a track is called: its name, else when it started. An untimed track is always named. */
 val TrackEntity.title: String
-    get() = trackName?.takeIf(String::isNotBlank) ?: localized(startedAtEpochMillis)
+    get() = trackName?.takeIf(String::isNotBlank) ?: startedAtEpochMillis?.let(::localized).orEmpty()
 
 /** Unnamed and titled by when it started. */
 val TrackEntity.isTitledByStart: Boolean
@@ -42,7 +42,10 @@ val TrackEntity.editableName: String
 val TrackEntity.exportFileName: String
     get() {
         val base = trackName?.takeIf(String::isNotBlank)
-            ?: TrackFiles.STAMP.format(Instant.ofEpochMilli(startedAtEpochMillis).atZone(ZoneId.systemDefault()))
+            ?: startedAtEpochMillis?.let {
+                TrackFiles.STAMP.format(Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()))
+            }
+            ?: "track"
         return safeFileName(base).ensureGpxSuffix()
     }
 

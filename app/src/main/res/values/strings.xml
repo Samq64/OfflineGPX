@@ -21,6 +21,7 @@
 
     <string name="chart_elevation">Elevation</string>
     <string name="chart_elevation_empty">This track has no elevation data.</string>
+    <string name="chart_speed_empty">This track has no timestamps.</string>
     <string name="chart_gap">Gap %1$s</string>
     <string name="chart_no_point">No point selected</string>
     <string name="chart_point">%1$s, %2$s</string>
@@ -82,6 +83,7 @@
     <string name="library_open_on_map">Open on map</string>
     <string name="library_rename_failed">Couldn\'t rename that track.</string>
     <string name="library_rename_label">Track name (optional)</string>
+    <string name="library_rename_label_required">Track name</string>
     <string name="library_search">Search tracks</string>
     <string name="library_search_clear">Clear search</string>
     <string name="library_search_close">Close search</string>
@@ -253,7 +255,6 @@
     <string name="track_close">Close</string>
     <string name="track_edit_failed">Couldn\'t change that track.</string>
     <string name="track_error_empty">This GPX file has no track points.</string>
-    <string name="track_error_untimed">This GPX file is missing timestamps.</string>
     <string name="track_error_too_large">This GPX file is too large.</string>
     <string name="track_error_invalid">This file isn\'t valid GPX.</string>
     <string name="track_error_title">Couldn\'t open this file</string>

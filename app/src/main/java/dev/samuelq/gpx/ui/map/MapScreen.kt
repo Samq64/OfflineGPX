@@ -854,6 +854,7 @@ fun MapScreen(
         TrackNameDialog(
             initialName = track.editableName,
             initialCategory = track.category.orEmpty(),
+            nameRequired = track.startedAtEpochMillis == null,
             categories = categories,
             // Prefilled, not a hint: dismissing keeps what's shown.
             onDismiss = { screen.renamingId = null },

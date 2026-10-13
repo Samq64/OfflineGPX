@@ -14,8 +14,8 @@ internal fun String.xmlSafe(): String = filterNot {
 }
 
 /**
- * Writes a [Track]'s points and waypoints as GPX 1.1, the on-disk format for recordings. Its
- * name, type and colour are the row's, added on the way out like any track's.
+ * Writes a [Track]'s points and waypoints as GPX 1.1, the on-disk format for recordings and
+ * imported routes. Its name, type and colour are the row's, added on the way out like any track's.
  *
  * @param newSerializer injected for plain-JVM tests, like [GpxParser]'s parser.
  */

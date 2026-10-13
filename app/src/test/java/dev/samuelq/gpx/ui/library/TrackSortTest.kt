@@ -13,7 +13,7 @@ class TrackSortTest {
     private fun track(
         id: Long,
         name: String,
-        started: Long = 0,
+        started: Long? = 0,
         opened: Long = 0,
         meters: Double = 0.0,
         seconds: Double = 0.0,
@@ -36,6 +36,16 @@ class TrackSortTest {
     fun `date is newest first`() {
         val tracks = listOf(track(1, "a", started = 100), track(2, "b", started = 300), track(3, "c", started = 200))
         assertEquals(listOf(2L, 3L, 1L), tracks.ids(TrackSort.DATE))
+    }
+
+    @Test
+    fun `untimed tracks sort as the oldest`() {
+        val tracks = listOf(track(1, "a", started = null), track(2, "b", started = 100))
+        assertEquals(listOf(2L, 1L), tracks.ids(TrackSort.DATE))
+        assertEquals(
+            listOf(1L, 2L),
+            tracks.sortedFor(TrackOrder(TrackSort.DATE, descending = false)).map(TrackEntity::id),
+        )
     }
 
     @Test

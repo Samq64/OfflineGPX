@@ -318,7 +318,8 @@ internal fun List<TrackEntity>.sections(): List<Section> = buildList {
 internal fun List<TrackEntity>.sortedFor(order: TrackOrder): List<TrackEntity> {
     val natural = when (order.sort) {
         TrackSort.RECENT -> this
-        TrackSort.DATE -> sortedByDescending { it.startedAtEpochMillis }
+        // Untimed as the oldest, as duration sorts them as the shortest.
+        TrackSort.DATE -> sortedByDescending { it.startedAtEpochMillis ?: Long.MIN_VALUE }
         TrackSort.DISTANCE -> sortedByDescending { it.distanceMeters }
         TrackSort.DURATION -> sortedByDescending { it.totalSeconds }
         TrackSort.NAME -> {

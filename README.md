@@ -14,7 +14,7 @@ Record and manage rides, runs and hikes on an offline map, with no internet perm
 - Record tracks in the background with pausing, waypoints and live charts
 - Recordings survive most crashes
 - Speed and elevation charts by distance or time, with zoom
-- Import and export recorded tracks as `.gpx` files compatible with other apps (not planned routes)
+- Import and export `.gpx` tracks compatible with other apps
 - Trim, search, sort and categorize tracks
 - Show, hide, export or delete many tracks at once
 - Maps are optional; without one, tracks draw on a blank background

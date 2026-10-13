@@ -35,6 +35,8 @@ import dev.samuelq.gpx.ui.DialogTitle
 fun TrackNameDialog(
     initialName: String,
     initialCategory: String,
+    /** For an untimed track, which has no start to be titled by instead. */
+    nameRequired: Boolean,
     /** Offered as the category is typed. */
     categories: List<String>,
     onDismiss: () -> Unit,
@@ -50,8 +52,10 @@ fun TrackNameDialog(
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(focusRequester) { focusRequester.requestFocus() }
 
+    val nameLabel = if (nameRequired) R.string.library_rename_label_required else R.string.library_rename_label
+    val canConfirm = !nameRequired || field.text.isNotBlank()
     val confirm = {
-        onConfirm(field.text.takeIf { it != initialName }, category.takeIf { it != initialCategory })
+        if (canConfirm) onConfirm(field.text.takeIf { it != initialName }, category.takeIf { it != initialCategory })
     }
 
     AlertDialog(
@@ -63,7 +67,7 @@ fun TrackNameDialog(
                     value = field,
                     onValueChange = { field = it },
                     singleLine = true,
-                    label = { Text(stringResource(R.string.library_rename_label)) },
+                    label = { Text(stringResource(nameLabel)) },
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                     modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
                 )
@@ -76,7 +80,7 @@ fun TrackNameDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = confirm) { Text(stringResource(R.string.action_save)) }
+            TextButton(onClick = confirm, enabled = canConfirm) { Text(stringResource(R.string.action_save)) }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }

@@ -97,8 +97,9 @@ class TrackRepository(
     val lastRecordingCategory: Flow<String?> = settings.lastRecordingCategory
 
     /**
-     * Copies [uri] into app-private storage and indexes it. Returns the row id. Named by its
-     * `<name>`, else by the file it arrived as; from then on only the row is.
+     * Copies [uri] into app-private storage and indexes it, a routes-only file as a track.
+     * Returns the row id. Named by its `<name>`, else by the file it arrived as; from then on
+     * only the row is.
      *
      * @param reuseIdentical returns the existing row instead when a track's file has the same
      *   bytes, so opening a shared file twice doesn't add it twice. A deliberate import always copies.
@@ -114,13 +115,15 @@ class TrackRepository(
                 }
                 if (reuseIdentical) identicalTrack(staged)?.let { return@runCancellable it }
                 val track = parse(staged.inputStream(), arrivedAs)
-                if (!track.points.let { points -> (0 until points.size).all(points::hasTime) }) {
-                    throw TrackLoadException.Untimed("Points without times in $arrivedAs")
-                }
+                // Kept as a track, so trim and export needn't handle routes.
+                if (track.isRoute) writeAtomically(staged) { writer.write(track, it) }
+                val profile = TrackAnalyzer.analyze(track)
                 val entity = newEntity(
                     track,
-                    TrackAnalyzer.analyze(track),
-                    name = track.name ?: arrivedAs.withoutGpxSuffix().asTrackName(),
+                    profile,
+                    // Untimed, it has no start to be titled by: ".gpx" alone still names it.
+                    name = track.name ?: arrivedAs.withoutGpxSuffix().asTrackName()
+                        ?: arrivedAs.asTrackName().takeIf { profile.stats.startedAt == null },
                     category = categoryAsSpelt(track.type),
                     color = track.displayColor?.let(RouteColor::ofGarmin),
                 )
@@ -300,13 +303,14 @@ class TrackRepository(
 
     /**
      * Renames a track and sets its category; null leaves either as it is. A blank [name] clears
-     * it, titling the track by its start; a blank [category] makes it uncategorised. The row's
-     * alone: [writeOut] puts both in a file as it leaves.
+     * it, titling the track by its start, and is ignored for a track without one; a blank
+     * [category] makes it uncategorised. The row's alone: [writeOut] puts both in a file as it leaves.
      */
     suspend fun rename(id: Long, name: String?, category: String? = null): Result<Unit> = withContext(io) {
         runCancellable {
             if (category != null) dao.setCategory(id, categoryAsSpelt(category, except = id))
-            if (name != null) dao.setTrackName(id, name.asTrackName())
+            val named = name?.asTrackName()
+            if (name != null && (named != null || entity(id).startedAtEpochMillis != null)) dao.setTrackName(id, named)
         }.recoverFailure()
     }
 
@@ -450,8 +454,7 @@ class TrackRepository(
     private fun summaryOf(track: Track, profile: TrackProfile): TrackSummary {
         val stats = profile.stats
         return TrackSummary(
-            // Imports are refused without times and recordings always have them, as does any part of either.
-            startedAtEpochMillis = checkNotNull(stats.startedAt) { "A track without a start" }.toEpochMilli(),
+            startedAtEpochMillis = stats.startedAt?.toEpochMilli(),
             distanceMeters = stats.distanceMeters,
             totalSeconds = stats.totalDurationSeconds,
             bounds = checkNotNull(track.points.bounds()) { "Summarising an empty track" },

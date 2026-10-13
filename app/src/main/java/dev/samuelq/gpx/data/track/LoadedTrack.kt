@@ -31,9 +31,6 @@ sealed class TrackLoadException(message: String, cause: Throwable? = null) : Exc
     /** No track points, e.g. waypoint-only files. */
     class Empty(message: String) : TrackLoadException(message)
 
-    /** A point without a time, e.g. a planned route: speed, duration and the title need them. */
-    class Untimed(message: String) : TrackLoadException(message)
-
     class TooLarge(message: String, cause: Throwable? = null) : TrackLoadException(message, cause)
 }
 

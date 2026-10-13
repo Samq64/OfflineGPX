@@ -70,18 +70,33 @@ class GpxParserTest {
     }
 
     @Test
-    fun `a route alone is no track`() {
+    fun `routes alone are read, a segment each`() {
         val track = parse(
             """
-            <gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1"><rte>
-              <name>Planned</name>
-              <rtept lat="47.0" lon="8.0"><ele>400</ele></rtept>
-            </rte></gpx>
+            <gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1"
+                xmlns:gpxx="http://www.garmin.com/xmlschemas/GpxExtensions/v3">
+              <rte>
+                <name>Planned</name>
+                <desc>Over the pass</desc>
+                <type>hiking</type>
+                <extensions><gpxx:RouteExtension><gpxx:DisplayColor>Magenta</gpxx:DisplayColor></gpxx:RouteExtension></extensions>
+                <rtept lat="47.0" lon="8.0"><ele>400</ele></rtept>
+                <rtept lat="47.1" lon="8.0"/>
+              </rte>
+              <rte><name>Second</name><rtept lat="47.2" lon="8.0"/></rte>
+            </gpx>
             """.trimIndent(),
         )
 
-        assertNull(track.name)
-        assertTrue(track.isEmpty)
+        assertTrue(track.isRoute)
+        assertEquals("Planned", track.name)
+        assertEquals("Over the pass", track.description)
+        assertEquals("hiking", track.type)
+        assertEquals("Magenta", track.displayColor)
+        assertEquals(3, track.points.size)
+        assertEquals(2, track.points.segmentCount)
+        assertEquals(400.0, track.points[0].elevation!!, 1e-9)
+        assertNull(track.points[0].time)
     }
 
     @Test
