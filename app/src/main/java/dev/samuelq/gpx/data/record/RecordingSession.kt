@@ -36,6 +36,9 @@ internal class RecordingSession(private val clock: () -> Long) {
     private var lastAccuracyMeters: Double? = null
     private val waypoints = mutableListOf<Waypoint>()
 
+    /** Where the next waypoint goes, from when it was asked for rather than named. */
+    private var marked: TrackPoint? = null
+
     /** First logged point, on [clock]; the recording starts where its data does. */
     private var startedAt: Long? = null
 
@@ -153,10 +156,16 @@ internal class RecordingSession(private val clock: () -> Long) {
         return true
     }
 
-    /** At the last known position, stamped [at] (the button press). Null before the first fix. */
+    /** Holds the last known position at [at] (the button press) for the next [addWaypoint]. */
+    fun markWaypoint(at: Instant) {
+        marked = lastPoint?.copy(time = at)
+    }
+
+    /** Where [markWaypoint] held, else the last known position at [at]. Null before the first fix. */
     fun addWaypoint(name: String, at: Instant): Waypoint? {
-        val point = lastPoint ?: return null
-        val waypoint = Waypoint(point.copy(time = at), name.trim().takeIf(String::isNotEmpty))
+        val point = marked ?: lastPoint?.copy(time = at) ?: return null
+        marked = null
+        val waypoint = Waypoint(point, name.trim().takeIf(String::isNotEmpty))
         waypoints += waypoint
         return waypoint
     }

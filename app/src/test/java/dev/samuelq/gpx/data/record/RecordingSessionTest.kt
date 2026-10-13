@@ -121,6 +121,22 @@ class RecordingSessionTest {
     }
 
     @Test
+    fun `a waypoint goes where it was asked for, not where it was named`() {
+        val session = session()
+        session.onFix(fix(0, 0.0))
+        session.markWaypoint(origin.plusSeconds(5))
+        session.onFix(fix(30, 260.0))
+
+        val waypoint = assertNotNull(session.addWaypoint("view", origin.plusSeconds(40)))
+        assertEquals(fix(0, 0.0).latitude, waypoint.point.latitude)
+        assertEquals(origin.plusSeconds(5), waypoint.point.time)
+
+        // Used once: the next is at the latest position.
+        val next = assertNotNull(session.addWaypoint("", origin.plusSeconds(50)))
+        assertEquals(fix(30, 260.0).latitude, next.point.latitude)
+    }
+
+    @Test
     fun `a waypoint can be added while paused, where the ride stopped`() {
         val session = session()
         session.onFix(fix(0, 0.0))

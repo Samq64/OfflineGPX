@@ -72,6 +72,8 @@ fun RecordingSheet(
     onPause: () -> Unit,
     onResume: () -> Unit,
     onStop: () -> Unit,
+    /** As the waypoint dialog opens, fixing where the waypoint goes. */
+    onMarkWaypoint: () -> Unit,
     /** [name] may be blank. */
     onAddWaypoint: (name: String) -> Unit,
 ) {
@@ -88,7 +90,7 @@ fun RecordingSheet(
         onPeekHeightChange = onPeekHeightChange,
         pointCount = state.pointCount,
     ) {
-        RecordingHeader(state, colorSlot, onColor, onPause, onResume, onStop, onAddWaypoint)
+        RecordingHeader(state, colorSlot, onColor, onPause, onResume, onStop, onMarkWaypoint, onAddWaypoint)
     }
 }
 
@@ -101,6 +103,7 @@ private fun RecordingHeader(
     onPause: () -> Unit,
     onResume: () -> Unit,
     onStop: () -> Unit,
+    onMarkWaypoint: () -> Unit,
     onAddWaypoint: (name: String) -> Unit,
 ) {
     val formatters = LocalFormatters.current
@@ -171,7 +174,13 @@ private fun RecordingHeader(
         ) {
             // Apart from pause and stop: it marks the recording rather than controlling it.
             // Disabled, not hidden, before the first fix so the layout doesn't shift.
-            OutlinedButton(onClick = { addingWaypoint = true }, enabled = state.lastPoint != null) {
+            OutlinedButton(
+                onClick = {
+                    onMarkWaypoint()
+                    addingWaypoint = true
+                },
+                enabled = state.lastPoint != null,
+            ) {
                 Text(stringResource(R.string.record_add_waypoint))
             }
 

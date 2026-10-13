@@ -46,6 +46,7 @@ class RecordingViewModel(private val controller: RecordingController, tracks: Tr
     fun cancelStop() = controller.cancelStop()
     fun stop(label: TrackLabel) = controller.stop(label)
     fun discard(label: TrackLabel) = controller.discard(label)
+    fun markWaypoint() = controller.markWaypoint()
     fun addWaypoint(name: String) = controller.addWaypoint(name)
     fun setColor(slot: Int) = controller.setColor(slot)
 

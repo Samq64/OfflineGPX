@@ -85,6 +85,7 @@ class RecordingService : Service() {
                     ACTION_RELEASE -> release()
                     ACTION_STOP -> stop(save = true, label = intent.label())
                     ACTION_DISCARD -> stop(save = false, label = intent.label())
+                    ACTION_MARK_WAYPOINT -> session?.markWaypoint(Instant.now())
                     ACTION_WAYPOINT -> addWaypoint(intent.getStringExtra(EXTRA_WAYPOINT_NAME) ?: "")
                     ACTION_COLOR -> setColor(intent.getIntExtra(EXTRA_COLOR, 0))
                 }
@@ -344,6 +345,7 @@ class RecordingService : Service() {
         internal const val ACTION_RELEASE = "dev.samuelq.gpx.RECORD_RELEASE"
         internal const val ACTION_STOP = "dev.samuelq.gpx.RECORD_STOP"
         internal const val ACTION_DISCARD = "dev.samuelq.gpx.RECORD_DISCARD"
+        internal const val ACTION_MARK_WAYPOINT = "dev.samuelq.gpx.RECORD_MARK_WAYPOINT"
         internal const val ACTION_WAYPOINT = "dev.samuelq.gpx.RECORD_WAYPOINT"
         internal const val ACTION_COLOR = "dev.samuelq.gpx.RECORD_COLOR"
         internal const val EXTRA_NAME = "name"

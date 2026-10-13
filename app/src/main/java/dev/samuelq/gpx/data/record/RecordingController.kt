@@ -131,7 +131,10 @@ class RecordingController(context: Context, private val locationSource: Location
         }
     }
 
-    /** [name] may be blank. */
+    /** As its dialog opens, so the waypoint is where it was asked for, not where it's named. */
+    fun markWaypoint() = send(RecordingService.ACTION_MARK_WAYPOINT)
+
+    /** At the last [markWaypoint], if any. [name] may be blank. */
     fun addWaypoint(name: String) = send(RecordingService.ACTION_WAYPOINT) {
         putExtra(RecordingService.EXTRA_WAYPOINT_NAME, name)
     }

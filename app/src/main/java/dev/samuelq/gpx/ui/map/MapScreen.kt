@@ -614,6 +614,7 @@ fun MapScreen(
                         onPause = recorder::pause,
                         onResume = recorder::resume,
                         onStop = recorder::requestStop,
+                        onMarkWaypoint = recorder::markWaypoint,
                         onAddWaypoint = recorder::addWaypoint,
                     )
                 }
