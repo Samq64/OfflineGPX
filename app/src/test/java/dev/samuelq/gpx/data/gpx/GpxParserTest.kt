@@ -83,7 +83,11 @@ class GpxParserTest {
                 <rtept lat="47.0" lon="8.0"><ele>400</ele></rtept>
                 <rtept lat="47.1" lon="8.0"/>
               </rte>
-              <rte><name>Second</name><rtept lat="47.2" lon="8.0"/></rte>
+              <rte>
+                <name>Second</name><desc>Back</desc><type>cycling</type><number>2</number>
+                <extensions><gpxx:RouteExtension><gpxx:DisplayColor>Red</gpxx:DisplayColor></gpxx:RouteExtension></extensions>
+                <rtept lat="47.2" lon="8.0"/>
+              </rte>
             </gpx>
             """.trimIndent(),
         )

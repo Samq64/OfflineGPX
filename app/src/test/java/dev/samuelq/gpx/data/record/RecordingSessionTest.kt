@@ -137,6 +137,16 @@ class RecordingSessionTest {
     }
 
     @Test
+    fun `a waypoint asked for before the first fix goes where it's named`() {
+        val session = session()
+        session.markWaypoint(origin)
+        session.onFix(fix(0, 0.0))
+
+        val at = origin.plusSeconds(10)
+        assertEquals(at, assertNotNull(session.addWaypoint("", at)).point.time)
+    }
+
+    @Test
     fun `a waypoint can be added while paused, where the ride stopped`() {
         val session = session()
         session.onFix(fix(0, 0.0))
