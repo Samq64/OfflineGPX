@@ -36,3 +36,6 @@ sealed class TrackLoadException(message: String, cause: Throwable? = null) : Exc
 
 /** What undoing a trim needs: the replaced file and summary. */
 class TrackEdit internal constructor(val id: Long, internal val backup: File, internal val before: TrackSummary)
+
+/** An imported track: [isNew] unless a file from another app had the same bytes as a saved one. */
+class ReceivedTrack(val id: Long, val isNew: Boolean)

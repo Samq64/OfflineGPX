@@ -10,7 +10,6 @@
     <string name="action_manage_named">Manage %1$s</string>
     <string name="action_not_now">Not now</string>
     <string name="action_rename">Rename</string>
-    <string name="action_retry">Try again</string>
     <string name="action_save">Save</string>
     <string name="action_undo">Undo</string>
 
@@ -42,6 +41,15 @@
 
     <!-- %1$s is a track or map name. -->
     <string name="deleted_named">Deleted “%1$s”.</string>
+
+    <!-- Files opened or shared from other apps, tracks and maps together; tracks alone say library_imported_all. -->
+    <plurals name="incoming_imported_all">
+        <item quantity="one">Imported %1$d file.</item>
+        <item quantity="other">Imported %1$d files.</item>
+    </plurals>
+    <string name="incoming_track_duplicate">Track already imported.</string>
+    <!-- Neither GPX nor a map; library imports, GPX only, say track_error_invalid. -->
+    <string name="incoming_unsupported">This file isn\'t a GPX track or a map.</string>
 
     <string name="library_clear_selection">Clear selection</string>
     <string name="library_color">Color: %1$s</string>
@@ -219,6 +227,11 @@
     <string name="settings_maps_failed_unreadable">Couldn\'t read that file.</string>
     <string name="settings_maps_import">Import map</string>
     <string name="settings_maps_imported">Map imported.</string>
+    <!-- Two or more maps picked together, all imported; otherwise library_imported_some or _none. -->
+    <plurals name="settings_maps_imported_all">
+        <item quantity="one">Imported %1$d map.</item>
+        <item quantity="other">Imported %1$d maps.</item>
+    </plurals>
     <string name="settings_maps_importing">Copying map…</string>
     <string name="settings_maps_name">Map name</string>
     <string name="settings_maps_rename_failed">Couldn\'t rename that map.</string>
@@ -257,9 +270,7 @@
     <string name="track_error_empty">This GPX file has no track points.</string>
     <string name="track_error_too_large">This GPX file is too large.</string>
     <string name="track_error_invalid">This file isn\'t valid GPX.</string>
-    <string name="track_error_title">Couldn\'t open this file</string>
-    <!-- Under track_error_title, which already says it couldn't be opened. -->
-    <string name="track_error_unreadable">It may have been moved, renamed or deleted.</string>
+    <string name="track_error_unreadable">Couldn\'t read that file.</string>
     <string name="track_hidden">Hid “%1$s”.</string>
     <string name="track_hide">Hide</string>
     <string name="track_loading">Reading track…</string>

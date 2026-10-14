@@ -93,7 +93,7 @@ internal fun sameBytes(a: File, b: File): Boolean {
 }
 
 /** Fills [buffer] unless the stream ends first; the bytes read. */
-private fun InputStream.readChunk(buffer: ByteArray): Int {
+internal fun InputStream.readChunk(buffer: ByteArray): Int {
     var filled = 0
     while (filled < buffer.size) {
         val read = read(buffer, filled, buffer.size - filled)

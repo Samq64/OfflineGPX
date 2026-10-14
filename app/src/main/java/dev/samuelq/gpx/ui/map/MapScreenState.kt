@@ -20,7 +20,7 @@ import dev.samuelq.gpx.ui.track.TrackRef
 @Stable
 class MapScreenState(
     private val focusedId: Long?,
-    private val recording: Boolean,
+    val recording: Boolean,
     private val kept: Kept,
     private val trim: MutableState<IntRange?>,
     private val focus: (TrackRef?) -> Unit,
@@ -121,12 +121,7 @@ class MapScreenState(
         return true
     }
 
-    fun frames(trackId: Long) = when (val ref = framing) {
-        is TrackRef.Saved -> ref.id == trackId
-        // Imported as it opened, so its id wasn't known when asked for.
-        is TrackRef.Shared -> true
-        null -> false
-    }
+    fun frames(trackId: Long) = (framing as? TrackRef.Saved)?.id == trackId
 
     /** A tap on [trackId]'s line, nearest its point [index]. */
     fun tapLine(trackId: Long, index: Int) {

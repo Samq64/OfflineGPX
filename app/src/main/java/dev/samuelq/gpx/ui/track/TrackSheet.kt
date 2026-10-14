@@ -532,32 +532,6 @@ internal fun TrackSheetLoading(modifier: Modifier = Modifier) {
 }
 
 @Composable
-internal fun TrackSheetError(messageRes: Int, onRetry: () -> Unit, onClose: () -> Unit, modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .heightIn(min = TrackSheetPeekHeight)
-            .padding(horizontal = EdgePadding)
-            .navigationBarsPadding(),
-    ) {
-        Text(
-            text = stringResource(R.string.track_error_title),
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.semantics { heading() },
-        )
-        Text(
-            text = stringResource(messageRes),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Row {
-            TextButton(onClick = onRetry) { Text(stringResource(R.string.action_retry)) }
-            TextButton(onClick = onClose) { Text(stringResource(R.string.track_close)) }
-        }
-    }
-}
-
-@Composable
 private fun AxisSelector(
     useTimeAxis: Boolean,
     onChange: (Boolean) -> Unit,

@@ -6,6 +6,7 @@ import android.os.storage.StorageManager
 import androidx.core.content.getSystemService
 import dev.samuelq.gpx.data.copyInto
 import dev.samuelq.gpx.data.displayName
+import dev.samuelq.gpx.data.readChunk
 import dev.samuelq.gpx.data.size
 import dev.samuelq.gpx.data.uniqueFile
 import dev.samuelq.gpx.data.uniqueName
@@ -20,6 +21,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.oscim.core.BoundingBox
 import org.oscim.tiling.source.mapfile.header.MapFileHeader
@@ -136,18 +139,23 @@ class MapStore(
         _maps.value = found.filter { it.file.name !in pendingDelete }
     }
 
+    /** One import at a time: Settings and a file from another app can both start one. */
+    private val importing = Mutex()
+
     /**
      * Copies [uri] into staging and validates the copy, deleting it on failure. Validated
      * after copying since SAF doesn't promise a second open returns the same bytes.
      */
-    suspend fun import(uri: Uri): MapImportResult = withContext(io) {
+    suspend fun import(uri: Uri): MapImportResult = importing.withLock { withContext(io) { importLocked(uri) } }
+
+    private suspend fun importLocked(uri: Uri): MapImportResult {
         // Only one import is ever pending, so anything here is a leftover.
         staging.listFiles()?.forEach { it.delete() }
 
         val resolver = appContext.contentResolver
         // Before copying, so a map too big doesn't fill the disk first.
         if (resolver.size(uri)?.let(::reserve) == false) {
-            return@withContext MapImportResult.Failed(MapImportError.NO_SPACE)
+            return MapImportResult.Failed(MapImportError.NO_SPACE)
         }
         val destination = uniqueFile(staging, resolver.displayName(uri), EXTENSION, fallback = "map")
         val copied = try {
@@ -159,20 +167,34 @@ class MapStore(
         }
         if (!copied) {
             destination.delete()
-            return@withContext MapImportResult.Failed(MapImportError.UNREADABLE)
+            return MapImportResult.Failed(MapImportError.UNREADABLE)
         }
 
         val map = OfflineMap.read(destination)
         if (map == null) {
             destination.delete()
-            return@withContext MapImportResult.Failed(MapImportError.NOT_A_MAP_FILE)
+            return MapImportResult.Failed(MapImportError.NOT_A_MAP_FILE)
         }
 
         if (_maps.value.any { it.isSameAs(map) }) {
             destination.delete()
-            return@withContext MapImportResult.Failed(MapImportError.ALREADY_IMPORTED)
+            return MapImportResult.Failed(MapImportError.ALREADY_IMPORTED)
         }
-        install(map)
+        return install(map)
+    }
+
+    /** Whether [uri] starts as a mapsforge map does; false if it can't be read. */
+    suspend fun holdsMap(uri: Uri): Boolean = withContext(io) {
+        try {
+            appContext.contentResolver.openInputStream(uri)?.use { input ->
+                val head = ByteArray(MAGIC.size)
+                input.readChunk(head) == head.size && head.contentEquals(MAGIC)
+            } == true
+        } catch (_: IOException) {
+            false
+        } catch (_: SecurityException) {
+            false
+        }
     }
 
     /** Has the system clear cache, if it must, to make room for [bytes]. False if it can't. */
@@ -244,6 +266,9 @@ class MapStore(
         private const val DIRECTORY = "maps"
         const val EXTENSION = "map"
         private const val STAGING = "map-staging"
+
+        /** Every mapsforge file's first bytes. */
+        private val MAGIC = "mapsforge binary OSM".toByteArray(Charsets.US_ASCII)
     }
 }
 

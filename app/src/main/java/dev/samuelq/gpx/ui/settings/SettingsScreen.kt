@@ -131,8 +131,8 @@ fun SettingsScreen(
     val snackbarHostState = snackbars.host
 
     val importer = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument(),
-    ) { uri -> viewModel.importMap(uri) }
+        ActivityResultContracts.OpenMultipleDocuments(),
+    ) { uris -> viewModel.importMaps(uris) }
     // Once per visit: saved, so returning from the picker or rotating doesn't reopen it.
     var importAsked by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(Unit) {
@@ -188,7 +188,21 @@ fun SettingsScreen(
     }
 
     LaunchedEffect(viewModel) {
-        viewModel.messages.collect { message -> launch { snackbars.say(resources.getString(message.text)) } }
+        viewModel.messages.collect { message ->
+            val text = when (message) {
+                is SettingsMessage -> resources.getString(message.text)
+                is MapsImported -> when (message.imported) {
+                    0 -> resources.getString(R.string.library_import_none)
+                    message.total -> resources.getQuantityString(
+                        R.plurals.settings_maps_imported_all,
+                        message.imported,
+                        message.imported,
+                    )
+                    else -> resources.getString(R.string.library_imported_some, message.imported, message.total)
+                }
+            }
+            launch { snackbars.say(text) }
+        }
     }
 
     Scaffold(

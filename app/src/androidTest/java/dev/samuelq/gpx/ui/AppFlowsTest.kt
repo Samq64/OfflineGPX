@@ -1,7 +1,9 @@
 package dev.samuelq.gpx.ui
 
+import android.content.ContentValues
 import android.content.Intent
 import android.net.Uri
+import android.provider.MediaStore
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToNodeAction
@@ -18,13 +20,17 @@ import dev.samuelq.gpx.MainActivity
 import dev.samuelq.gpx.R
 import dev.samuelq.gpx.container
 import dev.samuelq.gpx.core.model.UnitSystem
+import dev.samuelq.gpx.data.map.OfflineMap
 import dev.samuelq.gpx.data.track.TrackFiles
 import dev.samuelq.gpx.sampleGpx
 import dev.samuelq.gpx.targetContext
 import dev.samuelq.gpx.waitFor
 import java.io.File
+import java.nio.ByteBuffer
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Rule
 import org.junit.Test
@@ -80,13 +86,39 @@ class AppFlowsTest {
         compose.onNodeWithText(string(R.string.library_import)).assertExists()
     }
 
+    /** Into Downloads through MediaStore, so it arrives as another app's content would. */
+    private fun download(name: String, bytes: ByteArray): Uri {
+        val resolver = targetContext.contentResolver
+        val values = ContentValues().apply { put(MediaStore.Downloads.DISPLAY_NAME, name) }
+        val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)!!
+        resolver.openOutputStream(uri)!!.use { it.write(bytes) }
+        downloads += uri
+        return uri
+    }
+
+    private val downloads = mutableListOf<Uri>()
+
+    @After
+    fun deleteDownloads() {
+        downloads.forEach { targetContext.contentResolver.delete(it, null, null) }
+    }
+
+    /** The test map, padded back to the size its header declares, as in OfflineMapTest. */
+    private fun mapBytes(): ByteArray {
+        val bytes = javaClass.classLoader!!.getResourceAsStream("andorra-fragment.map").use { it.readBytes() }
+        return bytes.copyOf(ByteBuffer.wrap(bytes, 28, 8).long.toInt())
+    }
+
+    private fun tracks() = runBlocking { container.trackRepository.tracks.first() }
+
+    private fun waitForText(text: String) = compose.waitUntil(10_000) {
+        compose.onAllNodes(hasText(text), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+    }
+
     @Test
     fun viewIntentImportsTheTrack() {
         val name = "Shared ${System.nanoTime()}"
-        // Under a FileProvider root, as another app's content URI would arrive.
-        val file = File(TrackFiles.dir(targetContext), "incoming-${System.nanoTime()}.gpx")
-        file.writeText(sampleGpx(name = name))
-        val uri = FileProvider.getUriForFile(targetContext, "${targetContext.packageName}.fileprovider", file)
+        val uri = download("incoming-${System.nanoTime()}.gpx", sampleGpx(name = name).toByteArray())
 
         launch(
             Intent(Intent.ACTION_VIEW, uri, targetContext, MainActivity::class.java)
@@ -94,17 +126,80 @@ class AppFlowsTest {
         )
 
         // The rule's own wait: effects run on its dispatcher, which a blocking poll would stall.
-        compose.waitUntil(10_000) {
-            kotlinx.coroutines.runBlocking { container.trackRepository.tracks.first() }.any { it.trackName == name }
-        }
-        compose.waitUntil(10_000) {
-            compose.onAllNodes(hasText(name), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
-        }
-        file.delete()
+        compose.waitUntil(10_000) { tracks().any { it.trackName == name } }
+        waitForText(name)
+        waitForText(targetContext.resources.getQuantityString(R.plurals.library_imported_all, 1, 1))
 
         // In the library too.
         compose.onNodeWithContentDescription(string(R.string.library_title)).performClick()
         scrollLibraryTo(hasText(name))
+    }
+
+    /** As CoMaps shares even one file; a map among them is told apart by its first bytes. */
+    @Test
+    fun sendMultipleAddsTracksAndMaps() {
+        val name = "Multi ${System.nanoTime()}"
+        val uris = arrayListOf(
+            download("multi-${System.nanoTime()}.gpx", sampleGpx(name = name).toByteArray()),
+            download("andorra-${System.nanoTime()}.map", mapBytes()),
+        )
+        val mapsBefore = container.mapStore.maps.value.map { it.file }.toSet()
+
+        launch(
+            Intent(Intent.ACTION_SEND_MULTIPLE, null, targetContext, MainActivity::class.java)
+                .setType("application/octet-stream")
+                .putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),
+        )
+
+        val imported = targetContext.resources.getQuantityString(R.plurals.incoming_imported_all, 2, 2)
+        waitForText(imported)
+        assertTrue(tracks().any { it.trackName == name })
+        val added = container.mapStore.maps.value.filter { it.file !in mapsBefore }
+        assertEquals(1, added.size)
+
+        // Undo takes both back out.
+        compose.onNodeWithText(string(R.string.action_undo)).performClick()
+        compose.waitUntil(10_000) {
+            tracks().none { it.trackName == name } &&
+                container.mapStore.maps.value.none { it.file in added.map(OfflineMap::file) }
+        }
+    }
+
+    @Test
+    fun aFileThatIsNeitherGpxNorAMapSaysSo() {
+        val before = tracks().size
+        val uri = download("notes-${System.nanoTime()}.gpx", "not xml".toByteArray())
+        launch(
+            Intent(Intent.ACTION_SEND, null, targetContext, MainActivity::class.java)
+                .setType("application/gpx+xml")
+                .putExtra(Intent.EXTRA_STREAM, uri)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),
+        )
+        waitForText(string(R.string.incoming_unsupported))
+        assertEquals(before, tracks().size)
+    }
+
+    /** An explicit intent skips the filters; our own files mustn't be read on another app's say. */
+    @Test
+    fun ownFilesAreIgnored() {
+        val file = File(TrackFiles.dir(targetContext), "own-${System.nanoTime()}.gpx")
+        file.writeText(sampleGpx(name = "Own ${System.nanoTime()}"))
+        val before = tracks().size
+        try {
+            listOf(
+                FileProvider.getUriForFile(targetContext, "${targetContext.packageName}.fileprovider", file),
+                Uri.fromFile(file),
+            ).forEach { uri ->
+                launch(Intent(Intent.ACTION_VIEW, uri, targetContext, MainActivity::class.java))
+                compose.waitForIdle()
+                Thread.sleep(1_000)
+                assertEquals(before, tracks().size)
+                scenario?.close()
+            }
+        } finally {
+            file.delete()
+        }
     }
 
     @Test

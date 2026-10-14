@@ -106,12 +106,15 @@ class TrackRepositoryTest {
         val name = "shared-${System.nanoTime()}.gpx"
         val file = fixture(name, sampleGpx())
         runBlocking {
-            val first = repository.import(Uri.fromFile(file), reuseIdentical = true).getOrThrow()
+            val received = repository.receive(Uri.fromFile(file)).getOrThrow()
+            assertTrue(received.isNew)
+            val first = received.id
             // A rename leaves the file as it came, so it still matches.
             repository.rename(first, "Renamed").getOrThrow()
             val before = trackFiles()
-            val again = repository.import(Uri.fromFile(file), reuseIdentical = true).getOrThrow()
-            assertEquals(first, again)
+            val again = repository.receive(Uri.fromFile(file)).getOrThrow()
+            assertEquals(first, again.id)
+            assertFalse(again.isNew)
             assertEquals(before, trackFiles())
 
             // A deliberate import always copies.

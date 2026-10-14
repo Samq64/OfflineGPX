@@ -99,39 +99,46 @@ class TrackRepository(
     /**
      * Copies [uri] into app-private storage and indexes it, a routes-only file as a track.
      * Returns the row id. Named by its `<name>`, else by the file it arrived as; from then on
-     * only the row is.
-     *
-     * @param reuseIdentical returns the existing row instead when a track's file has the same
-     *   bytes, so opening a shared file twice doesn't add it twice. A deliberate import always copies.
+     * only the row is. A deliberate import always copies; see [receive] for files from other apps.
      */
-    suspend fun import(uri: Uri, reuseIdentical: Boolean = false): Result<Long> = withContext(io) {
-        runCancellable {
-            val arrivedAs = displayNameOf(uri)
-            val staged = stagedFile()
-            // Gone once moved in; deleted on any failure, so nothing unindexed is left behind.
-            try {
-                if (!appContext.contentResolver.copyInto(uri, staged)) {
-                    throw TrackLoadException.Unreadable("No provider could open $uri")
-                }
-                if (reuseIdentical) identicalTrack(staged)?.let { return@runCancellable it }
-                val track = parse(staged.inputStream(), arrivedAs)
-                // Kept as a track, so trim and export needn't handle routes.
-                if (track.isRoute) writeAtomically(staged) { writer.write(track, it) }
-                val profile = TrackAnalyzer.analyze(track)
-                val entity = newEntity(
-                    track,
-                    profile,
-                    // Untimed, it has no start to be titled by: ".gpx" alone still names it.
-                    name = track.name ?: arrivedAs.withoutGpxSuffix().asTrackName()
-                        ?: arrivedAs.asTrackName().takeIf { profile.stats.startedAt == null },
-                    category = categoryAsSpelt(track.type),
-                    color = track.displayColor?.let(RouteColor::ofGarmin),
-                )
-                insert(entity, staged, track)
-            } finally {
-                staged.delete()
+    suspend fun import(uri: Uri): Result<Long> = withContext(io) {
+        runCancellable { copyIn(uri, reuseIdentical = false).id }.recoverFailure()
+    }
+
+    /**
+     * Like [import], but returns the existing row when a track's file has the same bytes, so
+     * opening a shared file twice doesn't add it twice.
+     */
+    suspend fun receive(uri: Uri): Result<ReceivedTrack> = withContext(io) {
+        runCancellable { copyIn(uri, reuseIdentical = true) }.recoverFailure()
+    }
+
+    private suspend fun copyIn(uri: Uri, reuseIdentical: Boolean): ReceivedTrack {
+        val arrivedAs = displayNameOf(uri)
+        val staged = stagedFile()
+        // Gone once moved in; deleted on any failure, so nothing unindexed is left behind.
+        try {
+            if (!appContext.contentResolver.copyInto(uri, staged)) {
+                throw TrackLoadException.Unreadable("No provider could open $uri")
             }
-        }.recoverFailure()
+            if (reuseIdentical) identicalTrack(staged)?.let { return ReceivedTrack(it, isNew = false) }
+            val track = parse(staged.inputStream(), arrivedAs)
+            // Kept as a track, so trim and export needn't handle routes.
+            if (track.isRoute) writeAtomically(staged) { writer.write(track, it) }
+            val profile = TrackAnalyzer.analyze(track)
+            val entity = newEntity(
+                track,
+                profile,
+                // Untimed, it has no start to be titled by: ".gpx" alone still names it.
+                name = track.name ?: arrivedAs.withoutGpxSuffix().asTrackName()
+                    ?: arrivedAs.asTrackName().takeIf { profile.stats.startedAt == null },
+                category = categoryAsSpelt(track.type),
+                color = track.displayColor?.let(RouteColor::ofGarmin),
+            )
+            return ReceivedTrack(insert(entity, staged, track), isNew = true)
+        } finally {
+            staged.delete()
+        }
     }
 
     /** A live track whose file matches [copy] byte for byte. A rename leaves the file as it came. */

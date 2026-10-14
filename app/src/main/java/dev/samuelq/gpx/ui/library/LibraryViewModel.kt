@@ -39,7 +39,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 sealed interface LibraryEvent {
-    data class Open(val id: Long) : LibraryEvent
+    /** One track picked and imported, to open on the map and say so there. */
+    data class Imported(val id: Long) : LibraryEvent
 
     /** Words alone, with nothing to act on. */
     data class Say(@param:StringRes val text: Int) : LibraryEvent
@@ -152,7 +153,7 @@ class LibraryViewModel(
         viewModelScope.launch {
             if (uris.size == 1) {
                 repository.import(uris.single()).fold(
-                    onSuccess = { _events.send(LibraryEvent.Open(it)) },
+                    onSuccess = { _events.send(LibraryEvent.Imported(it)) },
                     onFailure = { _events.send(LibraryEvent.Say(R.string.library_import_failed)) },
                 )
                 return@launch

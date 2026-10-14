@@ -11,16 +11,20 @@ import dev.samuelq.gpx.core.analysis.TrackAnalyzer
 import dev.samuelq.gpx.core.analysis.TrackProfile
 import dev.samuelq.gpx.core.model.TrackPoints
 import dev.samuelq.gpx.data.db.TrackEntity
+import dev.samuelq.gpx.data.map.MapImportResult
 import dev.samuelq.gpx.data.map.MapStore
 import dev.samuelq.gpx.data.map.OfflineMap
 import dev.samuelq.gpx.data.record.RecordingController
 import dev.samuelq.gpx.data.settings.SettingsRepository
 import dev.samuelq.gpx.data.track.LoadedTrack
+import dev.samuelq.gpx.data.track.ReceivedTrack
 import dev.samuelq.gpx.data.track.TrackEdit
+import dev.samuelq.gpx.data.track.TrackLoadException
 import dev.samuelq.gpx.data.track.TrackRepository
 import dev.samuelq.gpx.data.track.title
 import dev.samuelq.gpx.di.appContainer
 import dev.samuelq.gpx.ui.library.sortedFor
+import dev.samuelq.gpx.ui.settings.message
 import dev.samuelq.gpx.ui.track.FocusedTrack
 import dev.samuelq.gpx.ui.track.TrackRef
 import dev.samuelq.gpx.ui.track.toTrackMessageRes
@@ -57,6 +61,17 @@ internal sealed interface MapMessage {
 
     /** A trim of [name], undone with [MapViewModel.undoEdit], else [MapViewModel.commitEdit]. */
     class Edited(val edit: TrackEdit, val name: String) : MapMessage
+
+    /**
+     * [total] files imported, from another app or picked, of which these were added or already
+     * saved; undone with [MapViewModel.undoImport]. [failure] says why, when a lone file wasn't.
+     */
+    class Imported(
+        val tracks: List<ReceivedTrack>,
+        val maps: List<OfflineMap>,
+        val total: Int,
+        @param:StringRes val failure: Int?,
+    ) : MapMessage
 }
 
 /** Visible tracks, with their geometry once it has been read off disk. */
@@ -77,7 +92,7 @@ internal data class MapUiState(
 class MapViewModel(
     private val repository: TrackRepository,
     controller: RecordingController,
-    mapStore: MapStore,
+    private val mapStore: MapStore,
     settings: SettingsRepository,
     /** For analysing the recording; a parameter so tests can substitute one. */
     analysis: CoroutineDispatcher = Dispatchers.Default,
@@ -167,22 +182,63 @@ class MapViewModel(
             _focused.value = FocusedTrack.None
             return
         }
-        if (ref == requested && _focused.value !is FocusedTrack.Failed) return
+        if (ref == requested) return
         requested = ref
         reload()
     }
 
-    fun retryFocus() {
-        if (requested != null) reload()
-    }
-
-    /** Imports a `.gpx` file from the empty state and focuses it. */
+    /** Imports a `.gpx` file from the empty state, then opens and announces it. */
     fun importTrack(uri: Uri) {
         viewModelScope.launch {
             repository.import(uri).fold(
-                onSuccess = { focus(TrackRef.Saved(it)) },
+                onSuccess = ::announceImport,
                 onFailure = { _messages.trySend(MapMessage.Say(R.string.library_import_failed)) },
             )
+        }
+    }
+
+    /** Adds files from other apps, each a map by its first bytes or else a track, in turn. */
+    fun receive(uris: List<Uri>) {
+        viewModelScope.launch {
+            val tracks = mutableListOf<ReceivedTrack>()
+            val maps = mutableListOf<OfflineMap>()
+            var failure: Int? = null
+            for (uri in uris) {
+                if (mapStore.holdsMap(uri)) {
+                    when (val result = mapStore.import(uri)) {
+                        is MapImportResult.Imported -> maps += result.map
+                        is MapImportResult.Failed -> failure = result.error.message.text
+                    }
+                } else {
+                    repository.receive(uri).fold(
+                        onSuccess = { tracks += it },
+                        onFailure = {
+                            failure = if (it is TrackLoadException.Invalid) {
+                                R.string.incoming_unsupported
+                            } else {
+                                it.toTrackMessageRes()
+                            }
+                        },
+                    )
+                }
+            }
+            _messages.trySend(MapMessage.Imported(tracks, maps, uris.size, failure))
+        }
+    }
+
+    /** Opens a track just picked and imported, and says so as for a shared one. */
+    fun announceImport(id: Long) {
+        _messages.trySend(MapMessage.Imported(listOf(ReceivedTrack(id, isNew = true)), emptyList(), 1, null))
+    }
+
+    /** Removes what [imported] added; tracks already saved before stay. */
+    internal fun undoImport(imported: MapMessage.Imported) {
+        val added = imported.tracks.filter { it.isNew }.map { it.id }
+        repository.deleteLater(added)
+        repository.commitDelete(added)
+        imported.maps.forEach {
+            mapStore.deleteLater(it)
+            mapStore.commitDelete(it)
         }
     }
 
@@ -202,22 +258,17 @@ class MapViewModel(
     }
 
     private fun reload() {
-        val ref = requested ?: return
+        val ref = requested as? TrackRef.Saved ?: return
         focusJob?.cancel()
         _focused.value = FocusedTrack.Loading
         focusJob = viewModelScope.launch {
-            val id = when (ref) {
-                is TrackRef.Saved -> ref.id
-                // Into the library, then opened like any saved track; a retry imports again.
-                is TrackRef.Shared -> repository.import(ref.uri, reuseIdentical = true).getOrElse {
-                    _focused.value = FocusedTrack.Failed(it.toTrackMessageRes())
-                    return@launch
-                }.also { requested = TrackRef.Saved(it) }
-            }
-
-            _focused.value = repository.open(id).fold(
+            _focused.value = repository.open(ref.id).fold(
                 onSuccess = FocusedTrack::Ready,
-                onFailure = { FocusedTrack.Failed(it.toTrackMessageRes()) },
+                onFailure = {
+                    requested = null
+                    _messages.trySend(MapMessage.Say(it.toTrackMessageRes()))
+                    FocusedTrack.None
+                },
             )
         }
     }

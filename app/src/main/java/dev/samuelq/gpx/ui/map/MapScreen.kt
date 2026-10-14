@@ -1,5 +1,6 @@
 package dev.samuelq.gpx.ui.map
 
+import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -97,7 +98,6 @@ import dev.samuelq.gpx.ui.track.TrackActions
 import dev.samuelq.gpx.ui.track.TrackNameDialog
 import dev.samuelq.gpx.ui.track.TrackRef
 import dev.samuelq.gpx.ui.track.TrackSheet
-import dev.samuelq.gpx.ui.track.TrackSheetError
 import dev.samuelq.gpx.ui.track.TrackSheetLoading
 import dev.samuelq.gpx.ui.track.TrackSheetPeekHeight
 import dev.samuelq.gpx.ui.track.TrimControls
@@ -112,6 +112,12 @@ import kotlinx.coroutines.launch
 fun MapScreen(
     pendingFocus: TrackRef?,
     onFocusConsumed: () -> Unit,
+    /** A track the list just imported. */
+    pendingImported: Long?,
+    onImportedConsumed: () -> Unit,
+    /** Files opened or shared from other apps, to add. */
+    incomingFiles: List<Uri>,
+    onIncomingConsumed: () -> Unit,
     /** A map's file name, from settings. */
     pendingMap: String?,
     onMapConsumed: () -> Unit,
@@ -237,7 +243,7 @@ fun MapScreen(
     }
 
     LaunchedEffect(focused) {
-        if (focused is FocusedTrack.None || focused is FocusedTrack.Failed) screen.framing = null
+        if (focused is FocusedTrack.None) screen.framing = null
     }
 
     LaunchedEffect(pendingFocus) {
@@ -245,6 +251,19 @@ fun MapScreen(
             if (!screen.open(it)) say(resources.getString(R.string.record_stop_to_open))
             onFocusConsumed()
         }
+    }
+
+    LaunchedEffect(pendingImported) {
+        pendingImported?.let {
+            viewModel.announceImport(it)
+            onImportedConsumed()
+        }
+    }
+
+    LaunchedEffect(incomingFiles) {
+        if (incomingFiles.isEmpty()) return@LaunchedEffect
+        viewModel.receive(incomingFiles)
+        onIncomingConsumed()
     }
 
     var framingMap by remember { mutableStateOf<OfflineMap?>(null) }
@@ -263,6 +282,8 @@ fun MapScreen(
         if (isRecording) viewModel.focus(null)
     }
 
+    // A new instance when recording starts or stops; the collector below outlives both.
+    val currentScreen by rememberUpdatedState(screen)
     LaunchedEffect(viewModel) {
         viewModel.messages.collect { message ->
             when (message) {
@@ -276,6 +297,47 @@ fun MapScreen(
                     onUndo = { viewModel.undoEdit(message.edit) },
                     onCommit = { viewModel.commitEdit(message.edit) },
                 )
+                is MapMessage.Imported -> {
+                    val undo = { viewModel.undoImport(message) }
+                    val track = message.tracks.singleOrNull()
+                    val map = message.maps.singleOrNull()
+                    when {
+                        message.total > 1 -> {
+                            val imported = message.tracks.size + message.maps.size
+                            // Named for what they all are: tracks as the list says it, or maps as settings does.
+                            val all = when {
+                                message.maps.isEmpty() -> R.plurals.library_imported_all
+                                message.tracks.isEmpty() -> R.plurals.settings_maps_imported_all
+                                else -> R.plurals.incoming_imported_all
+                            }
+                            val text = when (imported) {
+                                0 -> resources.getString(R.string.library_import_none)
+                                message.total -> resources.getQuantityString(all, imported, imported)
+                                else -> resources.getString(R.string.library_imported_some, imported, message.total)
+                            }
+                            val added = message.maps.isNotEmpty() || message.tracks.any { it.isNew }
+                            if (added) offerUndo(text, onUndo = undo) else say(text)
+                        }
+                        message.failure != null -> say(resources.getString(message.failure))
+                        track != null -> {
+                            // Said either way: while recording it doesn't open.
+                            currentScreen.open(TrackRef.Saved(track.id))
+                            if (track.isNew) {
+                                offerUndo(resources.getQuantityString(R.plurals.library_imported_all, 1, 1), undo)
+                            } else {
+                                say(resources.getString(R.string.incoming_track_duplicate))
+                            }
+                        }
+                        map != null -> {
+                            // Framed as from settings, unless a recording holds the camera.
+                            if (!currentScreen.recording) {
+                                currentScreen.stopFollowing()
+                                framingMap = map
+                            }
+                            offerUndo(resources.getString(R.string.settings_maps_imported), undo)
+                        }
+                    }
+                }
             }
         }
     }
@@ -565,11 +627,6 @@ fun MapScreen(
                 is SheetSubject.Track -> when (val focused = current.focused) {
                     FocusedTrack.None -> Unit
                     FocusedTrack.Loading -> TrackSheetLoading()
-                    is FocusedTrack.Failed -> TrackSheetError(
-                        messageRes = focused.messageRes,
-                        onRetry = viewModel::retryFocus,
-                        onClose = { viewModel.focus(null) },
-                    )
                     is FocusedTrack.Ready -> TrackSheet(
                         loaded = focused.track,
                         title = sheetTitle,

@@ -23,7 +23,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 
-enum class SettingsMessage(@param:StringRes val text: Int) {
+sealed interface SettingsNotice
+
+/** [imported] of [total] maps picked together; a lone map gets a [SettingsMessage]. */
+class MapsImported(val imported: Int, val total: Int) : SettingsNotice
+
+enum class SettingsMessage(@param:StringRes val text: Int) : SettingsNotice {
     MapImported(R.string.settings_maps_imported),
     MapUnreadable(R.string.settings_maps_failed_unreadable),
     MapWrongFormat(R.string.settings_maps_failed_format),
@@ -45,33 +50,25 @@ class SettingsViewModel(private val repository: SettingsRepository, private val 
     private val _importing = MutableStateFlow(false)
     val importing: StateFlow<Boolean> = _importing.asStateFlow()
 
-    private val _messages = Channel<SettingsMessage>(Channel.BUFFERED)
-    val messages: Flow<SettingsMessage> = _messages.receiveAsFlow()
+    private val _messages = Channel<SettingsNotice>(Channel.BUFFERED)
+    val messages: Flow<SettingsNotice> = _messages.receiveAsFlow()
 
     fun setUnits(units: UnitSystem) = repository.setUnits(units)
 
-    fun importMap(uri: Uri?) {
-        if (uri == null) return
+    fun importMaps(uris: List<Uri>) {
+        if (uris.isEmpty()) return
         viewModelScope.launch {
             _importing.value = true
-            val result = mapStore.import(uri)
+            val results = uris.map { mapStore.import(it) }
             _importing.value = false
-            report(result)
+            _messages.send(
+                when (val result = results.singleOrNull()) {
+                    is MapImportResult.Imported -> SettingsMessage.MapImported
+                    is MapImportResult.Failed -> result.error.message
+                    null -> MapsImported(results.count { it is MapImportResult.Imported }, results.size)
+                },
+            )
         }
-    }
-
-    private suspend fun report(result: MapImportResult) {
-        _messages.send(
-            when (result) {
-                is MapImportResult.Imported -> SettingsMessage.MapImported
-                is MapImportResult.Failed -> when (result.error) {
-                    MapImportError.UNREADABLE -> SettingsMessage.MapUnreadable
-                    MapImportError.NOT_A_MAP_FILE -> SettingsMessage.MapWrongFormat
-                    MapImportError.NO_SPACE -> SettingsMessage.MapNoSpace
-                    MapImportError.ALREADY_IMPORTED -> SettingsMessage.MapAlreadyImported
-                }
-            },
-        )
     }
 
     /** Undoable until [commitDeleteMap]. */
@@ -111,3 +108,11 @@ class SettingsViewModel(private val repository: SettingsRepository, private val 
         }
     }
 }
+
+internal val MapImportError.message: SettingsMessage
+    get() = when (this) {
+        MapImportError.UNREADABLE -> SettingsMessage.MapUnreadable
+        MapImportError.NOT_A_MAP_FILE -> SettingsMessage.MapWrongFormat
+        MapImportError.NO_SPACE -> SettingsMessage.MapNoSpace
+        MapImportError.ALREADY_IMPORTED -> SettingsMessage.MapAlreadyImported
+    }

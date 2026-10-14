@@ -34,7 +34,7 @@ import dev.samuelq.gpx.ui.track.TrackRef
 
 /** A track is a selection on the map, not a destination. */
 @Composable
-fun GpxApp(incomingTrack: Uri?, onIncomingTrackHandled: () -> Unit) {
+fun GpxApp(incomingFiles: List<Uri>, onIncomingFilesHandled: () -> Unit) {
     val navController = rememberNavController()
     val settings by viewModel<SettingsViewModel>(factory = SettingsViewModel.Factory).settings
         .collectAsStateWithLifecycle()
@@ -42,10 +42,10 @@ fun GpxApp(incomingTrack: Uri?, onIncomingTrackHandled: () -> Unit) {
     // Remembered: the charts key their labels on this instance.
     val formatters = rememberSystemFormatters(settings.units)
 
-    LaunchedEffect(incomingTrack) {
-        val uri = incomingTrack ?: return@LaunchedEffect
-        navController.focusOnMap(FocusRequest.uri(uri))
-        onIncomingTrackHandled()
+    LaunchedEffect(incomingFiles) {
+        if (incomingFiles.isEmpty()) return@LaunchedEffect
+        navController.backToMap(INCOMING_KEY, ArrayList(incomingFiles))
+        onIncomingFilesHandled()
     }
 
     CompositionLocalProvider(LocalFormatters provides formatters) {
@@ -61,15 +61,25 @@ fun GpxApp(incomingTrack: Uri?, onIncomingTrackHandled: () -> Unit) {
         ) {
             composable<MapRoute> { entry ->
                 val pending by entry.savedStateHandle
-                    .getStateFlow<Any?>(FocusRequest.KEY, null)
+                    .getStateFlow<Long?>(FOCUS_KEY, null)
+                    .collectAsStateWithLifecycle()
+                val imported by entry.savedStateHandle
+                    .getStateFlow<Long?>(IMPORTED_KEY, null)
+                    .collectAsStateWithLifecycle()
+                val incoming by entry.savedStateHandle
+                    .getStateFlow<ArrayList<Uri>?>(INCOMING_KEY, null)
                     .collectAsStateWithLifecycle()
                 val pendingMap by entry.savedStateHandle
                     .getStateFlow<String?>(SHOW_MAP_KEY, null)
                     .collectAsStateWithLifecycle()
 
                 MapScreen(
-                    pendingFocus = pending?.let(FocusRequest::decode),
-                    onFocusConsumed = { entry.savedStateHandle[FocusRequest.KEY] = null },
+                    pendingFocus = pending?.let(TrackRef::Saved),
+                    onFocusConsumed = { entry.savedStateHandle[FOCUS_KEY] = null },
+                    pendingImported = imported,
+                    onImportedConsumed = { entry.savedStateHandle[IMPORTED_KEY] = null },
+                    incomingFiles = incoming.orEmpty(),
+                    onIncomingConsumed = { entry.savedStateHandle[INCOMING_KEY] = null },
                     pendingMap = pendingMap,
                     onMapConsumed = { entry.savedStateHandle[SHOW_MAP_KEY] = null },
                     onOpenList = { area -> navController.open(LibraryRoute(area)) },
@@ -80,7 +90,8 @@ fun GpxApp(incomingTrack: Uri?, onIncomingTrackHandled: () -> Unit) {
 
             composable<LibraryRoute> {
                 LibraryScreen(
-                    onOpenTrack = { id -> navController.focusOnMap(FocusRequest.saved(id)) },
+                    onOpenTrack = { id -> navController.backToMap(FOCUS_KEY, id) },
+                    onImportedTrack = { id -> navController.backToMap(IMPORTED_KEY, id) },
                     // A second tap mid-transition would otherwise pop the map too.
                     onBack = dropUnlessResumed { navController.popBackStack() },
                 )
@@ -125,24 +136,17 @@ private fun StopRecordingPrompt(recorder: RecordingViewModel = viewModel(factory
 
 private val NavigationSpec = tween<IntOffset>(durationMillis = 300)
 
-/** A saved track's id or a shared file's Uri, under one key so only one can be set. */
-private object FocusRequest {
-    const val KEY = "focus"
+/** A saved track's id to open. */
+private const val FOCUS_KEY = "focus"
 
-    fun saved(id: Long): Any = id
-    fun uri(value: Uri): Any = value
+/** A track just imported from the list, to open and announce. */
+private const val IMPORTED_KEY = "imported"
 
-    fun decode(raw: Any): TrackRef? = when (raw) {
-        is Long -> TrackRef.Saved(raw)
-        is Uri -> TrackRef.Shared(raw)
-        else -> null
-    }
-}
+/** Files from other apps, to add. */
+private const val INCOMING_KEY = "incoming"
 
 /** A map's file name to frame. */
 private const val SHOW_MAP_KEY = "showMap"
-
-private fun NavController.focusOnMap(request: Any) = backToMap(FocusRequest.KEY, request)
 
 /** A pop, not a navigate: the map is always on the stack. */
 private fun NavController.backToMap(key: String, value: Any) {

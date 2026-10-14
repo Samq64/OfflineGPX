@@ -9,6 +9,7 @@ import dev.samuelq.gpx.targetContext
 import dev.samuelq.gpx.waitFor
 import java.io.File
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
@@ -30,6 +31,30 @@ class MapStoreTest {
             assertEquals(MapImportError.NOT_A_MAP_FILE, assertIs<MapImportResult.Failed>(result).error)
         } finally {
             file.delete()
+        }
+    }
+
+    /** Told apart from a track by its first bytes, as a file from another app is. */
+    @Test
+    fun aMapIsKnownByItsFirstBytes() {
+        val dir = TrackFiles.dir(targetContext)
+        val map = File(dir, "probe-${System.nanoTime()}.map")
+        javaClass.classLoader!!.getResourceAsStream("andorra-fragment.map").use { input ->
+            map.outputStream().use { input.copyTo(it) }
+        }
+        val short = File(dir, "short-${System.nanoTime()}.map").apply { writeText("mapsforge") }
+        val track = File(dir, "track-${System.nanoTime()}.gpx").apply { writeText(dev.samuelq.gpx.sampleGpx()) }
+        fun uri(file: File): Uri =
+            FileProvider.getUriForFile(targetContext, "${targetContext.packageName}.fileprovider", file)
+        try {
+            runBlocking {
+                assertTrue(container.mapStore.holdsMap(uri(map)))
+                assertFalse(container.mapStore.holdsMap(uri(short)))
+                assertFalse(container.mapStore.holdsMap(uri(track)))
+                assertFalse(container.mapStore.holdsMap(uri(File(dir, "missing.map"))))
+            }
+        } finally {
+            listOf(map, short, track).forEach(File::delete)
         }
     }
 

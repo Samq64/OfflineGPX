@@ -118,6 +118,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun LibraryScreen(
     onOpenTrack: (Long) -> Unit,
+    onImportedTrack: (Long) -> Unit,
     onBack: () -> Unit,
     viewModel: LibraryViewModel = viewModel(factory = LibraryViewModel.Factory),
 ) {
@@ -215,7 +216,7 @@ fun LibraryScreen(
         fun say(message: String) = launch { snackbars.say(message) }
         viewModel.events.collect { event ->
             when (event) {
-                is LibraryEvent.Open -> onOpenTrack(event.id)
+                is LibraryEvent.Imported -> onImportedTrack(event.id)
                 is LibraryEvent.Say -> say(resources.getString(event.text))
                 is LibraryEvent.ImportedAll -> say(
                     allOrSome(
