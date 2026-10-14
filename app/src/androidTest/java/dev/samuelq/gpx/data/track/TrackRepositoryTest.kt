@@ -1,6 +1,7 @@
 package dev.samuelq.gpx.data.track
 
 import android.net.Uri
+import androidx.core.content.FileProvider
 import androidx.room.Room
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.samuelq.gpx.core.model.Track
@@ -132,6 +133,14 @@ class TrackRepositoryTest {
             ).exceptionOrNull()
             assertIs<TrackLoadException.Invalid>(invalid)
 
+            // Refused by Android's own parser, not just the tests' kxml2.
+            val doctype = repository.import(
+                Uri.fromFile(
+                    fixture("doctype.gpx", sampleGpx().replaceFirst("<gpx", "<!DOCTYPE gpx [<!ENTITY x \"y\">]><gpx")),
+                ),
+            ).exceptionOrNull()
+            assertIs<TrackLoadException.Invalid>(doctype)
+
             val waypointsOnly = repository.import(
                 Uri.fromFile(fixture("empty.gpx", sampleGpx(points = 0))),
             ).exceptionOrNull()
@@ -143,6 +152,38 @@ class TrackRepositoryTest {
         assertEquals(before, trackFiles())
         assertTrue(stagedFiles().isEmpty())
         assertTrue(runBlocking { repository.tracks.first() }.isEmpty())
+    }
+
+    /** Refused while copying, and up front where the provider gives a size. */
+    @Test
+    fun anImportPastTheLimitIsRefusedAndLeavesNothing() {
+        // Under the shared root, so the FileProvider can serve it with a size.
+        val file = File(targetContext.cacheDir, "shared/big-${System.nanoTime()}.gpx").apply {
+            parentFile!!.mkdirs()
+            writeText(sampleGpx())
+        }
+        val small = TrackRepository(
+            targetContext,
+            dao,
+            SettingsRepository(targetContext),
+            scope,
+            maxImportBytes = file.length() - 1,
+        )
+        try {
+            runBlocking {
+                // A file URI has no size to give; a content URI does.
+                val sized = FileProvider.getUriForFile(targetContext, "${targetContext.packageName}.fileprovider", file)
+                for (uri in listOf(Uri.fromFile(file), sized)) {
+                    assertIs<TrackLoadException.TooLarge>(small.import(uri).exceptionOrNull())
+                }
+                val fits = small.import(Uri.fromFile(fixture("fits.gpx", sampleGpx(points = 2)))).getOrThrow()
+                // This test's database alone: the refused ones added no row.
+                assertEquals(listOf(fits), small.tracks.first().map { it.id })
+            }
+        } finally {
+            file.delete()
+        }
+        assertTrue(stagedFiles().isEmpty())
     }
 
     @Test

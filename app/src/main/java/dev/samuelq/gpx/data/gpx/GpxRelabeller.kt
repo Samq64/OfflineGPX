@@ -94,7 +94,7 @@ class GpxRelabeller(
                     XmlPullParser.ENTITY_REF -> parser.text?.let { value -> passThrough { xml.text(value) } }
                     XmlPullParser.COMMENT -> passThrough { xml.comment(parser.text) }
                     XmlPullParser.PROCESSING_INSTRUCTION -> passThrough { xml.processingInstruction(parser.text) }
-                    // No DTD: the parser never expands one, and it's no part of GPX.
+                    // Never stored: the parser refuses a file with one.
                     XmlPullParser.DOCDECL -> Unit
                     XmlPullParser.END_DOCUMENT -> break
                 }

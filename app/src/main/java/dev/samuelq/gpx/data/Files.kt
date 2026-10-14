@@ -7,6 +7,7 @@ import android.provider.OpenableColumns
 import android.util.Log
 import androidx.core.util.AtomicFile
 import java.io.File
+import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 
@@ -23,10 +24,24 @@ private inline fun <T> ContentResolver.queryOne(uri: Uri, column: String, read: 
     null
 }
 
-/** Copies [uri] into [destination]. False when no provider could open it. */
-internal fun ContentResolver.copyInto(uri: Uri, destination: File): Boolean = openInputStream(uri)?.use { input ->
-    destination.outputStream().use { output -> input.copyTo(output) }
-} != null
+/** More bytes than a copy was allowed. */
+internal class TooLargeException(limit: Long) : IOException("Over $limit bytes")
+
+/** Copies [uri] into [destination], failing past [maxBytes]. False when no provider could open it. */
+internal fun ContentResolver.copyInto(uri: Uri, destination: File, maxBytes: Long = Long.MAX_VALUE): Boolean =
+    openInputStream(uri)?.use { input ->
+        destination.outputStream().use { output ->
+            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+            var copied = 0L
+            while (true) {
+                val read = input.read(buffer)
+                if (read < 0) break
+                copied += read
+                if (copied > maxBytes) throw TooLargeException(maxBytes)
+                output.write(buffer, 0, read)
+            }
+        }
+    } != null
 
 /** A sanitised, numbered-if-taken file in [dir]; never overwrites. */
 internal fun uniqueFile(dir: File, name: String?, extension: String, fallback: String): File =

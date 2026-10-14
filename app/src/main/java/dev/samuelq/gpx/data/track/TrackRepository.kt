@@ -9,6 +9,7 @@ import dev.samuelq.gpx.core.analysis.TrackAnalyzer
 import dev.samuelq.gpx.core.analysis.TrackProfile
 import dev.samuelq.gpx.core.model.Track
 import dev.samuelq.gpx.core.model.bounds
+import dev.samuelq.gpx.data.TooLargeException
 import dev.samuelq.gpx.data.copyInto
 import dev.samuelq.gpx.data.db.ColorUse
 import dev.samuelq.gpx.data.db.SummaryUpdate
@@ -25,6 +26,7 @@ import dev.samuelq.gpx.data.gpx.GpxWriter
 import dev.samuelq.gpx.data.runCancellable
 import dev.samuelq.gpx.data.sameBytes
 import dev.samuelq.gpx.data.settings.SettingsRepository
+import dev.samuelq.gpx.data.size
 import dev.samuelq.gpx.data.uniqueName
 import dev.samuelq.gpx.data.writeAtomically
 import java.io.File
@@ -56,6 +58,8 @@ class TrackRepository(
     private val scope: CoroutineScope,
     /** For file and database work; a parameter so tests can substitute one. */
     private val io: CoroutineDispatcher = Dispatchers.IO,
+    /** Past this an import is refused before it fills the disk; a parameter so tests can lower it. */
+    private val maxImportBytes: Long = MAX_IMPORT_BYTES,
 ) {
 
     private val parser = GpxParser()
@@ -118,7 +122,9 @@ class TrackRepository(
         val staged = stagedFile()
         // Gone once moved in; deleted on any failure, so nothing unindexed is left behind.
         try {
-            if (!appContext.contentResolver.copyInto(uri, staged)) {
+            // Up front when the provider says; while copying when it doesn't.
+            if ((appContext.contentResolver.size(uri) ?: 0) > maxImportBytes) throw TooLargeException(maxImportBytes)
+            if (!appContext.contentResolver.copyInto(uri, staged, maxImportBytes)) {
                 throw TrackLoadException.Unreadable("No provider could open $uri")
             }
             if (reuseIdentical) identicalTrack(staged)?.let { return ReceivedTrack(it, isNew = false) }
@@ -491,6 +497,9 @@ class TrackRepository(
     private companion object {
         const val TAG = "TrackRepository"
 
+        /** Well past a file at [GpxParser.MAX_POINTS], even one heavy with extensions. */
+        const val MAX_IMPORT_BYTES = 512L * 1024 * 1024
+
         /** Long enough to cover a rotation or a trip to another screen and back. */
         const val SHARE_GRACE_MILLIS = 5_000L
 
@@ -500,6 +509,7 @@ class TrackRepository(
                 is TrackLoadException -> e
                 is GpxParseException -> TrackLoadException.Invalid(e.message ?: "Not valid GPX", e)
                 is GpxTooLargeException -> TrackLoadException.TooLarge(e.message ?: "Too many points", e)
+                is TooLargeException -> TrackLoadException.TooLarge(e.message ?: "Too many bytes", e)
                 is FileNotFoundException -> TrackLoadException.Unreadable("File no longer exists", e)
                 // A temporary URI grant can be revoked mid-read.
                 is SecurityException ->

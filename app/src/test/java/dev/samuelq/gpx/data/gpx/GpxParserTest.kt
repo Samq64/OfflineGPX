@@ -177,6 +177,27 @@ class GpxParserTest {
     }
 
     @Test
+    fun `refuses a doctype, so its entities can't expand`() {
+        val big = "x".repeat(1_000)
+        val refs = "&big;".repeat(1_000)
+        val error = assertFailsWith<GpxParseException> {
+            parse(
+                """<?xml version="1.0"?><!DOCTYPE gpx [<!ENTITY big "$big">]>""" +
+                    """<gpx version="1.1"><trk><name>$refs</name><trkseg><trkpt lat="1" lon="1"/></trkseg></trk></gpx>""",
+            )
+        }
+        assertTrue("DOCTYPE" in error.message!!, error.message)
+        assertFailsWith<GpxParseException> { parse("<!DOCTYPE gpx><gpx/>") }
+        // Comments and processing instructions before the root are still fine.
+        assertEquals(
+            1,
+            parse(
+                """<?xml version="1.0"?><!-- hi --><?pi x?><gpx><trk><trkseg><trkpt lat="1" lon="1"/></trkseg></trk></gpx>""",
+            ).points.size,
+        )
+    }
+
+    @Test
     fun `accepts the timestamp spellings exporters actually emit`() {
         val expected = Instant.parse("2026-05-01T08:00:00Z")
         assertEquals(expected, GpxParser.parseGpxTime("2026-05-01T08:00:00Z"))

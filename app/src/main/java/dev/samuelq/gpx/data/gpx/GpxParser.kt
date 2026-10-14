@@ -33,7 +33,6 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
         val parser = try {
             newPullParser().apply {
                 setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, true)
-                // FEATURE_PROCESS_DOCDECL stays false, blocking entity-expansion attacks.
                 setInput(input, null) // null: encoding from the XML declaration
             }
         } catch (e: XmlPullParserException) {
@@ -41,13 +40,27 @@ class GpxParser(private val newPullParser: () -> XmlPullParser = DEFAULT_PULL_PA
         }
 
         try {
-            parser.nextTag()
-            if (parser.eventType != XmlPullParser.START_TAG || parser.name != TAG_GPX) {
+            toRoot(parser)
+            if (parser.name != TAG_GPX) {
                 throw GpxParseException("Root element is <${parser.name}>, expected <gpx>")
             }
             return readGpx(parser)
         } catch (e: XmlPullParserException) {
             throw GpxParseException("Malformed XML: ${e.message}", e)
+        }
+    }
+
+    /**
+     * To the root's start tag, refusing a DTD. GPX never has one, and even unprocessed its
+     * entities are expanded a level, so a small file could fill memory.
+     */
+    private fun toRoot(parser: XmlPullParser) {
+        while (true) {
+            when (parser.nextToken()) {
+                XmlPullParser.START_TAG -> return
+                XmlPullParser.DOCDECL -> throw GpxParseException("Has a DOCTYPE, which GPX never needs")
+                XmlPullParser.END_DOCUMENT -> throw GpxParseException("No root element")
+            }
         }
     }
 
