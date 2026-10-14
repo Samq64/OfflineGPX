@@ -154,7 +154,7 @@ fun TrackSheet(
         )
 
         StatRow(
-            stats = trackHeadline(profile.stats, profile.hasTime),
+            stats = trackHeadline(profile.stats, profile.hasTime, profile.hasElevation),
             modifier = Modifier.padding(start = EdgePadding, end = 8.dp),
         )
 

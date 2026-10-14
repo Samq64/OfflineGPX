@@ -66,19 +66,27 @@ private fun StatCell(stat: Stat, valueStyle: TextStyle, modifier: Modifier = Mod
 
 private val RowHeight = 48.dp
 
-/** Elapsed, as the recording shows; moving time, which average speed is over, is in the details. */
+/**
+ * Elapsed, as the recording shows; moving time, which average speed is over, is in the details.
+ * Untimed, the details would hold only the climb, so it moves up here.
+ */
 @Composable
-fun trackHeadline(stats: TrackStats, hasTime: Boolean): List<Stat> {
+fun trackHeadline(stats: TrackStats, hasTime: Boolean, hasElevation: Boolean): List<Stat> {
     val formatters = LocalFormatters.current
 
     // Remembered: the sheet recomposes on every scrub frame.
     val distanceLabel = stringResource(R.string.axis_distance)
     val timeLabel = stringResource(R.string.stat_elapsed)
     val speedLabel = stringResource(R.string.stat_avg_speed)
+    val ascentLabel = stringResource(R.string.stat_ascent)
+    val descentLabel = stringResource(R.string.stat_descent)
     val pointsLabel = pluralStringResource(R.plurals.stat_points, stats.pointCount)
     val resources = LocalResources.current
 
-    return remember(stats, hasTime, formatters, resources, distanceLabel, timeLabel, speedLabel, pointsLabel) {
+    return remember(
+        stats, hasTime, hasElevation, formatters, resources,
+        distanceLabel, timeLabel, speedLabel, ascentLabel, descentLabel, pointsLabel,
+    ) {
         buildList {
             add(Stat(distanceLabel, formatters.distance(stats.distanceMeters)))
             if (hasTime) {
@@ -91,6 +99,10 @@ fun trackHeadline(stats: TrackStats, hasTime: Boolean): List<Stat> {
                 )
                 add(Stat(speedLabel, formatters.speed(stats.averageSpeedMps)))
             } else {
+                if (hasElevation) {
+                    add(Stat(ascentLabel, formatters.meters(stats.ascentMeters)))
+                    add(Stat(descentLabel, formatters.meters(stats.descentMeters)))
+                }
                 add(Stat(pointsLabel, Formatters.count(stats.pointCount)))
             }
         }
@@ -107,8 +119,9 @@ internal fun distanceAndElapsed(distanceMeters: Double, elapsedSeconds: Double?)
 )
 
 /**
- * Moving time, ascent, descent and points. [complete] shows every entry, zero where there's
- * no data, so a recording's layout holds still; null [stats] is no data yet.
+ * Moving time, ascent, descent and points; nothing when untimed, as [trackHeadline] has them.
+ * [complete] shows every entry, zero where there's no data, so a recording's layout holds
+ * still; null [stats] is no data yet.
  */
 @Composable
 fun TrackDetails(
@@ -136,32 +149,28 @@ fun TrackDetails(
         val timed = stats?.takeIf { hasTime }
         val climbed = stats?.takeIf { hasElevation }
         buildList {
-            // Shown even when equal to elapsed time, for a stable layout.
             if (hasTime || complete) {
+                // Shown even when equal to elapsed time, for a stable layout.
                 val moving = timed?.movingDurationSeconds ?: 0.0
                 add(Stat(movingLabel, Formatters.duration(moving), resources.spokenDuration(moving)))
-            }
-            if (hasElevation || complete) {
-                add(Stat(ascentLabel, formatters.meters(climbed?.ascentMeters ?: 0.0)))
-                add(Stat(descentLabel, formatters.meters(climbed?.descentMeters ?: 0.0)))
-            }
-            if (hasTime || complete) {
+                if (hasElevation || complete) {
+                    add(Stat(ascentLabel, formatters.meters(climbed?.ascentMeters ?: 0.0)))
+                    add(Stat(descentLabel, formatters.meters(climbed?.descentMeters ?: 0.0)))
+                }
                 add(Stat(pointsLabel, Formatters.count(points)))
             }
         }
     }
 
-    Column(modifier.fillMaxWidth()) {
-        if (details.isNotEmpty()) {
-            // Equal columns in one row, or two to a row when text is large enough to clip.
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(20.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                maxItemsInEachRow = if (isLargeText()) 2 else details.size,
-            ) {
-                details.forEach { stat -> StatCell(stat, MaterialTheme.typography.bodyLarge, Modifier.weight(1f)) }
-            }
-        }
+    // Not even its padding, or an untimed track's charts sit lower than a timed one's.
+    if (details.isEmpty()) return
+    // Equal columns in one row, or two to a row when text is large enough to clip.
+    FlowRow(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(20.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        maxItemsInEachRow = if (isLargeText()) 2 else details.size,
+    ) {
+        details.forEach { stat -> StatCell(stat, MaterialTheme.typography.bodyLarge, Modifier.weight(1f)) }
     }
 }
