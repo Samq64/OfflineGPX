@@ -87,7 +87,7 @@ Instrumented tests in `app/src/androidTest` need a connected device or emulator:
 core/        JVM Gradle module, so no Android: model (Track, TrackPoints columns,
              TrackPoint for single points), analysis (FixFilter, SpeedWindow,
              TrackAnalyzer -> TrackProfile).
-app/ data/   gpx (streaming parser/writer/trimmer), db (Room), map (MapStore, .map headers, VTM
+app/ data/   gpx (streaming parser/writer/relabeller), db (Room), map (MapStore, .map headers, VTM
              tile source), record (LocationSource, RecordingWal, RecordingService/
              Controller/Recovery), settings, track (TrackRepository, TrackCache).
 app/ ui/     map (MapScreen, VTM canvas, layers, generated render theme), track (sheet),

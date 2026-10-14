@@ -19,8 +19,8 @@ import dev.samuelq.gpx.data.displayName
 import dev.samuelq.gpx.data.gpx.GPX_MIME_TYPE
 import dev.samuelq.gpx.data.gpx.GpxParseException
 import dev.samuelq.gpx.data.gpx.GpxParser
+import dev.samuelq.gpx.data.gpx.GpxRelabeller
 import dev.samuelq.gpx.data.gpx.GpxTooLargeException
-import dev.samuelq.gpx.data.gpx.GpxTrimmer
 import dev.samuelq.gpx.data.gpx.GpxWriter
 import dev.samuelq.gpx.data.runCancellable
 import dev.samuelq.gpx.data.sameBytes
@@ -60,7 +60,7 @@ class TrackRepository(
 
     private val parser = GpxParser()
     private val writer = GpxWriter()
-    private val trimmer = GpxTrimmer()
+    private val relabeller = GpxRelabeller()
 
     private val appContext = context.applicationContext
 
@@ -272,7 +272,7 @@ class TrackRepository(
     }
 
     /** The stored file as it leaves the app: name, category and colour live in the row, so they go in here. */
-    private fun writeOut(entity: TrackEntity, input: InputStream, output: OutputStream) = trimmer.trim(
+    private fun writeOut(entity: TrackEntity, input: InputStream, output: OutputStream) = relabeller.relabel(
         input,
         output,
         // Blank removes the file's own.
@@ -358,7 +358,7 @@ class TrackRepository(
             val backup = backUp(file, id)
             val staged = stagedFile()
             try {
-                val track = trimmed(file, staged, loaded, from..to)
+                val track = trimmed(staged, loaded, from..to)
                 dao.setSummary(summaryUpdate(id, track, TrackAnalyzer.analyze(track))) { moveInto(staged, file) }
                 cache.write(id, file, track)
             } catch (e: Throwable) {
@@ -409,20 +409,21 @@ class TrackRepository(
     private fun backUp(file: File, id: Long): File =
         File(editsDir, "$id-${System.currentTimeMillis()}.gpx").also { file.copyTo(it, overwrite = true) }
 
-    /** Writes [file]'s points [keep], with the waypoints nearest them, to [into]; returned parsed. */
-    private fun trimmed(file: File, into: File, loaded: LoadedTrack, keep: IntRange): Track {
-        val waypoints = loaded.track.waypoints.indices.filter { loaded.waypointIndices[it] in keep }.toSet()
-        writeAtomically(into) { output ->
-            file.inputStream().use { input ->
-                trimmer.trim(
-                    input,
-                    output,
-                    keepPoint = { it in keep },
-                    keepWaypoint = { it in waypoints },
-                )
-            }
-        }
-        return parse(into.inputStream(), file.name)
+    /**
+     * Writes points [keep], with the waypoints nearest them, to [into] as [GpxWriter] writes a
+     * recording; returned parsed. Rewritten rather than cut, so nothing the app doesn't show,
+     * such as routes or the original start time, outlives a trim made to hide where a track began.
+     */
+    private fun trimmed(into: File, loaded: LoadedTrack, keep: IntRange): Track {
+        val track = loaded.track
+        val kept = Track(
+            name = null,
+            points = track.points.slice(keep),
+            waypoints = track.waypoints.filterIndexed { i, _ -> loaded.waypointIndices[i] in keep },
+        )
+        writeAtomically(into) { writer.write(kept, it) }
+        // Parsed back, so the cache holds the written precision.
+        return parse(into.inputStream(), into.name)
     }
 
     /** [category] trimmed, in the spelling another track already gives it: categories ignore case. */

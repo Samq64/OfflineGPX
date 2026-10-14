@@ -1,6 +1,5 @@
 package dev.samuelq.gpx.data.gpx
 
-import dev.samuelq.gpx.core.model.isValidCoordinate
 import java.io.InputStream
 import java.io.OutputStream
 import org.xmlpull.v1.XmlPullParser
@@ -8,34 +7,24 @@ import org.xmlpull.v1.XmlPullParserFactory
 import org.xmlpull.v1.XmlSerializer
 
 /**
- * Copies a GPX document keeping only some of its points and waypoints, and optionally renaming
- * its first track or setting its type or colour. Everything else passes through: extensions,
- * metadata, comments, other apps' data. [GpxWriter] would keep only what the app reads.
- *
- * Points are counted as [GpxParser] reads them, so an index here is one in the parsed track.
- * When cutting, unreadable points and waypoints, which have no index, are dropped. A segment
- * left with no points goes too, as does `<metadata><bounds>`.
+ * Copies a GPX document, optionally renaming its first track or setting its type or colour.
+ * Everything else passes through: extensions, metadata, comments, other apps' data.
  */
-class GpxTrimmer(
+class GpxRelabeller(
     private val newPullParser: () -> XmlPullParser = { XmlPullParserFactory.newInstance().newPullParser() },
     private val newSerializer: () -> XmlSerializer = { XmlPullParserFactory.newInstance().newSerializer() },
 ) {
 
     /**
-     * @param keepPoint null keeps every track point and the bounds. Routes, which the parser
-     *   doesn't read, are kept whole.
-     * @param keepWaypoint null keeps every waypoint.
      * @param name replaces the first `<trk>`'s name, or is added as its first child; blank
      *   removes it, null leaves it.
      * @param type the same for the first `<trk>`'s type, added where the schema orders it.
      * @param color a Garmin `DisplayColor` name for the first `<trk>`. Any colour extension
      *   already there goes, so none contradicts it; null leaves them.
      */
-    fun trim(
+    fun relabel(
         input: InputStream,
         output: OutputStream,
-        keepPoint: ((index: Int) -> Boolean)? = null,
-        keepWaypoint: ((index: Int) -> Boolean)? = null,
         name: String? = null,
         type: String? = null,
         color: String? = null,
@@ -49,8 +38,6 @@ class GpxTrimmer(
             newSerializer().apply {
                 setOutput(output, ENCODING)
             },
-            keepPoint,
-            keepWaypoint,
             name,
             type,
             color,
@@ -58,7 +45,7 @@ class GpxTrimmer(
             .run()
     }
 
-    /** A start tag held back until something inside it is kept. */
+    /** A start tag as read, to write in place of a replaced one. */
     private class StartTag(
         val namespaces: List<Pair<String, String>>,
         val namespace: String?,
@@ -70,8 +57,6 @@ class GpxTrimmer(
     private class Copy(
         private val parser: XmlPullParser,
         private val xml: XmlSerializer,
-        private val keepPoint: ((Int) -> Boolean)?,
-        private val keepWaypoint: ((Int) -> Boolean)?,
         /** Cleared once the first track has it. */
         private var newName: String?,
         /** Likewise. */
@@ -84,11 +69,6 @@ class GpxTrimmer(
 
         /** Whitespace since the last write, dropped with an element it led up to. */
         private val whitespace = StringBuilder()
-
-        /** The open `<trkseg>`, until its first kept point. */
-        private var pendingSegment: StartTag? = null
-        private var pointIndex = 0
-        private var waypointIndex = 0
 
         /** Inside the first `<trk>`, before its first child. */
         private var nameDue = false
@@ -154,30 +134,6 @@ class GpxTrimmer(
                 skipDepth = 1
                 return
             }
-            val keep = when {
-                name == TAG_TRKPT && path == TRKSEG_PATH -> point()
-                name == TAG_WPT && path == ROOT_PATH ->
-                    keepWaypoint == null || (readable() && keepWaypoint(waypointIndex++))
-                // Wider than what's left; optional, so dropped rather than recomputed ahead of the points.
-                name == TAG_BOUNDS && path == METADATA_PATH -> keepPoint == null
-                // Nothing but points is worth reopening an emptied segment for.
-                pendingSegment != null -> false
-                else -> true
-            }
-            if (!keep) {
-                whitespace.clear()
-                skipDepth = 1
-                return
-            }
-            if (name == TAG_TRKSEG && path == TRK_PATH) {
-                pendingSegment = capture()
-                path += name
-                return
-            }
-            pendingSegment?.let { segment ->
-                pendingSegment = null
-                writeStart(segment)
-            }
             writeStart(capture())
             path += name
             if (name == TAG_TRK && path == TRK_PATH) {
@@ -241,14 +197,6 @@ class GpxTrimmer(
             if (wrapped) xml.endTag(trackNamespace, TAG_EXTENSIONS)
         }
 
-        private fun point(): Boolean {
-            val keepPoint = keepPoint ?: return true
-            if (!readable()) return false
-            return keepPoint(pointIndex++)
-        }
-
-        private fun readable(): Boolean = parser.isReadablePoint()
-
         private fun endTag() {
             if (skipDepth > 0) {
                 skipDepth--
@@ -262,11 +210,6 @@ class GpxTrimmer(
                 recolouring = false
             }
             path.removeAt(path.lastIndex)
-            if (parser.name == TAG_TRKSEG && pendingSegment != null) {
-                pendingSegment = null
-                whitespace.clear()
-                return
-            }
             flushWhitespace()
             xml.endTag(parser.namespace.ifEmpty { null }, parser.name)
         }
@@ -277,14 +220,14 @@ class GpxTrimmer(
             if (path.isEmpty()) return
             if (value.isBlank()) {
                 whitespace.append(value)
-            } else if (pendingSegment == null) {
+            } else {
                 flushWhitespace()
                 xml.text(value)
             }
         }
 
         private inline fun passThrough(write: () -> Unit) {
-            if (skipDepth > 0 || pendingSegment != null) return
+            if (skipDepth > 0) return
             flushWhitespace()
             write()
         }
@@ -308,7 +251,7 @@ class GpxTrimmer(
         }
 
         private fun writeStart(tag: StartTag) {
-            // Its own; anything buffered since belongs inside it, as with a held segment's first point.
+            // Its own; anything buffered since belongs inside it.
             if (tag.leadingWhitespace.isNotEmpty()) xml.text(tag.leadingWhitespace)
             tag.namespaces.forEach { (prefix, uri) -> xml.setPrefix(prefix, uri) }
             xml.startTag(tag.namespace, tag.name)
@@ -323,30 +266,15 @@ class GpxTrimmer(
     }
 
     private companion object {
-        /** Mirrors the parser's test, so the indices agree. */
-        fun XmlPullParser.isReadablePoint(): Boolean {
-            val latitude = getAttributeValue(null, ATTR_LAT)?.toDoubleOrNull() ?: return false
-            val longitude = getAttributeValue(null, ATTR_LON)?.toDoubleOrNull() ?: return false
-            return isValidCoordinate(latitude, longitude)
-        }
-
         const val ENCODING = "UTF-8"
         const val TAG_TRK = "trk"
         const val TAG_TRKSEG = "trkseg"
-        const val TAG_TRKPT = "trkpt"
-        const val TAG_WPT = "wpt"
-        const val TAG_BOUNDS = "bounds"
         const val TAG_NAME = "name"
         const val TAG_TYPE = "type"
         const val TAG_EXTENSIONS = "extensions"
-        const val ATTR_LAT = "lat"
-        const val ATTR_LON = "lon"
         const val GARMIN_PREFIX = "gpxx"
 
-        val ROOT_PATH = listOf("gpx")
-        val METADATA_PATH = listOf("gpx", "metadata")
         val TRK_PATH = listOf("gpx", TAG_TRK)
-        val TRKSEG_PATH = listOf("gpx", TAG_TRK, TAG_TRKSEG)
         val TRK_EXTENSIONS_PATH = listOf("gpx", TAG_TRK, TAG_EXTENSIONS)
     }
 }

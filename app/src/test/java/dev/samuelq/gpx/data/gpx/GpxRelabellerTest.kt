@@ -9,9 +9,9 @@ import kotlin.test.assertTrue
 import org.kxml2.io.KXmlParser
 import org.kxml2.io.KXmlSerializer
 
-class GpxTrimmerTest {
+class GpxRelabellerTest {
 
-    private val trimmer = GpxTrimmer({ KXmlParser() }, { KXmlSerializer() })
+    private val relabeller = GpxRelabeller({ KXmlParser() }, { KXmlSerializer() })
     private val parser = GpxParser { KXmlParser() }
 
     private val source = """
@@ -39,70 +39,9 @@ class GpxTrimmerTest {
         </gpx>
     """.trimIndent()
 
-    private fun trim(keepPoint: (Int) -> Boolean, keepWaypoint: (Int) -> Boolean = { true }): String {
-        val out = ByteArrayOutputStream()
-        trimmer.trim(source.byteInputStream(), out, keepPoint, keepWaypoint)
-        return out.toString(Charsets.UTF_8)
-    }
-
-    @Test
-    fun `kept points keep their extensions, and the rest of the file passes through`() {
-        val trimmed = trim(keepPoint = { it >= 1 })
-        val track = parser.parse(trimmed.byteInputStream())
-
-        assertEquals(3, track.points.size)
-        assertEquals(410f, track.points.elevation(0))
-        assertEquals("Ride", track.name)
-        assertTrue("110" in trimmed && "100" !in trimmed, trimmed)
-        assertTrue("Kept metadata" in trimmed && "a comment" in trimmed && "Watch" in trimmed, trimmed)
-    }
-
-    @Test
-    fun `indices count points as the parser does, skipping unreadable ones`() {
-        // Index 2 is the second segment's first readable point; the unreadable one before it has none.
-        val track = parser.parse(trim(keepPoint = { it == 2 }).byteInputStream())
-        assertEquals(1, track.points.size)
-        assertEquals(47.2, track.points.latitude(0))
-    }
-
-    @Test
-    fun `a segment left empty is dropped, not kept as an empty element`() {
-        val trimmed = trim(keepPoint = { it >= 2 })
-        assertEquals(1, Regex("<trkseg").findAll(trimmed).count(), trimmed)
-        assertEquals(1, parser.parse(trimmed.byteInputStream()).points.segmentCount)
-    }
-
-    @Test
-    fun `waypoints are kept by index, unreadable ones having none`() {
-        val trimmed = trim(keepPoint = { true }, keepWaypoint = { it == 1 })
-        val waypoints = parser.parse(trimmed.byteInputStream()).waypoints
-        assertEquals(listOf("End"), waypoints.map { it.name })
-        assertFalse("Unreadable" in trimmed)
-    }
-
-    @Test
-    fun `stale bounds are dropped`() {
-        val trimmed = trim(keepPoint = { it >= 1 })
-        assertFalse("<bounds" in trimmed, trimmed)
-        assertTrue("Kept metadata" in trimmed, trimmed)
-    }
-
-    @Test
-    fun `no blank lines are left where points were`() {
-        val trimmed = trim(keepPoint = { it == 0 || it == 3 })
-        assertFalse(Regex("\\n\\s*\\n").containsMatchIn(trimmed), trimmed)
-    }
-
-    @Test
-    fun `keeping every point keeps the bounds`() {
-        val out = ByteArrayOutputStream()
-        trimmer.trim(source.byteInputStream(), out)
-        assertTrue("<bounds" in out.toString(Charsets.UTF_8))
-    }
-
     private fun rename(xml: String, name: String): String {
         val out = ByteArrayOutputStream()
-        trimmer.trim(xml.byteInputStream(), out, name = name)
+        relabeller.relabel(xml.byteInputStream(), out, name = name)
         return out.toString(Charsets.UTF_8)
     }
 
@@ -110,7 +49,7 @@ class GpxTrimmerTest {
 
     private fun retype(xml: String, type: String, name: String? = null): String {
         val out = ByteArrayOutputStream()
-        trimmer.trim(xml.byteInputStream(), out, name = name, type = type)
+        relabeller.relabel(xml.byteInputStream(), out, name = name, type = type)
         return out.toString(Charsets.UTF_8)
     }
 
@@ -237,43 +176,6 @@ class GpxTrimmerTest {
     }
 
     @Test
-    fun `unreadable and stray points get no index, as in the parser`() {
-        val doc = """
-            <gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1"><trk>
-              <extensions><trkpt lat="8" lon="8"/></extensions>
-              <trkseg>
-                <trkpt lon="1"/><trkpt lat="91" lon="1"/><trkpt lat="2" lon="2"/><trkpt lat="3" lon="3"/>
-              </trkseg>
-            </trk></gpx>
-        """.trimIndent()
-        val out = ByteArrayOutputStream()
-        trimmer.trim(doc.byteInputStream(), out, keepPoint = { it == 1 })
-
-        val written = out.toString(Charsets.UTF_8)
-        assertTrue("lat=\"8\"" in written, written)
-        val track = parser.parse(written.byteInputStream())
-        assertEquals(listOf(3.0), track.points.indices.map(track.points::latitude))
-    }
-
-    @Test
-    fun `route points are kept whole and not counted`() {
-        val doc = """
-            <gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
-              <rte><rtept lat="9" lon="9"/></rte>
-              <trk><trkseg><trkpt lat="1" lon="1"/><trkpt lat="2" lon="2"/></trkseg></trk>
-            </gpx>
-        """.trimIndent()
-
-        val out = ByteArrayOutputStream()
-        trimmer.trim(doc.byteInputStream(), out, keepPoint = { it == 1 })
-
-        val written = out.toString(Charsets.UTF_8)
-        assertTrue("lat=\"9\"" in written)
-        val track = parser.parse(written.byteInputStream())
-        assertEquals(listOf(2.0), track.points.indices.map(track.points::latitude))
-    }
-
-    @Test
     fun `CDATA, entities, comments and processing instructions pass through`() {
         val doc = """
             <?xml version="1.0" encoding="UTF-8"?>
@@ -281,18 +183,18 @@ class GpxTrimmerTest {
             <gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
               <metadata><desc><![CDATA[<b>raw</b>]]> &amp; more</desc></metadata>
               <?vendor data?>
-              <trk><trkseg><trkpt lat="1" lon="1"/><!-- gone --><?gone too?><![CDATA[gone]]><trkpt lat="2" lon="2"/></trkseg></trk>
+              <trk><trkseg><trkpt lat="1" lon="1"/><!-- note --><trkpt lat="2" lon="2"/></trkseg></trk>
             </gpx>
         """.trimIndent()
         val out = ByteArrayOutputStream()
-        trimmer.trim(doc.byteInputStream(), out, keepPoint = { it == 1 })
-        val trimmed = out.toString(Charsets.UTF_8)
+        relabeller.relabel(doc.byteInputStream(), out, name = "Ride")
+        val written = out.toString(Charsets.UTF_8)
 
-        assertTrue("<![CDATA[<b>raw</b>]]>" in trimmed, trimmed)
-        assertTrue("&amp; more" in trimmed, trimmed)
-        assertTrue("<?vendor data?>" in trimmed, trimmed)
-        assertFalse("gone" in trimmed, trimmed)
-        assertEquals(1, parser.parse(trimmed.byteInputStream()).points.size)
+        assertTrue("<![CDATA[<b>raw</b>]]>" in written, written)
+        assertTrue("&amp; more" in written, written)
+        assertTrue("<?vendor data?>" in written, written)
+        assertTrue("<!-- note -->" in written, written)
+        assertEquals(2, parser.parse(written.byteInputStream()).points.size)
     }
 
     @Test
@@ -300,23 +202,11 @@ class GpxTrimmerTest {
         val doc = """<?xml version="1.0"?><!DOCTYPE gpx>""" +
             """<gpx version="1.1"><trk><trkseg><trkpt lat="1" lon="1"/></trkseg></trk></gpx>"""
         val out = ByteArrayOutputStream()
-        trimmer.trim(doc.byteInputStream(), out)
-        val trimmed = out.toString(Charsets.UTF_8)
+        relabeller.relabel(doc.byteInputStream(), out)
+        val written = out.toString(Charsets.UTF_8)
 
-        assertFalse("DOCTYPE" in trimmed, trimmed)
-        assertEquals(1, parser.parse(trimmed.byteInputStream()).points.size)
-    }
-
-    @Test
-    fun `waypoints alone can be cut, keeping every point and the bounds`() {
-        val out = ByteArrayOutputStream()
-        trimmer.trim(source.byteInputStream(), out, keepWaypoint = { it == 0 })
-        val trimmed = out.toString(Charsets.UTF_8)
-        val track = parser.parse(trimmed.byteInputStream())
-
-        assertEquals(listOf("Start"), track.waypoints.map { it.name })
-        assertEquals(parser.parse(source.byteInputStream()).points.size, track.points.size)
-        assertTrue("<bounds" in trimmed, trimmed)
+        assertFalse("DOCTYPE" in written, written)
+        assertEquals(1, parser.parse(written.byteInputStream()).points.size)
     }
 
     @Test
@@ -329,14 +219,14 @@ class GpxTrimmerTest {
             </gpx>
         """.trimIndent()
         val out = ByteArrayOutputStream()
-        trimmer.trim(doc.byteInputStream(), out, keepPoint = { true })
-        val trimmed = out.toString(Charsets.UTF_8)
+        relabeller.relabel(doc.byteInputStream(), out, name = "Ride")
+        val written = out.toString(Charsets.UTF_8)
 
         assertTrue(
-            Regex("""\w+:schemaLocation="http://www.topografix.com/GPX/1/1 gpx.xsd"""").containsMatchIn(trimmed),
-            trimmed,
+            Regex("""\w+:schemaLocation="http://www.topografix.com/GPX/1/1 gpx.xsd"""").containsMatchIn(written),
+            written,
         )
-        assertEquals(1, parser.parse(trimmed.byteInputStream()).points.size)
+        assertEquals(1, parser.parse(written.byteInputStream()).points.size)
     }
 
     @Test
@@ -352,25 +242,9 @@ class GpxTrimmerTest {
         )
     }
 
-    @Test
-    fun `a cut segment takes its other children with it`() {
-        val doc = """
-            <gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1"><trk>
-              <trkseg><extensions><x>1</x></extensions><trkpt lat="1" lon="1"/></trkseg>
-              <trkseg><trkpt lat="2" lon="2"/></trkseg>
-            </trk></gpx>
-        """.trimIndent()
-        val out = ByteArrayOutputStream()
-        trimmer.trim(doc.byteInputStream(), out, keepPoint = { it == 1 })
-        val trimmed = out.toString(Charsets.UTF_8)
-
-        assertFalse("<x>" in trimmed, trimmed)
-        assertEquals(1, Regex("<trkseg").findAll(trimmed).count(), trimmed)
-    }
-
     private fun recolour(xml: String, color: String): String {
         val out = ByteArrayOutputStream()
-        trimmer.trim(xml.byteInputStream(), out, color = color)
+        relabeller.relabel(xml.byteInputStream(), out, color = color)
         return out.toString(Charsets.UTF_8)
     }
 

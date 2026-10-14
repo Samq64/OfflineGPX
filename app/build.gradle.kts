@@ -252,7 +252,7 @@ val coverageMinimums = mapOf(
     "dev/samuelq/gpx/core/analysis/SpeedWindow.kt" to (1.00 to 1.00),
     "dev/samuelq/gpx/data/gpx/GpxParser.kt" to (0.99 to 0.96),
     "dev/samuelq/gpx/data/gpx/GpxWriter.kt" to (0.98 to 1.00),
-    "dev/samuelq/gpx/data/gpx/GpxTrimmer.kt" to (0.99 to 0.89),
+    "dev/samuelq/gpx/data/gpx/GpxRelabeller.kt" to (0.99 to 0.89),
     "dev/samuelq/gpx/data/record/RecordingWal.kt" to (1.00 to 0.97),
     "dev/samuelq/gpx/data/record/RecordingSession.kt" to (1.00 to 0.95),
     "dev/samuelq/gpx/data/track/TrackCache.kt" to (1.00 to 0.96),

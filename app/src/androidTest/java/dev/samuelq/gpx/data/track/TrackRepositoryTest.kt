@@ -305,15 +305,25 @@ class TrackRepositoryTest {
     }
 
     @Test
-    fun trimBesideARouteCutsTheTrackAndKeepsTheRoute() {
-        val id =
-            importSample(sampleGpx(waypointAt = -1).replace("<trk>", """<rte><rtept lat="60" lon="10"/></rte><trk>"""))
+    fun trimLeavesNothingUnseenFromBeforeTheCut() {
+        val unseen = """<metadata><time>2024-05-04T09:00:00Z</time><author><name>Home</name></author></metadata>""" +
+            """<rte><rtept lat="60" lon="10"/></rte>"""
+        val id = importSample(
+            sampleGpx(waypointAt = 8)
+                .replace("<trk>", "$unseen<trk>")
+                .replace("<trkseg>", "<extensions><device>Watch</device></extensions><trkseg>"),
+        )
 
         runBlocking { repository.trim(id, 5, 14).getOrThrow() }
         val track = parsed(id)
         assertEquals(10, track.points.size)
         assertEquals(51.5005, track.points.latitude(0), 1e-9)
-        assertTrue("""lat="60"""" in fileOf(id).readText())
+        assertEquals(listOf("Cafe"), track.waypoints.map { it.name })
+        val text = fileOf(id).readText()
+        listOf("""lat="60"""", "Home", "Watch", "09:00:00Z").forEach { assertFalse(it in text, text) }
+        assertTrue("<time>2024-05-04T09:00:10Z</time></metadata>" in text.replace(Regex(">\\s+<"), "><"), text)
+        // Still named on the way out, from the row.
+        assertEquals("Test ride", shared(id).name)
     }
 
     @Test

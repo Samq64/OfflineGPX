@@ -19,15 +19,15 @@ See README.md for the source layout and the build, test, coverage and style comm
   one row per track with its stats and bounding box, and no geometry. Parsed points are
   cached in binary under `cacheDir`, which is regenerable and never backed up or shared. A
   saved track's name, category and colour come from its row only, and go into a file only on
-  its way out: export and share stream it through `GpxTrimmer`, writing the colour as the
+  its way out: export and share stream it through `GpxRelabeller`, writing the colour as the
   slot's Garmin `DisplayColor` name. An import takes its file's `<name>`, else the file's name,
   its `<type>` as category, and a Garmin colour as its slot; after that, recordings and imports are alike. An unnamed track is titled by its start;
   an untimed one has none and must keep a name. A file with only `<rte>`s is rewritten by
   `GpxWriter` as a track on import, so nothing past the parser handles routes; routes beside
   a track are ignored. Files shared from other apps join the library;
   MainActivity is singleTask so they reach the one instance.
-- Trim rewrites a file with `GpxTrimmer`, which streams it through and keeps
-  everything but the points cut; `GpxWriter` writes only what the app reads. The original
+- Trim rewrites a file with `GpxWriter`, which writes only what the app reads, as for a
+  recording: a trim often hides where a track began, so nothing unseen may outlive it. The original
   waits under `noBackupFilesDir/edits` for the undo, and is purged at the next launch.
   A recording appends to a line-per-fix WAL and becomes GPX on stop, so a crash leaves a
   recoverable log rather than truncated XML.
