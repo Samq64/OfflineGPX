@@ -11,6 +11,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -290,7 +291,8 @@ internal fun OfflineMapCanvas(
 
     // A frame fitted into the uncovered part, say beside the side panel, can need further out
     // than the floor below. Clamped to it, it kept its centre at the closer zoom, off screen.
-    var framedScale by remember { mutableStateOf<Double?>(null) }
+    // Saved, as is framedView: back from the list, the remembered camera is restored against them.
+    var framedScale by rememberSaveable { mutableStateOf<Double?>(null) }
 
     // Zoom-out floor: everything fits on the tighter axis. Against the whole view, not the
     // uncovered part, since the sheet comes and goes; lowered for the last frame if need be.
@@ -322,7 +324,7 @@ internal fun OfflineMapCanvas(
         )
     }
     // The clamp admits the last framed view, or a track at the extent's edge couldn't be centred.
-    var framedView by remember { mutableStateOf<BoundingBox?>(null) }
+    var framedView by rememberSaveable(stateSaver = BoundingBoxSaver) { mutableStateOf<BoundingBox?>(null) }
     val currentExtent by rememberUpdatedState(extent)
 
     // Read fresh, not via recomposition: a framing move's own update must already see its view.
@@ -511,6 +513,11 @@ private fun rememberMapViewWithLifecycle(): MapView {
     }
     return mapView
 }
+
+private val BoundingBoxSaver = Saver<BoundingBox?, DoubleArray>(
+    save = { it?.run { doubleArrayOf(minLatitude, minLongitude, maxLatitude, maxLongitude) } },
+    restore = { BoundingBox(it[0], it[1], it[2], it[3]) },
+)
 
 /** About a fingertip. */
 private const val TAP_REACH_DP = 40f
