@@ -111,23 +111,37 @@ class ChartMathTest {
 
     @Test
     fun `a pinch keeps the value under the fingers in place`() {
-        val view = zoomView(0f..100f, 0f..100f, anchor = 0.25f, zoom = 2f, pan = 0f)
+        val view = zoomView(0f..100f, 0f..100f, anchor = 0.25f, zoom = 2f)
         assertEquals(12.5f, view.start, 1e-3f)
         assertEquals(62.5f, view.endInclusive, 1e-3f)
     }
 
     @Test
     fun `a pinch stays within the domain and its zoom limit`() {
-        val panned = zoomView(0f..50f, 0f..100f, anchor = 0.5f, zoom = 1f, pan = 1f)
-        assertEquals(0f, panned.start, 1e-3f)
-        assertEquals(50f, panned.endInclusive, 1e-3f)
-
-        val zoomedOut = zoomView(40f..60f, 0f..100f, anchor = 0.5f, zoom = 0.1f, pan = 0f)
+        val zoomedOut = zoomView(40f..60f, 0f..100f, anchor = 0.5f, zoom = 0.1f)
         assertEquals(0f, zoomedOut.start, 1e-3f)
         assertEquals(100f, zoomedOut.endInclusive, 1e-3f)
 
-        val zoomedIn = zoomView(0f..100f, 0f..100f, anchor = 0.5f, zoom = 1000f, pan = 0f, maxZoom = 50f)
+        val zoomedIn = zoomView(0f..100f, 0f..100f, anchor = 0.5f, zoom = 1000f, maxZoom = 50f)
         assertEquals(2f, zoomedIn.endInclusive - zoomedIn.start, 1e-3f)
+    }
+
+    @Test
+    fun `a scroll moves the view by its span and stops at the domain`() {
+        assertEquals(30f..50f, scrollView(20f..40f, 0f..100f, by = 0.5f))
+        assertEquals(80f..100f, scrollView(70f..90f, 0f..100f, by = 1f))
+        assertEquals(0f..20f, scrollView(10f..30f, 0f..100f, by = -1f))
+    }
+
+    @Test
+    fun `an edge scrolls toward it, harder the closer the finger`() {
+        assertEquals(0f, edgeScroll(50f, 0f, 100f, zone = 10f))
+        assertEquals(-0.5f, edgeScroll(5f, 0f, 100f, zone = 10f), 1e-3f)
+        assertEquals(0.5f, edgeScroll(95f, 0f, 100f, zone = 10f), 1e-3f)
+        assertEquals(-1f, edgeScroll(-20f, 0f, 100f, zone = 10f))
+        assertEquals(1f, edgeScroll(120f, 0f, 100f, zone = 10f))
+        // A narrow plot keeps a middle that doesn't scroll.
+        assertEquals(0f, edgeScroll(50f, 0f, 100f, zone = 60f))
     }
 
     @Test
@@ -184,8 +198,8 @@ class ChartMathTest {
 
     @Test
     fun `a pinch over an empty domain or by zero leaves the view`() {
-        assertEquals(10f..20f, zoomView(10f..20f, 5f..5f, anchor = 0.5f, zoom = 2f, pan = 0f))
-        assertEquals(10f..20f, zoomView(10f..20f, 0f..100f, anchor = 0.5f, zoom = 0f, pan = 0f))
+        assertEquals(10f..20f, zoomView(10f..20f, 5f..5f, anchor = 0.5f, zoom = 2f))
+        assertEquals(10f..20f, zoomView(10f..20f, 0f..100f, anchor = 0.5f, zoom = 0f))
     }
 
     @Test

@@ -68,6 +68,7 @@ import dev.samuelq.gpx.ui.chart.EmptyChart
 import dev.samuelq.gpx.ui.chart.ProfileChart
 import dev.samuelq.gpx.ui.chart.axisScale
 import dev.samuelq.gpx.ui.chart.nearestIndex
+import dev.samuelq.gpx.ui.chart.scrollView
 import dev.samuelq.gpx.ui.chart.timeAxisScale
 import dev.samuelq.gpx.ui.chart.yScale
 import dev.samuelq.gpx.ui.chart.zoomView
@@ -264,11 +265,14 @@ private fun ProfileDetails(
     val xView = zoomed ?: xDomain
     // Reset per track and units, since the gutter only ever grows.
     val axisGroup = remember(viewKey, formatters) { ChartAxisGroup() }
-    val onZoom: (Float, Float, Float) -> Unit = remember(profile, useTimeAxis) {
-        { anchor, zoom, pan ->
-            val view = zoomView(zoomed ?: xDomain, xDomain, anchor, zoom, pan)
+    val onZoom: (Float, Float) -> Unit = remember(profile, useTimeAxis) {
+        { anchor, zoom ->
+            val view = zoomView(zoomed ?: xDomain, xDomain, anchor, zoom)
             zoomed = view.takeIf { it.endInclusive - it.start < xDomain.endInclusive - xDomain.start }
         }
+    }
+    val onScroll: (Float) -> Unit = remember(profile, useTimeAxis) {
+        { by -> zoomed?.let { zoomed = scrollView(it, xDomain, by) } }
     }
     // Shared by both charts so the scrubber lines up.
     val xScale = remember(xView, useTimeAxis, formatters) {
@@ -385,6 +389,7 @@ private fun ProfileDetails(
                 onZoom = onZoom,
                 // Undoing a pinch otherwise takes another pinch.
                 zoomed = zoomed != null,
+                onScroll = onScroll,
                 onResetZoom = { zoomed = null },
                 axisGroup = axisGroup,
                 contentDescription = stringResource(title),

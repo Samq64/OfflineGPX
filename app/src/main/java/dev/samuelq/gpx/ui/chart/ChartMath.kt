@@ -149,16 +149,12 @@ private fun endTickScale(min: Float, max: Float, perUnit: Float): Scale {
     return Scale(min, max, (listOf(min) + inner + max).toFloatArray(), step / perUnit)
 }
 
-/**
- * [view] scaled by [zoom] about [anchor] and shifted by [pan] (fractions of plot width),
- * kept within [domain] and [maxZoom].
- */
+/** [view] scaled by [zoom] about [anchor] (a fraction of plot width), kept within [domain] and [maxZoom]. */
 fun zoomView(
     view: ClosedFloatingPointRange<Float>,
     domain: ClosedFloatingPointRange<Float>,
     anchor: Float,
     zoom: Float,
-    pan: Float,
     maxZoom: Float = 50f,
 ): ClosedFloatingPointRange<Float> {
     val domainSpan = domain.endInclusive - domain.start
@@ -166,9 +162,35 @@ fun zoomView(
     val oldSpan = view.endInclusive - view.start
     val span = (oldSpan / zoom).coerceIn(domainSpan / maxZoom, domainSpan)
     val anchored = view.start + anchor * oldSpan
-    val start = (anchored - anchor * span - pan * span)
-        .coerceIn(domain.start, domain.endInclusive - span)
+    val start = (anchored - anchor * span).coerceIn(domain.start, domain.endInclusive - span)
     return start..(start + span)
+}
+
+/** [view] moved later by [by] of its span, kept within [domain]. */
+fun scrollView(
+    view: ClosedFloatingPointRange<Float>,
+    domain: ClosedFloatingPointRange<Float>,
+    by: Float,
+): ClosedFloatingPointRange<Float> {
+    val span = view.endInclusive - view.start
+    val start = (view.start + by * span)
+        .coerceIn(domain.start, maxOf(domain.start, domain.endInclusive - span))
+    return start..(start + span)
+}
+
+/**
+ * How fast a finger at [x] scrolls the plot from [left] to [right]: -1 to 1 across [zone]
+ * inside either edge, full past it, 0 between.
+ */
+fun edgeScroll(x: Float, left: Float, right: Float, zone: Float): Float {
+    val width = (right - left).coerceAtLeast(0f)
+    val band = zone.coerceAtMost(width / 4f)
+    if (band <= 0f) return 0f
+    return when {
+        x < left + band -> -((left + band - x) / band).coerceAtMost(1f)
+        x > right - band -> ((x - (right - band)) / band).coerceAtMost(1f)
+        else -> 0f
+    }
 }
 
 /** The x spans between segments (signal loss or long stops); none where x doesn't advance. */

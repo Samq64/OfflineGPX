@@ -5,7 +5,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateCentroid
-import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -28,6 +27,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
@@ -79,6 +79,9 @@ import dev.samuelq.gpx.ui.theme.ChartColors
 import dev.samuelq.gpx.ui.theme.LocalChartColors
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 
 private val LineWidth = 2.dp
 private val GridWidth = 1.dp
@@ -93,6 +96,12 @@ private val AxisBand = 18.dp
 private val PlotHeight = 100.dp
 private const val AreaFillAlpha = 0.10f
 private const val BreakWashAlpha = 0.10f
+
+/** Where a scrub nears a plot edge and scrolls a zoomed chart. */
+private val EdgeZone = 32.dp
+
+/** Plot widths per second, with the finger at or past the edge. */
+private const val EdgeScrollSpeed = 1f
 
 /**
  * A single-series line chart with an area wash and a scrubber. [xScale] is passed in so
@@ -114,10 +123,12 @@ fun ProfileChart(
     formatValue: (Float) -> String,
     /** Where the point at an index is along the track. */
     formatPosition: (Int) -> String,
-    /** Pinch or pan as (anchor, zoom, pan), anchor and pan as fractions of plot width. */
-    onZoom: (Float, Float, Float) -> Unit,
+    /** A pinch as (anchor, zoom), the anchor a fraction of plot width. */
+    onZoom: (Float, Float) -> Unit,
     /** Shows a reset in the corner, and a double tap resets too. */
     zoomed: Boolean,
+    /** Scrolls a zoomed view by a fraction of its span, while a scrub holds an edge. */
+    onScroll: (Float) -> Unit,
     onResetZoom: () -> Unit,
     /** Shared by stacked charts so their plots line up. */
     axisGroup: ChartAxisGroup,
@@ -238,6 +249,8 @@ fun ProfileChart(
             selectedIndex = selectedIndex,
             onSelectedIndexChange = onSelectedIndexChange,
             onZoom = onZoom,
+            scrollable = zoomed,
+            onScroll = onScroll,
             onDoubleTap = onResetZoom,
         )
         ChartTooltip(
@@ -330,7 +343,9 @@ private fun ScrubberLayer(
     chartColors: ChartColors,
     selectedIndex: Int?,
     onSelectedIndexChange: (Int?) -> Unit,
-    onZoom: (Float, Float, Float) -> Unit,
+    onZoom: (Float, Float) -> Unit,
+    scrollable: Boolean,
+    onScroll: (Float) -> Unit,
     onDoubleTap: () -> Unit,
 ) {
     val series = render.series
@@ -338,6 +353,8 @@ private fun ScrubberLayer(
     // Read through state, not keyed on, or each pinch frame would restart the gesture.
     val currentRender by rememberUpdatedState(render)
     val currentOnZoom by rememberUpdatedState(onZoom)
+    val currentScrollable by rememberUpdatedState(scrollable)
+    val currentOnScroll by rememberUpdatedState(onScroll)
     val currentOnDoubleTap by rememberUpdatedState(onDoubleTap)
 
     Canvas(
@@ -349,60 +366,88 @@ private fun ScrubberLayer(
                 // The first tap still selects at once, so a single tap never waits for a second.
                 var lastTapAt = Long.MIN_VALUE / 2
                 var lastTapAtX = 0f
+                val edgeZone = EdgeZone.toPx()
 
-                awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    var drift = Offset.Zero
-                    var scrubbing = false
-                    var zooming = false
-                    var lift: List<PointerInputChange> = emptyList()
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        val pressed = event.changes.filter { it.pressed }
-                        if (pressed.isEmpty()) {
-                            lift = event.changes
-                            break
-                        }
-                        if (pressed.size >= 2) {
-                            zooming = true
+                coroutineScope {
+                    // Scrolls each frame the scrub holds an edge, even with the finger still.
+                    var scrubX = 0f
+                    var autoscroll: Job? = null
+                    fun startAutoscroll() = launch {
+                        var last = withFrameNanos { it }
+                        while (true) {
+                            val now = withFrameNanos { it }
                             val plot = geometry.plotRect(size.toSize())
-                            val scale = event.calculateZoom()
-                            val pan = event.calculatePan().x
-                            if (scale != 1f || pan != 0f) {
-                                val anchor = (event.calculateCentroid().x - plot.left) / plot.width
-                                currentOnZoom(anchor, scale, pan / plot.width)
+                            val speed = edgeScroll(scrubX, plot.left, plot.right, edgeZone)
+                            if (speed != 0f && currentScrollable) {
+                                currentOnScroll(speed * EdgeScrollSpeed * (now - last) / 1e9f)
+                                select(scrubX)
                             }
-                            event.changes.forEach { it.consume() }
-                        } else if (!zooming) {
-                            // After a pinch the finger left behind neither scrubs nor taps.
-                            val change = pressed.firstOrNull { it.id == down.id } ?: break
-                            if (change.isConsumed) return@awaitEachGesture
-                            if (!scrubbing) {
-                                drift += change.positionChange()
-                                // Leave vertical drags to the page scroll.
-                                if (abs(drift.y) > viewConfiguration.touchSlop && abs(drift.y) > abs(drift.x)) {
-                                    return@awaitEachGesture
-                                }
-                                scrubbing = abs(drift.x) > viewConfiguration.touchSlop
-                            }
-                            if (scrubbing) {
-                                change.consume()
-                                select(change.position.x)
-                            }
+                            last = now
                         }
                     }
-                    if (!scrubbing && !zooming) {
-                        // Taken, or the sheet's tap-to-clear would undo it.
-                        lift.forEach { it.consume() }
-                        val second = down.uptimeMillis - lastTapAt <= viewConfiguration.doubleTapTimeoutMillis &&
-                            abs(down.position.x - lastTapAtX) <= viewConfiguration.touchSlop * 2
-                        if (second) {
-                            lastTapAt = Long.MIN_VALUE / 2
-                            currentOnDoubleTap()
-                        } else {
-                            lastTapAt = down.uptimeMillis
-                            lastTapAtX = down.position.x
-                            select(down.position.x)
+
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        var drift = Offset.Zero
+                        var scrubbing = false
+                        var zooming = false
+                        var lift: List<PointerInputChange> = emptyList()
+                        try {
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                val pressed = event.changes.filter { it.pressed }
+                                if (pressed.isEmpty()) {
+                                    lift = event.changes
+                                    break
+                                }
+                                if (pressed.size >= 2) {
+                                    zooming = true
+                                    autoscroll?.cancel()
+                                    autoscroll = null
+                                    val plot = geometry.plotRect(size.toSize())
+                                    val scale = event.calculateZoom()
+                                    if (scale != 1f) {
+                                        val anchor = (event.calculateCentroid().x - plot.left) / plot.width
+                                        currentOnZoom(anchor, scale)
+                                    }
+                                    event.changes.forEach { it.consume() }
+                                } else if (!zooming) {
+                                    // After a pinch the finger left behind neither scrubs nor taps.
+                                    val change = pressed.firstOrNull { it.id == down.id } ?: break
+                                    if (change.isConsumed) return@awaitEachGesture
+                                    if (!scrubbing) {
+                                        drift += change.positionChange()
+                                        // Leave vertical drags to the page scroll.
+                                        if (abs(drift.y) > viewConfiguration.touchSlop && abs(drift.y) > abs(drift.x)) {
+                                            return@awaitEachGesture
+                                        }
+                                        scrubbing = abs(drift.x) > viewConfiguration.touchSlop
+                                    }
+                                    if (scrubbing) {
+                                        change.consume()
+                                        scrubX = change.position.x
+                                        select(scrubX)
+                                        if (autoscroll == null) autoscroll = startAutoscroll()
+                                    }
+                                }
+                            }
+                        } finally {
+                            autoscroll?.cancel()
+                            autoscroll = null
+                        }
+                        if (!scrubbing && !zooming) {
+                            // Taken, or the sheet's tap-to-clear would undo it.
+                            lift.forEach { it.consume() }
+                            val second = down.uptimeMillis - lastTapAt <= viewConfiguration.doubleTapTimeoutMillis &&
+                                abs(down.position.x - lastTapAtX) <= viewConfiguration.touchSlop * 2
+                            if (second) {
+                                lastTapAt = Long.MIN_VALUE / 2
+                                currentOnDoubleTap()
+                            } else {
+                                lastTapAt = down.uptimeMillis
+                                lastTapAtX = down.position.x
+                                select(down.position.x)
+                            }
                         }
                     }
                 }
