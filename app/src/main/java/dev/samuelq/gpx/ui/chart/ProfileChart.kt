@@ -510,42 +510,8 @@ private class ChartGeometry(
     }
 }
 
-private fun Rect.xFor(value: Float, scale: Scale): Float = left + ((value - scale.min) / scale.span) * width
-
-private fun Rect.yFor(value: Float, scale: Scale): Float = bottom - ((value - scale.min) / scale.span) * height
-
 /** Where the scrubber at [index] meets the line, null outside the plot; y is NaN in a gap. */
-private fun ChartRender.scrubberAt(index: Int?, plot: Rect): Offset? {
-    if (index == null || index !in 0 until series.size) return null
-    val x = plot.xFor(series.x[index], xScale)
-    if (x < plot.left - 1f || x > plot.right + 1f) return null
-    return Offset(x, plot.yFor(series.y[index], yScale))
-}
-
-private fun Rect.valueForX(px: Float, scale: Scale): Float = scale.min + ((px - left) / width) * scale.span
-
-private fun buildPaths(series: ChartSeries, xScale: Scale, yScale: Scale, plot: Rect, line: Path, area: Path) {
-    val starts = series.segmentStartIndices
-    val builder = PolylineBuilder(line, area, plot.bottom)
-    // Visible range plus one either side, so the line runs off both edges.
-    val first = (nearestIndex(series.x, xScale.min) - 1).coerceAtLeast(0)
-    val last = (nearestIndex(series.x, xScale.max) + 2).coerceAtMost(series.size)
-
-    for (segment in starts.indices) {
-        val from = maxOf(starts[segment], first)
-        val to = minOf(if (segment + 1 < starts.size) starts[segment + 1] else series.size, last)
-        for (i in from until to) {
-            val value = series.y[i]
-            if (value.isNaN()) {
-                builder.breakLine()
-                continue
-            }
-            builder.add(plot.xFor(series.x[i], xScale), plot.yFor(value, yScale))
-        }
-        builder.breakLine()
-    }
-    builder.finish()
-}
+private fun ChartRender.scrubberAt(index: Int?, plot: Rect): Offset? = series.pointAt(index, xScale, yScale, plot)
 
 /** A wash over each gap, not a drop to zero, which would invent unmeasured decelerations. */
 private fun DrawScope.drawBreaks(render: ChartRender, plot: Rect, color: Color, labels: List<Rect?>) {
@@ -635,17 +601,4 @@ private fun DrawScope.drawAxisLabels(render: ChartRender, plot: Rect, geometry: 
         val x = centered.coerceIn(0f, (plot.right - layout.size.width).coerceAtLeast(0f))
         drawText(layout, topLeft = Offset(x, plot.bottom + geometry.labelGap))
     }
-}
-
-/** The finite y values' span, for a spoken summary; null with none. */
-private fun ChartSeries.yRange(): ClosedFloatingPointRange<Float>? {
-    var low = Float.POSITIVE_INFINITY
-    var high = Float.NEGATIVE_INFINITY
-    for (v in y) {
-        if (v.isFinite()) {
-            low = minOf(low, v)
-            high = maxOf(high, v)
-        }
-    }
-    return if (low <= high) low..high else null
 }

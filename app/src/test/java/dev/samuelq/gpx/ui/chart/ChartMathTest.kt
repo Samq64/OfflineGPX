@@ -1,5 +1,6 @@
 package dev.samuelq.gpx.ui.chart
 
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -12,6 +13,7 @@ import kotlin.math.roundToInt
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class ChartMathTest {
 
@@ -267,6 +269,79 @@ class ChartMathTest {
         val label = Size(40f, 10f)
         assertEquals(Rect(30f, 45f, 70f, 55f), centredLabel(0f, 100f, 50f, label, margin = 30f))
         assertNull(centredLabel(0f, 100f, 50f, label, margin = 31f))
+    }
+
+    private val plot = Rect(0f, 0f, 100f, 100f)
+    private fun scale(min: Float, max: Float) = Scale(min, max, FloatArray(0))
+
+    @Test
+    fun `x maps to the plot and back`() {
+        val x = scale(10f, 20f)
+        assertEquals(25f, plot.xFor(12.5f, x))
+        assertEquals(12.5f, plot.valueForX(25f, x))
+        // Up from the bottom.
+        assertEquals(75f, plot.yFor(12.5f, x))
+    }
+
+    /** The x of each point drawn, and of each start of a detached run. */
+    private fun traced(series: ChartSeries, xScale: Scale): Pair<List<Int>, List<Int>> {
+        val line = RecordingPath()
+        buildPaths(series, xScale, scale(0f, 100f), plot, line.path, RecordingPath().path)
+        fun xs(prefix: String) =
+            line.calls.filter { it.startsWith(prefix) }.map { it.drop(1).substringBefore(',').toInt() }
+        return xs("").distinct() to xs("M")
+    }
+
+    @Test
+    fun `a zoomed path draws what's in view and one point either side`() {
+        val series = ChartSeries(
+            x = FloatArray(11) { it.toFloat() },
+            y = FloatArray(11) { 50f },
+            segmentStartIndices = intArrayOf(0),
+            color = Color.Red,
+        )
+        assertEquals(listOf(-50, 0, 50, 100, 150) to listOf(-50), traced(series, scale(4f, 6f)))
+    }
+
+    @Test
+    fun `a path is cut at each segment and missing value`() {
+        val series = ChartSeries(
+            x = floatArrayOf(0f, 1f, 2f, 3f, 4f, 5f),
+            y = floatArrayOf(10f, Float.NaN, 30f, 40f, 50f, 60f),
+            segmentStartIndices = intArrayOf(0, 4),
+            color = Color.Red,
+        )
+        assertEquals(listOf(0, 40, 80), traced(series, scale(0f, 5f)).second)
+    }
+
+    @Test
+    fun `the scrubber is on the line, off a gap's, and nowhere off the plot`() {
+        val series = series(floatArrayOf(0f, 5f, 10f), 0).let {
+            ChartSeries(it.x, floatArrayOf(20f, Float.NaN, 80f), it.segmentStartIndices, it.color)
+        }
+        val x = scale(0f, 10f)
+        val y = scale(0f, 100f)
+        assertEquals(Offset(100f, 20f), series.pointAt(2, x, y, plot))
+        assertTrue(series.pointAt(1, x, y, plot)!!.y.isNaN())
+        assertNull(series.pointAt(null, x, y, plot))
+        assertNull(series.pointAt(3, x, y, plot))
+        assertNull(series.pointAt(2, scale(0f, 5f), y, plot))
+    }
+
+    @Test
+    fun `a spoken range skips missing and infinite values`() {
+        assertEquals(
+            3f..7f,
+            series(floatArrayOf(0f, 1f, 2f, 3f), 0).let {
+                ChartSeries(
+                    it.x,
+                    floatArrayOf(Float.NaN, 3f, Float.NEGATIVE_INFINITY, 7f),
+                    it.segmentStartIndices,
+                    it.color,
+                )
+            }.yRange(),
+        )
+        assertNull(ChartSeries(floatArrayOf(0f), floatArrayOf(Float.NaN), intArrayOf(0), Color.Red).yRange())
     }
 
     /** Compose's Path is an interface; this records the calls the builder makes. */
