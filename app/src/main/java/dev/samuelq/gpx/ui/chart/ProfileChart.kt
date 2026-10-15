@@ -108,7 +108,8 @@ fun ProfileChart(
     breakLabel: ((Float) -> String)?,
     /** Tooltip value with its unit; [formatY] labels bare axis ticks. */
     formatValue: (Float) -> String,
-    formatPosition: (Float) -> String,
+    /** Where the point at an index is along the track. */
+    formatPosition: (Int) -> String,
     /** Pinch or pan as (anchor, zoom, pan), anchor and pan as fractions of plot width. */
     onZoom: (Float, Float, Float) -> Unit,
     /** Shows a reset in the corner, and a double tap resets too. */
@@ -187,7 +188,7 @@ fun ProfileChart(
     val state = if (selectedIndex != null && selectedX != null) {
         stringResource(
             R.string.chart_point,
-            formatPosition(selectedX),
+            formatPosition(selectedIndex),
             series.y.getOrNull(selectedIndex)?.let(formatValue) ?: formatValue(Float.NaN),
         )
     } else {
@@ -411,7 +412,7 @@ private fun ChartTooltip(
     boxSize: IntSize,
     selectedIndex: Int?,
     formatValue: (Float) -> String,
-    formatPosition: (Float) -> String,
+    formatPosition: (Int) -> String,
 ) {
     val style = MaterialTheme.typography.labelSmall.tabularFigures()
     val series = render.series
@@ -433,7 +434,7 @@ private fun ChartTooltip(
         Text(
             text = buildAnnotatedString {
                 withStyle(SpanStyle(color = TooltipSecondary)) {
-                    append(formatPosition(series.x[index]))
+                    append(formatPosition(index))
                 }
                 append('\n')
                 append(formatValue(value))

@@ -799,10 +799,7 @@ fun MapScreen(
                 )
 
                 screen.tappedWaypoint?.let { tapped ->
-                    // The live profile lags while its charts are hidden, and would put a new waypoint at its old end.
-                    val charted = chartedFor(tapped)?.takeIf { !isRecording || it.points.size == trace.size }
-                    val distance = remember(tapped, charted) { charted?.distanceTo(tapped.point) }
-                    WaypointTooltip(tapped, distance, tipAt = { tappedWaypointAt.value })
+                    WaypointTooltip(tapped, tipAt = { tappedWaypointAt.value })
                 }
 
                 val hasRoutes = overlays.isNotEmpty() || liveOverlay != null

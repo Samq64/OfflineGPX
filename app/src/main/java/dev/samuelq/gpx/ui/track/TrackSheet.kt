@@ -291,10 +291,21 @@ private fun ProfileDetails(
         remember(formatters) { { formatters.speed(it.toDouble()) } }
     val elevationValue: (Float) -> String =
         remember(formatters) { { formatters.meters(it.toDouble()) } }
-    val positionValue = remember(formatters, useTimeAxis) { formatters.position(useTimeAxis) }
+    val resources = LocalResources.current
+    // The same on either axis: distance, then the time since the start.
+    val positionValue: (Int) -> String = remember(formatters, profile, resources) {
+        { i ->
+            val distance = formatters.distance(profile.distanceMeters[i].toDouble())
+            if (profile.hasTime) {
+                val elapsed = Formatters.duration(profile.elapsedSeconds[i].toDouble())
+                resources.getString(R.string.chart_position_elapsed, distance, elapsed)
+            } else {
+                distance
+            }
+        }
+    }
 
     // Time axis only: on a distance axis a stop is zero wide.
-    val resources = LocalResources.current
     val breakLabel: ((Float) -> String)? = remember(useTimeAxis, resources) {
         if (!useTimeAxis) {
             null

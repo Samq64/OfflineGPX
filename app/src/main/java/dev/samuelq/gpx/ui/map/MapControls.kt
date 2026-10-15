@@ -32,12 +32,9 @@ import dev.samuelq.gpx.ui.TooltipSecondary
 import dev.samuelq.gpx.ui.format.LocalFormatters
 import kotlin.math.roundToInt
 
-/**
- * A tapped waypoint's distance into its track, time, and note, beside its pin tip at [tipAt].
- * [distanceMeters] is null off a track.
- */
+/** A tapped waypoint's time and note, beside its pin tip at [tipAt]. */
 @Composable
-internal fun WaypointTooltip(waypoint: Waypoint, distanceMeters: Double?, tipAt: () -> Offset) {
+internal fun WaypointTooltip(waypoint: Waypoint, tipAt: () -> Offset) {
     val density = LocalDensity.current
     val headRadius = with(density) { WaypointPinHeadRadius.toPx() }
     val height = with(density) { (WaypointPinHeadRadius + PIN_TIP_LENGTH_DP.dp).toPx() }
@@ -52,16 +49,11 @@ internal fun WaypointTooltip(waypoint: Waypoint, distanceMeters: Double?, tipAt:
         Column(Modifier.semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }) {
             val formatters = LocalFormatters.current
             val name = waypoint.name?.takeIf(String::isNotBlank)
-            val distance = distanceMeters?.let(formatters::distance)
-            val time = waypoint.point.time?.let { formatters.time(it) }
-            val detail = when {
-                distance != null && time != null -> stringResource(R.string.waypoint_distance_time, distance, time)
-                else -> distance ?: time
-            }
+            val time = waypoint.point.time
             // The placeholder dash only when there's nothing else to show.
-            if (detail != null || name == null) {
+            if (time != null || name == null) {
                 Text(
-                    text = detail ?: formatters.time(null),
+                    text = formatters.time(time),
                     style = MaterialTheme.typography.labelMedium,
                     color = TooltipSecondary,
                 )
