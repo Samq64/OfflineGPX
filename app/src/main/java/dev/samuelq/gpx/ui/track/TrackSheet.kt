@@ -280,7 +280,7 @@ private fun ProfileDetails(
     // Keyed on the scale: label precision follows the step.
     val formatX: (Float) -> String = remember(formatters, useTimeAxis, xScale) {
         if (useTimeAxis) {
-            Formatters.durationAxisFor(xScale.max)
+            { seconds -> Formatters.duration(seconds.toDouble()) }
         } else {
             formatters.distanceAxisFor(xScale.step)
         }
@@ -311,7 +311,7 @@ private fun ProfileDetails(
             null
         } else {
             { seconds ->
-                resources.getString(R.string.chart_gap, Formatters.durationAxis(seconds))
+                resources.getString(R.string.chart_gap, Formatters.labelledDuration(seconds.toDouble()))
             }
         }
     }

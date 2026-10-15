@@ -93,7 +93,7 @@ fun trackHeadline(stats: TrackStats, hasTime: Boolean, hasElevation: Boolean): L
                 add(
                     Stat(
                         label = timeLabel,
-                        value = Formatters.duration(stats.totalDurationSeconds),
+                        value = Formatters.labelledDuration(stats.totalDurationSeconds),
                         spoken = resources.spokenDuration(stats.totalDurationSeconds),
                     ),
                 )
@@ -114,7 +114,11 @@ fun trackHeadline(stats: TrackStats, hasTime: Boolean, hasElevation: Boolean): L
 internal fun distanceAndElapsed(distanceMeters: Double, elapsedSeconds: Double?): List<Stat> = listOfNotNull(
     Stat(stringResource(R.string.axis_distance), LocalFormatters.current.distance(distanceMeters)),
     elapsedSeconds?.let {
-        Stat(stringResource(R.string.stat_elapsed), Formatters.duration(it), LocalResources.current.spokenDuration(it))
+        Stat(
+            stringResource(R.string.stat_elapsed),
+            Formatters.labelledDuration(it),
+            LocalResources.current.spokenDuration(it),
+        )
     },
 )
 
@@ -152,7 +156,7 @@ fun TrackDetails(
             if (hasTime || complete) {
                 // Shown even when equal to elapsed time, for a stable layout.
                 val moving = timed?.movingDurationSeconds ?: 0.0
-                add(Stat(movingLabel, Formatters.duration(moving), resources.spokenDuration(moving)))
+                add(Stat(movingLabel, Formatters.labelledDuration(moving), resources.spokenDuration(moving)))
                 if (hasElevation || complete) {
                     add(Stat(ascentLabel, formatters.meters(climbed?.ascentMeters ?: 0.0)))
                     add(Stat(descentLabel, formatters.meters(climbed?.descentMeters ?: 0.0)))

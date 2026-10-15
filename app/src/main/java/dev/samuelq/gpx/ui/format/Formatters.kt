@@ -150,39 +150,18 @@ class Formatters(
         internal const val FEET_PER_METER = 3.280839895
         private const val SECONDS_PER_HOUR = 3600.0
 
-        /** `h:mm:ss` past an hour, `m:ss` below it, in the locale's digits. */
+        /** `h:mm:ss` in the locale's digits; hours even when zero, so it never reads as `m:ss`. */
         fun duration(seconds: Double, locale: Locale = Locale.getDefault()): String {
             if (seconds.isNaN() || seconds < 0) return EMPTY
             val total = seconds.roundToLong()
-            val hours = total / 3600
-            val minutes = (total % 3600) / 60
-            val secs = total % 60
-            return if (hours > 0) {
-                String.format(locale, "%d:%02d:%02d", hours, minutes, secs)
-            } else {
-                String.format(locale, "%d:%02d", minutes, secs)
-            }
+            return String.format(locale, "%d:%02d:%02d", total / 3600, (total % 3600) / 60, total % 60)
         }
 
-        /** Compact form: `h:mm` when [hours], else `m:ss`. */
-        fun durationAxis(
-            seconds: Float,
-            hours: Boolean = seconds >= SECONDS_PER_HOUR,
-            locale: Locale = Locale.getDefault(),
-        ): String {
-            if (seconds.isNaN() || seconds < 0) return EMPTY
-            val total = seconds.roundToLong()
-            return if (hours) {
-                String.format(locale, "%d:%02d", total / 3600, (total % 3600) / 60)
-            } else {
-                String.format(locale, "%d:%02d", total / 60, total % 60)
-            }
-        }
-
-        /** One format for every tick, so `33:20` and `1:06` never mix minutes and hours. */
-        fun durationAxisFor(maxSeconds: Float): (Float) -> String {
-            val hours = maxSeconds >= SECONDS_PER_HOUR
-            return { seconds -> durationAxis(seconds, hours) }
+        /** [duration] beside a label that says it is one, so a zero hour is dropped: `m:ss`. */
+        fun labelledDuration(seconds: Double, locale: Locale = Locale.getDefault()): String {
+            val total = seconds.takeIf { it >= 0 }?.roundToLong() ?: return EMPTY
+            if (total >= SECONDS_PER_HOUR) return duration(seconds, locale)
+            return String.format(locale, "%d:%02d", total / 60, total % 60)
         }
 
         /** Always kilobytes, rounded up, so tracks compare at a glance. */

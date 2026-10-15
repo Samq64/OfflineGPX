@@ -82,7 +82,9 @@ class FormattersTest {
     @Test
     fun `duration is the same in both systems`() {
         assertEquals("1:04:12", Formatters.duration(3852.0))
-        assertEquals("4:12", Formatters.duration(252.0))
+        assertEquals("0:04:12", Formatters.duration(252.0))
+        assertEquals("4:12", Formatters.labelledDuration(252.0))
+        assertEquals("1:04:12", Formatters.labelledDuration(3852.0))
     }
 
     @Test
@@ -100,16 +102,6 @@ class FormattersTest {
 
         val slow = metric.speedAxisFor(0.5f / 3.6f, en)
         assertEquals("1.5 km/h", slow(1.5f / 3.6f))
-    }
-
-    /** One format per axis: `33:20` beside `1:06` reads as minutes, then hours. */
-    @Test
-    fun `duration ticks share one format`() {
-        val short = Formatters.durationAxisFor(1800f)
-        assertEquals(listOf("0:00", "10:00", "20:00"), listOf(0f, 600f, 1200f).map(short))
-
-        val long = Formatters.durationAxisFor(4000f)
-        assertEquals(listOf("0:00", "0:30", "1:00"), listOf(0f, 1800f, 3600f).map(long))
     }
 
     @Test
@@ -177,10 +169,8 @@ class FormattersTest {
     @Test
     fun `negative or missing durations read as nothing`() {
         assertEquals(Formatters.EMPTY, Formatters.duration(-1.0))
-        assertEquals(Formatters.EMPTY, Formatters.durationAxis(Float.NaN))
-        assertEquals(Formatters.EMPTY, Formatters.durationAxis(-1f))
-        assertEquals("1:05", Formatters.durationAxis(3900f))
-        assertEquals("0:59", Formatters.durationAxis(59f))
+        assertEquals(Formatters.EMPTY, Formatters.labelledDuration(Double.NaN))
+        assertEquals(Formatters.EMPTY, Formatters.labelledDuration(-1.0))
     }
 
     @Test
