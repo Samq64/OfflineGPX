@@ -481,8 +481,7 @@ fun MapScreen(
     // What saving the trim would drop with the points.
     val cutWaypoints = remember(focusedTrack, trimRange) {
         val range = trimRange ?: return@remember emptySet()
-        focusedTrack?.track?.waypoints?.filterIndexed { i, _ -> focusedTrack.waypointIndices[i] !in range }?.toSet()
-            .orEmpty()
+        focusedTrack?.waypointsCutBy(range)?.toSet().orEmpty()
     }
 
     // Indexed like the analysis, so a chart index is a point on this line.

@@ -104,7 +104,7 @@ fun ScaleBar(
 private data class SnappedScale(val meters: Double, val width: Dp)
 
 /** Whole number and unit; the general formatter's decimal would imply false precision. */
-private fun scaleLabel(meters: Double, units: UnitSystem, locale: Locale = Locale.getDefault()): String {
+internal fun scaleLabel(meters: Double, units: UnitSystem, locale: Locale = Locale.getDefault()): String {
     val (value, unit) = when {
         units == UnitSystem.METRIC && meters >= 1000 -> meters / 1000 to "km"
         units == UnitSystem.METRIC -> meters to "m"
@@ -115,7 +115,7 @@ private fun scaleLabel(meters: Double, units: UnitSystem, locale: Locale = Local
 }
 
 /** The largest 1-2-5 round distance that fits. */
-private fun roundDistance(maxMeters: Double, units: UnitSystem): Double {
+internal fun roundDistance(maxMeters: Double, units: UnitSystem): Double {
     if (maxMeters <= 0.0) return 0.0
 
     // Feet below a mile, miles above: "2640 ft" is a conversion, not a distance.

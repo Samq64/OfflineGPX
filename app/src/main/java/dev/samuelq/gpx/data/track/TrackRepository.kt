@@ -432,7 +432,7 @@ class TrackRepository(
         val kept = Track(
             name = null,
             points = track.points.slice(keep),
-            waypoints = track.waypoints.filterIndexed { i, _ -> loaded.waypointIndices[i] in keep },
+            waypoints = loaded.waypointsKeptBy(keep),
         )
         writeAtomically(into) { writer.write(kept, it) }
         // Parsed back, so the cache holds the written precision.

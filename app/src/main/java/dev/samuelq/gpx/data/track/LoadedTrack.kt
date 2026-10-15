@@ -2,6 +2,7 @@ package dev.samuelq.gpx.data.track
 
 import dev.samuelq.gpx.core.analysis.TrackProfile
 import dev.samuelq.gpx.core.model.Track
+import dev.samuelq.gpx.core.model.Waypoint
 import dev.samuelq.gpx.data.db.TrackSummary
 import java.io.File
 
@@ -19,6 +20,14 @@ class LoadedTrack(
     val waypointIndices: IntArray by lazy {
         IntArray(track.waypoints.size) { profile.indexOf(track.waypoints[it].point) }
     }
+
+    /** The waypoints a trim to [keep] writes. */
+    fun waypointsKeptBy(keep: IntRange): List<Waypoint> =
+        track.waypoints.filterIndexed { i, _ -> waypointIndices[i] in keep }
+
+    /** The rest, which the trim drops. */
+    fun waypointsCutBy(keep: IntRange): List<Waypoint> =
+        track.waypoints.filterIndexed { i, _ -> waypointIndices[i] !in keep }
 }
 
 /** The UI maps these to messages. */

@@ -3,6 +3,7 @@ package dev.samuelq.gpx.ui.map
 import androidx.compose.ui.geometry.Offset
 import dev.samuelq.gpx.core.model.TrackPoint
 import dev.samuelq.gpx.core.model.Waypoint
+import org.oscim.core.MapPosition
 import org.oscim.core.MercatorProjection
 import org.oscim.core.Tile
 import org.oscim.map.Map
@@ -56,17 +57,29 @@ internal fun pick(
     liveRoute: RouteOverlay?,
     reachPx: Float,
 ): Pair<Long, Int>? {
-    // Screen pixels equal map pixels, since the map never rotates or tilts.
     val position = map.mapPosition
-    val mapSize = Tile.SIZE * position.scale
+    val (tapX, tapY) = mapPixel(screenX, screenY, position, map.width, map.height)
     return nearestOnRoutes(
-        tapX = position.x * mapSize + (screenX - map.width / 2.0),
-        tapY = position.y * mapSize + (screenY - map.height / 2.0),
-        mapSize = mapSize,
+        tapX = tapX,
+        tapY = tapY,
+        mapSize = Tile.SIZE * position.scale,
         // The recording too, so a tap on it doesn't read as the bare map.
         routes = routes + listOfNotNull(liveRoute),
         reachPx = reachPx,
     )
+}
+
+/** A screen point in map pixels, the inverse of [screenPosition] for a [width] by [height] view. */
+internal fun mapPixel(
+    screenX: Float,
+    screenY: Float,
+    position: MapPosition,
+    width: Int,
+    height: Int,
+): Pair<Double, Double> {
+    // Screen pixels equal map pixels, since the map never rotates or tilts.
+    val mapSize = Tile.SIZE * position.scale
+    return position.x * mapSize + (screenX - width / 2.0) to position.y * mapSize + (screenY - height / 2.0)
 }
 
 /** [pick] in map pixels, with the world [mapSize] across. */

@@ -8,7 +8,9 @@ import dev.samuelq.gpx.core.model.Waypoint
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import org.oscim.core.MapPosition
 import org.oscim.core.MercatorProjection
+import org.oscim.core.Tile
 
 /** Which point a tap on a line picks, in map pixels around the origin. */
 class MapHitTestTest {
@@ -30,6 +32,17 @@ class MapHitTestTest {
 
     private fun tap(x: Double, y: Double, vararg routes: RouteOverlay, reach: Float = 10f) =
         nearestOnRoutes(centre + x, centre + y, mapSize, routes.toList(), reach)
+
+    @Test
+    fun `a screen point maps back to the map pixel it was drawn at`() {
+        val position = MapPosition(51.5, -0.1, (1 shl 14).toDouble())
+        val point = TrackPoint(51.501, -0.098, null, null)
+        val screen = screenPosition(point, position, 1080, 2400)
+        val (x, y) = mapPixel(screen.x, screen.y, position, 1080, 2400)
+        val mapSize = Tile.SIZE * position.scale
+        assertEquals(MercatorProjection.longitudeToX(point.longitude) * mapSize, x, 0.01)
+        assertEquals(MercatorProjection.latitudeToY(point.latitude) * mapSize, y, 0.01)
+    }
 
     @Test
     fun `a lone point is hit within reach`() {
