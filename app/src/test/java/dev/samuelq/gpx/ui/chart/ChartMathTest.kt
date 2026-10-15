@@ -1,5 +1,7 @@
 package dev.samuelq.gpx.ui.chart
 
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import kotlin.math.abs
@@ -9,6 +11,7 @@ import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 class ChartMathTest {
 
@@ -240,6 +243,30 @@ class ChartMathTest {
         val area = RecordingPath()
         PolylineBuilder(RecordingPath().path, area.path).finish()
         assertEquals(emptyList(), area.calls)
+    }
+
+    private fun series(x: FloatArray, vararg starts: Int) =
+        ChartSeries(x = x, y = FloatArray(x.size), segmentStartIndices = starts, color = Color.Red)
+
+    @Test
+    fun `a break spans the last point of one segment to the first of the next`() {
+        val timed = series(floatArrayOf(0f, 5f, 10f, 610f, 615f, 900f, 905f), 0, 3, 5)
+        assertEquals(listOf(10f..610f, 615f..900f), timed.breaks())
+    }
+
+    @Test
+    fun `a break that x doesn't advance across, or that isn't inside the series, isn't one`() {
+        // Distance doesn't advance through signal loss.
+        assertEquals(emptyList(), series(floatArrayOf(0f, 5f, 5f, 9f), 0, 2).breaks())
+        assertEquals(emptyList(), series(floatArrayOf(0f, 5f), 0).breaks())
+        assertEquals(emptyList(), series(floatArrayOf(0f, 5f), 0, 0, 2).breaks())
+    }
+
+    @Test
+    fun `a label is centred in its span only with a margin either side`() {
+        val label = Size(40f, 10f)
+        assertEquals(Rect(30f, 45f, 70f, 55f), centredLabel(0f, 100f, 50f, label, margin = 30f))
+        assertNull(centredLabel(0f, 100f, 50f, label, margin = 31f))
     }
 
     /** Compose's Path is an interface; this records the calls the builder makes. */

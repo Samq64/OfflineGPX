@@ -12,11 +12,13 @@ import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.core.content.FileProvider
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.samuelq.gpx.MainActivity
+import dev.samuelq.gpx.PAUSE_SECONDS
 import dev.samuelq.gpx.R
 import dev.samuelq.gpx.container
 import dev.samuelq.gpx.core.model.UnitSystem
@@ -24,6 +26,7 @@ import dev.samuelq.gpx.data.map.OfflineMap
 import dev.samuelq.gpx.data.track.TrackFiles
 import dev.samuelq.gpx.sampleGpx
 import dev.samuelq.gpx.targetContext
+import dev.samuelq.gpx.ui.format.spokenDuration
 import dev.samuelq.gpx.waitFor
 import java.io.File
 import java.nio.ByteBuffer
@@ -133,6 +136,32 @@ class AppFlowsTest {
         // In the library too.
         compose.onNodeWithContentDescription(string(R.string.library_title)).performClick()
         scrollLibraryTo(hasText(name))
+    }
+
+    /** Drawn on a canvas, so it's checked through what a screen reader hears. */
+    @Test
+    fun aPauseIsSpokenAsAGapInBothCharts() {
+        val name = "Paused ${System.nanoTime()}"
+        val uri = download("paused-${System.nanoTime()}.gpx", sampleGpx(name = name, pauseAt = 10).toByteArray())
+        launch(
+            Intent(Intent.ACTION_VIEW, uri, targetContext, MainActivity::class.java)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),
+        )
+        compose.waitUntil(10_000) { tracks().any { it.trackName == name } }
+        waitForText(name)
+
+        val resources = targetContext.resources
+        val gap = resources.getQuantityString(
+            R.plurals.chart_gaps,
+            1,
+            1,
+            resources.spokenDuration(PAUSE_SECONDS.toDouble()),
+        )
+        val spoken = hasContentDescription(gap, substring = true)
+        // On a distance axis a pause has no width.
+        assertTrue(compose.onAllNodes(spoken).fetchSemanticsNodes().isEmpty())
+        compose.onNodeWithText(string(R.string.axis_time)).performScrollTo().performClick()
+        compose.waitUntil(5_000) { compose.onAllNodes(spoken).fetchSemanticsNodes().size == 2 }
     }
 
     /** As CoMaps shares even one file; a map among them is told apart by its first bytes. */

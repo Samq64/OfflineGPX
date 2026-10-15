@@ -50,6 +50,7 @@ import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.contentDescription
@@ -107,8 +108,8 @@ fun ProfileChart(
     selectedIndex: Int?,
     onSelectedIndexChange: (Int?) -> Unit,
     contentDescription: String,
-    /** Labels a data gap by its width in x units; null leaves gaps unlabelled. */
-    breakLabel: ((Float) -> String)?,
+    /** Shows and speaks gaps by their width in x units; null leaves them unlabelled. */
+    breakLabel: BreakLabel?,
     /** Tooltip value with its unit; [formatY] labels bare axis ticks. */
     formatValue: (Float) -> String,
     /** Where the point at an index is along the track. */
@@ -148,11 +149,13 @@ fun ProfileChart(
             yScale = yScale,
             yTicks = yScale.ticks.map { textMeasurer.measure(formatY(it), labelStyle) },
             xTicks = xScale.ticks.map { textMeasurer.measure(formatX(it), labelStyle) },
-            breaks = series.breaks().map { (from, to) ->
+            breaks = series.breaks().map { gap ->
                 ChartBreak(
-                    from = from,
-                    to = to,
-                    layout = breakLabel?.let { textMeasurer.measure(it(to - from), labelStyle) },
+                    from = gap.start,
+                    to = gap.endInclusive,
+                    layout = breakLabel?.let {
+                        textMeasurer.measure(it.shown(gap.endInclusive - gap.start), labelStyle)
+                    },
                 )
             },
         )
@@ -184,9 +187,16 @@ fun ProfileChart(
 
     // Adjustable for a screen reader: each step picks the nearest point, as a tap would.
     val range = remember(series) { series.yRange() }
-    val summary = range?.let {
+    val described = range?.let {
         stringResource(R.string.chart_summary, contentDescription, formatValue(it.start), formatValue(it.endInclusive))
     } ?: contentDescription
+    // Drawn gaps only, so the summary says what the chart shows.
+    val breaks = render.breaks
+    val gaps = breakLabel?.takeIf { breaks.isNotEmpty() }?.let { label ->
+        val total = breaks.sumOf { (it.to - it.from).toDouble() }.toFloat()
+        pluralStringResource(R.plurals.chart_gaps, breaks.size, breaks.size, label.spoken(total))
+    }
+    val summary = gaps?.let { stringResource(R.string.chart_summary_gaps, described, it) } ?: described
     val selectedX = selectedIndex?.let { series.x.getOrNull(it) }
     val state = if (selectedIndex != null && selectedX != null) {
         stringResource(
@@ -454,6 +464,10 @@ private fun ChartTooltip(
     }
 }
 
+/** A gap's width in x units, as drawn in it and as spoken in the chart's summary. */
+@Immutable
+class BreakLabel(val shown: (Float) -> String, val spoken: (Float) -> String)
+
 /** Widest y-axis label gutter across a stack of charts. */
 @Stable
 class ChartAxisGroup {
@@ -472,22 +486,6 @@ private class ChartRender(
 
 @Immutable
 private class ChartBreak(val from: Float, val to: Float, val layout: TextLayoutResult?)
-
-/** The x spans between segments (signal loss or long stops). */
-private fun ChartSeries.breaks(): List<Pair<Float, Float>> {
-    if (segmentStartIndices.size < 2) return emptyList()
-    // Not `size` inside buildList, which is the list being built.
-    val pointCount = size
-    return buildList {
-        for (segment in 1 until segmentStartIndices.size) {
-            val index = segmentStartIndices[segment]
-            if (index <= 0 || index >= pointCount) continue
-            val from = x[index - 1]
-            val to = x[index]
-            if (to > from) add(from to to)
-        }
-    }
-}
 
 @Immutable
 private class ChartGeometry(
@@ -571,10 +569,8 @@ private fun DrawScope.drawBreaks(render: ChartRender, plot: Rect, color: Color, 
 private fun Density.breakLabelRects(render: ChartRender, plot: Rect): List<Rect?> = render.breaks.map { gap ->
     val layout = gap.layout ?: return@map null
     val left = plot.xFor(gap.from, render.xScale)
-    val width = plot.xFor(gap.to, render.xScale) - left
-    if (layout.size.width + 2 * LabelGap.toPx() > width) return@map null
-    val size = layout.size.toSize()
-    Rect(Offset(left + (width - size.width) / 2f, plot.center.y - size.height / 2f), size)
+    val right = plot.xFor(gap.to, render.xScale)
+    centredLabel(left, right, plot.center.y, layout.size.toSize(), LabelGap.toPx())
 }
 
 /** A chart's footprint and bare grid with [message] over it, for a series with nothing to plot. */

@@ -28,6 +28,13 @@
     <string name="chart_speed">Speed</string>
     <!-- Spoken for a chart: its title and range, then the point it's on. -->
     <string name="chart_summary">%1$s chart, %2$s to %3$s</string>
+    <!-- The summary, then its gaps. -->
+    <string name="chart_summary_gaps">%1$s, %2$s</string>
+    <!-- %2$s is the gaps' total length, in words. -->
+    <plurals name="chart_gaps">
+        <item quantity="one">%1$d gap of %2$s</item>
+        <item quantity="other">%1$d gaps, %2$s in all</item>
+    </plurals>
     <!-- Not "Paused": a break is equally signal loss or an analyser cut, and naming one
          asserts a cause the app took care not to infer. -->
     <string name="chart_waiting">No movement yet</string>

@@ -61,6 +61,7 @@ import dev.samuelq.gpx.core.analysis.TrackProfile
 import dev.samuelq.gpx.core.model.Waypoint
 import dev.samuelq.gpx.data.track.LoadedTrack
 import dev.samuelq.gpx.ui.EdgePadding
+import dev.samuelq.gpx.ui.chart.BreakLabel
 import dev.samuelq.gpx.ui.chart.ChartAxisGroup
 import dev.samuelq.gpx.ui.chart.ChartSeries
 import dev.samuelq.gpx.ui.chart.EmptyChart
@@ -306,8 +307,11 @@ private fun ProfileDetails(
     }
 
     // Time axis only: on a distance axis a stop is zero wide. The wash says it's a gap.
-    val breakLabel: ((Float) -> String)? = remember(useTimeAxis) {
-        if (useTimeAxis) { seconds -> Formatters.duration(seconds.toDouble()) } else null
+    val breakLabel = remember(useTimeAxis, resources) {
+        BreakLabel(
+            shown = { Formatters.duration(it.toDouble()) },
+            spoken = { resources.spokenDuration(it.toDouble()) },
+        ).takeIf { useTimeAxis }
     }
 
     // While trimming, the whole track's details would read as the trimmed one's.

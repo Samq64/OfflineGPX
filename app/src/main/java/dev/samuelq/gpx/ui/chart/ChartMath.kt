@@ -1,6 +1,9 @@
 package dev.samuelq.gpx.ui.chart
 
 import androidx.compose.runtime.Immutable
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import kotlin.math.abs
@@ -166,6 +169,27 @@ fun zoomView(
     val start = (anchored - anchor * span - pan * span)
         .coerceIn(domain.start, domain.endInclusive - span)
     return start..(start + span)
+}
+
+/** The x spans between segments (signal loss or long stops); none where x doesn't advance. */
+fun ChartSeries.breaks(): List<ClosedFloatingPointRange<Float>> {
+    // Not `size` inside buildList, which is the list being built.
+    val pointCount = size
+    return buildList {
+        for (segment in 1 until segmentStartIndices.size) {
+            val index = segmentStartIndices[segment]
+            if (index <= 0 || index >= pointCount) continue
+            val from = x[index - 1]
+            val to = x[index]
+            if (to > from) add(from..to)
+        }
+    }
+}
+
+/** [label] centred between [left] and [right] at [centreY], or null without [margin] either side. */
+fun centredLabel(left: Float, right: Float, centreY: Float, label: Size, margin: Float): Rect? {
+    if (label.width + 2 * margin > right - left) return null
+    return Rect(Offset((left + right - label.width) / 2f, centreY - label.height / 2f), label)
 }
 
 /** Closest index in sorted [values]; binary search since it runs on every pointer move. */
