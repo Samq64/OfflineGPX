@@ -21,7 +21,6 @@
     <string name="chart_elevation">Elevation</string>
     <string name="chart_elevation_empty">This track has no elevation data.</string>
     <string name="chart_speed_empty">This track has no timestamps.</string>
-    <string name="chart_gap">Gap %1$s</string>
     <string name="chart_no_point">No point selected</string>
     <string name="chart_point">%1$s, %2$s</string>
     <!-- A chart point's distance into the track, then the time since its start. -->

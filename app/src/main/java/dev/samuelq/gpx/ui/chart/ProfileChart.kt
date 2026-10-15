@@ -34,12 +34,14 @@ import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerInputChange
@@ -62,6 +64,7 @@ import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -261,13 +264,20 @@ private fun StaticLayer(render: ChartRender, geometry: ChartGeometry, chartColor
                 val areaPath = Path()
                 buildPaths(render.series, render.xScale, render.yScale, plot, linePath, areaPath)
                 val stroke = Stroke(width = LineWidth.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                val gapLabels = breakLabelRects(render, plot)
+                // Grid lines would strike through gap labels.
+                val gridKnockout = Path().apply {
+                    gapLabels.forEach { it?.let { rect -> addRect(rect.inflate(LabelGap.toPx() / 2f)) } }
+                }
 
                 onDrawBehind {
-                    drawGrid(render.yScale, plot, chartColors.grid, GridWidth.toPx())
+                    clipPath(gridKnockout, ClipOp.Difference) {
+                        drawGrid(render.yScale, plot, chartColors.grid, GridWidth.toPx())
+                    }
                     // Bleed above so a peak at the top isn't shaved flat.
                     val bleed = LineWidth.toPx()
                     clipRect(plot.left, plot.top - bleed, plot.right, plot.bottom) {
-                        drawBreaks(render, plot, chartColors.label)
+                        drawBreaks(render, plot, chartColors.label, gapLabels)
                         drawPath(areaPath, render.series.color.copy(alpha = AreaFillAlpha))
                         drawPath(linePath, render.series.color, style = stroke)
                     }
@@ -466,10 +476,12 @@ private class ChartBreak(val from: Float, val to: Float, val layout: TextLayoutR
 /** The x spans between segments (signal loss or long stops). */
 private fun ChartSeries.breaks(): List<Pair<Float, Float>> {
     if (segmentStartIndices.size < 2) return emptyList()
+    // Not `size` inside buildList, which is the list being built.
+    val pointCount = size
     return buildList {
         for (segment in 1 until segmentStartIndices.size) {
             val index = segmentStartIndices[segment]
-            if (index <= 0 || index >= size) continue
+            if (index <= 0 || index >= pointCount) continue
             val from = x[index - 1]
             val to = x[index]
             if (to > from) add(from to to)
@@ -538,27 +550,31 @@ private fun buildPaths(series: ChartSeries, xScale: Scale, yScale: Scale, plot: 
 }
 
 /** A wash over each gap, not a drop to zero, which would invent unmeasured decelerations. */
-private fun DrawScope.drawBreaks(render: ChartRender, plot: Rect, color: Color) {
-    for (gap in render.breaks) {
+private fun DrawScope.drawBreaks(render: ChartRender, plot: Rect, color: Color, labels: List<Rect?>) {
+    render.breaks.forEachIndexed { index, gap ->
         val left = plot.xFor(gap.from, render.xScale)
         val right = plot.xFor(gap.to, render.xScale)
-        val width = right - left
         // A sub-pixel band would read as a grid line.
-        if (width < 1f) continue
+        if (right - left < 1f) return@forEachIndexed
 
         drawRect(
             color = color.copy(alpha = BreakWashAlpha),
             topLeft = Offset(left, plot.top),
-            size = Size(width, plot.height),
+            size = Size(right - left, plot.height),
         )
-
-        val layout = gap.layout ?: continue
-        if (layout.size.width + 2 * LabelGap.toPx() > width) continue
-        drawText(
-            textLayoutResult = layout,
-            topLeft = Offset(left + (width - layout.size.width) / 2f, plot.top + 2f),
-        )
+        val layout = gap.layout ?: return@forEachIndexed
+        labels[index]?.let { drawText(layout, topLeft = it.topLeft) }
     }
+}
+
+/** Each gap's label centred in its wash, or null where it has none or wouldn't fit. */
+private fun Density.breakLabelRects(render: ChartRender, plot: Rect): List<Rect?> = render.breaks.map { gap ->
+    val layout = gap.layout ?: return@map null
+    val left = plot.xFor(gap.from, render.xScale)
+    val width = plot.xFor(gap.to, render.xScale) - left
+    if (layout.size.width + 2 * LabelGap.toPx() > width) return@map null
+    val size = layout.size.toSize()
+    Rect(Offset(left + (width - size.width) / 2f, plot.center.y - size.height / 2f), size)
 }
 
 /** A chart's footprint and bare grid with [message] over it, for a series with nothing to plot. */

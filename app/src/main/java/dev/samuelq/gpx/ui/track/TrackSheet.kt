@@ -305,15 +305,9 @@ private fun ProfileDetails(
         }
     }
 
-    // Time axis only: on a distance axis a stop is zero wide.
-    val breakLabel: ((Float) -> String)? = remember(useTimeAxis, resources) {
-        if (!useTimeAxis) {
-            null
-        } else {
-            { seconds ->
-                resources.getString(R.string.chart_gap, Formatters.labelledDuration(seconds.toDouble()))
-            }
-        }
+    // Time axis only: on a distance axis a stop is zero wide. The wash says it's a gap.
+    val breakLabel: ((Float) -> String)? = remember(useTimeAxis) {
+        if (useTimeAxis) { seconds -> Formatters.duration(seconds.toDouble()) } else null
     }
 
     // While trimming, the whole track's details would read as the trimmed one's.
