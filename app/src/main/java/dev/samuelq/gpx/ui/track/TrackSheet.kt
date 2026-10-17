@@ -2,6 +2,7 @@ package dev.samuelq.gpx.ui.track
 
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -46,7 +47,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -152,7 +157,16 @@ fun TrackSheet(
         onKeptRangeChange = trim?.onRangeChange,
     ) {
         if (trim != null) {
-            TrimHeader(title, profile, trim, useTimeAxis, onAxisChange, selectedIndex, onSelectedIndexChange)
+            TrimHeader(
+                title = title,
+                profile = profile,
+                trim = trim,
+                routeColor = routeColor,
+                useTimeAxis = useTimeAxis,
+                onAxisChange = onAxisChange,
+                selectedIndex = selectedIndex,
+                onSelectedIndexChange = onSelectedIndexChange,
+            )
             return@ProfileSheet
         }
         SheetTitle(
@@ -452,6 +466,8 @@ private fun TrimHeader(
     title: String,
     profile: TrackProfile,
     trim: TrimControls,
+    /** The map's marks for the ends are in it, so the legend is too. */
+    routeColor: Color,
     useTimeAxis: Boolean,
     onAxisChange: (Boolean) -> Unit,
     /** An end selected was last moved, by a step or on the charts, and is the one shown there. */
@@ -536,6 +552,8 @@ private fun TrimHeader(
         ) {
             TrimEnd(
                 label = stringResource(R.string.trim_start),
+                mark = TrimMark.Ring,
+                markColor = routeColor,
                 // What's cut from each end, so both read alike.
                 cut = format(x[first]),
                 spoken = speak(x[first]),
@@ -551,6 +569,8 @@ private fun TrimHeader(
             val cutFromEnd = x[last] - x[end]
             TrimEnd(
                 label = stringResource(R.string.trim_end),
+                mark = TrimMark.Square,
+                markColor = routeColor,
                 cut = if (end < last) stringResource(R.string.trim_end_cut, format(cutFromEnd)) else format(0f),
                 spoken = stringResource(R.string.trim_end_cut_spoken, speak(cutFromEnd)),
                 active = selectedIndex == end,
@@ -578,6 +598,9 @@ private fun TrimActions(trim: TrimControls, canSave: Boolean) {
 @Composable
 private fun TrimEnd(
     label: String,
+    /** This end's shape on the map, beside [label] as its legend. */
+    mark: TrimMark,
+    markColor: Color,
     /** How much is cut from this end. */
     cut: String,
     spoken: String,
@@ -598,11 +621,15 @@ private fun TrimEnd(
             Modifier.weight(1f).padding(valueInset),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TrimMarkGlyph(mark, markColor)
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             // Shrunk to fit, not clipped: a value cut short, unit and all, read as another number.
             // Over an unseen full-size line, so a shrunk value leaves the two ends level. Without its
             // line height, which non-linear font scaling grows at the smaller size, past the full line's.
@@ -622,6 +649,34 @@ private fun TrimEnd(
         RepeatingIconButton(R.drawable.ic_chevron_right, later, onLater)
     }
 }
+
+/** The shapes the map marks a trim's moved ends with: hollow, so neither reads as the scrub dot. */
+private enum class TrimMark { Ring, Square }
+
+/** [mark] at the label's size, as the map draws it: a hollow outline. Decorative; the label says which end. */
+@Composable
+private fun TrimMarkGlyph(mark: TrimMark, color: Color) {
+    val size = with(LocalDensity.current) { MaterialTheme.typography.labelSmall.fontSize.toDp() }
+    Canvas(Modifier.size(size)) {
+        val stroke = Stroke(width = MarkGlyphStroke.toPx())
+        val inset = stroke.width / 2
+        when (mark) {
+            TrimMark.Ring -> drawCircle(color, radius = this.size.minDimension / 2 - inset, style = stroke)
+            TrimMark.Square -> drawRoundRect(
+                color = color,
+                topLeft = Offset(inset, inset),
+                size = Size(this.size.width - stroke.width, this.size.height - stroke.width),
+                cornerRadius = CornerRadius(this.size.minDimension * MarkGlyphCorner),
+                style = stroke,
+            )
+        }
+    }
+}
+
+private val MarkGlyphStroke = 2.dp
+
+// As the map's square.
+private const val MarkGlyphCorner = 0.2f
 
 /** Steps once on a tap; held, steps again, more at a time the longer, until let go. Null disables it. */
 @Composable
