@@ -10,6 +10,7 @@ import dev.samuelq.gpx.R
 import dev.samuelq.gpx.core.analysis.TrackAnalyzer
 import dev.samuelq.gpx.core.analysis.TrackProfile
 import dev.samuelq.gpx.core.model.TrackPoints
+import dev.samuelq.gpx.core.model.Waypoint
 import dev.samuelq.gpx.data.db.TrackEntity
 import dev.samuelq.gpx.data.map.MapImportResult
 import dev.samuelq.gpx.data.map.MapStore
@@ -59,8 +60,11 @@ internal sealed interface MapMessage {
     /** Undone with [MapViewModel.show]. [name] is the track's, for the message. */
     class Hidden(val id: Long, val name: String) : MapMessage
 
-    /** A trim of [name], undone with [MapViewModel.undoEdit], else [MapViewModel.commitEdit]. */
-    class Edited(val edit: TrackEdit, val name: String) : MapMessage
+    /**
+     * A change to [name]'s file, as [text] says with the name; undone with [MapViewModel.undoEdit],
+     * else [MapViewModel.commitEdit].
+     */
+    class Edited(val edit: TrackEdit, val name: String, @param:StringRes val text: Int) : MapMessage
 
     /**
      * [total] files imported, from another app or picked, of which these were added or already
@@ -320,16 +324,39 @@ class MapViewModel(
 
     fun commitDelete(id: Long) = repository.commitDelete(listOf(id))
 
-    /** Keeps points [range], inclusive. */
-    fun trim(id: Long, range: IntRange) = edit(id) { repository.trim(id, range.first, range.last) }
+    /** Sets the note of [id]'s waypoint [index]; [onDone] gets the waypoint as rewritten. */
+    fun renameWaypoint(id: Long, index: Int, name: String, onDone: (Waypoint) -> Unit) {
+        viewModelScope.launch {
+            repository.renameWaypoint(id, index, name).fold(
+                onSuccess = { loaded ->
+                    // In place, not reloaded: the sheet keeps its selection.
+                    if ((requested as? TrackRef.Saved)?.id == id) {
+                        focusJob?.cancel()
+                        _focused.value = FocusedTrack.Ready(loaded)
+                    }
+                    loaded.track.waypoints.getOrNull(index)?.let(onDone)
+                },
+                onFailure = { _messages.trySend(MapMessage.Say(R.string.track_edit_failed)) },
+            )
+        }
+    }
 
-    private fun edit(id: Long, run: suspend () -> Result<TrackEdit>) {
+    /** Keeps points [range], inclusive. */
+    fun trim(id: Long, range: IntRange) = edit(id, R.string.track_trimmed) {
+        repository.trim(id, range.first, range.last)
+    }
+
+    fun deleteWaypoint(id: Long, index: Int) = edit(id, R.string.waypoint_deleted) {
+        repository.deleteWaypoint(id, index)
+    }
+
+    private fun edit(id: Long, @StringRes text: Int, run: suspend () -> Result<TrackEdit>) {
         val name = nameOf(id)
         viewModelScope.launch {
             run().fold(
                 onSuccess = { edit ->
                     refresh(edit.id)
-                    _messages.trySend(MapMessage.Edited(edit, name))
+                    _messages.trySend(MapMessage.Edited(edit, name, text))
                 },
                 onFailure = { _messages.trySend(MapMessage.Say(R.string.track_edit_failed)) },
             )

@@ -43,6 +43,9 @@ class MapScreenState(
     var tappedWaypoint by mutableStateOf<Waypoint?>(null)
         private set
 
+    /** The tapped waypoint, while its note is edited. */
+    var editingWaypoint by mutableStateOf<Waypoint?>(null)
+
     /** The points a trim being set up keeps; null when not trimming. */
     val trimRange: IntRange? get() = trim.value
 
@@ -149,6 +152,15 @@ class MapScreenState(
     fun selectWaypoint(waypoint: Waypoint, chartIndex: Int?) {
         tappedWaypoint = waypoint
         chartIndex?.let { selectedIndex = it }
+    }
+
+    /** The open tooltip follows its waypoint, rewritten with a new note. */
+    fun waypointRenamed(waypoint: Waypoint) {
+        if (tappedWaypoint != null) tappedWaypoint = waypoint
+    }
+
+    fun closeWaypoint() {
+        tappedWaypoint = null
     }
 
     fun startTrim(pointCount: Int) {

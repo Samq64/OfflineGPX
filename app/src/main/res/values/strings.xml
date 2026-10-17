@@ -285,6 +285,7 @@
     <string name="track_manage">Manage this track</string>
     <string name="track_trim">Trim</string>
     <string name="track_trimmed">Trimmed “%1$s”.</string>
+    <string name="waypoint_deleted">Deleted a waypoint from “%1$s”.</string>
 
     <!-- How much a trim keeps: its distance, the time it spans and its waypoints, joined; spoken after "Keeping". -->
     <string name="trim_kept">Keeping %1$s</string>
@@ -322,4 +323,6 @@
     <string name="waypoint_action_note">Waypoint %1$d: %2$s</string>
     <string name="waypoint_action_time">Waypoint %1$d, %2$s</string>
     <string name="waypoint_action_time_note">Waypoint %1$d, %2$s: %3$s</string>
+    <string name="waypoint_edit">Edit note</string>
+    <string name="waypoint_no_note">No note</string>
 </resources>

@@ -90,6 +90,7 @@ import dev.samuelq.gpx.ui.makeWay
 import dev.samuelq.gpx.ui.record.RecordingOutcomes
 import dev.samuelq.gpx.ui.record.RecordingSheet
 import dev.samuelq.gpx.ui.record.RecordingViewModel
+import dev.samuelq.gpx.ui.record.WaypointDialog
 import dev.samuelq.gpx.ui.screenSnackbars
 import dev.samuelq.gpx.ui.theme.routePalette
 import dev.samuelq.gpx.ui.theme.slot
@@ -294,7 +295,7 @@ fun MapScreen(
                     onUndo = { viewModel.show(message.id) },
                 )
                 is MapMessage.Edited -> offerUndo(
-                    resources.getString(R.string.track_trimmed, message.name),
+                    resources.getString(message.text, message.name),
                     onUndo = { viewModel.undoEdit(message.edit) },
                     onCommit = { viewModel.commitEdit(message.edit) },
                 )
@@ -820,7 +821,13 @@ fun MapScreen(
                 )
 
                 screen.tappedWaypoint?.let { tapped ->
-                    WaypointTooltip(tapped, tipAt = { tappedWaypointAt.value })
+                    // A saved track's only: a recording's are still being logged.
+                    val editable = focusedTrack?.track?.waypoints?.contains(tapped) == true
+                    WaypointTooltip(
+                        tapped,
+                        tipAt = { tappedWaypointAt.value },
+                        onEdit = { screen.editingWaypoint = tapped }.takeIf { editable },
+                    )
                 }
 
                 val hasRoutes = overlays.isNotEmpty() || liveOverlay != null
@@ -922,6 +929,28 @@ fun MapScreen(
                     .background(MaterialTheme.colorScheme.surfaceContainer),
             )
         }
+    }
+
+    screen.editingWaypoint?.let { waypoint ->
+        val track = focusedTrack ?: return@let
+        val index = track.track.waypoints.indexOf(waypoint)
+        if (index < 0) return@let
+        WaypointDialog(
+            number = index + 1,
+            initial = waypoint.name.orEmpty(),
+            onDismiss = { screen.editingWaypoint = null },
+            onConfirm = { name ->
+                screen.editingWaypoint = null
+                if (name.trim() != waypoint.name.orEmpty()) {
+                    viewModel.renameWaypoint(track.id, index, name) { currentScreen.waypointRenamed(it) }
+                }
+            },
+            onDelete = {
+                screen.editingWaypoint = null
+                screen.closeWaypoint()
+                viewModel.deleteWaypoint(track.id, index)
+            },
+        )
     }
 
     // Only once loaded, which is what knows the name to offer.

@@ -23,6 +23,7 @@ import dev.samuelq.gpx.data.gpx.GpxParser
 import dev.samuelq.gpx.data.gpx.GpxRelabeller
 import dev.samuelq.gpx.data.gpx.GpxTooLargeException
 import dev.samuelq.gpx.data.gpx.GpxWriter
+import dev.samuelq.gpx.data.gpx.WaypointEdit
 import dev.samuelq.gpx.data.runCancellable
 import dev.samuelq.gpx.data.sameBytes
 import dev.samuelq.gpx.data.settings.SettingsRepository
@@ -382,6 +383,45 @@ class TrackRepository(
             }
             TrackEdit(id, backup, entity.summary)
         }.recoverFailure()
+    }
+
+    /**
+     * Sets the note of the track's waypoint [index]; blank clears it. In place, as an export
+     * relabels, so all else in the file is kept. Returns the track as reloaded.
+     */
+    suspend fun renameWaypoint(id: Long, index: Int, name: String): Result<LoadedTrack> = withContext(io) {
+        runCancellable { rewriteWaypoint(id, WaypointEdit.Rename(index, name)) }.recoverFailure()
+    }
+
+    /** Removes the track's waypoint [index] as [renameWaypoint] renames, kept for [undoEdit] until [commitEdit]. */
+    suspend fun deleteWaypoint(id: Long, index: Int): Result<TrackEdit> = withContext(io) {
+        runCancellable {
+            val entity = entity(id)
+            val backup = backUp(fileOf(entity), id)
+            try {
+                rewriteWaypoint(id, WaypointEdit.Delete(index))
+            } catch (e: Throwable) {
+                backup.delete()
+                throw e
+            }
+            TrackEdit(id, backup, entity.summary)
+        }.recoverFailure()
+    }
+
+    private suspend fun rewriteWaypoint(id: Long, edit: WaypointEdit): LoadedTrack {
+        val file = fileOf(entity(id))
+        val staged = stagedFile()
+        try {
+            writeAtomically(staged) { output ->
+                file.inputStream().use { relabeller.relabel(it, output, waypoint = edit) }
+            }
+            val track = parse(staged.inputStream(), staged.name)
+            moveInto(staged, file)
+            cache.write(id, file, track)
+            return LoadedTrack(id, track, TrackAnalyzer.analyze(track))
+        } finally {
+            staged.delete()
+        }
     }
 
     /** Puts the file and summary back as they were before [edit]; the rest of the row is left. */

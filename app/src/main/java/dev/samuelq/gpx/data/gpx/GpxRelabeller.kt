@@ -1,13 +1,25 @@
 package dev.samuelq.gpx.data.gpx
 
+import dev.samuelq.gpx.core.model.isValidCoordinate
 import java.io.InputStream
 import java.io.OutputStream
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserFactory
 import org.xmlpull.v1.XmlSerializer
 
+/** A change to one waypoint, at [index] as [GpxParser] counts them, past unusable ones. */
+sealed interface WaypointEdit {
+    val index: Int
+
+    /** Blank removes the name. Its `<desc>` and `<cmt>` go either way, as other apps show them as the note too. */
+    data class Rename(override val index: Int, val name: String) : WaypointEdit
+
+    data class Delete(override val index: Int) : WaypointEdit
+}
+
 /**
- * Copies a GPX document, optionally renaming its first track or setting its type or colour.
+ * Copies a GPX document, optionally renaming its first track, setting its type or colour, or
+ * editing a waypoint.
  * Everything else passes through: extensions, metadata, comments, other apps' data.
  */
 class GpxRelabeller(
@@ -28,6 +40,7 @@ class GpxRelabeller(
         name: String? = null,
         type: String? = null,
         color: String? = null,
+        waypoint: WaypointEdit? = null,
     ) {
         val parser = newPullParser().apply {
             setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, true)
@@ -41,6 +54,7 @@ class GpxRelabeller(
             name,
             type,
             color,
+            waypoint,
         )
             .run()
     }
@@ -63,7 +77,13 @@ class GpxRelabeller(
         private var newType: String?,
         /** Likewise. */
         private var newColor: String?,
+        waypoint: WaypointEdit?,
     ) {
+        /** -1 for none. */
+        private val waypointIndex = waypoint?.index ?: -1
+        private val waypointName = (waypoint as? WaypointEdit.Rename)?.name.orEmpty()
+        private val deletingWaypoint = waypoint is WaypointEdit.Delete
+
         private val path = ArrayList<String>()
         private var skipDepth = 0
 
@@ -82,6 +102,16 @@ class GpxRelabeller(
 
         /** Inside the first `<trk>`, before [newColor] is written. */
         private var colorDue = false
+
+        /** Usable `<wpt>`s so far. */
+        private var waypointCount = 0
+
+        /** Inside the waypoint [waypointIndex], to rename it. */
+        private var renamingWaypoint = false
+
+        /** Likewise, before its name is written. */
+        private var waypointNameDue = false
+        private var waypointNamespace: String? = null
 
         fun run() {
             xml.startDocument(ENCODING, null)
@@ -129,7 +159,28 @@ class GpxRelabeller(
                 if (name == TAG_EXTENSIONS || name == TAG_TRKSEG) insertType()
             }
             if (colorDue && path == TRK_PATH && name == TAG_TRKSEG) insert { writeColor(wrapped = true) }
+            if (renamingWaypoint && path == WPT_PATH) {
+                if (waypointNameDue && name == TAG_NAME) {
+                    writeWaypointName(capture())
+                    skipDepth = 1
+                    return
+                }
+                if (name == TAG_DESC || name == TAG_CMT) {
+                    whitespace.clear()
+                    skipDepth = 1
+                    return
+                }
+                // The schema puts these first, before the name.
+                if (waypointNameDue && name !in BEFORE_WAYPOINT_NAME) insert { writeWaypointName() }
+            }
             if (recolouring && path == TRK_EXTENSIONS_PATH && GpxColors.isColorElement(parser.namespace, name)) {
+                whitespace.clear()
+                skipDepth = 1
+                return
+            }
+            val waypointDue = name == TAG_WPT && path == ROOT_PATH && waypointIndex >= 0 &&
+                isUsableWaypoint() && waypointCount++ == waypointIndex
+            if (waypointDue && deletingWaypoint) {
                 whitespace.clear()
                 skipDepth = 1
                 return
@@ -143,6 +194,23 @@ class GpxRelabeller(
                 colorDue = recolouring
                 trackNamespace = parser.namespace.ifEmpty { null }
             }
+            if (waypointDue) {
+                renamingWaypoint = true
+                waypointNameDue = true
+                waypointNamespace = parser.namespace.ifEmpty { null }
+            }
+        }
+
+        /** As [GpxParser] judges a `<wpt>`, so the count matches its list. */
+        private fun isUsableWaypoint(): Boolean {
+            val latitude = parser.getAttributeValue(null, ATTR_LAT)?.toDoubleOrNull() ?: return false
+            val longitude = parser.getAttributeValue(null, ATTR_LON)?.toDoubleOrNull() ?: return false
+            return isValidCoordinate(latitude, longitude)
+        }
+
+        private fun writeWaypointName(replaced: StartTag? = null) {
+            waypointNameDue = false
+            writeLabel(TAG_NAME, waypointName, replaced, waypointNamespace)
         }
 
         private fun insertName() {
@@ -173,11 +241,11 @@ class GpxRelabeller(
             newType = null
         }
 
-        /** [value] in place of [replaced], or new under the track's namespace; blank writes nothing. */
-        private fun writeLabel(tag: String, value: String?, replaced: StartTag?) {
+        /** [value] in place of [replaced], or new under [parent]'s namespace; blank writes nothing. */
+        private fun writeLabel(tag: String, value: String?, replaced: StartTag?, parent: String? = trackNamespace) {
             val text = value?.trim()?.xmlSafe()
             if (text.isNullOrEmpty()) return
-            val namespace = replaced?.namespace ?: trackNamespace
+            val namespace = replaced?.namespace ?: parent
             if (replaced != null) writeStart(replaced) else xml.startTag(namespace, tag)
             xml.text(text).endTag(namespace, tag)
         }
@@ -208,6 +276,10 @@ class GpxRelabeller(
                 if (typeDue) insertType()
                 if (colorDue) insert { writeColor(wrapped = true) }
                 recolouring = false
+            }
+            if (renamingWaypoint && path == WPT_PATH) {
+                if (waypointNameDue) insert { writeWaypointName() }
+                renamingWaypoint = false
             }
             path.removeAt(path.lastIndex)
             flushWhitespace()
@@ -268,6 +340,11 @@ class GpxRelabeller(
     private companion object {
         const val ENCODING = "UTF-8"
         const val TAG_TRK = "trk"
+        const val TAG_WPT = "wpt"
+        const val TAG_DESC = "desc"
+        const val TAG_CMT = "cmt"
+        const val ATTR_LAT = "lat"
+        const val ATTR_LON = "lon"
         const val TAG_TRKSEG = "trkseg"
         const val TAG_NAME = "name"
         const val TAG_TYPE = "type"
@@ -276,5 +353,8 @@ class GpxRelabeller(
 
         val TRK_PATH = listOf("gpx", TAG_TRK)
         val TRK_EXTENSIONS_PATH = listOf("gpx", TAG_TRK, TAG_EXTENSIONS)
+        val ROOT_PATH = listOf("gpx")
+        val WPT_PATH = listOf("gpx", TAG_WPT)
+        val BEFORE_WAYPOINT_NAME = setOf("ele", "time", "magvar", "geoidheight")
     }
 }

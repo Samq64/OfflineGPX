@@ -35,15 +35,18 @@ internal val TooltipSecondary: Color
  * A bubble beside a box that moves: a scrubbed chart point, a tapped map pin. [anchorAt] is
  * the box's top-left in the parent's coordinates. Placed during layout in the app's own
  * window rather than as a popup, which trails a drag by a frame or more. Fills its parent,
- * flips sides at its edges, and may overhang it vertically.
+ * flips sides at its edges, and may overhang it vertically. [content] may read which side
+ * the caret is on as it places, which is when that's known.
  */
 @Composable
 fun PointTooltip(
     anchorAt: () -> IntOffset,
     anchorSize: DpSize,
+    /** On the bubble, not the layer it's placed in; such as a click. */
+    modifier: Modifier = Modifier,
     /** Kept within these rows if it fits, its caret still on the anchor; else it may overhang. */
     within: IntRange? = null,
-    content: @Composable () -> Unit,
+    content: @Composable (caretOnLeft: () -> Boolean) -> Unit,
 ) {
     // Surface-toned, not Material's inverse: that is a near-white block over a dark map.
     val fill = MaterialTheme.colorScheme.surfaceContainerHigh
@@ -56,7 +59,7 @@ fun PointTooltip(
         modifier = Modifier.fillMaxSize(),
         content = {
             Box(
-                Modifier
+                modifier
                     .drawWithCache {
                         val path = bubblePath(size, caretOnLeft.value, caretY.value)
                         val stroke = Stroke(BorderWidth.toPx())
@@ -71,8 +74,7 @@ fun PointTooltip(
                 CompositionLocalProvider(
                     LocalContentColor provides MaterialTheme.colorScheme.onSurface,
                     LocalTextStyle provides MaterialTheme.typography.bodySmall,
-                    content = content,
-                )
+                ) { content { caretOnLeft.value } }
             }
         },
     ) { measurables, constraints ->

@@ -349,6 +349,36 @@ class TrackRepositoryTest {
     }
 
     @Test
+    fun renamingAWaypointKeepsTheRestOfTheFile() {
+        val id = importSample(
+            sampleGpx(waypointAt = 8).replace("<trkseg>", "<extensions><device>Watch</device></extensions><trkseg>"),
+        )
+        loaded(id)
+
+        val renamed = runBlocking { repository.renameWaypoint(id, 0, "Lunch").getOrThrow() }
+        assertEquals(listOf("Lunch"), renamed.track.waypoints.map { it.name })
+        assertEquals(listOf("Lunch"), parsed(id).waypoints.map { it.name })
+        // The cache is rewritten too, not left with the old name.
+        assertEquals(listOf("Lunch"), loaded(id).track.waypoints.map { it.name })
+        assertTrue("Watch" in fileOf(id).readText())
+        assertEquals(emptySet(), stagedFiles())
+    }
+
+    @Test
+    fun deletingAWaypointAndUndo() {
+        val id = importSample(sampleGpx(waypointAt = 8))
+        val original = fileOf(id).readBytes()
+
+        val edit = runBlocking { repository.deleteWaypoint(id, 0).getOrThrow() }
+        assertEquals(emptyList(), parsed(id).waypoints)
+        assertEquals(emptyList(), loaded(id).track.waypoints)
+
+        runBlocking { repository.undoEdit(edit).getOrThrow() }
+        assertContentEquals(original, fileOf(id).readBytes())
+        assertEquals(listOf("Cafe"), loaded(id).track.waypoints.map { it.name })
+    }
+
+    @Test
     fun trimLeavesNothingUnseenFromBeforeTheCut() {
         val unseen = """<metadata><time>2024-05-04T09:00:00Z</time><author><name>Home</name></author></metadata>""" +
             """<rte><rtept lat="60" lon="10"/></rte>"""

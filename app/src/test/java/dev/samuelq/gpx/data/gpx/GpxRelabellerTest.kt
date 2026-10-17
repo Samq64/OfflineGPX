@@ -290,4 +290,64 @@ class GpxRelabellerTest {
         assertEquals("Blue", colorOf(out))
         assertTrue(">Red<" in out, out)
     }
+
+    private fun renameWaypoint(xml: String, index: Int, name: String): String {
+        val out = ByteArrayOutputStream()
+        relabeller.relabel(xml.byteInputStream(), out, waypoint = WaypointEdit.Rename(index, name))
+        return out.toString(Charsets.UTF_8)
+    }
+
+    private fun waypointNames(xml: String) = parser.parse(xml.byteInputStream()).waypoints.map { it.name }
+
+    @Test
+    fun `names a waypoint counted as the parser counts them, after its time`() {
+        // The unreadable one between isn't in the parsed list, so index 1 is "End".
+        val out = renameWaypoint(source, 1, "Summit")
+        assertEquals(listOf("Start", "Summit"), waypointNames(out))
+        assertTrue("<time>2026-05-01T08:00:00Z</time>" in out, out)
+        assertTrue("<desc>Unreadable</desc>" in out, out)
+        assertTrue("<hr:bpm>110</hr:bpm>" in out, out)
+        assertTrue("<wpt lat=\"47.3\" lon=\"8.3\"><name>Summit</name></wpt>" in out, out)
+    }
+
+    @Test
+    fun `replaces a waypoint's name in place`() {
+        val named = """<gpx><wpt lat="1" lon="2"><ele>5</ele><name>Old</name><sym>Flag</sym></wpt></gpx>"""
+        val out = renameWaypoint(named, 0, "New")
+        assertEquals(listOf("New"), waypointNames(out))
+        assertTrue("<ele>5</ele><name>New</name><sym>Flag</sym>" in out, out)
+    }
+
+    @Test
+    fun `counts only waypoints with a position, and names one with no children`() {
+        val unplaced = """<wpt lon="2"/><wpt lat="1"/><wpt lat="x" lon="2"/><wpt lat="1" lon="y"/>"""
+        val out = renameWaypoint("""<gpx>$unplaced<wpt lat="1" lon="2"/></gpx>""", 0, "Added")
+        assertEquals(listOf("Added"), waypointNames(out))
+    }
+
+    @Test
+    fun `a waypoint loses what would stand in for its name, leaving others'`() {
+        val noted = """<gpx><wpt lat="1" lon="2"><name>A</name><cmt>B</cmt><desc>C</desc></wpt>""" +
+            """<wpt lat="3" lon="4"><desc>Kept</desc></wpt></gpx>"""
+        assertEquals(listOf(null, "Kept"), waypointNames(renameWaypoint(noted, 0, " ")))
+        assertEquals(listOf("D", "Kept"), waypointNames(renameWaypoint(noted, 0, "D")))
+    }
+
+    @Test
+    fun `leaves the track's labels with a waypoint's`() {
+        val out = renameWaypoint(source, 0, "Home")
+        assertEquals("Ride", nameOf(out))
+        assertEquals(listOf("Home", "End"), waypointNames(out))
+    }
+
+    @Test
+    fun `deletes a waypoint counted as the parser counts them, and nothing else`() {
+        val out = ByteArrayOutputStream()
+        relabeller.relabel(source.byteInputStream(), out, waypoint = WaypointEdit.Delete(1))
+        val text = out.toString(Charsets.UTF_8)
+        assertEquals(listOf("Start"), waypointNames(text))
+        assertTrue("<desc>Unreadable</desc>" in text, text)
+        assertFalse("End" in text, text)
+        assertEquals("Ride", nameOf(text))
+    }
 }

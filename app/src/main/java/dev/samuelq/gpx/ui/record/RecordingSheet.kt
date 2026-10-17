@@ -37,6 +37,8 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.samuelq.gpx.R
@@ -212,9 +214,16 @@ private fun RecordingHeader(
     }
 }
 
+/** A waypoint's note: new while recording, else [initial] to edit, with [onDelete] if it can go. */
 @Composable
-private fun WaypointDialog(number: Int, onDismiss: () -> Unit, onConfirm: (name: String) -> Unit) {
-    var name by remember { mutableStateOf("") }
+internal fun WaypointDialog(
+    number: Int,
+    onDismiss: () -> Unit,
+    onConfirm: (name: String) -> Unit,
+    initial: String = "",
+    onDelete: (() -> Unit)? = null,
+) {
+    var name by remember { mutableStateOf(TextFieldValue(initial, selection = TextRange(0, initial.length))) }
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(focusRequester) { focusRequester.requestFocus() }
 
@@ -230,12 +239,19 @@ private fun WaypointDialog(number: Int, onDismiss: () -> Unit, onConfirm: (name:
             )
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(name) }) {
+            TextButton(onClick = { onConfirm(name.text) }) {
                 Text(stringResource(R.string.action_done))
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                onDelete?.let {
+                    TextButton(onClick = it) {
+                        Text(stringResource(R.string.action_delete), color = MaterialTheme.colorScheme.error)
+                    }
+                }
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+            }
         },
     )
 }
