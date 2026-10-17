@@ -444,22 +444,6 @@ fun MapScreen(
         scope.launch { backProgress.animateTo(0f) }
         if (collapsing) sheetState.partialExpand() else viewModel.focus(null)
     }
-    // Declared after, so it's asked first: back leaves a trim before anything else. Once an end has
-    // moved, only after asking: a stray edge swipe would throw the adjustment away with no undo.
-    var confirmingDiscard by remember { mutableStateOf(false) }
-    BackHandler(enabled = screen.trimRange != null) {
-        val moved = screen.trimRange != focusedTrack?.profile?.points?.let { 0..<it.size }
-        if (moved) confirmingDiscard = true else screen.cancelTrim()
-    }
-    if (confirmingDiscard && screen.trimRange != null) {
-        DiscardTrimDialog(
-            onDiscard = {
-                confirmingDiscard = false
-                screen.cancelTrim()
-            },
-            onDismiss = { confirmingDiscard = false },
-        )
-    }
 
     // --- What the canvas draws, and how much room it has ---------------------------
 
@@ -501,6 +485,23 @@ fun MapScreen(
     val cutWaypoints = remember(focusedTrack, trimRange) {
         val range = trimRange ?: return@remember emptySet()
         focusedTrack?.waypointsCutBy(range)?.toSet().orEmpty()
+    }
+
+    // Declared after the predictive handler, so it's asked first: back leaves a trim before anything
+    // else. Once an end has moved, only after asking: a stray edge swipe would throw the adjustment
+    // away with no undo.
+    var confirmingDiscard by remember { mutableStateOf(false) }
+    BackHandler(enabled = trimRange != null) {
+        if (trimMarks?.moved == true) confirmingDiscard = true else screen.cancelTrim()
+    }
+    if (confirmingDiscard && trimRange != null) {
+        DiscardTrimDialog(
+            onDiscard = {
+                confirmingDiscard = false
+                screen.cancelTrim()
+            },
+            onDismiss = { confirmingDiscard = false },
+        )
     }
 
     // Indexed like the analysis, so a chart index is a point on this line.
@@ -663,6 +664,8 @@ fun MapScreen(
                         trim = trimRange?.let { range ->
                             TrimControls(
                                 range = range,
+                                moved = trimMarks?.moved == true,
+                                waypointsCut = cutWaypoints.size,
                                 onRangeChange = screen::setTrim,
                                 onCancel = screen::cancelTrim,
                                 onSave = {

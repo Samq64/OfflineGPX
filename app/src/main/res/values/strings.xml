@@ -299,11 +299,12 @@
         <item quantity="other">%1$d/%2$d waypoints</item>
     </plurals>
 
-    <!-- The ends of what a trim keeps, each stepped a point at a time. -->
     <!-- Asked when back would leave a trim whose ends have moved. -->
     <string name="trim_discard">Discard</string>
     <string name="trim_discard_title">Discard this trim?</string>
     <string name="trim_keep_editing">Keep editing</string>
+
+    <!-- The ends of what a trim keeps, each stepped a point at a time. -->
     <string name="trim_end">End</string>
     <!-- How much a trim cuts off before the track's end. -->
     <string name="trim_end_cut">−%1$s</string>

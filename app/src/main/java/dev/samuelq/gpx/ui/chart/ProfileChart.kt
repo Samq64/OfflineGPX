@@ -346,9 +346,8 @@ private fun KeptLayer(render: ChartRender, geometry: ChartGeometry, kept: IntRan
     Canvas(Modifier.fillMaxSize()) {
         if (series.size == 0) return@Canvas
         val plot = geometry.plotRect(size)
-        fun xAt(i: Int) = plot.xFor(series.x[i.coerceIn(0, series.size - 1)], render.xScale)
-        val start = xAt(kept.first)
-        val end = xAt(kept.last)
+        val start = render.xOf(kept.first, plot)
+        val end = render.xOf(kept.last, plot)
         val left = start.coerceIn(plot.left, plot.right)
         val right = end.coerceIn(plot.left, plot.right)
         drawRect(scrim, Offset(plot.left, plot.top), Size(left - plot.left, plot.height))
@@ -363,7 +362,7 @@ private fun KeptLayer(render: ChartRender, geometry: ChartGeometry, kept: IntRan
         val corner = HandleCorner.toPx()
         val grip = GripLine.toSize()
         for ((x, outward) in listOf(start to -1f, end to 1f)) {
-            if (x < plot.left - 0.5f || x > plot.right + 0.5f) continue
+            if (!plot.showsX(x)) continue
             // Outside the end, in the inset at the plot's edges.
             val handleLeft = if (outward < 0) x - width else x
             val rect = Rect(handleLeft, plot.top - frame, handleLeft + width, plot.bottom + frame)
@@ -423,7 +422,7 @@ private fun ScrubberLayer(
                 fun select(x: Float) = onSelectedIndexChange(geometry.indexAt(x, size.toSize(), currentRender))
 
                 // The trim end a drag holds, if it started on one.
-                var handle: TrimEnd? = null
+                var handle: KeptEnd? = null
 
                 // Moves the held end, keeping two points, or scrubs.
                 fun drag(x: Float) {
@@ -433,15 +432,15 @@ private fun ScrubberLayer(
                     if (end == null || kept == null || onKept == null) return select(x)
                     val index = geometry.indexAt(x, size.toSize(), currentRender)
                     val moved = when (end) {
-                        TrimEnd.Start -> index.coerceAtMost(kept.last - 1)..kept.last
-                        TrimEnd.End -> kept.first..index.coerceAtLeast(kept.first + 1)
+                        KeptEnd.Start -> index.coerceAtMost(kept.last - 1)..kept.last
+                        KeptEnd.End -> kept.first..index.coerceAtLeast(kept.first + 1)
                     }
                     onKept(moved)
-                    onSelectedIndexChange(if (end == TrimEnd.Start) moved.first else moved.last)
+                    onSelectedIndexChange(if (end == KeptEnd.Start) moved.first else moved.last)
                 }
 
                 // The nearer end within reach of [x], when one shows.
-                fun handleAt(x: Float): TrimEnd? {
+                fun handleAt(x: Float): KeptEnd? {
                     val kept = currentKept ?: return null
                     if (currentOnKeptChange == null) return null
                     val render = currentRender
@@ -449,21 +448,16 @@ private fun ScrubberLayer(
                     if (series.size == 0) return null
                     val plot = geometry.plotRect(size.toSize())
                     val reach = HandleReach.toPx()
-                    fun distance(i: Int): Float {
-                        val at = plot.xFor(series.x[i.coerceIn(0, series.size - 1)], render.xScale)
-                        return if (at < plot.left - 0.5f || at > plot.right + 0.5f) Float.MAX_VALUE else abs(at - x)
-                    }
+                    fun distance(i: Int): Float =
+                        render.xOf(i, plot).let { if (plot.showsX(it)) abs(it - x) else Float.MAX_VALUE }
                     val start = distance(kept.first)
                     val end = distance(kept.last)
                     return when {
                         minOf(start, end) > reach -> null
                         // Ends drawn together: past the end, only the end can go; before it, the start.
-                        start == end -> {
-                            val at = plot.xFor(series.x[kept.last], render.xScale)
-                            if (x > at) TrimEnd.End else TrimEnd.Start
-                        }
-                        start < end -> TrimEnd.Start
-                        else -> TrimEnd.End
+                        start == end -> if (x > render.xOf(kept.last, plot)) KeptEnd.End else KeptEnd.Start
+                        start < end -> KeptEnd.Start
+                        else -> KeptEnd.End
                     }
                 }
 
@@ -624,7 +618,8 @@ class ChartAxisGroup {
     internal var gutterPx by mutableFloatStateOf(0f)
 }
 
-private enum class TrimEnd { Start, End }
+/** An end of what a trim keeps, held by a drag. */
+private enum class KeptEnd { Start, End }
 
 @Immutable
 private class ChartRender(
@@ -661,6 +656,13 @@ private class ChartGeometry(
         return nearestIndex(render.series.x, target)
     }
 }
+
+/** Where the point at [index] falls across [plot]: outside it for one a zoom has scrolled away. */
+private fun ChartRender.xOf(index: Int, plot: Rect): Float =
+    plot.xFor(series.x[index.coerceIn(0, series.size - 1)], xScale)
+
+/** [x] is in [plot]'s width, give or take a rounding. */
+private fun Rect.showsX(x: Float) = x >= left - 0.5f && x <= right + 0.5f
 
 /** Where the scrubber at [index] meets the line, null outside the plot; y is NaN in a gap. */
 private fun ChartRender.scrubberAt(index: Int?, plot: Rect): Offset? = series.pointAt(index, xScale, yScale, plot)

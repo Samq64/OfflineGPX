@@ -114,6 +114,10 @@ class TrackActions(
 /** A trim being set up on the sheet: [range] is the points kept, inclusive. */
 class TrimControls(
     val range: IntRange,
+    /** Whether either end has left the track's own. */
+    val moved: Boolean,
+    /** The track's waypoints the trim would drop. */
+    val waypointsCut: Int,
     val onRangeChange: (IntRange) -> Unit,
     val onCancel: () -> Unit,
     val onSave: () -> Unit,
@@ -163,9 +167,7 @@ fun TrackSheet(
                 profile = profile,
                 trim = trim,
                 waypoints = loaded.track.waypoints.size,
-                waypointsKept = loaded.track.waypoints.size - remember(loaded, trim.range) {
-                    loaded.waypointsCutBy(trim.range).size
-                },
+                waypointsKept = loaded.track.waypoints.size - trim.waypointsCut,
                 routeColor = routeColor,
                 useTimeAxis = useTimeAxis,
                 onAxisChange = onAxisChange,
@@ -544,13 +546,13 @@ private fun TrimHeader(
                     modifier = Modifier.semantics { contentDescription = keptSpoken },
                 )
             }
-            if (!stacked) TrimActions(trim, canSave = first > 0 || end < last)
+            if (!stacked) TrimActions(trim)
         }
         if (stacked) {
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = EdgePadding).padding(top = 8.dp),
                 horizontalArrangement = Arrangement.End,
-            ) { TrimActions(trim, canSave = first > 0 || end < last) }
+            ) { TrimActions(trim) }
         }
 
         if (profile.hasTime) {
@@ -604,11 +606,11 @@ private fun TrimHeader(
 }
 
 @Composable
-private fun TrimActions(trim: TrimControls, canSave: Boolean) {
+private fun TrimActions(trim: TrimControls) {
     TextButton(onClick = trim.onCancel) { Text(stringResource(R.string.action_cancel)) }
     Spacer(Modifier.width(8.dp))
     // Nothing to save until something is cut.
-    Button(onClick = trim.onSave, enabled = canSave) { Text(stringResource(R.string.action_save)) }
+    Button(onClick = trim.onSave, enabled = trim.moved) { Text(stringResource(R.string.action_save)) }
 }
 
 /** One end of a trim, stepped a point per tap, and faster the longer it's held. */

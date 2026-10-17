@@ -178,7 +178,7 @@ internal fun OfflineMapCanvas(
     // selected dot sits under the pins, unless a tapped pin put it there: then it's over the
     // rest, under only that pin. The puck is always over pins, or a waypoint dropped where
     // the user stands would hide them.
-    // A trim's ends, under the scrub dot, which marks the end being moved by sitting on it.
+    // A trim's ends, under the scrub dot.
     val trimEndsLayer = remember(map) { markerLayer(map) }
     val belowPinsLayer = remember(map) { markerLayer(map) }
     val pinLayer = remember(map) { markerLayer(map) }
@@ -266,10 +266,9 @@ internal fun OfflineMapCanvas(
     ) {
         val puckRoute = liveRoute?.takeIf { showPuck }
         val here = symbols.puck(position, bearing = null)
-        // An out-and-back's kept part lies over its cut part; only its ends tell them apart. An end
-        // not yet moved is the track's own, plain to see.
-        val trimStart = trim?.let { it.points.getOrNull(it.kept.first.takeIf { first -> first > 0 } ?: -1) }
-        val trimEnd = trim?.let { it.points.getOrNull(it.kept.last.takeIf { last -> last < it.points.size - 1 } ?: -1) }
+        // An out-and-back's kept part lies over its cut part; only its ends tell them apart.
+        val trimStart = trim?.start
+        val trimEnd = trim?.end
         trimEndsLayer.show(symbols.trimEnds(trimStart, trimEnd))
         // Not over an end's mark, or near enough to cover it, as while that end is moved: its shape says which it is.
         val reach = trimEndReach * MercatorProjection.groundResolution(map.mapPosition)
@@ -514,8 +513,8 @@ internal fun OfflineMapCanvas(
         val at = focusedPoints(focusedTrackId, currentRoutes, currentLiveRoute, currentTrim)
             ?.getOrNull(selectedIndex ?: -1) ?: return@LaunchedEffect
         // A trim's end moves by metres, which only show close in: zoomed to once, then nudged like the rest.
-        val trimEnd = currentTrim?.let { selectedIndex == it.kept.first || selectedIndex == it.kept.last } == true
-        if (trimEnd && map.mapPosition.scale < TRIM_END_SCALE.coerceAtMost(map.viewport().maxScale)) {
+        val onTrimEnd = currentTrim?.let { selectedIndex == it.kept.first || selectedIndex == it.kept.last } == true
+        if (onTrimEnd && map.mapPosition.scale < TRIM_END_SCALE.coerceAtMost(map.viewport().maxScale)) {
             centreOn(at, zoomIn = true, scale = TRIM_END_SCALE)
         } else {
             map.nudgeIntoView(at, insets, followMargin)
@@ -532,7 +531,14 @@ private fun focusedPoints(trackId: Long?, routes: List<RouteOverlay>, liveRoute:
 
 /** A trim's [kept] range of the focused track's whole [points]. */
 @Immutable
-class TrimMarks(val points: TrackPoints, val kept: IntRange)
+class TrimMarks(val points: TrackPoints, val kept: IntRange) {
+    /** Where an end has moved; one left alone is the track's own, plain to see. */
+    val start: TrackPoint? get() = points.getOrNull(kept.first).takeIf { kept.first > 0 }
+    val end: TrackPoint? get() = points.getOrNull(kept.last).takeIf { kept.last < points.size - 1 }
+
+    /** Something to save, or to lose. */
+    val moved: Boolean get() = kept.first > 0 || kept.last < points.size - 1
+}
 
 /** A [MapView] tied to the lifecycle; it owns a GL thread and surface that would otherwise leak. */
 @Composable

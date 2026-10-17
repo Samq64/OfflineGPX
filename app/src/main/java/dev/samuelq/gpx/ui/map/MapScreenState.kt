@@ -128,7 +128,7 @@ class MapScreenState(
         when {
             // An open note takes the first tap, so closing it never moves the marker.
             tappedWaypoint != null -> tappedWaypoint = null
-            // The slider sets a trim; a tap shouldn't drop it for another track.
+            // A trim is being set up; a tap shouldn't drop it for another track.
             trimRange != null -> Unit
             trackId == LIVE_TRACK_ID || trackId == focusedId -> selectedIndex = index
             // Not while recording, which holds the sheet.
