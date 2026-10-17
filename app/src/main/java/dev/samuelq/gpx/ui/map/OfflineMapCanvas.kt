@@ -139,6 +139,7 @@ internal fun OfflineMapCanvas(
 
     val currentRoutes by rememberUpdatedState(routes)
     val currentLiveRoute by rememberUpdatedState(liveRoute)
+    val currentFocusedId by rememberUpdatedState(focusedTrackId)
     val currentTrim by rememberUpdatedState(trim)
     val currentWaypoints by rememberUpdatedState(trackWaypoints + liveWaypoints)
     val select by rememberUpdatedState(onSelect)
@@ -214,7 +215,7 @@ internal fun OfflineMapCanvas(
             if (waypointHit != null) {
                 selectWaypoint(waypointHit)
             } else {
-                val hit = pick(x, y, map, currentRoutes, currentLiveRoute, tapReach)
+                val hit = pick(x, y, map, currentRoutes, currentLiveRoute, currentFocusedId, tapReach)
                 if (hit == null) selectNothing() else select(hit.first, hit.second)
             }
         }

@@ -55,6 +55,7 @@ internal fun pick(
     map: Map,
     routes: List<RouteOverlay>,
     liveRoute: RouteOverlay?,
+    focusedId: Long?,
     reachPx: Float,
 ): Pair<Long, Int>? {
     val position = map.mapPosition
@@ -63,10 +64,18 @@ internal fun pick(
         tapX = tapX,
         tapY = tapY,
         mapSize = Tile.SIZE * position.scale,
-        // The recording too, so a tap on it doesn't read as the bare map.
-        routes = routes + listOfNotNull(liveRoute),
+        routes = topmostFirst(routes, liveRoute, focusedId),
         reachPx = reachPx,
     )
+}
+
+/**
+ * As drawn, top down: the recording, the focused track, then the rest from the last. The
+ * recording is in too, so a tap on it doesn't read as the bare map.
+ */
+internal fun topmostFirst(routes: List<RouteOverlay>, liveRoute: RouteOverlay?, focusedId: Long?): List<RouteOverlay> {
+    val (focused, rest) = routes.partition { it.trackId == focusedId }
+    return listOfNotNull(liveRoute) + focused.asReversed() + rest.asReversed()
 }
 
 /** A screen point in map pixels, the inverse of [screenPosition] for a [width] by [height] view. */
@@ -82,7 +91,10 @@ internal fun mapPixel(
     return position.x * mapSize + (screenX - width / 2.0) to position.y * mapSize + (screenY - height / 2.0)
 }
 
-/** [pick] in map pixels, with the world [mapSize] across. */
+/**
+ * [pick] in map pixels, with the world [mapSize] across. Of equally near lines, as where
+ * tracks coincide, the first in [routes] wins: the one on top, the one seen.
+ */
 internal fun nearestOnRoutes(
     tapX: Double,
     tapY: Double,

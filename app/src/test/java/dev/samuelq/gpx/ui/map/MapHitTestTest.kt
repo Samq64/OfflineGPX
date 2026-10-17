@@ -125,4 +125,15 @@ class MapHitTestTest {
         assertEquals(a, pickPin(108f, 70f, *pins, onTop = a))
         assertNull(pickPin(500f, 500f, *pins))
     }
+
+    @Test
+    fun `where lines coincide, the one drawn on top is picked`() {
+        val under = route(listOf(0.0, 100.0), id = 1)
+        val over = route(listOf(0.0, 100.0), id = 2)
+        assertEquals(2L, tap(50.0, 0.0, *topmostFirst(listOf(under, over), null, null).toTypedArray())?.first)
+        // Focused is lifted above the rest, and the recording above all.
+        assertEquals(1L, tap(50.0, 0.0, *topmostFirst(listOf(under, over), null, 1).toTypedArray())?.first)
+        val live = route(listOf(0.0, 100.0), id = LIVE_TRACK_ID)
+        assertEquals(LIVE_TRACK_ID, tap(50.0, 0.0, *topmostFirst(listOf(under, over), live, 1).toTypedArray())?.first)
+    }
 }
