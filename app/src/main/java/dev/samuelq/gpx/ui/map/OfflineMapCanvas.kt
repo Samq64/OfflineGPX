@@ -352,13 +352,18 @@ internal fun OfflineMapCanvas(
         return true
     }
 
-    // Centred in the uncovered part; with zoomIn, zooming in if too far out to place it. Admitted
+    // Centred in the uncovered part; with zoomIn, zooming in to [scale] if further out. Admitted
     // to the clamp like a framed track, but only if some of the extent would show: a blank view says
     // nothing about where the user is.
-    fun centreOn(point: TrackPoint, zoomIn: Boolean, camera: MapPosition = map.mapPosition): CentreResult {
+    fun centreOn(
+        point: TrackPoint,
+        zoomIn: Boolean,
+        camera: MapPosition = map.mapPosition,
+        scale: Double = LOCATE_SCALE,
+    ): CentreResult {
         val size = viewSize?.takeIf { it.usable(insets) != null } ?: return CentreResult.NotLaidOut
         camera.setPosition(point.latitude, point.longitude)
-        if (zoomIn) camera.setScale(maxOf(camera.scale, LOCATE_SCALE).coerceAtMost(map.viewport().maxScale))
+        if (zoomIn) camera.setScale(maxOf(camera.scale, scale).coerceAtMost(map.viewport().maxScale))
         camera.centreIn(insets)
         val view = camera.visibleBox(size)
         if (currentExtent?.intersects(view) == false) return CentreResult.OutOfBounds
@@ -492,7 +497,13 @@ internal fun OfflineMapCanvas(
     LaunchedEffect(map, focusedTrackId, selectedIndex, insets) {
         val at = focusedPoints(focusedTrackId, currentRoutes, currentLiveRoute, currentTrim)
             ?.getOrNull(selectedIndex ?: -1) ?: return@LaunchedEffect
-        map.nudgeIntoView(at, insets, followMargin)
+        // A trim's end moves by metres, which only show close in: zoomed to once, then nudged like the rest.
+        val trimEnd = currentTrim?.let { selectedIndex == it.kept.first || selectedIndex == it.kept.last } == true
+        if (trimEnd && map.mapPosition.scale < TRIM_END_SCALE.coerceAtMost(map.viewport().maxScale)) {
+            centreOn(at, zoomIn = true, scale = TRIM_END_SCALE)
+        } else {
+            map.nudgeIntoView(at, insets, followMargin)
+        }
     }
 }
 
@@ -534,6 +545,9 @@ private const val FOLLOW_MARGIN_DP = 36f
 
 /** Street level, for finding yourself; 2^15. */
 private const val LOCATE_SCALE = 32768.0
+
+/** A few hundred metres across, where a trim's step of a point or two shows; 2^17. */
+private const val TRIM_END_SCALE = 131072.0
 
 /** Used when no map is shown. */
 private const val DEFAULT_MAX_ZOOM = 18

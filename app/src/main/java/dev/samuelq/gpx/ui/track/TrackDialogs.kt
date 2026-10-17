@@ -135,3 +135,14 @@ fun CategoryField(
         }
     }
 }
+
+/** Asked before back throws away a trim that has moved an end; Cancel is asked for outright. */
+@Composable
+fun DiscardTrimDialog(onDiscard: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { DialogTitle(stringResource(R.string.trim_discard_title)) },
+        confirmButton = { TextButton(onClick = onDiscard) { Text(stringResource(R.string.trim_discard)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.trim_keep_editing)) } },
+    )
+}

@@ -93,6 +93,7 @@ import dev.samuelq.gpx.ui.record.RecordingViewModel
 import dev.samuelq.gpx.ui.screenSnackbars
 import dev.samuelq.gpx.ui.theme.routePalette
 import dev.samuelq.gpx.ui.theme.slot
+import dev.samuelq.gpx.ui.track.DiscardTrimDialog
 import dev.samuelq.gpx.ui.track.FocusedTrack
 import dev.samuelq.gpx.ui.track.TrackActions
 import dev.samuelq.gpx.ui.track.TrackNameDialog
@@ -443,8 +444,22 @@ fun MapScreen(
         scope.launch { backProgress.animateTo(0f) }
         if (collapsing) sheetState.partialExpand() else viewModel.focus(null)
     }
-    // Declared after, so it's asked first: back leaves a trim before anything else.
-    BackHandler(enabled = screen.trimRange != null, onBack = screen::cancelTrim)
+    // Declared after, so it's asked first: back leaves a trim before anything else. Once an end has
+    // moved, only after asking: a stray edge swipe would throw the adjustment away with no undo.
+    var confirmingDiscard by remember { mutableStateOf(false) }
+    BackHandler(enabled = screen.trimRange != null) {
+        val moved = screen.trimRange != focusedTrack?.profile?.points?.let { 0..<it.size }
+        if (moved) confirmingDiscard = true else screen.cancelTrim()
+    }
+    if (confirmingDiscard && screen.trimRange != null) {
+        DiscardTrimDialog(
+            onDiscard = {
+                confirmingDiscard = false
+                screen.cancelTrim()
+            },
+            onDismiss = { confirmingDiscard = false },
+        )
+    }
 
     // --- What the canvas draws, and how much room it has ---------------------------
 

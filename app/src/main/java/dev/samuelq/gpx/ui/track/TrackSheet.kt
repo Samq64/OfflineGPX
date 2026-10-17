@@ -9,6 +9,7 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -20,6 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -42,6 +44,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
@@ -51,6 +54,7 @@ import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.heading
@@ -58,7 +62,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import dev.samuelq.gpx.R
 import dev.samuelq.gpx.core.analysis.TrackProfile
 import dev.samuelq.gpx.core.model.Waypoint
@@ -146,7 +152,7 @@ fun TrackSheet(
         onKeptRangeChange = trim?.onRangeChange,
     ) {
         if (trim != null) {
-            TrimHeader(title, profile, trim, useTimeAxis, selectedIndex, onSelectedIndexChange)
+            TrimHeader(title, profile, trim, useTimeAxis, onAxisChange, selectedIndex, onSelectedIndexChange)
             return@ProfileSheet
         }
         SheetTitle(
@@ -347,9 +353,11 @@ private fun ProfileDetails(
         )
     }
 
-    Spacer(Modifier.height(20.dp))
+    // Less while trimming: the selector this leaves room for is in the header.
+    Spacer(Modifier.height(if (keptRange == null) 20.dp else 8.dp))
 
-    if (profile.hasTime) {
+    // A trim's header has it, beside the ends it sets the units of.
+    if (profile.hasTime && keptRange == null) {
         AxisSelector(
             useTimeAxis = useTimeAxis,
             onChange = onAxisChange,
@@ -445,6 +453,7 @@ private fun TrimHeader(
     profile: TrackProfile,
     trim: TrimControls,
     useTimeAxis: Boolean,
+    onAxisChange: (Boolean) -> Unit,
     /** An end selected was last moved, by a step or on the charts, and is the one shown there. */
     selectedIndex: Int?,
     onSelectedIndexChange: (Int?) -> Unit,
@@ -480,32 +489,51 @@ private fun TrimHeader(
         ?: stringResource(R.string.trim_kept, distance)
     val keptSpoken = elapsed?.let { stringResource(R.string.trim_kept_timed, distance, resources.spokenDuration(it)) }
         ?: kept
+    // Large text leaves the title no room beside the actions, so they take a row of their own.
+    val stacked = isLargeText()
 
-    Column(Modifier.fillMaxWidth().padding(start = EdgePadding, end = 8.dp, bottom = 8.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = stringResource(R.string.trim_title, title),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f).semantics { heading() },
-            )
-            TextButton(onClick = trim.onCancel) { Text(stringResource(R.string.action_cancel)) }
-            // Nothing to save until something is cut.
-            Button(onClick = trim.onSave, enabled = first > 0 || end < last) {
-                Text(stringResource(R.string.action_save))
+    Column(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+        Row(Modifier.padding(horizontal = EdgePadding), verticalAlignment = Alignment.CenterVertically) {
+            // Together, so the actions centre on both rather than leaving the second adrift below them.
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.trim_title, title),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = if (stacked) 2 else 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.semantics { heading() },
+                )
+                Text(
+                    text = kept,
+                    style = MaterialTheme.typography.bodyMedium.tabularFigures(),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.semantics { contentDescription = keptSpoken },
+                )
             }
+            if (!stacked) TrimActions(trim, canSave = first > 0 || end < last)
         }
-        Text(
-            text = kept,
-            style = MaterialTheme.typography.bodyMedium.tabularFigures(),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.semantics { contentDescription = keptSpoken },
-        )
+        if (stacked) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = EdgePadding).padding(top = 8.dp),
+                horizontalArrangement = Arrangement.End,
+            ) { TrimActions(trim, canSave = first > 0 || end < last) }
+        }
 
-        // At least two points are kept, or there's no track left.
-        Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (profile.hasTime) {
+            AxisSelector(
+                useTimeAxis = timed,
+                onChange = onAxisChange,
+                modifier = Modifier.padding(start = EdgePadding, top = 12.dp, end = EdgePadding),
+            )
+        }
+
+        // At least two points are kept, or there's no track left. The arrows on the margin, their
+        // touch targets past it, as Material places edge icon buttons.
+        Row(
+            Modifier.padding(horizontal = EdgePadding - 12.dp).padding(top = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             TrimEnd(
                 label = stringResource(R.string.trim_start),
                 // What's cut from each end, so both read alike.
@@ -514,8 +542,10 @@ private fun TrimHeader(
                 active = selectedIndex == first,
                 earlier = stringResource(R.string.trim_start_earlier),
                 later = stringResource(R.string.trim_start_later),
-                onEarlier = { move(first - 1..end, first - 1) }.takeIf { first > 0 },
-                onLater = { move(first + 1..end, first + 1) }.takeIf { first + 1 < end },
+                onEarlier = { n: Int -> (first - n).coerceAtLeast(0).let { move(it..end, it) } }.takeIf { first > 0 },
+                onLater = { n: Int -> (first + n).coerceAtMost(end - 1).let { move(it..end, it) } }
+                    .takeIf { first + 1 < end },
+                valueInset = PaddingValues(start = 12.dp),
                 modifier = Modifier.weight(1f),
             )
             val cutFromEnd = x[last] - x[end]
@@ -526,15 +556,25 @@ private fun TrimHeader(
                 active = selectedIndex == end,
                 earlier = stringResource(R.string.trim_end_earlier),
                 later = stringResource(R.string.trim_end_later),
-                onEarlier = { move(first..end - 1, end - 1) }.takeIf { end - 1 > first },
-                onLater = { move(first..end + 1, end + 1) }.takeIf { end < last },
+                onEarlier = { n: Int -> (end - n).coerceAtLeast(first + 1).let { move(first..it, it) } }
+                    .takeIf { end - 1 > first },
+                onLater = { n: Int -> (end + n).coerceAtMost(last).let { move(first..it, it) } }.takeIf { end < last },
+                valueInset = PaddingValues(end = 12.dp),
                 modifier = Modifier.weight(1f),
             )
         }
     }
 }
 
-/** One end of a trim, stepped a point per tap, and repeatedly while held. */
+@Composable
+private fun TrimActions(trim: TrimControls, canSave: Boolean) {
+    TextButton(onClick = trim.onCancel) { Text(stringResource(R.string.action_cancel)) }
+    Spacer(Modifier.width(8.dp))
+    // Nothing to save until something is cut.
+    Button(onClick = trim.onSave, enabled = canSave) { Text(stringResource(R.string.action_save)) }
+}
+
+/** One end of a trim, stepped a point per tap, and faster the longer it's held. */
 @Composable
 private fun TrimEnd(
     label: String,
@@ -545,33 +585,47 @@ private fun TrimEnd(
     active: Boolean,
     earlier: String,
     later: String,
-    onEarlier: (() -> Unit)?,
-    onLater: (() -> Unit)?,
+    /** Each moves by the given number of points. */
+    onEarlier: ((Int) -> Unit)?,
+    onLater: ((Int) -> Unit)?,
+    /** On the side whose button reaches past the margin, so the value centres on the selector's segment. */
+    valueInset: PaddingValues,
     modifier: Modifier = Modifier,
 ) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         RepeatingIconButton(R.drawable.ic_chevron_left, earlier, onEarlier)
-        Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(
+            Modifier.weight(1f).padding(valueInset),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Text(
-                text = cut,
-                style = MaterialTheme.typography.titleMedium.tabularFigures(),
-                color = if (active) MaterialTheme.colorScheme.primary else Color.Unspecified,
-                maxLines = 1,
-                modifier = Modifier.semantics { contentDescription = spoken },
-            )
+            // Shrunk to fit, not clipped: a value cut short, unit and all, read as another number.
+            // Over an unseen full-size line, so a shrunk value leaves the two ends level. Without its
+            // line height, which non-linear font scaling grows at the smaller size, past the full line's.
+            val style = MaterialTheme.typography.titleMedium.tabularFigures()
+            Box(contentAlignment = Alignment.Center) {
+                Text("", style = style, modifier = Modifier.alpha(0f).clearAndSetSemantics {})
+                Text(
+                    text = cut,
+                    style = style.copy(lineHeight = TextUnit.Unspecified),
+                    color = if (active) MaterialTheme.colorScheme.primary else Color.Unspecified,
+                    maxLines = 1,
+                    autoSize = TextAutoSize.StepBased(minFontSize = MinValueSize, maxFontSize = style.fontSize),
+                    modifier = Modifier.semantics { contentDescription = spoken },
+                )
+            }
         }
         RepeatingIconButton(R.drawable.ic_chevron_right, later, onLater)
     }
 }
 
-/** Steps once on a tap; held, steps again until let go. Null disables it. */
+/** Steps once on a tap; held, steps again, more at a time the longer, until let go. Null disables it. */
 @Composable
-private fun RepeatingIconButton(@DrawableRes icon: Int, description: String, onStep: (() -> Unit)?) {
+private fun RepeatingIconButton(@DrawableRes icon: Int, description: String, onStep: ((Int) -> Unit)?) {
     val interactions = remember { MutableInteractionSource() }
     val pressed by interactions.collectIsPressedAsState()
     val step by rememberUpdatedState(onStep)
@@ -581,14 +635,16 @@ private fun RepeatingIconButton(@DrawableRes icon: Int, description: String, onS
         if (!pressed) return@LaunchedEffect
         repeated = false
         delay(RepeatDelayMillis)
+        var held = 0L
         while (true) {
-            step?.invoke() ?: break
+            step?.invoke(holdSteps(held)) ?: break
             repeated = true
             delay(RepeatIntervalMillis)
+            held += RepeatIntervalMillis
         }
     }
     IconButton(
-        onClick = { if (!repeated) step?.invoke() },
+        onClick = { if (!repeated) step?.invoke(1) },
         enabled = onStep != null,
         interactionSource = interactions,
     ) {
@@ -596,8 +652,22 @@ private fun RepeatingIconButton(@DrawableRes icon: Int, description: String, onS
     }
 }
 
+/**
+ * Points per repeat after a hold of [heldMillis]: one for a second, so a few metres stay easy,
+ * then doubling every half second, so a long drive to the start is seconds away rather than minutes.
+ */
+internal fun holdSteps(heldMillis: Long): Int {
+    if (heldMillis < HoldRampAfterMillis) return 1
+    val doublings = (heldMillis - HoldRampAfterMillis) / HoldDoublingMillis + 1
+    return 1 shl doublings.coerceAtMost(MaxHoldDoublings).toInt()
+}
+
 private const val RepeatDelayMillis = 400L
 private const val RepeatIntervalMillis = 50L
+private const val HoldRampAfterMillis = 1000L
+private const val HoldDoublingMillis = 500L
+private const val MaxHoldDoublings = 6L
+private val MinValueSize = 10.sp
 
 /** Name beside the route swatch, tying the sheet to one of several overlaid routes. */
 @Composable
