@@ -1,0 +1,10 @@
+Share or open maps, several files and more GPX types, even while recording
+Import several maps at once in Settings
+Imports can be undone
+Unsafe GPX and files over 512 MB are refused
+Trim on the graphs, not a slider, step each end a point and see what's cut and kept
+Saved waypoints can be edited or deleted
+Shaded and labelled graph gaps
+Zoomed graphs scroll by dragging to the edge, not with two fingers
+Graph, list and notification times show hours
+Fixed the map jumping after the track list

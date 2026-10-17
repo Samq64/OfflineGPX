@@ -1,3 +1,0 @@
-- Added support for importing GPX files without timestamps
-- "Add waypoint" is now based on its button tap, not when it was saved
-- Shortened the about screen's Git hash to 8 characters

@@ -69,8 +69,8 @@ android {
         minSdk = libs.versions.minSdk.get().toInt()
         // AGP 9 defaults this to compileSdk; pinned so a compileSdk bump can't change behaviour.
         targetSdk = libs.versions.targetSdk.get().toInt()
-        versionCode = 3
-        versionName = "0.2.0"
+        versionCode = 4
+        versionName = "0.3.0"
         buildConfigField("String", "GIT_HASH", "\"$gitHash\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
