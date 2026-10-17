@@ -57,6 +57,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -161,6 +162,10 @@ fun TrackSheet(
                 title = title,
                 profile = profile,
                 trim = trim,
+                waypoints = loaded.track.waypoints.size,
+                waypointsKept = loaded.track.waypoints.size - remember(loaded, trim.range) {
+                    loaded.waypointsCutBy(trim.range).size
+                },
                 routeColor = routeColor,
                 useTimeAxis = useTimeAxis,
                 onAxisChange = onAxisChange,
@@ -466,6 +471,9 @@ private fun TrimHeader(
     title: String,
     profile: TrackProfile,
     trim: TrimControls,
+    /** The track's, and of them those the trim keeps. */
+    waypoints: Int,
+    waypointsKept: Int,
     /** The map's marks for the ends are in it, so the legend is too. */
     routeColor: Color,
     useTimeAxis: Boolean,
@@ -482,10 +490,11 @@ private fun TrimHeader(
     val end = trim.range.last
     val resources = LocalResources.current
 
-    // How much is cut, to the point: the usual two decimals of a km hid single steps.
+    // How much is cut, to the point: the usual two decimals of a km hid single steps. Hours always,
+    // as for any time not labelled as one.
     val format: (Float) -> String =
         if (timed) {
-            { seconds -> Formatters.labelledDuration(seconds.toDouble()) }
+            { seconds -> Formatters.duration(seconds.toDouble()) }
         } else {
             { meters -> formatters.preciseDistance(meters.toDouble()) }
         }
@@ -501,10 +510,18 @@ private fun TrimHeader(
     // difference is exact.
     val distance = formatters.distance((profile.distanceMeters[end] - profile.distanceMeters[first]).toDouble())
     val elapsed = (profile.elapsedSeconds[end] - profile.elapsedSeconds[first]).toDouble().takeIf { profile.hasTime }
-    val kept = elapsed?.let { stringResource(R.string.trim_kept_timed, distance, Formatters.labelledDuration(it)) }
-        ?: stringResource(R.string.trim_kept, distance)
-    val keptSpoken = elapsed?.let { stringResource(R.string.trim_kept_timed, distance, resources.spokenDuration(it)) }
-        ?: kept
+    // Kept of all, once any would go: the map's dimmed pins are easy to miss.
+    val waypointsPart = when {
+        waypoints == 0 -> null
+        waypointsKept == waypoints -> pluralStringResource(R.plurals.trim_waypoints, waypoints, waypoints)
+        else -> pluralStringResource(R.plurals.trim_waypoints_some, waypoints, waypointsKept, waypoints)
+    }
+    val join = stringResource(R.string.trim_kept_join)
+    fun keptLine(time: String?) =
+        listOfNotNull(distance, time, waypointsPart).reduce { a, b -> String.format(join, a, b) }
+    // Bare under the title, which says it's a trim; spoken after the word, with no title beside it.
+    val kept = keptLine(elapsed?.let { Formatters.duration(it) })
+    val keptSpoken = stringResource(R.string.trim_kept, keptLine(elapsed?.let { resources.spokenDuration(it) }))
     // Large text leaves the title no room beside the actions, so they take a row of their own.
     val stacked = isLargeText()
 

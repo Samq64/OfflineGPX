@@ -286,9 +286,18 @@
     <string name="track_trim">Trim</string>
     <string name="track_trimmed">Trimmed “%1$s”.</string>
 
-    <!-- How much a trim keeps: a distance, then the time it spans. -->
+    <!-- How much a trim keeps: its distance, the time it spans and its waypoints, joined; spoken after "Keeping". -->
     <string name="trim_kept">Keeping %1$s</string>
-    <string name="trim_kept_timed">Keeping %1$s · %2$s</string>
+    <string name="trim_kept_join">%1$s · %2$s</string>
+    <plurals name="trim_waypoints">
+        <item quantity="one">%1$d waypoint</item>
+        <item quantity="other">%1$d waypoints</item>
+    </plurals>
+    <!-- Some would be dropped. Counted by the second number, the track's. -->
+    <plurals name="trim_waypoints_some">
+        <item quantity="one">%1$d/%2$d waypoint</item>
+        <item quantity="other">%1$d/%2$d waypoints</item>
+    </plurals>
 
     <!-- The ends of what a trim keeps, each stepped a point at a time. -->
     <!-- Asked when back would leave a trim whose ends have moved. -->
