@@ -51,6 +51,8 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -571,7 +573,7 @@ private fun TrimHeader(
         ) {
             TrimEnd(
                 label = stringResource(R.string.trim_start),
-                mark = TrimMark.Ring,
+                mark = TrimMark.Play,
                 markColor = routeColor,
                 // What's cut from each end, so both read alike.
                 cut = format(x[first]),
@@ -588,7 +590,7 @@ private fun TrimHeader(
             val cutFromEnd = x[last] - x[end]
             TrimEnd(
                 label = stringResource(R.string.trim_end),
-                mark = TrimMark.Square,
+                mark = TrimMark.Stop,
                 markColor = routeColor,
                 cut = if (end < last) stringResource(R.string.trim_end_cut, format(cutFromEnd)) else format(0f),
                 spoken = stringResource(R.string.trim_end_cut_spoken, speak(cutFromEnd)),
@@ -669,23 +671,35 @@ private fun TrimEnd(
     }
 }
 
-/** The shapes the map marks a trim's moved ends with: hollow, so neither reads as the scrub dot. */
-private enum class TrimMark { Ring, Square }
+/** The shapes the map marks a trim's moved ends with: play and stop. */
+private enum class TrimMark { Play, Stop }
 
-/** [mark] at the label's size, as the map draws it: a hollow outline. Decorative; the label says which end. */
+/** [mark] at the label's size, hollow as the map draws it. Decorative; the label says which end. */
 @Composable
 private fun TrimMarkGlyph(mark: TrimMark, color: Color) {
     val size = with(LocalDensity.current) { MaterialTheme.typography.labelSmall.fontSize.toDp() }
     Canvas(Modifier.size(size)) {
-        val stroke = Stroke(width = MarkGlyphStroke.toPx())
+        val stroke = Stroke(width = MarkGlyphStroke.toPx(), join = StrokeJoin.Round)
+        // The edge's middle, so its outside meets the box.
         val inset = stroke.width / 2
+        val side = this.size.minDimension - stroke.width
         when (mark) {
-            TrimMark.Ring -> drawCircle(color, radius = this.size.minDimension / 2 - inset, style = stroke)
-            TrimMark.Square -> drawRoundRect(
+            // Its flat side in, so its length matches its height across, as an equilateral triangle's.
+            TrimMark.Play -> drawPath(
+                Path().apply {
+                    moveTo(inset + side * PlayInset, inset)
+                    lineTo(inset + side, inset + side / 2)
+                    lineTo(inset + side * PlayInset, inset + side)
+                    close()
+                },
+                color,
+                style = stroke,
+            )
+            TrimMark.Stop -> drawRoundRect(
                 color = color,
                 topLeft = Offset(inset, inset),
-                size = Size(this.size.width - stroke.width, this.size.height - stroke.width),
-                cornerRadius = CornerRadius(this.size.minDimension * MarkGlyphCorner),
+                size = Size(side, side),
+                cornerRadius = CornerRadius(side * MarkGlyphCorner),
                 style = stroke,
             )
         }
@@ -693,6 +707,7 @@ private fun TrimMarkGlyph(mark: TrimMark, color: Color) {
 }
 
 private val MarkGlyphStroke = 2.dp
+private const val PlayInset = 0.13f
 
 // As the map's square.
 private const val MarkGlyphCorner = 0.2f

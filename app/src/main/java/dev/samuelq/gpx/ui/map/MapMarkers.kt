@@ -32,9 +32,9 @@ internal class MarkerSymbols(marker: Color, puck: Color, hole: Color, density: D
     val cutWaypoint: MarkerSymbol
 
     /**
-     * A trim's ends, told apart by shape where an out-and-back's meet: no colour of their own,
-     * and nothing turned to a bearing, which jitter at the ends would swing. Both hollow, so
-     * neither reads as the solid scrub dot.
+     * A trim's ends, as play and stop, told apart by shape where an out-and-back's meet: no colour
+     * of their own, and nothing turned to a bearing, which jitter at the ends would swing. Hollow,
+     * as filled they outweighed the line on the map.
      */
     val trimStart: MarkerSymbol
     val trimEnd: MarkerSymbol
@@ -68,53 +68,55 @@ internal class MarkerSymbols(marker: Color, puck: Color, hole: Color, density: D
             liveWaypoint = pin(pinRadius, tipLength, pinRing, fill = puck, ring = MARKER_RING, hole = hole)
             cutWaypoint =
                 pin(pinRadius, tipLength, pinRing, fill = marker, ring = MARKER_RING, hole = hole, UNFOCUSED_ALPHA)
-            val radius = TRIM_END_RADIUS_DP.dp.toPx()
-            val stroke = TRIM_RING_STROKE_DP.dp.toPx()
-            trimStart = ring(radius, stroke, ringWidth, fill = marker, outline = MARKER_RING, hole = hole)
-            trimEnd = square(TRIM_SQUARE_SIDE_DP.dp.toPx(), stroke, ringWidth, marker, MARKER_RING, hole)
+            val stroke = TRIM_MARK_STROKE_DP.dp.toPx()
+            trimStart = hollow(playTriangle(TRIM_TRIANGLE_LENGTH_DP.dp.toPx()), stroke, ringWidth, marker, hole)
+            trimEnd = hollow(square(TRIM_SQUARE_SIDE_DP.dp.toPx()), stroke, ringWidth, marker, hole)
         }
     }
 
-    /** A [stroke]-wide ring round a [hole]-coloured centre, outlined. */
-    private fun ring(
-        radius: Float,
-        stroke: Float,
-        outlineWidth: Float,
-        fill: Color,
-        outline: Color,
-        hole: Color,
-    ): MarkerSymbol {
-        val outer = radius + stroke / 2
-        val size = kotlin.math.ceil((outer + outlineWidth) * 2).toInt() + 2
-        val bitmap = createBitmap(size, size)
-        val canvas = android.graphics.Canvas(bitmap)
-        val c = size / 2f
-        canvas.drawCircle(c, c, outer + outlineWidth, fillPaint(outline))
-        canvas.drawCircle(c, c, outer, fillPaint(fill))
-        canvas.drawCircle(c, c, radius - stroke / 2, fillPaint(hole))
-        return MarkerSymbol(AndroidBitmap(bitmap), MarkerSymbol.HotspotPlace.CENTER, false)
+    /**
+     * Pointing right, as play does, whichever way the track runs: it says "start", not a heading.
+     * About its centroid, not its box's centre, so it sits on the line as the square does.
+     */
+    private fun playTriangle(length: Float) = android.graphics.Path().apply {
+        val half = length / kotlin.math.sqrt(3f)
+        moveTo(-length / 3, -half)
+        lineTo(length * 2 / 3, 0f)
+        lineTo(-length / 3, half)
+        close()
     }
 
-    /** Hollow like [ring]: a [stroke]-wide square edge round a [hole]-coloured centre, outlined. */
-    private fun square(
-        side: Float,
+    private fun square(side: Float) = android.graphics.Path().apply {
+        val corner = side * SQUARE_CORNER_RATIO
+        addRoundRect(-side / 2, -side / 2, side / 2, side / 2, corner, corner, android.graphics.Path.Direction.CW)
+    }
+
+    /** [shape], about the origin, as a [stroke]-wide edge round a [hole]-coloured centre, outlined. */
+    private fun hollow(
+        shape: android.graphics.Path,
         stroke: Float,
         outlineWidth: Float,
         fill: Color,
-        outline: Color,
         hole: Color,
     ): MarkerSymbol {
-        val size = kotlin.math.ceil(side + outlineWidth * 2).toInt() + 2
+        val bounds = android.graphics.RectF().also { shape.computeBounds(it, true) }
+        val reach = maxOf(-bounds.left, bounds.right, -bounds.top, bounds.bottom) + stroke / 2 + outlineWidth
+        val size = kotlin.math.ceil(reach * 2).toInt() + 2
         val bitmap = createBitmap(size, size)
         val canvas = android.graphics.Canvas(bitmap)
-        val c = size / 2f
-        fun rect(half: Float, color: Color) {
-            val corner = half * 2 * SQUARE_CORNER_RATIO
-            canvas.drawRoundRect(c - half, c - half, c + half, c + half, corner, corner, fillPaint(color))
+        canvas.translate(size / 2f, size / 2f)
+        val edge = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeJoin = Paint.Join.ROUND
         }
-        rect(side / 2 + outlineWidth, outline)
-        rect(side / 2, fill)
-        rect(side / 2 - stroke, hole)
+        // The outline as a wider stroke beneath, its inner half then covered by the centre.
+        edge.color = MARKER_RING.toArgb()
+        edge.strokeWidth = stroke + outlineWidth * 2
+        canvas.drawPath(shape, edge)
+        canvas.drawPath(shape, fillPaint(hole))
+        edge.color = fill.toArgb()
+        edge.strokeWidth = stroke
+        canvas.drawPath(shape, edge)
         return MarkerSymbol(AndroidBitmap(bitmap), MarkerSymbol.HotspotPlace.CENTER, false)
     }
 
@@ -297,10 +299,11 @@ private const val PIN_RING_WIDTH_DP = 2.5f
 
 private const val PIN_HOLE_RATIO = 0.4f
 
-// A trim's ends: the size of the scrub dot, so the one lands on the other cleanly.
-private const val TRIM_END_RADIUS_DP = 6f
-private const val TRIM_RING_STROKE_DP = 3f
-private const val TRIM_SQUARE_SIDE_DP = 13f
+// A trim's ends, measured along the middle of their edges: about the scrub dot's size, the triangle
+// longer, as its point leaves it less area.
+private const val TRIM_TRIANGLE_LENGTH_DP = 13f
+private const val TRIM_SQUARE_SIDE_DP = 10f
+private const val TRIM_MARK_STROKE_DP = 3f
 private const val SQUARE_CORNER_RATIO = 0.2f
 
 /** The pin's head, ring included. */
