@@ -286,9 +286,21 @@
     <string name="track_trim">Trim</string>
     <string name="track_trimmed">Trimmed “%1$s”.</string>
 
-    <!-- What the trim keeps, from where to where along the track. -->
-    <string name="trim_range">Keeping %1$s to %2$s</string>
-    <string name="trim_title">Trim %1$s</string>
+    <!-- How much a trim keeps: a distance, then the time it spans. -->
+    <string name="trim_kept">Keeping %1$s</string>
+    <string name="trim_kept_timed">Keeping %1$s · %2$s</string>
+
+    <!-- The ends of what a trim keeps, each stepped a point at a time. -->
+    <string name="trim_end">End</string>
+    <!-- How much a trim cuts off before the track's end. -->
+    <string name="trim_end_cut">−%1$s</string>
+    <string name="trim_end_cut_spoken">%1$s before the end</string>
+    <string name="trim_end_earlier">End earlier</string>
+    <string name="trim_end_later">End later</string>
+    <string name="trim_start">Start</string>
+    <string name="trim_start_earlier">Start earlier</string>
+    <string name="trim_start_later">Start later</string>
+    <string name="trim_title">Trimming “%1$s”</string>
 
     <string name="value_unknown">unknown</string>
 

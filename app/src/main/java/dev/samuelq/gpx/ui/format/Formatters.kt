@@ -87,6 +87,19 @@ class Formatters(
         }
     }
 
+    /** [distance] to the metre or so at any length, where a step of one point must show. */
+    fun preciseDistance(meters: Double, locale: Locale = Locale.getDefault()): String = when {
+        meters.isNaN() -> EMPTY
+        metric -> if (abs(meters) < METERS_PER_KM) {
+            String.format(locale, "%.0f m", meters)
+        } else {
+            String.format(locale, "%,.3f km", meters / METERS_PER_KM)
+        }
+
+        abs(meters / METERS_PER_MILE) < 0.1 -> String.format(locale, "%,.0f ft", meters * FEET_PER_METER)
+        else -> String.format(locale, "%,.3f mi", meters / METERS_PER_MILE)
+    }
+
     /**
      * Axis labels with precision from the tick step, so neighbouring ticks never print the
      * same. A lambda since the charts key their layout on its identity.

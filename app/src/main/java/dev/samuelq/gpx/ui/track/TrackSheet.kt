@@ -1,8 +1,11 @@
 package dev.samuelq.gpx.ui.track
 
+import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,7 +20,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -25,7 +27,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -33,6 +34,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,6 +51,7 @@ import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -67,7 +70,6 @@ import dev.samuelq.gpx.ui.chart.ChartSeries
 import dev.samuelq.gpx.ui.chart.EmptyChart
 import dev.samuelq.gpx.ui.chart.ProfileChart
 import dev.samuelq.gpx.ui.chart.axisScale
-import dev.samuelq.gpx.ui.chart.nearestIndex
 import dev.samuelq.gpx.ui.chart.scrollView
 import dev.samuelq.gpx.ui.chart.timeAxisScale
 import dev.samuelq.gpx.ui.chart.yScale
@@ -75,10 +77,12 @@ import dev.samuelq.gpx.ui.chart.zoomView
 import dev.samuelq.gpx.ui.format.Formatters
 import dev.samuelq.gpx.ui.format.LocalFormatters
 import dev.samuelq.gpx.ui.format.spokenDuration
+import dev.samuelq.gpx.ui.format.tabularFigures
 import dev.samuelq.gpx.ui.isLargeText
 import dev.samuelq.gpx.ui.theme.LocalChartColors
 import java.time.Instant
 import java.time.ZoneId
+import kotlinx.coroutines.delay
 
 /** Peek height before a track loads, and the minimum after. */
 val TrackSheetPeekHeight = 128.dp
@@ -139,9 +143,10 @@ fun TrackSheet(
         // The file's own <desc>; the app never writes one.
         description = loaded.track.description,
         keptRange = trim?.range,
+        onKeptRangeChange = trim?.onRangeChange,
     ) {
         if (trim != null) {
-            TrimHeader(title, profile, trim, useTimeAxis)
+            TrimHeader(title, profile, trim, useTimeAxis, selectedIndex, onSelectedIndexChange)
             return@ProfileSheet
         }
         SheetTitle(
@@ -190,6 +195,8 @@ fun ProfileSheet(
     pointCount: Int? = null,
     /** While trimming: the points kept, the rest greyed on the charts. */
     keptRange: IntRange? = null,
+    /** Makes [keptRange]'s ends draggable on the charts. */
+    onKeptRangeChange: ((IntRange) -> Unit)? = null,
     header: @Composable () -> Unit,
 ) {
     val density = LocalDensity.current
@@ -235,6 +242,7 @@ fun ProfileSheet(
                     description = description,
                     pointCount = pointCount,
                     keptRange = keptRange,
+                    onKeptRangeChange = onKeptRangeChange,
                 )
             } else {
                 EmptyProfile(pointCount, useTimeAxis)
@@ -254,6 +262,7 @@ private fun ProfileDetails(
     description: String?,
     pointCount: Int?,
     keptRange: IntRange?,
+    onKeptRangeChange: ((IntRange) -> Unit)?,
 ) {
     val chartColors = LocalChartColors.current
     val formatters = LocalFormatters.current
@@ -397,6 +406,7 @@ private fun ProfileDetails(
                 formatValue = formatValue,
                 formatPosition = positionValue,
                 keptRange = keptRange,
+                onKeptRangeChange = onKeptRangeChange,
             )
         }
     }
@@ -428,21 +438,50 @@ private fun ProfileDetails(
     Spacer(Modifier.height(32.dp))
 }
 
-/** What a trim keeps, set with a slider along the charts' axis. */
+/** What a trim keeps: dragged on the charts, or stepped a point at a time here. */
 @Composable
-private fun TrimHeader(title: String, profile: TrackProfile, trim: TrimControls, useTimeAxis: Boolean) {
+private fun TrimHeader(
+    title: String,
+    profile: TrackProfile,
+    trim: TrimControls,
+    useTimeAxis: Boolean,
+    /** An end selected was last moved, by a step or on the charts, and is the one shown there. */
+    selectedIndex: Int?,
+    onSelectedIndexChange: (Int?) -> Unit,
+) {
     val formatters = LocalFormatters.current
     val timed = useTimeAxis && profile.hasTime
     val x = if (timed) profile.elapsedSeconds else profile.distanceMeters
     val last = x.size - 1
     val first = trim.range.first
     val end = trim.range.last
-    val format = formatters.position(timed)
+    val resources = LocalResources.current
 
-    Column(
-        modifier = Modifier.fillMaxWidth().padding(start = EdgePadding, end = 8.dp, bottom = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
+    // How much is cut, to the point: the usual two decimals of a km hid single steps.
+    val format: (Float) -> String =
+        if (timed) {
+            { seconds -> Formatters.labelledDuration(seconds.toDouble()) }
+        } else {
+            { meters -> formatters.preciseDistance(meters.toDouble()) }
+        }
+    val speak: (Float) -> String = if (timed) { seconds -> resources.spokenDuration(seconds.toDouble()) } else format
+
+    // Selected too, so the map follows the end and the charts show where it is.
+    fun move(range: IntRange, moved: Int) {
+        trim.onRangeChange(range)
+        onSelectedIndexChange(moved)
+    }
+
+    // From the cumulative series: distance is flat across a break and elapsed is wall-clock, so a
+    // difference is exact.
+    val distance = formatters.distance((profile.distanceMeters[end] - profile.distanceMeters[first]).toDouble())
+    val elapsed = (profile.elapsedSeconds[end] - profile.elapsedSeconds[first]).toDouble().takeIf { profile.hasTime }
+    val kept = elapsed?.let { stringResource(R.string.trim_kept_timed, distance, Formatters.labelledDuration(it)) }
+        ?: stringResource(R.string.trim_kept, distance)
+    val keptSpoken = elapsed?.let { stringResource(R.string.trim_kept_timed, distance, resources.spokenDuration(it)) }
+        ?: kept
+
+    Column(Modifier.fillMaxWidth().padding(start = EdgePadding, end = 8.dp, bottom = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = stringResource(R.string.trim_title, title),
@@ -458,35 +497,107 @@ private fun TrimHeader(title: String, profile: TrackProfile, trim: TrimControls,
                 Text(stringResource(R.string.action_save))
             }
         }
-
-        // From the cumulative series: distance is flat across a break and elapsed is wall-clock, so a
-        // difference is exact.
-        StatRow(
-            distanceAndElapsed(
-                (profile.distanceMeters[end] - profile.distanceMeters[first]).toDouble(),
-                (profile.elapsedSeconds[end] - profile.elapsedSeconds[first]).toDouble().takeIf { profile.hasTime },
-            ),
-        )
-
-        RangeSlider(
-            value = x[first]..x[end],
-            onValueChange = { range ->
-                val from = nearestIndex(x, range.start)
-                val to = nearestIndex(x, range.endInclusive)
-                // At least two points, or there's no track left.
-                if (from < to) trim.onRangeChange(from..to)
-            },
-            valueRange = x[0]..x[last].coerceAtLeast(x[0] + 1f),
-            // The thumbs sit where edge swipes mean back; padded in, and claimed from the system.
-            modifier = Modifier.padding(end = EdgePadding - 8.dp).systemGestureExclusion(),
-        )
         Text(
-            text = stringResource(R.string.trim_range, format(x[first]), format(x[end])),
-            style = MaterialTheme.typography.bodySmall,
+            text = kept,
+            style = MaterialTheme.typography.bodyMedium.tabularFigures(),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.semantics { contentDescription = keptSpoken },
         )
+
+        // At least two points are kept, or there's no track left.
+        Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            TrimEnd(
+                label = stringResource(R.string.trim_start),
+                // What's cut from each end, so both read alike.
+                cut = format(x[first]),
+                spoken = speak(x[first]),
+                active = selectedIndex == first,
+                earlier = stringResource(R.string.trim_start_earlier),
+                later = stringResource(R.string.trim_start_later),
+                onEarlier = { move(first - 1..end, first - 1) }.takeIf { first > 0 },
+                onLater = { move(first + 1..end, first + 1) }.takeIf { first + 1 < end },
+                modifier = Modifier.weight(1f),
+            )
+            val cutFromEnd = x[last] - x[end]
+            TrimEnd(
+                label = stringResource(R.string.trim_end),
+                cut = if (end < last) stringResource(R.string.trim_end_cut, format(cutFromEnd)) else format(0f),
+                spoken = stringResource(R.string.trim_end_cut_spoken, speak(cutFromEnd)),
+                active = selectedIndex == end,
+                earlier = stringResource(R.string.trim_end_earlier),
+                later = stringResource(R.string.trim_end_later),
+                onEarlier = { move(first..end - 1, end - 1) }.takeIf { end - 1 > first },
+                onLater = { move(first..end + 1, end + 1) }.takeIf { end < last },
+                modifier = Modifier.weight(1f),
+            )
+        }
     }
 }
+
+/** One end of a trim, stepped a point per tap, and repeatedly while held. */
+@Composable
+private fun TrimEnd(
+    label: String,
+    /** How much is cut from this end. */
+    cut: String,
+    spoken: String,
+    /** Tinted when it's the end the charts and map are showing. */
+    active: Boolean,
+    earlier: String,
+    later: String,
+    onEarlier: (() -> Unit)?,
+    onLater: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        RepeatingIconButton(R.drawable.ic_chevron_left, earlier, onEarlier)
+        Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = cut,
+                style = MaterialTheme.typography.titleMedium.tabularFigures(),
+                color = if (active) MaterialTheme.colorScheme.primary else Color.Unspecified,
+                maxLines = 1,
+                modifier = Modifier.semantics { contentDescription = spoken },
+            )
+        }
+        RepeatingIconButton(R.drawable.ic_chevron_right, later, onLater)
+    }
+}
+
+/** Steps once on a tap; held, steps again until let go. Null disables it. */
+@Composable
+private fun RepeatingIconButton(@DrawableRes icon: Int, description: String, onStep: (() -> Unit)?) {
+    val interactions = remember { MutableInteractionSource() }
+    val pressed by interactions.collectIsPressedAsState()
+    val step by rememberUpdatedState(onStep)
+    // The release still clicks; skipped once a hold has repeated.
+    var repeated by remember { mutableStateOf(false) }
+    LaunchedEffect(pressed) {
+        if (!pressed) return@LaunchedEffect
+        repeated = false
+        delay(RepeatDelayMillis)
+        while (true) {
+            step?.invoke() ?: break
+            repeated = true
+            delay(RepeatIntervalMillis)
+        }
+    }
+    IconButton(
+        onClick = { if (!repeated) step?.invoke() },
+        enabled = onStep != null,
+        interactionSource = interactions,
+    ) {
+        Icon(painterResource(icon), contentDescription = description)
+    }
+}
+
+private const val RepeatDelayMillis = 400L
+private const val RepeatIntervalMillis = 50L
 
 /** Name beside the route swatch, tying the sheet to one of several overlaid routes. */
 @Composable

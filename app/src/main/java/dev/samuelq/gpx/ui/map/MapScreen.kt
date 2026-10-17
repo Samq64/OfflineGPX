@@ -478,6 +478,10 @@ fun MapScreen(
         }
     }
 
+    val trimMarks = remember(focusedTrack, trimRange) {
+        trimRange?.let { range -> focusedTrack?.let { TrimMarks(it.profile.points, range) } }
+    }
+
     // What saving the trim would drop with the points.
     val cutWaypoints = remember(focusedTrack, trimRange) {
         val range = trimRange ?: return@remember emptySet()
@@ -755,7 +759,7 @@ fun MapScreen(
                     controller = mapController,
                     focusedTrackId = if (isRecording) LIVE_TRACK_ID else focusedTrack?.id,
                     selectedIndex = screen.selectedIndex,
-                    markEnds = trimRange != null,
+                    trim = trimMarks,
                     markerColor = when {
                         isRecording -> liveColor
                         focusedTrack != null -> focusedColor

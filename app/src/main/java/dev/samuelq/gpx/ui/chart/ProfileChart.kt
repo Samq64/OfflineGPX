@@ -31,8 +31,10 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.Color
@@ -97,6 +99,15 @@ private val PlotHeight = 100.dp
 private const val AreaFillAlpha = 0.10f
 private const val BreakWashAlpha = 0.10f
 
+/** A trim end's grip, outside what's kept, as on a video editor's timeline; and the frame between. */
+private val HandleWidth = 14.dp
+private val HandleCorner = 6.dp
+private val GripLine = DpSize(2.dp, 12.dp)
+private val FrameWidth = 1.5.dp
+
+/** How near an end a drag takes it rather than scrubbing. */
+private val HandleReach = 24.dp
+
 /** Where a scrub nears a plot edge and scrolls a zoomed chart. */
 private val EdgeZone = 32.dp
 
@@ -135,6 +146,8 @@ fun ProfileChart(
     modifier: Modifier = Modifier,
     /** While trimming: the points kept, the rest greyed out. */
     keptRange: IntRange? = null,
+    /** Makes [keptRange]'s ends draggable, each drag also selecting the end it moves. */
+    onKeptRangeChange: ((IntRange) -> Unit)? = null,
 ) {
     val chartColors = LocalChartColors.current
     val density = LocalDensity.current
@@ -179,16 +192,19 @@ fun ProfileChart(
     val xLabelHeight = render.xTicks.maxOfOrNull { it.size.height } ?: 0
     val bandPx = with(density) { maxOf(AxisBand.toPx(), xLabelHeight + LabelGap.toPx()) }
     val plotHeight = PlotHeight * textGrowth(density.fontScale)
+    // Inset while trimming, so a grip at either end sits beside the data rather than over it.
+    val handles = keptRange != null && onKeptRangeChange != null
     // Not keyed on render: a pinch makes a new one every frame and would restart the gesture.
-    val geometry = remember(gutter, density, bandPx) {
+    val geometry = remember(gutter, density, bandPx, handles) {
         with(density) {
+            val inset = if (handles) HandleWidth.toPx() else 0f
             ChartGeometry(
                 gutterPx = gutter,
-                plotLeft = gutter + LabelGap.toPx(),
+                plotLeft = gutter + LabelGap.toPx() + inset,
                 // Room for half a tick label, should one land on the top edge.
                 topPad = 8.dp.toPx(),
                 bottomBand = bandPx,
-                rightPad = RightPad.toPx(),
+                rightPad = maxOf(RightPad.toPx(), inset),
                 labelGap = LabelGap.toPx(),
             )
         }
@@ -241,13 +257,15 @@ fun ProfileChart(
             },
     ) {
         StaticLayer(render, geometry, chartColors)
-        keptRange?.let { KeptLayer(render, geometry, it) }
+        keptRange?.let { KeptLayer(render, geometry, it, handles) }
         ScrubberLayer(
             render = render,
             geometry = geometry,
             chartColors = chartColors,
             selectedIndex = selectedIndex,
             onSelectedIndexChange = onSelectedIndexChange,
+            keptRange = keptRange,
+            onKeptRangeChange = onKeptRangeChange,
             onZoom = onZoom,
             scrollable = zoomed,
             onScroll = onScroll,
@@ -318,20 +336,57 @@ private fun StaticLayer(render: ChartRender, geometry: ChartGeometry, chartColor
     )
 }
 
-/** Scrims the plot either side of [kept], as a trim would cut it. */
+/** Scrims the plot either side of [kept], as a trim would cut it, with [handles] on its ends. */
 @Composable
-private fun KeptLayer(render: ChartRender, geometry: ChartGeometry, kept: IntRange) {
+private fun KeptLayer(render: ChartRender, geometry: ChartGeometry, kept: IntRange, handles: Boolean) {
     val series = render.series
     val scrim = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = CutScrimAlpha)
+    val handleColor = MaterialTheme.colorScheme.primary
+    val gripColor = MaterialTheme.colorScheme.onPrimary
     Canvas(Modifier.fillMaxSize()) {
         if (series.size == 0) return@Canvas
         val plot = geometry.plotRect(size)
         fun xAt(i: Int) = plot.xFor(series.x[i.coerceIn(0, series.size - 1)], render.xScale)
-            .coerceIn(plot.left, plot.right)
         val start = xAt(kept.first)
         val end = xAt(kept.last)
-        drawRect(scrim, Offset(plot.left, plot.top), Size(start - plot.left, plot.height))
-        drawRect(scrim, Offset(end, plot.top), Size(plot.right - end, plot.height))
+        val left = start.coerceIn(plot.left, plot.right)
+        val right = end.coerceIn(plot.left, plot.right)
+        drawRect(scrim, Offset(plot.left, plot.top), Size(left - plot.left, plot.height))
+        drawRect(scrim, Offset(right, plot.top), Size(plot.right - right, plot.height))
+        if (!handles) return@Canvas
+        val width = HandleWidth.toPx()
+        val frame = FrameWidth.toPx()
+        // The frame along what's kept, over the plot's edges.
+        drawRect(handleColor, Offset(left, plot.top - frame), Size(right - left, frame))
+        drawRect(handleColor, Offset(left, plot.bottom), Size(right - left, frame))
+        // Not at the plot's edge for an end zoomed out of view: that would look movable there.
+        val corner = HandleCorner.toPx()
+        val grip = GripLine.toSize()
+        for ((x, outward) in listOf(start to -1f, end to 1f)) {
+            if (x < plot.left - 0.5f || x > plot.right + 0.5f) continue
+            // Outside the end, in the inset at the plot's edges.
+            val handleLeft = if (outward < 0) x - width else x
+            val rect = Rect(handleLeft, plot.top - frame, handleLeft + width, plot.bottom + frame)
+            val radii = CornerRadius(corner)
+            drawPath(
+                Path().apply {
+                    addRoundRect(
+                        if (outward < 0) {
+                            RoundRect(rect, topLeft = radii, bottomLeft = radii)
+                        } else {
+                            RoundRect(rect, topRight = radii, bottomRight = radii)
+                        },
+                    )
+                },
+                handleColor,
+            )
+            drawRoundRect(
+                color = gripColor,
+                topLeft = Offset(rect.center.x - grip.width / 2, rect.center.y - grip.height / 2),
+                size = grip,
+                cornerRadius = CornerRadius(grip.width / 2),
+            )
+        }
     }
 }
 
@@ -343,6 +398,8 @@ private fun ScrubberLayer(
     chartColors: ChartColors,
     selectedIndex: Int?,
     onSelectedIndexChange: (Int?) -> Unit,
+    keptRange: IntRange?,
+    onKeptRangeChange: ((IntRange) -> Unit)?,
     onZoom: (Float, Float) -> Unit,
     scrollable: Boolean,
     onScroll: (Float) -> Unit,
@@ -356,12 +413,59 @@ private fun ScrubberLayer(
     val currentScrollable by rememberUpdatedState(scrollable)
     val currentOnScroll by rememberUpdatedState(onScroll)
     val currentOnDoubleTap by rememberUpdatedState(onDoubleTap)
+    val currentKept by rememberUpdatedState(keptRange)
+    val currentOnKeptChange by rememberUpdatedState(onKeptRangeChange)
 
     Canvas(
         Modifier
             .fillMaxSize()
             .pointerInput(geometry) {
                 fun select(x: Float) = onSelectedIndexChange(geometry.indexAt(x, size.toSize(), currentRender))
+
+                // The trim end a drag holds, if it started on one.
+                var handle: TrimEnd? = null
+
+                // Moves the held end, keeping two points, or scrubs.
+                fun drag(x: Float) {
+                    val end = handle
+                    val kept = currentKept
+                    val onKept = currentOnKeptChange
+                    if (end == null || kept == null || onKept == null) return select(x)
+                    val index = geometry.indexAt(x, size.toSize(), currentRender)
+                    val moved = when (end) {
+                        TrimEnd.Start -> index.coerceAtMost(kept.last - 1)..kept.last
+                        TrimEnd.End -> kept.first..index.coerceAtLeast(kept.first + 1)
+                    }
+                    onKept(moved)
+                    onSelectedIndexChange(if (end == TrimEnd.Start) moved.first else moved.last)
+                }
+
+                // The nearer end within reach of [x], when one shows.
+                fun handleAt(x: Float): TrimEnd? {
+                    val kept = currentKept ?: return null
+                    if (currentOnKeptChange == null) return null
+                    val render = currentRender
+                    val series = render.series
+                    if (series.size == 0) return null
+                    val plot = geometry.plotRect(size.toSize())
+                    val reach = HandleReach.toPx()
+                    fun distance(i: Int): Float {
+                        val at = plot.xFor(series.x[i.coerceIn(0, series.size - 1)], render.xScale)
+                        return if (at < plot.left - 0.5f || at > plot.right + 0.5f) Float.MAX_VALUE else abs(at - x)
+                    }
+                    val start = distance(kept.first)
+                    val end = distance(kept.last)
+                    return when {
+                        minOf(start, end) > reach -> null
+                        // Ends drawn together: past the end, only the end can go; before it, the start.
+                        start == end -> {
+                            val at = plot.xFor(series.x[kept.last], render.xScale)
+                            if (x > at) TrimEnd.End else TrimEnd.Start
+                        }
+                        start < end -> TrimEnd.Start
+                        else -> TrimEnd.End
+                    }
+                }
 
                 // The first tap still selects at once, so a single tap never waits for a second.
                 var lastTapAt = Long.MIN_VALUE / 2
@@ -380,7 +484,7 @@ private fun ScrubberLayer(
                             val speed = edgeScroll(scrubX, plot.left, plot.right, edgeZone)
                             if (speed != 0f && currentScrollable) {
                                 currentOnScroll(speed * EdgeScrollSpeed * (now - last) / 1e9f)
-                                select(scrubX)
+                                drag(scrubX)
                             }
                             last = now
                         }
@@ -388,6 +492,7 @@ private fun ScrubberLayer(
 
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
+                        handle = handleAt(down.position.x)
                         var drift = Offset.Zero
                         var scrubbing = false
                         var zooming = false
@@ -426,7 +531,7 @@ private fun ScrubberLayer(
                                     if (scrubbing) {
                                         change.consume()
                                         scrubX = change.position.x
-                                        select(scrubX)
+                                        drag(scrubX)
                                         if (autoscroll == null) autoscroll = startAutoscroll()
                                     }
                                 }
@@ -518,6 +623,8 @@ class BreakLabel(val shown: (Float) -> String, val spoken: (Float) -> String)
 class ChartAxisGroup {
     internal var gutterPx by mutableFloatStateOf(0f)
 }
+
+private enum class TrimEnd { Start, End }
 
 @Immutable
 private class ChartRender(

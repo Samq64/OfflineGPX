@@ -4,6 +4,7 @@ import android.view.ViewConfiguration
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
@@ -32,6 +33,7 @@ import androidx.core.view.ViewCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import dev.samuelq.gpx.R
 import dev.samuelq.gpx.core.model.TrackPoint
+import dev.samuelq.gpx.core.model.TrackPoints
 import dev.samuelq.gpx.core.model.Waypoint
 import dev.samuelq.gpx.data.map.OfflineMap
 import dev.samuelq.gpx.data.map.maxViewZoom
@@ -73,8 +75,8 @@ internal fun OfflineMapCanvas(
     focusedTrackId: Long?,
     /** Highlighted point within [focusedTrackId]'s route, as an index into its points. */
     selectedIndex: Int?,
-    /** Marks both ends of [focusedTrackId]'s route, which a trim being set up has cut to. */
-    markEnds: Boolean,
+    /** A trim being set up on [focusedTrackId], whose route in [routes] is then only the part kept; its ends are marked. */
+    trim: TrimMarks?,
     /** [focusedTrackId]'s colour, for its selected point and its [trackWaypoints]. */
     markerColor: Color,
     /** Whether to mark [liveRoute]'s last point. */
@@ -135,6 +137,7 @@ internal fun OfflineMapCanvas(
 
     val currentRoutes by rememberUpdatedState(routes)
     val currentLiveRoute by rememberUpdatedState(liveRoute)
+    val currentTrim by rememberUpdatedState(trim)
     val currentWaypoints by rememberUpdatedState(trackWaypoints + liveWaypoints)
     val select by rememberUpdatedState(onSelect)
     val selectNothing by rememberUpdatedState(onSelectNothing)
@@ -250,21 +253,17 @@ internal fun OfflineMapCanvas(
 
     LaunchedEffect(
         belowPinsLayer, pinLayer, abovePinsLayer, onTopLayer, symbols, routes, liveRoute, showPuck,
-        focusedTrackId, selectedIndex, markEnds, trackWaypoints, liveWaypoints, cutWaypoints, followedWaypoint,
+        focusedTrackId, selectedIndex, trim, trackWaypoints, liveWaypoints, cutWaypoints, followedWaypoint,
         position,
     ) {
         val puckRoute = liveRoute?.takeIf { showPuck }
         val here = symbols.puck(position, bearing = null)
-        val focused = routeFor(focusedTrackId, routes, liveRoute)?.points
-        val markerAt = focused?.getOrNull(selectedIndex ?: -1)
+        val markerAt = focusedPoints(focusedTrackId, routes, liveRoute, trim)?.getOrNull(selectedIndex ?: -1)
         // An out-and-back's kept part lies over its cut part; only its ends tell them apart.
-        val ends = if (markEnds) {
-            symbols.selectedDot(
-                focused?.getOrNull(0),
-            ) + symbols.selectedDot(focused?.lastOrNull())
-        } else {
-            emptyList()
-        }
+        val ends = trim?.let {
+            symbols.selectedDot(it.points.getOrNull(it.kept.first)) +
+                symbols.selectedDot(it.points.getOrNull(it.kept.last))
+        }.orEmpty()
 
         val selected = symbols.selectedDot(markerAt) + ends
         val pinTapped = followedWaypoint != null
@@ -491,14 +490,22 @@ internal fun OfflineMapCanvas(
 
     // Nudge the least distance rather than re-centring, so scrubbing doesn't pan the map constantly.
     LaunchedEffect(map, focusedTrackId, selectedIndex, insets) {
-        val at = routeFor(focusedTrackId, currentRoutes, currentLiveRoute)
-            ?.points?.getOrNull(selectedIndex ?: -1) ?: return@LaunchedEffect
+        val at = focusedPoints(focusedTrackId, currentRoutes, currentLiveRoute, currentTrim)
+            ?.getOrNull(selectedIndex ?: -1) ?: return@LaunchedEffect
         map.nudgeIntoView(at, insets, followMargin)
     }
 }
 
 private fun routeFor(trackId: Long?, routes: List<RouteOverlay>, liveRoute: RouteOverlay?) =
     liveRoute?.takeIf { it.trackId == trackId } ?: routes.firstOrNull { it.trackId == trackId }
+
+/** What a chart index points into: the whole track while trimming, not the part drawn as it. */
+private fun focusedPoints(trackId: Long?, routes: List<RouteOverlay>, liveRoute: RouteOverlay?, trim: TrimMarks?) =
+    trim?.points ?: routeFor(trackId, routes, liveRoute)?.points
+
+/** A trim's [kept] range of the focused track's whole [points]. */
+@Immutable
+class TrimMarks(val points: TrackPoints, val kept: IntRange)
 
 /** A [MapView] tied to the lifecycle; it owns a GL thread and surface that would otherwise leak. */
 @Composable

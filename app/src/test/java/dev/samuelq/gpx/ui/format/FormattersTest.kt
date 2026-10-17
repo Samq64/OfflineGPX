@@ -29,6 +29,15 @@ class FormattersTest {
     }
 
     @Test
+    fun `a precise distance keeps the metre at any length`() {
+        assertEquals("850 m", metric.preciseDistance(850.0, en))
+        assertEquals("3.512 km", metric.preciseDistance(3512.0, en))
+        assertEquals("42.195 km", metric.preciseDistance(42_195.0, en))
+        assertEquals("328 ft", imperial.preciseDistance(100.0, en))
+        assertEquals("26.219 mi", imperial.preciseDistance(42_195.0, en))
+    }
+
+    @Test
     fun `imperial distance uses feet below a tenth of a mile`() {
         assertEquals("328 ft", imperial.distance(100.0, en))
         assertEquals("0.75 mi", imperial.distance(1207.0, en))
