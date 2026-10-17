@@ -9,6 +9,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -32,6 +33,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.ViewCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import dev.samuelq.gpx.R
+import dev.samuelq.gpx.core.analysis.haversineMeters
 import dev.samuelq.gpx.core.model.TrackPoint
 import dev.samuelq.gpx.core.model.TrackPoints
 import dev.samuelq.gpx.core.model.Waypoint
@@ -157,6 +159,10 @@ internal fun OfflineMapCanvas(
     // A 48dp target, the pin itself being narrower.
     val pinMinHalf = remember(density) { with(density) { 24.dp.toPx() } }
     val followMargin = remember(density) { with(density) { FOLLOW_MARGIN_DP.dp.roundToPx() } }
+    val trimEndReach = remember(density) { with(density) { TRIM_END_REACH_DP.dp.toPx() } }
+    // Whole levels only: the scrub dot's distance from a trim's end is judged in pixels, and a
+    // finer key would rebuild the markers every frame of a pinch.
+    var zoomLevel by remember { mutableIntStateOf(0) }
 
     val insets = remember(contentPadding, layoutDirection, density) {
         contentPadding.toInsets(density, layoutDirection)
@@ -172,6 +178,8 @@ internal fun OfflineMapCanvas(
     // selected dot sits under the pins, unless a tapped pin put it there: then it's over the
     // rest, under only that pin. The puck is always over pins, or a waypoint dropped where
     // the user stands would hide them.
+    // A trim's ends, under the scrub dot, which marks the end being moved by sitting on it.
+    val trimEndsLayer = remember(map) { markerLayer(map) }
     val belowPinsLayer = remember(map) { markerLayer(map) }
     val pinLayer = remember(map) { markerLayer(map) }
     val abovePinsLayer = remember(map) { markerLayer(map) }
@@ -182,7 +190,7 @@ internal fun OfflineMapCanvas(
         LayerGroup.entries.forEach { layers.addGroup(it.ordinal) }
         layers.add(routeLayer.layer, LayerGroup.Routes.ordinal)
         layers.add(traceLayer.layer, LayerGroup.Trace.ordinal)
-        listOf(belowPinsLayer, pinLayer, abovePinsLayer, onTopLayer)
+        listOf(trimEndsLayer, belowPinsLayer, pinLayer, abovePinsLayer, onTopLayer)
             .forEach { layers.add(it, LayerGroup.Markers.ordinal) }
         val taps = TapDetector(
             ViewConfiguration.get(context),
@@ -252,20 +260,27 @@ internal fun OfflineMapCanvas(
     }
 
     LaunchedEffect(
-        belowPinsLayer, pinLayer, abovePinsLayer, onTopLayer, symbols, routes, liveRoute, showPuck,
+        trimEndsLayer, belowPinsLayer, pinLayer, abovePinsLayer, onTopLayer, symbols, routes, liveRoute, showPuck,
         focusedTrackId, selectedIndex, trim, trackWaypoints, liveWaypoints, cutWaypoints, followedWaypoint,
-        position,
+        position, zoomLevel,
     ) {
         val puckRoute = liveRoute?.takeIf { showPuck }
         val here = symbols.puck(position, bearing = null)
+        // An out-and-back's kept part lies over its cut part; only its ends tell them apart. An end
+        // not yet moved is the track's own, plain to see.
+        val trimStart = trim?.let { it.points.getOrNull(it.kept.first.takeIf { first -> first > 0 } ?: -1) }
+        val trimEnd = trim?.let { it.points.getOrNull(it.kept.last.takeIf { last -> last < it.points.size - 1 } ?: -1) }
+        trimEndsLayer.show(symbols.trimEnds(trimStart, trimEnd))
+        // Not over an end's mark, or near enough to cover it, as while that end is moved: its shape says which it is.
+        val reach = trimEndReach * MercatorProjection.groundResolution(map.mapPosition)
         val markerAt = focusedPoints(focusedTrackId, routes, liveRoute, trim)?.getOrNull(selectedIndex ?: -1)
-        // An out-and-back's kept part lies over its cut part; only its ends tell them apart.
-        val ends = trim?.let {
-            symbols.selectedDot(it.points.getOrNull(it.kept.first)) +
-                symbols.selectedDot(it.points.getOrNull(it.kept.last))
-        }.orEmpty()
+            ?.takeIf { at ->
+                listOfNotNull(trimStart, trimEnd).none {
+                    haversineMeters(at.latitude, at.longitude, it.latitude, it.longitude) < reach
+                }
+            }
 
-        val selected = symbols.selectedDot(markerAt) + ends
+        val selected = symbols.selectedDot(markerAt)
         val pinTapped = followedWaypoint != null
         belowPinsLayer.show(if (pinTapped) emptyList() else selected)
         pinLayer.show(symbols.pins(trackWaypoints, liveWaypoints, cutWaypoints, followedWaypoint))
@@ -424,6 +439,7 @@ internal fun OfflineMapCanvas(
                 centreOn(followed, zoomIn = false, MapPosition().apply { copy(position) })
             }
             reportScale(MercatorProjection.groundResolution(position))
+            zoomLevel = position.zoomLevel
             currentFollowedWaypoint?.let { reportWaypointAt(map.screenPosition(it.point, position)) }
             // Not before first framing: until then VTM sits at whole-world, and remembering that
             // would feed back in as initialCamera.
@@ -539,6 +555,9 @@ private val BoundingBoxSaver = Saver<BoundingBox?, DoubleArray>(
 
 /** About a fingertip. */
 private const val TAP_REACH_DP = 40f
+
+/** Within this of a trim's end mark, the scrub dot would cover it. */
+private const val TRIM_END_REACH_DP = 14f
 
 /** How far inside the uncovered box a scrubbed point is kept. */
 private const val FOLLOW_MARGIN_DP = 36f

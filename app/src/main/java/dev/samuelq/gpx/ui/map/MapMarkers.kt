@@ -31,6 +31,14 @@ internal class MarkerSymbols(marker: Color, puck: Color, hole: Color, density: D
     /** A track waypoint a trim would drop: dimmed like the line cut with it. */
     val cutWaypoint: MarkerSymbol
 
+    /**
+     * A trim's ends, told apart by shape where an out-and-back's meet: no colour of their own,
+     * and nothing turned to a bearing, which jitter at the ends would swing. Both hollow, so
+     * neither reads as the solid scrub dot.
+     */
+    val trimStart: MarkerSymbol
+    val trimEnd: MarkerSymbol
+
     init {
         with(density) {
             val ringWidth = MARKER_RING_WIDTH_DP.dp.toPx()
@@ -60,7 +68,54 @@ internal class MarkerSymbols(marker: Color, puck: Color, hole: Color, density: D
             liveWaypoint = pin(pinRadius, tipLength, pinRing, fill = puck, ring = MARKER_RING, hole = hole)
             cutWaypoint =
                 pin(pinRadius, tipLength, pinRing, fill = marker, ring = MARKER_RING, hole = hole, UNFOCUSED_ALPHA)
+            val radius = TRIM_END_RADIUS_DP.dp.toPx()
+            val stroke = TRIM_RING_STROKE_DP.dp.toPx()
+            trimStart = ring(radius, stroke, ringWidth, fill = marker, outline = MARKER_RING, hole = hole)
+            trimEnd = square(TRIM_SQUARE_SIDE_DP.dp.toPx(), stroke, ringWidth, marker, MARKER_RING, hole)
         }
+    }
+
+    /** A [stroke]-wide ring round a [hole]-coloured centre, outlined. */
+    private fun ring(
+        radius: Float,
+        stroke: Float,
+        outlineWidth: Float,
+        fill: Color,
+        outline: Color,
+        hole: Color,
+    ): MarkerSymbol {
+        val outer = radius + stroke / 2
+        val size = kotlin.math.ceil((outer + outlineWidth) * 2).toInt() + 2
+        val bitmap = createBitmap(size, size)
+        val canvas = android.graphics.Canvas(bitmap)
+        val c = size / 2f
+        canvas.drawCircle(c, c, outer + outlineWidth, fillPaint(outline))
+        canvas.drawCircle(c, c, outer, fillPaint(fill))
+        canvas.drawCircle(c, c, radius - stroke / 2, fillPaint(hole))
+        return MarkerSymbol(AndroidBitmap(bitmap), MarkerSymbol.HotspotPlace.CENTER, false)
+    }
+
+    /** Hollow like [ring]: a [stroke]-wide square edge round a [hole]-coloured centre, outlined. */
+    private fun square(
+        side: Float,
+        stroke: Float,
+        outlineWidth: Float,
+        fill: Color,
+        outline: Color,
+        hole: Color,
+    ): MarkerSymbol {
+        val size = kotlin.math.ceil(side + outlineWidth * 2).toInt() + 2
+        val bitmap = createBitmap(size, size)
+        val canvas = android.graphics.Canvas(bitmap)
+        val c = size / 2f
+        fun rect(half: Float, color: Color) {
+            val corner = half * 2 * SQUARE_CORNER_RATIO
+            canvas.drawRoundRect(c - half, c - half, c + half, c + half, corner, corner, fillPaint(color))
+        }
+        rect(side / 2 + outlineWidth, outline)
+        rect(side / 2, fill)
+        rect(side / 2 - stroke, hole)
+        return MarkerSymbol(AndroidBitmap(bitmap), MarkerSymbol.HotspotPlace.CENTER, false)
     }
 
     private fun symbol(
@@ -211,6 +266,10 @@ private const val HEADING_MIN_METERS = 3.0
 internal fun MarkerSymbols.selectedDot(at: TrackPoint?): List<MarkerInterface> =
     listOfNotNull(at?.let { marker(it, marker) })
 
+/** Either may be null, for an end not moved. */
+internal fun MarkerSymbols.trimEnds(start: TrackPoint?, end: TrackPoint?): List<MarkerInterface> =
+    listOfNotNull(start?.let { marker(it, trimStart) }, end?.let { marker(it, trimEnd) })
+
 internal fun MarkerSymbols.onTopPin(
     onTop: Waypoint?,
     liveWaypoints: List<Waypoint>,
@@ -237,6 +296,12 @@ internal const val PIN_TIP_LENGTH_DP = 24.75f
 private const val PIN_RING_WIDTH_DP = 2.5f
 
 private const val PIN_HOLE_RATIO = 0.4f
+
+// A trim's ends: the size of the scrub dot, so the one lands on the other cleanly.
+private const val TRIM_END_RADIUS_DP = 6f
+private const val TRIM_RING_STROKE_DP = 3f
+private const val TRIM_SQUARE_SIDE_DP = 13f
+private const val SQUARE_CORNER_RATIO = 0.2f
 
 /** The pin's head, ring included. */
 internal val WaypointPinHeadRadius = (PIN_RADIUS_DP + PIN_RING_WIDTH_DP).dp
