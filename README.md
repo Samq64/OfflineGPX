@@ -1,4 +1,7 @@
-# <img src="docs/icon.svg" alt="" width="48" height="48" align="top"> Offline GPX
+# <img src="fastlane/metadata/android/en-US/images/icon.png" width="40" height="40" align="top"> Offline GPX
+<a href="https://f-droid.org/packages/dev.samuelq.gpx">
+  <img src="https://f-droid.org/badge/get-it-on.png" alt="Get it on F-Droid" height="80">
+</a>
 
 Record and manage rides, runs and hikes on an offline map, with no internet permission at all. Tracks are standard GPX files, and maps are optional [Mapsforge](https://download.mapsforge.org) files you import yourself.
 
@@ -93,7 +96,6 @@ app/ data/   gpx (streaming parser/writer/relabeller), db (Room), map (MapStore,
 app/ ui/     map (MapScreen, VTM canvas, layers, generated render theme), track (sheet),
              chart (hand-rolled Canvas charts), library, record, settings, format, theme, nav.
 app/ di/     AppContainer: manual wiring, no Hilt.
-docs/        README icon.
 fastlane/    F-Droid listing and screenshots.
 ```
 
