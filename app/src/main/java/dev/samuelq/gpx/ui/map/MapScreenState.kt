@@ -29,6 +29,7 @@ class MapScreenState(
     @Stable
     class Kept {
         var renamingId by mutableStateOf<Long?>(null)
+        var categorizingId by mutableStateOf<Long?>(null)
         var framing by mutableStateOf<TrackRef?>(null)
         var following by mutableStateOf(false)
         var snapping by mutableStateOf(false)
@@ -51,6 +52,9 @@ class MapScreenState(
 
     /** By id: the prompt waits for the track to load, by which time the sheet may show another. */
     var renamingId by kept::renamingId
+
+    /** As [renamingId]. */
+    var categorizingId by kept::categorizingId
 
     /** Opened from the list or an intent, so framed once loaded; map taps never move the camera. */
     var framing by kept::framing

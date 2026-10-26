@@ -105,6 +105,7 @@ val TrackSheetPeekHeight = 128.dp
 @Immutable
 class TrackActions(
     val onRename: () -> Unit,
+    val onCategorize: () -> Unit,
     val onShare: () -> Unit,
     val onHide: () -> Unit,
     val onDelete: () -> Unit,
@@ -785,6 +786,7 @@ private fun SheetTitle(
         actions?.let {
             TrackMenu(
                 it.onRename,
+                it.onCategorize,
                 it.onShare,
                 it.onHide,
                 it.onDelete,

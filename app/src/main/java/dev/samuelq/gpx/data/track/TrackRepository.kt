@@ -316,15 +316,20 @@ class TrackRepository(
     suspend fun touch(id: Long) = dao.touch(id, System.currentTimeMillis())
 
     /**
-     * Renames a track and sets its category; null leaves either as it is. A blank [name] clears
-     * it, titling the track by its start, and is ignored for a track without one; a blank
-     * [category] makes it uncategorised. The row's alone: [writeOut] puts both in a file as it leaves.
+     * Renames a track. A blank [name] clears it, titling the track by its start, and is ignored
+     * for a track without one. The row's alone: [writeOut] puts it in a file as it leaves.
      */
-    suspend fun rename(id: Long, name: String?, category: String? = null): Result<Unit> = withContext(io) {
+    suspend fun rename(id: Long, name: String): Result<Unit> = withContext(io) {
         runCancellable {
-            if (category != null) dao.setCategory(id, categoryAsSpelt(category, except = id))
-            val named = name?.asTrackName()
-            if (name != null && (named != null || entity(id).startedAtEpochMillis != null)) dao.setTrackName(id, named)
+            val named = name.asTrackName()
+            if (named != null || entity(id).startedAtEpochMillis != null) dao.setTrackName(id, named)
+        }.recoverFailure()
+    }
+
+    /** Puts [ids] in [category], or uncategorises them if it's blank; the row's alone, as [rename]. */
+    suspend fun setCategory(ids: Collection<Long>, category: String): Result<Unit> = withContext(io) {
+        runCancellable {
+            dao.setCategory(ids.toList(), categoryAsSpelt(category, except = ids))
         }.recoverFailure()
     }
 
@@ -480,9 +485,9 @@ class TrackRepository(
     }
 
     /** [category] trimmed, in the spelling another track already gives it: categories ignore case. */
-    private suspend fun categoryAsSpelt(category: String?, except: Long = 0): String? {
+    private suspend fun categoryAsSpelt(category: String?, except: Collection<Long> = emptyList()): String? {
         val trimmed = category?.asTrackName() ?: return null
-        return dao.categories(except).firstOrNull { it.equals(trimmed, ignoreCase = true) } ?: trimmed
+        return dao.categories(except.toList()).firstOrNull { it.equals(trimmed, ignoreCase = true) } ?: trimmed
     }
 
     private suspend fun entity(id: Long): TrackEntity =

@@ -310,29 +310,45 @@ class TrackRepositoryTest {
     fun categoryTakesTheSpellingInUseElseItsOwn() {
         val first = importSample()
         val second = importSample()
-        runBlocking { repository.rename(first, name = null, category = "Hikes $first").getOrThrow() }
-        runBlocking { repository.rename(second, name = null, category = "HIKES $first").getOrThrow() }
+        runBlocking { repository.setCategory(listOf(first), "Hikes $first").getOrThrow() }
+        runBlocking { repository.setCategory(listOf(second), "HIKES $first").getOrThrow() }
         assertEquals("Hikes $first", row(second).category)
         assertEquals("Hikes $first", shared(second).type)
         // Alone in it, a track can respell its own.
         val alone = importSample()
-        runBlocking { repository.rename(alone, name = null, category = "solo $alone").getOrThrow() }
-        runBlocking { repository.rename(alone, name = null, category = "Solo $alone").getOrThrow() }
+        runBlocking { repository.setCategory(listOf(alone), "solo $alone").getOrThrow() }
+        runBlocking { repository.setCategory(listOf(alone), "Solo $alone").getOrThrow() }
         assertEquals("Solo $alone", row(alone).category)
     }
 
     @Test
     fun categoryIsSetAlone() {
         val id = importSample(sampleGpx().replace("<trkseg>", "<type>Rides</type><trkseg>"))
-        runBlocking { repository.rename(id, name = null, category = " Hikes ").getOrThrow() }
+        runBlocking { repository.setCategory(listOf(id), " Hikes ").getOrThrow() }
         assertEquals("Hikes", row(id).category)
         assertEquals("Hikes", shared(id).type)
         assertEquals("Test ride", row(id).trackName)
         assertEquals("Rides", parsed(id).type)
 
-        runBlocking { repository.rename(id, name = null, category = " ").getOrThrow() }
+        runBlocking { repository.setCategory(listOf(id), " ").getOrThrow() }
         assertNull(row(id).category)
         assertNull(shared(id).type)
+    }
+
+    @Test
+    fun categoryIsSetOnSeveral() {
+        val first = importSample()
+        val second = importSample(sampleGpx().replace("<trkseg>", "<type>Rides</type><trkseg>"))
+        runBlocking { repository.setCategory(listOf(first), "walks $first").getOrThrow() }
+        // Each other's spelling doesn't count when they all move.
+        runBlocking { repository.setCategory(listOf(first, second), "Walks $first").getOrThrow() }
+        assertEquals("Walks $first", row(first).category)
+        assertEquals("Walks $first", row(second).category)
+        assertEquals("Test ride", row(second).trackName)
+
+        runBlocking { repository.setCategory(listOf(first, second), "").getOrThrow() }
+        assertNull(row(first).category)
+        assertNull(row(second).category)
     }
 
     @Test

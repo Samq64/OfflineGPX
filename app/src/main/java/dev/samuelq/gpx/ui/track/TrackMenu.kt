@@ -24,6 +24,7 @@ import dev.samuelq.gpx.R
 @Composable
 fun TrackMenu(
     onRename: () -> Unit,
+    onCategorize: () -> Unit,
     onShare: () -> Unit,
     onHide: (() -> Unit)?,
     onDelete: () -> Unit,
@@ -64,6 +65,7 @@ fun TrackMenu(
                 onTrim?.let { Item(R.string.track_trim, it) }
                 if (onHide != null || onTrim != null) HorizontalDivider()
                 Item(R.string.action_rename, onRename)
+                Item(R.string.action_categorize, onCategorize)
                 Item(R.string.library_share, onShare)
                 HorizontalDivider()
                 Item(R.string.action_delete, onDelete, error = true)

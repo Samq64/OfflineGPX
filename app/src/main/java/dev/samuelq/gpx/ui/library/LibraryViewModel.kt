@@ -84,7 +84,7 @@ class LibraryViewModel(
     /** What the map showed on the way here; null if it showed nothing yet. */
     val area: GeoBounds? = savedState.toRoute<LibraryRoute>().area
 
-    /** For the rename dialog to suggest. */
+    /** For the category dialog to suggest. */
     val categories: StateFlow<List<String>> = repository.categories
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
@@ -196,11 +196,20 @@ class LibraryViewModel(
         }
     }
 
-    /** Null leaves either as it is. */
-    fun rename(id: Long, name: String?, category: String?) {
+    fun rename(id: Long, name: String) {
         viewModelScope.launch {
-            repository.rename(id, name, category).onFailure {
+            repository.rename(id, name).onFailure {
                 _events.send(LibraryEvent.Say(R.string.library_rename_failed))
+            }
+        }
+    }
+
+    /** Ends the selection, as the other bulk actions do. */
+    fun setCategory(ids: Set<Long>, category: String) {
+        clearSelection()
+        viewModelScope.launch {
+            repository.setCategory(ids, category).onFailure {
+                _events.send(LibraryEvent.Say(R.string.library_categorize_failed))
             }
         }
     }

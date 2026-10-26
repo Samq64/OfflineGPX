@@ -2,6 +2,7 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <string name="action_back">Back</string>
     <string name="action_cancel">Cancel</string>
+    <string name="action_categorize">Categorize</string>
     <string name="action_continue">Continue</string>
     <string name="action_delete">Delete</string>
     <string name="action_done">Done</string>
@@ -59,6 +60,7 @@
     <!-- Neither GPX nor a map; library imports, GPX only, say track_error_invalid. -->
     <string name="incoming_unsupported">This file isn\'t a GPX track or a map.</string>
 
+    <string name="library_categorize_failed">Couldn\'t change the category.</string>
     <string name="library_clear_selection">Clear selection</string>
     <string name="library_color">Color: %1$s</string>
     <string name="library_color_change">Change color</string>

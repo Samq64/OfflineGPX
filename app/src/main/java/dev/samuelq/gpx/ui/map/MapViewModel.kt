@@ -148,7 +148,7 @@ class MapViewModel(
      */
     val screenKept = MapScreenState.Kept()
 
-    /** For the rename dialog to suggest. */
+    /** For the category dialog to suggest. */
     val categories: StateFlow<List<String>> = repository.categories
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
@@ -246,11 +246,19 @@ class MapViewModel(
         }
     }
 
-    /** Null leaves either as it is. The sheet reads the name off the row, so the row's update is all it needs. */
-    fun rename(id: Long, name: String?, category: String?) {
+    /** The sheet reads the name off the row, so the row's update is all it needs. */
+    fun rename(id: Long, name: String) {
         viewModelScope.launch {
-            repository.rename(id, name, category).onFailure {
+            repository.rename(id, name).onFailure {
                 _messages.trySend(MapMessage.Say(R.string.library_rename_failed))
+            }
+        }
+    }
+
+    fun setCategory(id: Long, category: String) {
+        viewModelScope.launch {
+            repository.setCategory(listOf(id), category).onFailure {
+                _messages.trySend(MapMessage.Say(R.string.library_categorize_failed))
             }
         }
     }

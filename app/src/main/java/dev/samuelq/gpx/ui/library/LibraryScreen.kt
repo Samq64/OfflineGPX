@@ -105,6 +105,7 @@ import dev.samuelq.gpx.ui.isLargeText
 import dev.samuelq.gpx.ui.readFirst
 import dev.samuelq.gpx.ui.readableWidth
 import dev.samuelq.gpx.ui.screenSnackbars
+import dev.samuelq.gpx.ui.track.CategoryDialog
 import dev.samuelq.gpx.ui.track.ColorDot
 import dev.samuelq.gpx.ui.track.TrackMenu
 import dev.samuelq.gpx.ui.track.TrackNameDialog
@@ -171,6 +172,8 @@ fun LibraryScreen(
     }
 
     var renaming by remember { mutableStateOf<TrackEntity?>(null) }
+    // From a row's menu or the selection's.
+    var categorizing by remember { mutableStateOf<Set<Long>>(emptySet()) }
 
     // A track just changed or brought back, scrolled to once its row is in the list.
     var reveal by remember { mutableStateOf<Long?>(null) }
@@ -262,6 +265,7 @@ fun LibraryScreen(
                     onShow = { viewModel.changeVisibility(selection, BulkVisibility.SHOW) },
                     onHide = { viewModel.changeVisibility(selection, BulkVisibility.HIDE) },
                     onShowOnly = { viewModel.changeVisibility(selection, BulkVisibility.SHOW_ONLY) },
+                    onCategorize = { categorizing = selection },
                     onExport = {
                         viewModel.beginExportAll(
                             tracks.filter { it.id in selection }
@@ -399,6 +403,7 @@ fun LibraryScreen(
                                         scope.launch { context.shareTrack(track, viewModel.fileToShare(track)) }
                                     },
                                     onRename = { renaming = track },
+                                    onCategorize = { categorizing = setOf(track.id) },
                                     onDelete = { delete(setOf(track.id)) },
                                 )
                             }
@@ -410,18 +415,33 @@ fun LibraryScreen(
     }
 
     renaming?.let { track ->
-        val categories by viewModel.categories.collectAsStateWithLifecycle()
         TrackNameDialog(
             initialName = track.editableName,
-            initialCategory = track.category.orEmpty(),
             nameRequired = track.startedAtEpochMillis == null,
-            categories = categories,
             onDismiss = { renaming = null },
-            onConfirm = { name, category ->
-                viewModel.rename(track.id, name, category)
-                // A new name or category can move it.
+            onConfirm = { name ->
+                viewModel.rename(track.id, name)
+                // A new name can move it.
                 reveal = track.id
                 renaming = null
+            },
+        )
+    }
+
+    if (categorizing.isNotEmpty()) {
+        val categories by viewModel.categories.collectAsStateWithLifecycle()
+        val ids = categorizing
+        val shared = remember(ids) {
+            tracks.filter { it.id in ids }.map { it.category.orEmpty() }.distinctBy { it.lowercase() }.singleOrNull()
+        }
+        CategoryDialog(
+            initialCategory = shared.orEmpty(),
+            categories = categories,
+            onDismiss = { categorizing = emptySet() },
+            onConfirm = { category ->
+                viewModel.setCategory(ids, category)
+                reveal = ids.first()
+                categorizing = emptySet()
             },
         )
     }
@@ -437,6 +457,7 @@ private fun SelectionBar(
     onShow: () -> Unit,
     onHide: () -> Unit,
     onShowOnly: () -> Unit,
+    onCategorize: () -> Unit,
     onExport: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -470,6 +491,7 @@ private fun SelectionBar(
                 onShow = onShow,
                 onHide = onHide,
                 onShowOnly = onShowOnly,
+                onCategorize = onCategorize,
             )
         },
     )
@@ -483,6 +505,7 @@ private fun SelectionMenu(
     onShow: () -> Unit,
     onHide: () -> Unit,
     onShowOnly: () -> Unit,
+    onCategorize: () -> Unit,
 ) {
     var open by remember { mutableStateOf(false) }
     Box {
@@ -505,6 +528,8 @@ private fun SelectionMenu(
             Item(stringResource(R.string.library_show_selected), onShow)
             Item(stringResource(R.string.library_hide_selected), onHide)
             Item(pluralStringResource(R.plurals.library_show_only_selected, count), onShowOnly)
+            HorizontalDivider()
+            Item(stringResource(R.string.action_categorize), onCategorize)
         }
     }
 }
@@ -601,6 +626,7 @@ private fun TrackRow(
     onColor: (Int) -> Unit,
     onShare: () -> Unit,
     onRename: () -> Unit,
+    onCategorize: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -610,6 +636,7 @@ private fun TrackRow(
     val openLabel = stringResource(R.string.library_open_on_map)
     val selectLabel = stringResource(R.string.library_select)
     val renameLabel = stringResource(R.string.action_rename)
+    val categorizeLabel = stringResource(R.string.action_categorize)
     val shareLabel = stringResource(R.string.library_share)
     val deleteLabel = stringResource(R.string.action_delete)
 
@@ -670,6 +697,10 @@ private fun TrackRow(
                                 onRename()
                                 true
                             },
+                            CustomAccessibilityAction(categorizeLabel) {
+                                onCategorize()
+                                true
+                            },
                             CustomAccessibilityAction(shareLabel) {
                                 onShare()
                                 true
@@ -722,7 +753,7 @@ private fun TrackRow(
                     onCheckedChange = { onToggleVisible() },
                     modifier = Modifier.padding(start = 8.dp).semantics { contentDescription = showOnMap },
                 )
-                TrackMenu(onRename, onShare, onHide = null, onDelete, trackTitle = title)
+                TrackMenu(onRename, onCategorize, onShare, onHide = null, onDelete, trackTitle = title)
             }
         }
         // Inset to the title: the same group, next item.

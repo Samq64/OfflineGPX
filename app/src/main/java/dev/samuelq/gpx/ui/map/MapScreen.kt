@@ -94,6 +94,7 @@ import dev.samuelq.gpx.ui.record.WaypointDialog
 import dev.samuelq.gpx.ui.screenSnackbars
 import dev.samuelq.gpx.ui.theme.routePalette
 import dev.samuelq.gpx.ui.theme.slot
+import dev.samuelq.gpx.ui.track.CategoryDialog
 import dev.samuelq.gpx.ui.track.DiscardTrimDialog
 import dev.samuelq.gpx.ui.track.FocusedTrack
 import dev.samuelq.gpx.ui.track.TrackActions
@@ -413,8 +414,11 @@ fun MapScreen(
             sheetState.hide()
         }
         if (!hasSheet) sheetWasExpanded = false
-        // So a stale name prompt can't reappear when the track is reopened.
-        if (!hasFocus) screen.renamingId = null
+        // So a stale prompt can't reappear when the track is reopened.
+        if (!hasFocus) {
+            screen.renamingId = null
+            screen.categorizingId = null
+        }
     }
 
     // Swiping the sheet away clears focus. drop(1): the initial Hidden emission would clear a
@@ -605,6 +609,7 @@ fun MapScreen(
         remember(entity.id, entity.trackName, entity.startedAtEpochMillis, entity.category, entity.color, screen) {
             TrackActions(
                 onRename = { screen.renamingId = entity.id },
+                onCategorize = { screen.categorizingId = entity.id },
                 onShare = { scope.launch { context.shareTrack(entity, viewModel.fileToShare(entity)) } },
                 onHide = {
                     viewModel.hide(entity.id)
@@ -955,17 +960,26 @@ fun MapScreen(
 
     // Only once loaded, which is what knows the name to offer.
     focusedRow?.takeIf { it.id == screen.renamingId }?.let { track ->
-        val categories by viewModel.categories.collectAsStateWithLifecycle()
         TrackNameDialog(
             initialName = track.editableName,
-            initialCategory = track.category.orEmpty(),
             nameRequired = track.startedAtEpochMillis == null,
-            categories = categories,
             // Prefilled, not a hint: dismissing keeps what's shown.
             onDismiss = { screen.renamingId = null },
-            onConfirm = { name, category ->
-                viewModel.rename(track.id, name, category)
+            onConfirm = { name ->
+                viewModel.rename(track.id, name)
                 screen.renamingId = null
+            },
+        )
+    }
+    focusedRow?.takeIf { it.id == screen.categorizingId }?.let { track ->
+        val categories by viewModel.categories.collectAsStateWithLifecycle()
+        CategoryDialog(
+            initialCategory = track.category.orEmpty(),
+            categories = categories,
+            onDismiss = { screen.categorizingId = null },
+            onConfirm = { category ->
+                viewModel.setCategory(track.id, category)
+                screen.categorizingId = null
             },
         )
     }

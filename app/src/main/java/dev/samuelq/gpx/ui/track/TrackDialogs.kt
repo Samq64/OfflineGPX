@@ -1,7 +1,5 @@
 package dev.samuelq.gpx.ui.track
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -26,7 +24,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.unit.dp
 import dev.samuelq.gpx.R
 import dev.samuelq.gpx.ui.DialogTitle
 
@@ -34,53 +31,81 @@ import dev.samuelq.gpx.ui.DialogTitle
 @Composable
 fun TrackNameDialog(
     initialName: String,
-    initialCategory: String,
     /** For an untimed track, which has no start to be titled by instead. */
     nameRequired: Boolean,
-    /** Offered as the category is typed. */
-    categories: List<String>,
     onDismiss: () -> Unit,
-    /** Null for what's unchanged. */
-    onConfirm: (name: String?, category: String?) -> Unit,
+    onConfirm: (String) -> Unit,
 ) {
     var field by remember(initialName) {
         mutableStateOf(
             TextFieldValue(initialName, selection = TextRange(0, initialName.length)),
         )
     }
-    var category by remember(initialCategory) { mutableStateOf(initialCategory) }
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(focusRequester) { focusRequester.requestFocus() }
 
     val nameLabel = if (nameRequired) R.string.library_rename_label_required else R.string.library_rename_label
     val canConfirm = !nameRequired || field.text.isNotBlank()
     val confirm = {
-        if (canConfirm) onConfirm(field.text.takeIf { it != initialName }, category.takeIf { it != initialCategory })
+        when {
+            !canConfirm -> Unit
+            field.text == initialName -> onDismiss()
+            else -> onConfirm(field.text)
+        }
     }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { DialogTitle(stringResource(R.string.action_rename)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = field,
-                    onValueChange = { field = it },
-                    singleLine = true,
-                    label = { Text(stringResource(nameLabel)) },
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                    modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
-                )
-                CategoryField(
-                    initial = initialCategory,
-                    onChange = { category = it },
-                    suggestions = categories,
-                    onDone = confirm,
-                )
-            }
+            OutlinedTextField(
+                value = field,
+                onValueChange = { field = it },
+                singleLine = true,
+                label = { Text(stringResource(nameLabel)) },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { confirm() }),
+                modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
+            )
         },
         confirmButton = {
             TextButton(onClick = confirm, enabled = canConfirm) { Text(stringResource(R.string.action_save)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+        },
+    )
+}
+
+/** For one track or several; blank uncategorises them. */
+@Composable
+fun CategoryDialog(
+    /** What they share, else blank. */
+    initialCategory: String,
+    /** Offered as the category is typed. */
+    categories: List<String>,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    var category by remember(initialCategory) { mutableStateOf(initialCategory) }
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(focusRequester) { focusRequester.requestFocus() }
+    val confirm = { onConfirm(category) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { DialogTitle(stringResource(R.string.action_categorize)) },
+        text = {
+            CategoryField(
+                initial = initialCategory,
+                onChange = { category = it },
+                suggestions = categories,
+                onDone = confirm,
+                focusRequester = focusRequester,
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = confirm) { Text(stringResource(R.string.action_save)) }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
@@ -98,6 +123,7 @@ fun CategoryField(
     modifier: Modifier = Modifier,
     /** Null leaves the keyboard's action as Next. */
     onDone: (() -> Unit)? = null,
+    focusRequester: FocusRequester? = null,
 ) {
     var field by remember(initial) { mutableStateOf(TextFieldValue(initial, selection = TextRange(initial.length))) }
     var expanded by remember { mutableStateOf(false) }
@@ -119,7 +145,10 @@ fun CategoryField(
             label = { Text(stringResource(R.string.track_category)) },
             keyboardOptions = KeyboardOptions(imeAction = if (onDone != null) ImeAction.Done else ImeAction.Next),
             keyboardActions = KeyboardActions(onDone = { onDone?.invoke() }),
-            modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable),
+            modifier = Modifier
+                .fillMaxWidth()
+                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable)
+                .then(focusRequester?.let { Modifier.focusRequester(it) } ?: Modifier),
         )
         ExposedDropdownMenu(expanded = open, onDismissRequest = { expanded = false }) {
             matches.forEach { suggestion ->
