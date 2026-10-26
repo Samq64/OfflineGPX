@@ -180,11 +180,14 @@ internal fun RecordButton(onStart: () -> Unit, modifier: Modifier = Modifier) {
 }
 
 /**
- * Filled while [following], with the found-position icon once there's a fix; [waiting] until
- * then. Says what a tap does: follow, stop following, or, outside a recording, stop showing the position.
+ * By icon, not colour: struck through while off, hollow while waiting for a fix or not
+ * following, filled while following. Says what a tap does: follow, stop following, or,
+ * outside a recording, stop showing the position.
  */
 @Composable
 internal fun LocationButton(
+    /** The position is shown, or recorded. */
+    on: Boolean,
     following: Boolean,
     waiting: Boolean,
     recording: Boolean,
@@ -199,7 +202,11 @@ internal fun LocationButton(
         },
     )
     val waitingLabel = stringResource(R.string.record_waiting_for_fix)
-    val icon = if (following && !waiting) R.drawable.ic_my_location else R.drawable.ic_location_searching
+    val icon = when {
+        !on -> R.drawable.ic_location_disabled
+        following && !waiting -> R.drawable.ic_my_location
+        else -> R.drawable.ic_location_searching
+    }
     Surface(
         onClick = onClick,
         modifier = modifier.size(48.dp).semantics {
@@ -207,7 +214,7 @@ internal fun LocationButton(
             if (waiting) stateDescription = waitingLabel
         },
         shape = CircleShape,
-        color = with(MaterialTheme.colorScheme) { if (following) primaryContainer else surfaceContainerHigh },
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
         shadowElevation = 2.dp,
     ) {
         Box(contentAlignment = Alignment.Center) {

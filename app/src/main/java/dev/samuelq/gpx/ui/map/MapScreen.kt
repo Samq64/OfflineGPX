@@ -236,6 +236,8 @@ fun MapScreen(
             CentreResult.Centred -> screen.centred()
             CentreResult.OutOfBounds -> {
                 screen.stopFollowing()
+                // Else a tap only follows again, into the same refusal, and location never stops.
+                if (!isRecording) location.showLocation(false)
                 say(resources.getString(R.string.map_location_outside))
             }
             CentreResult.NotLaidOut -> Unit
@@ -838,6 +840,14 @@ fun MapScreen(
                 val hasRoutes = overlays.isNotEmpty() || liveOverlay != null
                 // Nothing to measure against without a basemap or route.
                 val hasContent = hasRoutes || basemaps.isNotEmpty()
+                // Off with the button that would turn it off, as when the last track is hidden.
+                val buttonGone = !isRecording && !hasContent && !state.loading
+                LaunchedEffect(buttonGone) {
+                    if (buttonGone) {
+                        screen.stopFollowing()
+                        location.showLocation(false)
+                    }
+                }
 
                 when {
                     hasRoutes -> Unit
@@ -890,6 +900,7 @@ fun MapScreen(
                         // Nothing to place the dot against without a track or a map, unless recording.
                         if (isRecording || hasContent) {
                             LocationButton(
+                                on = isRecording || locating,
                                 following = screen.following,
                                 // The puck is the position while recording.
                                 waiting = if (isRecording) trace.size == 0 else locating && position == null,
