@@ -7,7 +7,7 @@
          ring as the map draws it. -->
     <path
         android:pathData="M101.9,183.6 L54,52 L-77.6,99.9"
-        android:strokeColor="#3851A3"
+        android:strokeColor="#2773EE"
         android:strokeWidth="8.5"
         android:strokeLineCap="round"
         android:strokeLineJoin="round" />
@@ -16,5 +16,5 @@
         android:fillColor="#FFFFFF" />
     <path
         android:pathData="M60.8,70.8 m-7.5,0 a7.5,7.5 0 1,0 15.0,0 a7.5,7.5 0 1,0 -15.0,0"
-        android:fillColor="#3851A3" />
+        android:fillColor="#2773EE" />
 </vector>
