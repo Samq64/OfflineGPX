@@ -3,7 +3,7 @@
   <img src="https://f-droid.org/badge/get-it-on.png" alt="Get it on F-Droid" height="80">
 </a>
 
-Record and manage rides, runs and hikes on an offline map, with no internet permission at all. Tracks are standard GPX files, and maps are optional [Mapsforge](https://download.mapsforge.org) files you import yourself.
+Record and manage rides, runs and hikes on an offline map, with no internet permission at all. Tracks are standard GPX files, and maps are optional [Mapsforge](https://download.mapsforge.org) files you import yourself. Runs on Android 12 or later.
 
 <p>
   <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1_map.png" alt="Tracks on an offline map" width="24%">
@@ -43,31 +43,17 @@ Record and manage rides, runs and hikes on an offline map, with no internet perm
 ## Building
 
 Needs the Android SDK (`sdk.dir` in `local.properties`, or `ANDROID_HOME`) and any JDK 17+
-to start Gradle, which then builds with an installed JDK 21 or fetches one. Runs on Android 12 or later.
+to start Gradle, which then builds with an installed JDK 21 or fetches one.
 
 ```sh
 ./gradlew :app:assembleDebug     # app/build/outputs/apk/debug/app-debug.apk
 ./gradlew :app:assembleRelease   # app/build/outputs/apk/release/app-release-unsigned.apk
 ```
 
-The release build is minified but unsigned; sign it with your own key. F-Droid rebuilds each
-release with Debian's OpenJDK 21 and ships it only if it matches the signed APK on GitHub, so
-build that one clean and with the same JDK: an incremental build can carry a stale baseline profile.
-
-```sh
-./gradlew clean :app:assembleRelease --no-build-cache
-apksigner sign --ks release.jks --alignment-preserved --v1-signing-enabled false --out offline-gpx-<version>.apk app/build/outputs/apk/release/app-release-unsigned.apk
-```
+The release build is minified but unsigned; sign it with your own key.
 
 The build fails if any dependency adds a network permission to the merged manifest
 (`CheckNoNetworkPermissions` in `app/build.gradle.kts`).
-
-Dependencies are checked against `gradle/verification-metadata.xml`. After changing one, refresh it
-with a device or emulator connected:
-
-```sh
-./gradlew --write-verification-metadata sha256 check :app:assembleRelease :app:connectedDebugAndroidTest
-```
 
 ## Testing
 
@@ -84,20 +70,44 @@ Instrumented tests in `app/src/androidTest` need a connected device or emulator:
 ./gradlew :app:connectedDebugAndroidTest
 ```
 
+Dependencies are checked against `gradle/verification-metadata.xml`. After changing one, refresh it
+with a device or emulator connected:
+
+```sh
+./gradlew --write-verification-metadata sha256 check :app:assembleRelease :app:connectedDebugAndroidTest
+```
+
+## Releasing
+
+1. Bump `versionCode` and `versionName` in `app/build.gradle.kts`, write the notes to
+   `fastlane/metadata/android/en-US/changelogs/<versionCode>.txt`, and run `check` and the
+   instrumented tests.
+2. Commit, tag it `v<versionName>`, and check out the tag. The build embeds the commit hash, so
+   build only from the tagged commit.
+3. Build clean and sign. F-Droid rebuilds each release with Debian's OpenJDK 21 and ships it
+   only if it matches the signed APK on GitHub, which a stale baseline profile from an
+   incremental build would break.
+
+   ```sh
+   ./gradlew clean :app:assembleRelease --no-build-cache
+   apksigner sign --ks release.jks --alignment-preserved --v1-signing-enabled false --out offline-gpx-<version>.apk app/build/outputs/apk/release/app-release-unsigned.apk
+   ```
+
+4. Push the commit and tag, and attach the signed APK to the tag's GitHub release.
+
 ## Source layout
 
-```
-core/        JVM Gradle module, so no Android: model (Track, TrackPoints columns,
-             TrackPoint for single points), analysis (FixFilter, SpeedWindow,
-             TrackAnalyzer -> TrackProfile).
-app/ data/   gpx (streaming parser/writer/relabeller), db (Room), map (MapStore, .map headers, VTM
-             tile source), record (LocationSource, RecordingWal, RecordingService/
-             Controller/Recovery), settings, track (TrackRepository, TrackCache).
-app/ ui/     map (MapScreen, VTM canvas, layers, generated render theme), track (sheet),
-             chart (hand-rolled Canvas charts), library, record, settings, format, theme, nav.
-app/ di/     AppContainer: manual wiring, no Hilt.
-fastlane/    F-Droid listing and screenshots.
-```
+| Path | Contents |
+| --- | --- |
+| `core/` | JVM-only Gradle module, so no Android. `model`: `Track`, `TrackPoints` columns, `TrackPoint` for single points, `GeoBounds`. `analysis`: `FixFilter`, `SpeedWindow`, `TrackAnalyzer` → `TrackProfile`. |
+| `app/…/data/` | `gpx`: streaming parser, writer and relabeller. `db`: Room. `map`: `MapStore`, `TileIndex`, and the VTM tile source and theme in `MapTiles`. `record`: `LocationSource`, `RecordingWal`, `RecordingService`/`Controller`/`Recovery`. `settings`. `track`: `TrackRepository`, `TrackCache`. |
+| `app/…/ui/` | `map`: `MapScreen`, VTM canvas, layers, generated render theme. `track`: the sheet. `chart`: hand-rolled Canvas charts. `library`, `record`, `settings`, `format`, `theme`, `nav`. |
+| `app/…/di/` | `AppContainer`: manual wiring, no Hilt. |
+| `app/src/main/java/org/oscim/` | `MapFileHeaders`, in VTM's package to reach its package-private header reader. |
+| `app/schemas/` | Room's exported schemas, used by `MigrationTest`. |
+| `fastlane/` | F-Droid listing and screenshots. `images/icon.png` is a 512 px render of the launcher icon's drawables. |
+
+`app/…` is `app/src/main/java/dev/samuelq/gpx`, which also holds `MainActivity` and `GpxApplication`.
 
 ## License
 

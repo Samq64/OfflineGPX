@@ -36,24 +36,30 @@ See README.md for the source layout and the build, test, coverage and style comm
   colours; it expects the tags of the v5 files at download.mapsforge.org. VTM widens lines
   1.4x per zoom above z12 and the theme divides that back out.
 - Data colours (charts, the six route colours) are fixed, checked for contrast against the
-  map and separation under simulated colour blindness; `tools/route_palette.py` searches the
-  route colours, one per Garmin hue. A recording is drawn in the slot it will be saved with.
-  Chrome follows Material You.
+  map and separation under simulated colour blindness, one route colour per Garmin hue. A
+  recording is drawn in the slot it will be saved with. Chrome follows Material You.
 - Analysis invariants: a `<trkseg>` break is lost signal, so distance, the speed window and
   drawn lines never span it. Speed is differentiated over ~10 s, ascent uses a 3 m
   hysteresis on smoothed elevation, average speed is over moving time, and long series are
   reduced per pixel column keeping extremes.
+- Releases are tagged, so persisted formats keep compatibility: the Room schema (bump its
+  version, add a migration, keep the exported schema in `app/schemas` and extend
+  `MigrationTest`), files under `filesDir`, settings keys, persisted enum names such as
+  `RouteColor`'s, the WAL format and GPX output.
+- The launcher icon draws the basemap's water, vegetation and road colours and the blue route
+  slot; when those change, update its drawables and re-render
+  `fastlane/metadata/android/en-US/images/icon.png` from them.
 - Scope: a track recorder and viewer over an offline basemap, not a maps app. No routing,
   tile fetching, search or turn-by-turn. Never intercept back at the root.
 
 ## Tests
 
-`GpxParser` takes its `XmlPullParser` as a parameter so tests can use kxml2; android.jar's
-xmlpull classes are stubs.
+`GpxParser` takes an `XmlPullParser` factory in its constructor so tests can use kxml2;
+android.jar's xmlpull classes are stubs.
 `connectedDebugAndroidTest` runs on every attached device, so prefix it with
 `ANDROID_SERIAL=<emulator>`.
 
 ## Shell
 
-The shell is zsh: an unmatched glob is an error, not passed through. Quote globs meant for the
-command, such as `grep --include='*.kt'` and `--tests '*Wal*'`.
+Quote globs meant for the command, such as `grep --include='*.kt'` and `--tests '*Wal*'`:
+unquoted, the shell may expand them or, in zsh, fail on no match.
