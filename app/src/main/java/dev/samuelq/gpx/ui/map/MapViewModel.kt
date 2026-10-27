@@ -169,7 +169,7 @@ class MapViewModel(
                 val before = _state.value.all
                 _state.update { it.copy(all = all) }
                 // Close the sheet if its track was deleted, or just hidden, elsewhere. A track opened
-                // while already hidden is meant to be shown.
+                // while already hidden stays open, drawn until it closes.
                 val focusedId = (requested as? TrackRef.Saved)?.id ?: return@collect
                 val row = all.firstOrNull { it.id == focusedId }
                 val wasVisible = before.firstOrNull { it.id == focusedId }?.visible == true

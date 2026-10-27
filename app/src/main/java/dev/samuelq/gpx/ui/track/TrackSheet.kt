@@ -108,6 +108,8 @@ class TrackActions(
     val onCategorize: () -> Unit,
     val onShare: () -> Unit,
     val onHide: () -> Unit,
+    /** Null unless the track is hidden, and drawn only while open. */
+    val onShow: (() -> Unit)?,
     val onDelete: () -> Unit,
     val onTrim: () -> Unit,
     val colorIndex: Int,
@@ -791,6 +793,7 @@ private fun SheetTitle(
                 it.onHide,
                 it.onDelete,
                 onTrim = it.onTrim,
+                onShow = it.onShow,
             )
         }
         onClose?.let {

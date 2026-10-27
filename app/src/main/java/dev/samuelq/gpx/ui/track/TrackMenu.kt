@@ -20,7 +20,10 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import dev.samuelq.gpx.R
 
-/** [onHide] only where hiding closes something. [trackTitle] names the button in a list of them. */
+/**
+ * [onHide] only where hiding closes something, and [onShow] in its place for a hidden track drawn
+ * only while open. [trackTitle] names the button in a list of them.
+ */
 @Composable
 fun TrackMenu(
     onRename: () -> Unit,
@@ -32,6 +35,7 @@ fun TrackMenu(
     trackTitle: String? = null,
     /** On the map only, where the charts to trim against are. */
     onTrim: (() -> Unit)? = null,
+    onShow: (() -> Unit)? = null,
 ) {
     var open by remember { mutableStateOf(false) }
 
@@ -61,9 +65,9 @@ fun TrackMenu(
         if (open) {
             DropdownMenu(expanded = true, onDismissRequest = { open = false }) {
                 // The map's own first, apart from what the list's menu has too.
-                onHide?.let { Item(R.string.track_hide, it) }
+                onShow?.let { Item(R.string.track_keep_shown, it) } ?: onHide?.let { Item(R.string.track_hide, it) }
                 onTrim?.let { Item(R.string.track_trim, it) }
-                if (onHide != null || onTrim != null) HorizontalDivider()
+                if (onShow != null || onHide != null || onTrim != null) HorizontalDivider()
                 Item(R.string.action_rename, onRename)
                 Item(R.string.action_categorize, onCategorize)
                 Item(R.string.library_share, onShare)

@@ -619,7 +619,15 @@ fun MapScreen(
 
     // Null until a new import's row arrives.
     val actions = focusedTrack?.let { state.entity(it.id) }?.let { entity ->
-        remember(entity.id, entity.trackName, entity.startedAtEpochMillis, entity.category, entity.color, screen) {
+        remember(
+            entity.id,
+            entity.trackName,
+            entity.startedAtEpochMillis,
+            entity.category,
+            entity.color,
+            entity.visible,
+            screen,
+        ) {
             TrackActions(
                 onRename = { screen.renamingId = entity.id },
                 onCategorize = { screen.categorizingId = entity.id },
@@ -628,6 +636,7 @@ fun MapScreen(
                     viewModel.hide(entity.id)
                     viewModel.focus(null)
                 },
+                onShow = if (entity.visible) null else ({ viewModel.show(entity.id) }),
                 onDelete = {
                     // Unfocus first so the sheet doesn't show a deleted row.
                     viewModel.focus(null)

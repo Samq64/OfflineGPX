@@ -299,6 +299,8 @@
     <string name="track_error_unreadable">Couldn\'t read that file.</string>
     <string name="track_hidden">Hid “%1$s”.</string>
     <string name="track_hide">Hide</string>
+    <!-- A hidden track opened is drawn only until its sheet closes. -->
+    <string name="track_keep_shown">Keep on map</string>
     <string name="track_loading">Reading track…</string>
     <string name="track_manage">Manage this track</string>
     <string name="track_trim">Trim</string>

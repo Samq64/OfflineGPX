@@ -391,11 +391,8 @@ fun LibraryScreen(
                                     sizeBytes = sizes[track.id],
                                     selected = track.id in selection,
                                     selectionActive = selection.isNotEmpty(),
-                                    onOpen = {
-                                        // Otherwise the switch would say off for a line on the map.
-                                        if (!track.visible) viewModel.setVisible(track.id, true)
-                                        onOpenTrack(track.id)
-                                    },
+                                    // A hidden track is drawn only while open; its sheet can keep it.
+                                    onOpen = { onOpenTrack(track.id) },
                                     onToggleSelected = { viewModel.toggleSelected(track.id) },
                                     onToggleVisible = { viewModel.setVisible(track.id, !track.visible) },
                                     onColor = { viewModel.setColor(track.id, it) },
