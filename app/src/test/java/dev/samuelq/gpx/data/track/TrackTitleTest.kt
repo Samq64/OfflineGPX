@@ -3,6 +3,7 @@ package dev.samuelq.gpx.data.track
 import dev.samuelq.gpx.core.model.GeoBounds
 import dev.samuelq.gpx.data.db.TrackEntity
 import dev.samuelq.gpx.data.db.TrackSummary
+import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.util.Locale
@@ -70,6 +71,16 @@ class TrackTitleTest {
             // The stamp sorts, where the localised date wouldn't.
             assertEquals("2024-05-04T180000.gpx", row(unnamed).exportFileName)
         }
+    }
+
+    @Test
+    fun `its own stamp is known on the way back in`() {
+        val start = Instant.ofEpochMilli(started)
+        assertTrue("2024-05-04T180000".isStampOf(start))
+        assertTrue("2024-05-04T180000 (2)".isStampOf(start))
+        assertFalse("2024-05-04T180000 (2) copy".isStampOf(start))
+        assertFalse("2024-05-04T180001".isStampOf(start))
+        assertFalse("2024-05-04T180000".isStampOf(null))
     }
 
     @Test

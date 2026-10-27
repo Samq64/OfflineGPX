@@ -42,15 +42,27 @@ val TrackEntity.editableName: String
 val TrackEntity.exportFileName: String
     get() {
         val base = trackName?.takeIf(String::isNotBlank)
-            ?: startedAtEpochMillis?.let {
-                TrackFiles.STAMP.format(Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()))
-            }
+            ?: startedAtEpochMillis?.let { stamp(Instant.ofEpochMilli(it)) }
             ?: "track"
         return safeFileName(base).ensureGpxSuffix()
     }
 
 /** A file's name without `.gpx`, as an import is named when it has no `<name>`. */
 internal fun String.withoutGpxSuffix(): String = if (endsWith(GPX, ignoreCase = true)) dropLast(GPX.length) else this
+
+/**
+ * Whether this, without `.gpx`, is the name [exportFileName] gives an unnamed track started at
+ * [startedAt], numbered or not: it comes back unnamed rather than named after its stamp.
+ */
+internal fun String.isStampOf(startedAt: Instant?): Boolean {
+    val stamp = stamp(startedAt ?: return false)
+    return this == stamp || (startsWith(stamp) && NUMBERED.matches(substring(stamp.length)))
+}
+
+private fun stamp(startedAt: Instant): String = TrackFiles.STAMP.format(startedAt.atZone(ZoneId.systemDefault()))
+
+/** As [dev.samuelq.gpx.data.uniqueName] numbers a name already taken. */
+private val NUMBERED = Regex(""" \(\d+\)""")
 
 private fun String.ensureGpxSuffix(): String = if (endsWith(GPX, ignoreCase = true)) this else "$this$GPX"
 

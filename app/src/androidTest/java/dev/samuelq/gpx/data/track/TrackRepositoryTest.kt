@@ -216,6 +216,20 @@ class TrackRepositoryTest {
     }
 
     @Test
+    fun anUnnamedTrackComesBackUnnamed() {
+        val id = importSample(sampleGpx(name = null), name = "Morning loop.gpx")
+        runBlocking { repository.rename(id, " ").getOrThrow() }
+        val out = runBlocking { repository.fileToShare(row(id)) }
+        assertEquals(row(id).exportFileName, out.name)
+
+        val back = importSample(out.readText(), name = out.name)
+        assertNull(row(back).trackName)
+        // Numbered beside an earlier export, too.
+        val numbered = importSample(out.readText(), name = out.nameWithoutExtension + " (2).gpx")
+        assertNull(row(numbered).trackName)
+    }
+
+    @Test
     fun untimedImportsHaveNoStartAndKeepAName() {
         // One point without a time is enough.
         val partly = importSample(sampleGpx().replaceFirst(Regex("<time>[^<]*</time>"), ""))

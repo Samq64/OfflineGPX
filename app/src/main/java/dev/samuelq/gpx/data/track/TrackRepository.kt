@@ -136,8 +136,10 @@ class TrackRepository(
             val entity = newEntity(
                 track,
                 profile,
-                // Untimed, it has no start to be titled by: ".gpx" alone still names it.
-                name = track.name ?: arrivedAs.withoutGpxSuffix().asTrackName()
+                // Untimed, it has no start to be titled by: ".gpx" alone still names it. Its own
+                // export stamp leaves it unnamed, as it went out.
+                name = track.name
+                    ?: arrivedAs.withoutGpxSuffix().takeUnless { it.isStampOf(profile.stats.startedAt) }?.asTrackName()
                     ?: arrivedAs.asTrackName().takeIf { profile.stats.startedAt == null },
                 category = categoryAsSpelt(track.type),
                 color = track.displayColor?.let(RouteColor::ofGarmin),
