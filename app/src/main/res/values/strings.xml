@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
+    <string name="action_app_info">App info</string>
     <string name="action_back">Back</string>
     <string name="action_cancel">Cancel</string>
     <string name="action_categorize">Categorize</string>
@@ -194,12 +195,27 @@
     <string name="record_notification_active">Recording</string>
     <string name="record_notification_paused">Recording paused</string>
     <string name="record_pause">Pause</string>
-    <string name="record_battery_explanation">Disabling battery optimizations may help keep recordings running.</string>
-    <string name="record_battery_open_app_info">Open app info</string>
+    <!-- After record_interrupted_force_stopped. -->
+    <string name="record_battery_hint">If it wasn\'t you, it may have been caused by your device\'s battery settings.</string>
+    <!-- Why a recording stopped, from Android's record of the app's exit; first in the recovered dialog, and the interrupted notification's text. -->
+    <string name="record_interrupted_anr">The app stopped responding during a recording.</string>
+    <string name="record_interrupted_channel">Interrupted recordings</string>
+    <string name="record_interrupted_force_stopped">The app was force stopped during a recording.</string>
+    <string name="record_interrupted_crash">The app crashed during a recording.</string>
+    <string name="record_interrupted_memory">Android closed the app to free memory during a recording.</string>
+    <string name="record_interrupted_permission">A permission changed during a recording.</string>
+    <string name="record_interrupted_reboot">The device restarted during a recording.</string>
+    <string name="record_interrupted_stopped">The app was stopped from the active apps list during a recording.</string>
+    <string name="record_interrupted_title">Recording interrupted</string>
+    <string name="record_interrupted_unknown">The app closed during a recording.</string>
+    <string name="record_interrupted_unsaved">The recording couldn\'t be saved.</string>
+    <string name="record_interrupted_updated">The app was updated during a recording.</string>
     <!-- %1$s is the date, %2$s the time of the last point recorded. -->
-    <string name="record_recovered_body">The app closed during a recording, last updated on %1$s at %2$s. It wasn\'t saved.</string>
+    <string name="record_recovered_body">Last updated on %1$s at %2$s.</string>
     <string name="record_recovered_title">Unsaved recording</string>
     <string name="record_resume">Resume</string>
+    <string name="record_resume_failed">Couldn\'t resume that recording.</string>
+    <string name="record_resume_too_old">That recording stopped over an hour ago, so it can\'t be resumed.</string>
     <string name="record_save_failed">Couldn\'t save that recording. It\'s still on the device.</string>
     <string name="record_start">Record</string>
     <string name="record_start_failed">Couldn\'t start recording. An earlier unsaved one is in the way.</string>

@@ -1,7 +1,10 @@
 package dev.samuelq.gpx.data.record
 
 import dev.samuelq.gpx.core.analysis.FixFilter
+import dev.samuelq.gpx.core.model.Track
 import dev.samuelq.gpx.core.model.TrackPoint
+import dev.samuelq.gpx.core.model.TrackPoints
+import dev.samuelq.gpx.core.model.Waypoint
 import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -290,5 +293,39 @@ class RecordingSessionTest {
         assertEquals(3, session.colorSlot)
         assertEquals(3, session.state().colorSlot)
         assertFalse(session.locationOff)
+    }
+
+    /** A resumed log keeps its line, numbers and clock, and the gap to the next fix is a break. */
+    @Test
+    fun `continuing a log carries its numbers on, with a break before the next fix`() {
+        val track = Track(
+            name = null,
+            points = TrackPoints.of(listOf(fix(0, 0.0), fix(10, 50.0)), listOf(fix(20, 60.0), fix(30, 100.0))),
+            waypoints = listOf(Waypoint(fix(10, 50.0), "Gate")),
+        )
+        val session = session()
+        now = 5_000
+        // Ten minutes after the log's first point.
+        session.continueFrom(track, distanceMeters = 90.0, nowMillis = origin.plusSeconds(600).toEpochMilli())
+
+        assertEquals(600.0, session.totalSeconds, 0.001)
+        assertEquals(4, session.state().pointCount)
+        assertEquals(1, session.state().waypoints.size)
+        assertEquals(fix(30, 100.0), session.state().lastPoint)
+
+        session.onFix(fix(600, 2_000.0))
+        session.onFix(fix(601, 2_010.0))
+        assertEquals(100.0, session.distanceMeters, 0.1)
+        assertContentEquals(intArrayOf(0, 2, 4), session.trace().segmentStarts())
+    }
+
+    @Test
+    fun `continuing an empty log starts the clock at the first fix as usual`() {
+        val session = session()
+        session.continueFrom(Track(name = null, points = TrackPoints.EMPTY), distanceMeters = 0.0, nowMillis = 0)
+        assertFalse(session.timing)
+        now = 1_000
+        session.onFix(fix(0, 0.0))
+        assertTrue(session.timing)
     }
 }

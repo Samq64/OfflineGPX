@@ -6,7 +6,9 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import dev.samuelq.gpx.data.record.AbandonedRecording
 import dev.samuelq.gpx.data.record.DiscardedRecording
+import dev.samuelq.gpx.data.record.RecordingController
 import dev.samuelq.gpx.data.record.RecordingRecovery
+import dev.samuelq.gpx.data.record.RecordingState
 import dev.samuelq.gpx.data.track.TrackLabel
 import dev.samuelq.gpx.di.appContainer
 import java.io.File
@@ -15,6 +17,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChangedBy
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 
@@ -30,7 +34,8 @@ sealed interface RecoveryEvent {
 }
 
 /** Recordings a crash left unsaved, and undoing Stop's discard. */
-class RecoveryViewModel(private val recovery: RecordingRecovery) : ViewModel() {
+class RecoveryViewModel(private val recovery: RecordingRecovery, private val controller: RecordingController) :
+    ViewModel() {
 
     /** The oldest recording a crash left unsaved, until it is saved or discarded. */
     private val _abandoned = MutableStateFlow<AbandonedRecording?>(null)
@@ -43,6 +48,18 @@ class RecoveryViewModel(private val recovery: RecordingRecovery) : ViewModel() {
 
     init {
         viewModelScope.launch { nextAbandoned() }
+        // A resume, from here or the notification, takes the log on offer back.
+        viewModelScope.launch {
+            controller.state
+                .distinctUntilChangedBy { it is RecordingState.Active }
+                .drop(1)
+                .collect { nextAbandoned() }
+        }
+    }
+
+    /** Carries on the recording on offer; the dialog stays until it's running, so a refusal leaves it. */
+    fun resumeAbandoned() {
+        _abandoned.value?.let(controller::resume)
     }
 
     /** Saves the abandoned recording on offer and opens it, as a clean stop would. */
@@ -98,11 +115,17 @@ class RecoveryViewModel(private val recovery: RecordingRecovery) : ViewModel() {
     private suspend fun nextAbandoned() {
         // Skipping a failed save keeps the dialog from reopening on it.
         _abandoned.value = recovery.abandoned().firstOrNull { it.file !in skipped }
+        if (_abandoned.value != null) recovery.dismissNotice()
     }
 
     companion object {
         val Factory = viewModelFactory {
-            initializer { RecoveryViewModel(recovery = appContainer.recordingRecovery) }
+            initializer {
+                RecoveryViewModel(
+                    recovery = appContainer.recordingRecovery,
+                    controller = appContainer.recordingController,
+                )
+            }
         }
     }
 }

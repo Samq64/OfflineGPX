@@ -90,6 +90,7 @@ import dev.samuelq.gpx.ui.makeWay
 import dev.samuelq.gpx.ui.record.RecordingOutcomes
 import dev.samuelq.gpx.ui.record.RecordingSheet
 import dev.samuelq.gpx.ui.record.RecordingViewModel
+import dev.samuelq.gpx.ui.record.RecoveryViewModel
 import dev.samuelq.gpx.ui.record.WaypointDialog
 import dev.samuelq.gpx.ui.screenSnackbars
 import dev.samuelq.gpx.ui.theme.routePalette
@@ -210,7 +211,15 @@ fun MapScreen(
         },
         say = ::say,
     )
+    val recovery: RecoveryViewModel = viewModel(factory = RecoveryViewModel.Factory)
+    val requestResume = rememberLocationRequest(
+        LocationUse.Record,
+        isGpsEnabled = { recorder.isGpsEnabled },
+        onGranted = { recovery.resumeAbandoned() },
+        say = ::say,
+    )
     LocationRationale(requestRecording)
+    LocationRationale(requestResume)
     LocationRationale(showLocation)
     fun tapLocation() {
         when (screen.tapLocation(locating)) {
@@ -368,6 +377,8 @@ fun MapScreen(
         offerUndo = { message, onUndo, onCommit -> offerUndo(message, onUndo, onCommit) },
         onSaved = { viewModel.focus(TrackRef.Saved(it)) },
         onDiscarded = { showAllAfterRecording = true },
+        onResume = requestResume,
+        recovery = recovery,
     )
 
     // --- The sheet -----------------------------------------------------------------

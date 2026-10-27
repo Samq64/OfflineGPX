@@ -29,6 +29,8 @@ internal fun RecordingOutcomes(
     offerUndo: (message: String, onUndo: () -> Unit, onCommit: () -> Unit) -> Unit,
     onSaved: (id: Long) -> Unit,
     onDiscarded: () -> Unit,
+    /** Resumes the recording on offer, once location is granted. */
+    onResume: () -> Unit,
     recovery: RecoveryViewModel = viewModel(factory = RecoveryViewModel.Factory),
 ) {
     // Not context.getString: a long-lived collector would keep the old locale.
@@ -93,6 +95,7 @@ internal fun RecordingOutcomes(
             recording = recording,
             categories = categories,
             onSave = recovery::saveAbandoned,
+            onResume = onResume,
             onDiscard = recovery::discardAbandoned,
         )
     }

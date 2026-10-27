@@ -62,7 +62,18 @@ class RecordingService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val action = intent?.action
+        // A restart after the process died with a recording, which the launch has claimed.
+        if (intent == null) {
+            scope.launch {
+                commands.withLock {
+                    container.recordingRecovery.interrupted()?.let { notifyInterrupted(it) }
+                    if (session == null) stopSelf(startId)
+                }
+            }
+            // Never resume location sampling unasked.
+            return START_NOT_STICKY
+        }
+        val action = intent.action
         // Immediately: a START queued behind a save would miss the startForegroundService deadline.
         if (action == ACTION_START && !notifications.startForeground(notificationContent())) {
             scope.launch {
@@ -78,7 +89,7 @@ class RecordingService : Service() {
         scope.launch {
             commands.withLock {
                 when (action) {
-                    ACTION_START -> start()
+                    ACTION_START -> start(resume = intent.getStringExtra(EXTRA_RESUME))
                     ACTION_PAUSE -> pause()
                     ACTION_RESUME -> resume()
                     ACTION_HOLD -> hold()
@@ -93,11 +104,12 @@ class RecordingService : Service() {
                 if (session == null) stopSelf(startId)
             }
         }
-        // Never resume location sampling unasked.
-        return START_NOT_STICKY
+        // Restarted with no intent if the process dies, to say so.
+        return START_STICKY
     }
 
-    private suspend fun start() {
+    /** [resume] names a claimed log to carry on rather than starting afresh. */
+    private suspend fun start(resume: String?) {
         if (session != null) return
         session = RecordingSession(clock = SystemClock::elapsedRealtime)
 
@@ -114,15 +126,40 @@ class RecordingService : Service() {
             return
         }
 
-        // Set aside any unsaved recording for recovery so this one starts from an empty log.
-        if (!container.recordingRecovery.claim()) {
+        val recovery = container.recordingRecovery
+        cancelInterrupted()
+        val resumed = if (resume != null) {
+            when (val reopened = recovery.reopen(resume)) {
+                is Reopened.Resumed -> reopened.recording
+                is Reopened.TooOld -> {
+                    // Again, without the Resume it can no longer take.
+                    notifyInterrupted(reopened.recording)
+                    abandon(R.string.record_resume_too_old)
+                    return
+                }
+                Reopened.Gone -> {
+                    abandon(R.string.record_resume_failed)
+                    return
+                }
+            }
+        } else if (!recovery.claim()) {
+            // Set aside any unsaved recording for recovery so this one starts from an empty log.
             abandon(R.string.record_start_failed)
             return
+        } else {
+            null
         }
 
-        wal = RecordingWal.open(container.recordingRecovery.liveLog)
-        // Fixed now, so recolouring other tracks mid-recording doesn't move it.
-        setColor(container.trackRepository.nextColor().ordinal)
+        wal = RecordingWal.open(recovery.liveLog)
+        if (resumed != null) {
+            // Lost signal: a new segment, so nothing spans the gap.
+            wal?.appendBreak()
+            session?.continueFrom(resumed.track, resumed.profile.stats.distanceMeters, System.currentTimeMillis())
+            session?.let(::publishTrace)
+        }
+        // Fixed now, so recolouring other tracks mid-recording doesn't move it; a resumed one keeps its own.
+        val color = resumed?.track?.displayColor?.let(RouteColor::ofGarmin) ?: container.trackRepository.nextColor()
+        setColor(color.ordinal)
 
         publish()
         startTicker()
@@ -352,6 +389,7 @@ class RecordingService : Service() {
         internal const val EXTRA_CATEGORY = "category"
         internal const val EXTRA_WAYPOINT_NAME = "waypoint_name"
         internal const val EXTRA_COLOR = "color"
+        internal const val EXTRA_RESUME = "resume"
 
         private const val TAG = "RecordingService"
 

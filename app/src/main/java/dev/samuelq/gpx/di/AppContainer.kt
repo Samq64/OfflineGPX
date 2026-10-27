@@ -45,7 +45,7 @@ class AppContainer(context: Context) {
     /** Undispatched, so it holds the recovery lock before any recording can start. */
     fun claimAbandonedRecording() {
         applicationScope.launch(start = CoroutineStart.UNDISPATCHED) {
-            recordingRecovery.claim()
+            recordingRecovery.claimAtLaunch()
             recordingRecovery.purgeDiscarded()
         }
     }

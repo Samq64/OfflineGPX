@@ -32,6 +32,8 @@ internal class NotificationContent(
 )
 
 private const val CHANNEL_ID = "recording"
+private const val INTERRUPTED_CHANNEL_ID = "interrupted"
+private const val INTERRUPTED_NOTIFICATION_ID = 2
 
 /**
  * The recording's notification would show: the app's notifications and its channel are on.
@@ -179,6 +181,60 @@ internal class RecordingNotifications(private val service: Service) {
 
         const val TAG = "RecordingNotifications"
     }
+}
+
+/**
+ * After a recording's process died and the system restarted the service: says why, with Resume
+ * while [AbandonedRecording.resumable]. A tap opens the app, which offers it to save.
+ */
+internal fun Context.notifyInterrupted(recording: AbandonedRecording) {
+    val manager = getSystemService<NotificationManager>() ?: return
+    manager.createNotificationChannel(
+        // Not silent like the recording's: the user thinks it's still running.
+        NotificationChannel(
+            INTERRUPTED_CHANNEL_ID,
+            getString(R.string.record_interrupted_channel),
+            NotificationManager.IMPORTANCE_DEFAULT,
+        ),
+    )
+    val resumable = recording.resumable()
+    // Past the window, as when a late Resume tap posts this again, it says so.
+    val cause = getString(recording.cause.messageRes) +
+        if (resumable) "" else " " + getString(R.string.record_resume_too_old)
+    val open = PendingIntent.getActivity(
+        this,
+        0,
+        Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+        PendingIntent.FLAG_IMMUTABLE,
+    )
+    val notification = NotificationCompat.Builder(this, INTERRUPTED_CHANNEL_ID)
+        .setSmallIcon(R.drawable.ic_launcher_monochrome)
+        .setContentTitle(getString(R.string.record_interrupted_title))
+        .setContentText(cause)
+        .setStyle(NotificationCompat.BigTextStyle().bigText(cause))
+        .setWhen(recording.lastFix.toEpochMilli())
+        .setShowWhen(true)
+        .setContentIntent(open)
+        .setAutoCancel(true)
+        .setCategory(NotificationCompat.CATEGORY_STATUS)
+    if (resumable) {
+        // A notification action may start a location service from the background.
+        val resume = PendingIntent.getForegroundService(
+            this,
+            0,
+            Intent(this, RecordingService::class.java)
+                .setAction(RecordingService.ACTION_START)
+                .putExtra(RecordingService.EXTRA_RESUME, recording.file.name),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        notification.addAction(0, getString(R.string.record_resume), resume)
+    }
+    manager.notify(INTERRUPTED_NOTIFICATION_ID, notification.build())
+}
+
+/** Once the app offers the recording itself, or another starts. */
+internal fun Context.cancelInterrupted() {
+    getSystemService<NotificationManager>()?.cancel(INTERRUPTED_NOTIFICATION_ID)
 }
 
 /** "12.3 km  ·  1:02:03", read with the duration in words and the dot as a pause. */

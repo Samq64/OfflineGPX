@@ -4,6 +4,7 @@ import dev.samuelq.gpx.core.analysis.FixFilter
 import dev.samuelq.gpx.core.analysis.SpeedWindow
 import dev.samuelq.gpx.core.analysis.TrackAnalyzer
 import dev.samuelq.gpx.core.analysis.haversineMeters
+import dev.samuelq.gpx.core.model.Track
 import dev.samuelq.gpx.core.model.TrackPoint
 import dev.samuelq.gpx.core.model.TrackPoints
 import dev.samuelq.gpx.core.model.TrackPointsBuilder
@@ -69,6 +70,22 @@ internal class RecordingSession(private val clock: () -> Long) {
     val traceDue: Boolean
         get() = tracePoints.size - tracePublishedAt >= TRACE_PUBLISH_EVERY ||
             (tracePublishedAt == 0 && tracePoints.size > 0)
+
+    /**
+     * Carries on [track], a log an interruption left, before any fix: its line, waypoints and
+     * [distanceMeters], and its elapsed time to [nowMillis], with a gap before what comes next.
+     */
+    fun continueFrom(track: Track, distanceMeters: Double, nowMillis: Long) {
+        val points = track.points
+        for (segment in 0 until points.segmentCount) {
+            tracePoints.startSegment()
+            for (i in points.segmentStart(segment) until points.segmentEnd(segment)) logged(points[i])
+        }
+        tracePoints.startSegment()
+        waypoints += track.waypoints
+        this.distanceMeters = distanceMeters
+        if (points.size > 0) startedAt = clock() - (nowMillis - points.timeMillis(0))
+    }
 
     /** Returns the point to log, or null if rejected or paused. */
     fun onFix(fix: TrackPoint): TrackPoint? {

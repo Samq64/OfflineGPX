@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import dev.samuelq.gpx.R
 import dev.samuelq.gpx.data.record.AbandonedRecording
+import dev.samuelq.gpx.data.record.Interruption
 import dev.samuelq.gpx.data.record.RecordingRecovery
 import dev.samuelq.gpx.data.record.RecordingState
 import dev.samuelq.gpx.data.track.TrackLabel
@@ -40,7 +41,6 @@ import dev.samuelq.gpx.ui.format.LocalFormatters
 import dev.samuelq.gpx.ui.track.CategoryField
 import dev.samuelq.gpx.ui.track.StatRow
 import dev.samuelq.gpx.ui.track.distanceAndElapsed
-import java.time.Instant
 
 /** The categories in use, and the one a new recording gets unless changed: the last one's. */
 internal class CategoryChoice(val all: List<String>, val default: String)
@@ -73,6 +73,7 @@ internal fun RecoveredRecordingDialog(
     recording: AbandonedRecording,
     categories: CategoryChoice,
     onSave: (TrackLabel) -> Unit,
+    onResume: () -> Unit,
     onDiscard: (TrackLabel) -> Unit,
 ) {
     val stats = recording.profile.stats
@@ -85,11 +86,11 @@ internal fun RecoveredRecordingDialog(
                 Column {
                     StatRow(distanceAndElapsed(stats.distanceMeters, stats.totalDurationSeconds))
                     val formatters = LocalFormatters.current
-                    // The last fix: the nearest to the crash the log holds. Every fix has a time.
-                    val lastFix = recording.track.points.let { Instant.ofEpochMilli(it.timeMillis(it.size - 1)) }
-                    val date = formatters.longDate(lastFix)
-                    val time = formatters.time(lastFix)
-                    val body = stringResource(R.string.record_recovered_body, date, time)
+                    // The last fix: the nearest to the crash the log holds.
+                    val date = formatters.longDate(recording.lastFix)
+                    val time = formatters.time(recording.lastFix)
+                    val body = stringResource(recording.cause.messageRes) + " " +
+                        stringResource(R.string.record_recovered_body, date, time)
                     Text(
                         buildAnnotatedString {
                             append(body)
@@ -103,8 +104,12 @@ internal fun RecoveredRecordingDialog(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 8.dp),
                     )
-                    // Here, where a stopped recording has just shown why it matters.
-                    BatteryOptimisationHint(Modifier.padding(top = 8.dp))
+                    // Only where it may help: a battery saver's exemption, or the permission back.
+                    when (recording.cause) {
+                        Interruption.FORCE_STOPPED -> BatteryHint(Modifier.padding(top = 8.dp))
+                        Interruption.PERMISSION -> AppInfoButton()
+                        else -> Unit
+                    }
                 }
             },
             canSave = true,
@@ -112,13 +117,15 @@ internal fun RecoveredRecordingDialog(
             onSave = onSave,
             onDiscard = onDiscard,
             onDismiss = null,
+            // Judged as it opens; the service checks again.
+            onResume = onResume.takeIf { remember(recording) { recording.resumable() } },
         )
     }
 }
 
 /**
- * Discard, Cancel and Save, with Save at the end. A null [onDismiss] leaves only Save and
- * Discard to close it.
+ * Discard, Cancel, Resume and Save, with Save at the end. A null [onDismiss] leaves only Save,
+ * Discard and Resume to close it; a null [onResume] leaves Resume out.
  */
 @Composable
 private fun SaveRecordingDialog(
@@ -129,6 +136,7 @@ private fun SaveRecordingDialog(
     onSave: (TrackLabel) -> Unit,
     onDiscard: (TrackLabel) -> Unit,
     onDismiss: (() -> Unit)?,
+    onResume: (() -> Unit)? = null,
 ) {
     // Optional, so not auto-focused: a keyboard would hide the map.
     var name by remember { mutableStateOf("") }
@@ -175,6 +183,9 @@ private fun SaveRecordingDialog(
         confirmButton = {
             // The distance says why to a sighted user; a screen reader hears only "disabled".
             val tooShort = stringResource(R.string.record_too_short)
+            if (onResume != null) {
+                TextButton(onClick = onResume) { Text(stringResource(R.string.record_resume)) }
+            }
             TextButton(
                 onClick = { onSave(label()) },
                 enabled = canSave,
