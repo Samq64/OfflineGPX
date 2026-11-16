@@ -2,6 +2,7 @@ package dev.samuelq.gpx
 
 import android.content.ContentResolver
 import android.content.Intent
+import android.content.res.Configuration
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -11,6 +12,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.IntentCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.samuelq.gpx.ui.GpxApp
 import dev.samuelq.gpx.ui.theme.GpxTheme
 
@@ -27,14 +29,22 @@ class MainActivity : ComponentActivity() {
         // Not on a restore, which would re-ask a question already answered.
         if (savedInstanceState == null) intent?.let(::requestStopIfAsked)
 
+        val settingsRepository = (application as GpxApplication).container.settingsRepository
         setContent {
-            GpxTheme {
+            val settings by settingsRepository.settings.collectAsStateWithLifecycle()
+            GpxTheme(settings) {
                 GpxApp(
                     incomingFiles = incomingFiles,
                     onIncomingFilesHandled = { incomingFiles = emptyList() },
                 )
             }
         }
+    }
+
+    /** uiMode is handled here, so the bars' icons are redone for a theme switch. */
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        enableEdgeToEdge()
     }
 
     override fun onNewIntent(intent: Intent) {

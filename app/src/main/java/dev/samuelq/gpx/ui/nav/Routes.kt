@@ -28,3 +28,6 @@ data class SettingsRoute(val importMap: Boolean = false)
 
 @Serializable
 data object LibrariesRoute
+
+@Serializable
+data object TrackColorsRoute

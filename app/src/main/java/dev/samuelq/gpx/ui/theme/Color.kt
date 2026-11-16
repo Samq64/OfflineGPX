@@ -13,10 +13,6 @@ private val Blue400 = Color(0xFF3987E5)
 private val Green = Color(0xFF25852A)
 private val GreenDark = Color(0xFF6DB365)
 
-private val RoutePaletteLight = RouteColors.LIGHT.map { Color(it) }
-
-private val RoutePaletteDark = RouteColors.DARK.map { Color(it) }
-
 /** Names for the slots, alike in both themes: Garmin's, which files carry. */
 val RouteColorNames = listOf(
     R.string.color_red,
@@ -29,11 +25,10 @@ val RouteColorNames = listOf(
 
 fun List<Color>.slot(index: Int): Color = this[index.mod(size)]
 
-/** Follows dark mode, not the wallpaper. */
+/** The user's route colours for the current theme; defaults in [RouteColors]. */
 @androidx.compose.runtime.Composable
 @androidx.compose.runtime.ReadOnlyComposable
-fun routePalette(): List<Color> =
-    if (androidx.compose.foundation.isSystemInDarkTheme()) RoutePaletteDark else RoutePaletteLight
+fun routePalette(): List<Color> = LocalRoutePalette.current
 
 /**
  * The series are fixed, not wallpaper-derived: their hues were checked for contrast and CVD

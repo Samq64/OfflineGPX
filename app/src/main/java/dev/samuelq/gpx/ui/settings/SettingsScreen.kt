@@ -92,6 +92,7 @@ import dev.samuelq.gpx.BuildConfig
 import dev.samuelq.gpx.R
 import dev.samuelq.gpx.core.model.UnitSystem
 import dev.samuelq.gpx.data.map.OfflineMap
+import dev.samuelq.gpx.data.settings.AppTheme
 import dev.samuelq.gpx.data.settings.Settings
 import dev.samuelq.gpx.ui.BackButton
 import dev.samuelq.gpx.ui.BarInsets
@@ -116,6 +117,7 @@ import kotlinx.coroutines.launch
 fun SettingsScreen(
     onBack: () -> Unit,
     onOpenLibraries: () -> Unit,
+    onOpenTrackColors: () -> Unit,
     /** Back to the map, framing the file named. */
     onShowMap: (String) -> Unit,
     /** Opens the map file picker on arrival. */
@@ -250,6 +252,7 @@ fun SettingsScreen(
 
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
 
+            SectionHeading(stringResource(R.string.settings_section_display))
             Setting(
                 title = stringResource(R.string.settings_units),
                 explanation = stringResource(R.string.settings_units_explanation),
@@ -276,6 +279,28 @@ fun SettingsScreen(
                     }
                 }
             }
+            Setting(stringResource(R.string.settings_theme)) {
+                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                    AppTheme.entries.forEachIndexed { index, theme ->
+                        SegmentedButton(
+                            selected = settings.theme == theme,
+                            onClick = { viewModel.setTheme(theme) },
+                            shape = SegmentedButtonDefaults.itemShape(index = index, count = AppTheme.entries.size),
+                        ) {
+                            Text(
+                                stringResource(
+                                    when (theme) {
+                                        AppTheme.SYSTEM -> R.string.settings_theme_system
+                                        AppTheme.LIGHT -> R.string.settings_theme_light
+                                        AppTheme.DARK -> R.string.settings_theme_dark
+                                    },
+                                ),
+                            )
+                        }
+                    }
+                }
+            }
+            PageRow(stringResource(R.string.settings_track_colors), onClick = onOpenTrackColors)
 
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
             SectionHeading(stringResource(R.string.settings_section_about))
@@ -377,7 +402,7 @@ private fun LinkButtons(links: List<Pair<String, String>>, onClick: (String) -> 
 
 /** Opens a sub-page; the chevron marks it as one. */
 @Composable
-private fun PageRow(title: String, onClick: () -> Unit) {
+internal fun PageRow(title: String, onClick: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -592,7 +617,7 @@ private val MAP_MIME_TYPES = arrayOf("application/octet-stream", "*/*")
 private const val MAP_HELP_URL = "https://download.mapsforge.org/maps/v5/"
 
 @Composable
-private fun SectionHeading(text: String) {
+internal fun SectionHeading(text: String) {
     Text(
         text = text,
         style = MaterialTheme.typography.titleSmall,
@@ -604,18 +629,20 @@ private fun SectionHeading(text: String) {
 }
 
 @Composable
-private fun Setting(title: String, explanation: String, control: @Composable () -> Unit) {
+private fun Setting(title: String, explanation: String? = null, control: @Composable () -> Unit) {
     Column(Modifier.fillMaxWidth().padding(horizontal = EdgePadding, vertical = 8.dp)) {
         Text(
             text = title,
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
         )
-        Text(
-            text = explanation,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        explanation?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         Spacer(Modifier.height(8.dp))
         control()
     }

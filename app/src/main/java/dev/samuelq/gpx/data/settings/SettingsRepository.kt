@@ -1,14 +1,30 @@
 package dev.samuelq.gpx.data.settings
 
+import android.app.UiModeManager
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
 import dev.samuelq.gpx.core.model.UnitSystem
+import dev.samuelq.gpx.data.track.RouteColor
+import dev.samuelq.gpx.data.track.RouteColors
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-data class Settings(val units: UnitSystem = UnitSystem.METRIC)
+data class Settings(
+    val units: UnitSystem = UnitSystem.METRIC,
+    val theme: AppTheme = AppTheme.SYSTEM,
+    /** ARGB by [RouteColor.ordinal], for the light and dark themes. */
+    val routeColorsLight: List<Int> = RouteColors.LIGHT,
+    val routeColorsDark: List<Int> = RouteColors.DARK,
+)
+
+/** Light or dark, or the system's. Stored by name. */
+enum class AppTheme {
+    SYSTEM,
+    LIGHT,
+    DARK,
+}
 
 /** The library's order, which the map stacks by too, the list's top drawn on top. */
 enum class TrackSort(
@@ -30,6 +46,8 @@ class SettingsRepository(context: Context) {
 
     private val prefs: SharedPreferences =
         context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+
+    private val uiModeManager = context.getSystemService(UiModeManager::class.java)
 
     private val _settings = MutableStateFlow(read())
 
@@ -61,6 +79,36 @@ class SettingsRepository(context: Context) {
 
     fun setUnits(units: UnitSystem) = update { putString(KEY_UNITS, units.name) }
 
+    fun setTheme(theme: AppTheme) {
+        update { putString(KEY_THEME, theme.name) }
+        applyTheme()
+    }
+
+    /**
+     * The platform's per-app night mode rather than Compose alone, so system bars, platform
+     * dialogs and `values-night` follow too. The system keeps it, but not through a restore, so
+     * it's reapplied at launch.
+     */
+    fun applyTheme() {
+        uiModeManager.setApplicationNightMode(
+            when (_settings.value.theme) {
+                AppTheme.SYSTEM -> UiModeManager.MODE_NIGHT_AUTO
+                AppTheme.LIGHT -> UiModeManager.MODE_NIGHT_NO
+                AppTheme.DARK -> UiModeManager.MODE_NIGHT_YES
+            },
+        )
+    }
+
+    /** Null restores the default. Keyed by the slot's name, which is never renamed. */
+    fun setRouteColor(dark: Boolean, slot: RouteColor, argb: Int?) = update {
+        val key = routeColorKey(dark, slot)
+        if (argb == null) remove(key) else putInt(key, argb)
+    }
+
+    fun resetRouteColors(dark: Boolean) = update {
+        RouteColor.entries.forEach { remove(routeColorKey(dark, it)) }
+    }
+
     /** The category the last saved recording had, which the next one is offered. */
     private val _lastRecordingCategory = MutableStateFlow(prefs.getString(KEY_LAST_RECORDING_CATEGORY, null))
     val lastRecordingCategory: StateFlow<String?> = _lastRecordingCategory.asStateFlow()
@@ -79,7 +127,17 @@ class SettingsRepository(context: Context) {
         units = prefs.getString(KEY_UNITS, null)
             ?.let { name -> UnitSystem.entries.firstOrNull { it.name == name } }
             ?: Settings().units,
+        theme = prefs.getString(KEY_THEME, null)
+            ?.let { name -> AppTheme.entries.firstOrNull { it.name == name } }
+            ?: AppTheme.SYSTEM,
+        routeColorsLight = readRouteColors(dark = false),
+        routeColorsDark = readRouteColors(dark = true),
     )
+
+    private fun readRouteColors(dark: Boolean): List<Int> {
+        val defaults = if (dark) RouteColors.DARK else RouteColors.LIGHT
+        return RouteColor.entries.map { prefs.getInt(routeColorKey(dark, it), defaults[it.ordinal]) }
+    }
 
     private companion object {
         const val FILE = "settings"
@@ -88,5 +146,8 @@ class SettingsRepository(context: Context) {
         const val KEY_TRACK_SORT = "track_sort"
         const val KEY_TRACK_SORT_DESCENDING = "track_sort_descending"
         const val KEY_LAST_RECORDING_CATEGORY = "last_recording_category"
+        const val KEY_THEME = "theme"
+
+        fun routeColorKey(dark: Boolean, slot: RouteColor) = "route_color_${if (dark) "dark" else "light"}_${slot.name}"
     }
 }

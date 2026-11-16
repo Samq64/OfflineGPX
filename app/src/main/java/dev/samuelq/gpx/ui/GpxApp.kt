@@ -7,6 +7,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.unit.IntOffset
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.dropUnlessResumed
@@ -25,11 +26,14 @@ import dev.samuelq.gpx.ui.nav.LibrariesRoute
 import dev.samuelq.gpx.ui.nav.LibraryRoute
 import dev.samuelq.gpx.ui.nav.MapRoute
 import dev.samuelq.gpx.ui.nav.SettingsRoute
+import dev.samuelq.gpx.ui.nav.TrackColorsRoute
 import dev.samuelq.gpx.ui.record.RecordingViewModel
 import dev.samuelq.gpx.ui.record.StopRecordingDialog
 import dev.samuelq.gpx.ui.settings.LibrariesScreen
 import dev.samuelq.gpx.ui.settings.SettingsScreen
 import dev.samuelq.gpx.ui.settings.SettingsViewModel
+import dev.samuelq.gpx.ui.settings.TrackColorsScreen
+import dev.samuelq.gpx.ui.track.LocalOpenTrackColors
 import dev.samuelq.gpx.ui.track.TrackRef
 
 /** A track is a selection on the map, not a destination. */
@@ -48,7 +52,13 @@ fun GpxApp(incomingFiles: List<Uri>, onIncomingFilesHandled: () -> Unit) {
         onIncomingFilesHandled()
     }
 
-    CompositionLocalProvider(LocalFormatters provides formatters) {
+    // Remembered: a new lambda each time would recompose every reader.
+    val openTrackColors = remember(navController) { { navController.open(TrackColorsRoute) } }
+
+    CompositionLocalProvider(
+        LocalFormatters provides formatters,
+        LocalOpenTrackColors provides openTrackColors,
+    ) {
         // No BackHandler here: NavHost owns the back stack, so back at the root exits and
         // predictive back isn't intercepted.
         NavHost(
@@ -101,9 +111,14 @@ fun GpxApp(incomingFiles: List<Uri>, onIncomingFilesHandled: () -> Unit) {
                 SettingsScreen(
                     onBack = dropUnlessResumed { navController.popBackStack() },
                     onOpenLibraries = { navController.open(LibrariesRoute) },
+                    onOpenTrackColors = { navController.open(TrackColorsRoute) },
                     onShowMap = { name -> navController.backToMap(SHOW_MAP_KEY, name) },
                     importMapOnOpen = entry.toRoute<SettingsRoute>().importMap,
                 )
+            }
+
+            composable<TrackColorsRoute> {
+                TrackColorsScreen(onBack = dropUnlessResumed { navController.popBackStack() })
             }
 
             composable<LibrariesRoute> {

@@ -52,7 +52,7 @@ class AppContainer(context: Context) {
 
     /** Off the main thread, ahead of the first frame that reads them. */
     fun warmSettings() {
-        applicationScope.launch(Dispatchers.IO) { settingsRepository }
+        applicationScope.launch(Dispatchers.IO) { settingsRepository.applyTheme() }
     }
 
     /** Eager, since the map screen is shown first. */

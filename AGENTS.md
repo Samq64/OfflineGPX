@@ -36,8 +36,10 @@ See README.md for the source layout and the build, test, coverage and style comm
   colours; it expects the tags of the v5 files at download.mapsforge.org. VTM widens lines
   1.4x per zoom above z12 and the theme divides that back out.
 - Data colours (charts, the six route colours) are fixed, checked for contrast against the
-  map and separation under simulated colour blindness, one route colour per Garmin hue. A
-  recording is drawn in the slot it will be saved with. Chrome follows Material You.
+  map and separation under simulated colour blindness, one route colour per Garmin hue. Users
+  may override each route slot per theme in Track colors; a slot keeps its Garmin name in files
+  whatever its colour. A recording is drawn in the slot it will be saved with. Chrome follows
+  Material You, light or dark per the Theme setting, applied as the platform's per-app night mode.
 - Analysis invariants: a `<trkseg>` break is lost signal, so distance, the speed window and
   drawn lines never span it. Speed is differentiated over ~10 s, ascent uses a 3 m
   hysteresis on smoothed elevation, average speed is over moving time, and long series are

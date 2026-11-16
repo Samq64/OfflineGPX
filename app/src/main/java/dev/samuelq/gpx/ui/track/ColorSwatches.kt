@@ -4,17 +4,22 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -59,11 +64,28 @@ internal fun ColorDot(colorIndex: Int, onColor: (Int) -> Unit, modifier: Modifie
                     onColor(it)
                 },
             )
+            LocalOpenTrackColors.current?.let { openTrackColors ->
+                // Even gaps: the swatches and the item each end 16dp from the divider and the menu edge.
+                HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.library_color_edit)) },
+                    leadingIcon = { Icon(painterResource(R.drawable.ic_edit), null) },
+                    // Centres the icon under the first swatch: 8dp row inset plus half of 48 less half of 24.
+                    contentPadding = PaddingValues(horizontal = 20.dp),
+                    onClick = {
+                        open = false
+                        openTrackColors()
+                    },
+                )
+            }
         }
     }
 }
 
 val ColorDotSize = 20.dp
+
+/** Opens the palette editor, from any screen's picker; null where there's no way there. */
+internal val LocalOpenTrackColors = staticCompositionLocalOf<(() -> Unit)?> { null }
 
 /** The route palette as radio buttons, for a menu. [onPick] only for a different colour. */
 @Composable

@@ -12,8 +12,10 @@ import dev.samuelq.gpx.data.map.MapImportError
 import dev.samuelq.gpx.data.map.MapImportResult
 import dev.samuelq.gpx.data.map.MapStore
 import dev.samuelq.gpx.data.map.OfflineMap
+import dev.samuelq.gpx.data.settings.AppTheme
 import dev.samuelq.gpx.data.settings.Settings
 import dev.samuelq.gpx.data.settings.SettingsRepository
+import dev.samuelq.gpx.data.track.RouteColor
 import dev.samuelq.gpx.di.appContainer
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -54,6 +56,12 @@ class SettingsViewModel(private val repository: SettingsRepository, private val 
     val messages: Flow<SettingsNotice> = _messages.receiveAsFlow()
 
     fun setUnits(units: UnitSystem) = repository.setUnits(units)
+
+    fun setTheme(theme: AppTheme) = repository.setTheme(theme)
+
+    fun setRouteColor(dark: Boolean, slot: RouteColor, argb: Int?) = repository.setRouteColor(dark, slot, argb)
+
+    fun resetRouteColors(dark: Boolean) = repository.resetRouteColors(dark)
 
     fun importMaps(uris: List<Uri>) {
         if (uris.isEmpty()) return
