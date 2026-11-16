@@ -111,7 +111,7 @@ internal class RecordingNotifications(private val service: Service) {
         notifiedAt = SystemClock.elapsedRealtime()
 
         return NotificationCompat.Builder(service, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_launcher_monochrome)
+            .setSmallIcon(R.drawable.ic_my_location)
             // As the sheet says it.
             .setContentTitle(
                 service.getString(
@@ -208,7 +208,7 @@ internal fun Context.notifyInterrupted(recording: AbandonedRecording) {
         PendingIntent.FLAG_IMMUTABLE,
     )
     val notification = NotificationCompat.Builder(this, INTERRUPTED_CHANNEL_ID)
-        .setSmallIcon(R.drawable.ic_launcher_monochrome)
+        .setSmallIcon(R.drawable.ic_my_location)
         .setContentTitle(getString(R.string.record_interrupted_title))
         .setContentText(cause)
         .setStyle(NotificationCompat.BigTextStyle().bigText(cause))
