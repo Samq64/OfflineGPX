@@ -15,11 +15,15 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.FloatState
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
@@ -225,3 +229,36 @@ internal fun LocationButton(
         }
     }
 }
+
+/** Shown while the map is turned: a needle pointing north, red end first, and a tap turns it back. */
+@Composable
+internal fun CompassButton(
+    /** VTM's bearing; read only here and in drawing, so a turn doesn't recompose the screen. */
+    bearing: FloatState,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val turned by remember { derivedStateOf { kotlin.math.abs(bearing.floatValue) >= TURNED_DEGREES } }
+    if (!turned) return
+    val label = stringResource(R.string.map_north_up)
+    Surface(
+        onClick = onClick,
+        modifier = modifier.size(40.dp).semantics { contentDescription = label },
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shadowElevation = 2.dp,
+    ) {
+        // A positive bearing turns the map, and so north, anticlockwise.
+        Box(Modifier.graphicsLayer { rotationZ = bearing.floatValue }, contentAlignment = Alignment.Center) {
+            Icon(painterResource(R.drawable.ic_compass_south), contentDescription = null)
+            Icon(
+                painterResource(R.drawable.ic_compass_north),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.error,
+            )
+        }
+    }
+}
+
+/** Less is north up to the eye, and the button would flicker in and out with the compass. */
+private const val TURNED_DEGREES = 0.5f

@@ -1,5 +1,6 @@
 package dev.samuelq.gpx.ui.map
 
+import android.animation.ValueAnimator
 import android.view.ViewConfiguration
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.runtime.Composable
@@ -33,6 +34,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.ViewCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import dev.samuelq.gpx.R
+import dev.samuelq.gpx.core.analysis.bearingDegrees
 import dev.samuelq.gpx.core.analysis.haversineMeters
 import dev.samuelq.gpx.core.model.TrackPoint
 import dev.samuelq.gpx.core.model.TrackPoints
@@ -116,10 +118,15 @@ internal fun OfflineMapCanvas(
     panelWidth: Dp,
     basemapStyle: BasemapStyle,
     onScaleChange: (metersPerPixel: Double) -> Unit,
-    /** Kept centred through zooms while followed; centring on each new one is the caller's. */
+    /**
+     * Kept centred through zooms while followed, and the map turned to the direction of travel;
+     * centring on each new one is the caller's.
+     */
     followed: TrackPoint?,
     /** A user's drag, which ends following; never a move the app makes. */
     onDrag: () -> Unit,
+    /** The map's bearing as VTM has it, on every camera move: 0 is north up. */
+    onBearingChange: (Float) -> Unit,
     /** Cold-start camera, if remembered; takes priority over fitting to tracks or maps. */
     initialCamera: CameraSnapshot?,
     onCameraChange: (CameraSnapshot) -> Unit,
@@ -150,6 +157,7 @@ internal fun OfflineMapCanvas(
     val reportScale by rememberUpdatedState(onScaleChange)
     val reportCamera by rememberUpdatedState(onCameraChange)
     val drag by rememberUpdatedState(onDrag)
+    val reportBearing by rememberUpdatedState(onBearingChange)
     // Plain, not state: a drag clears it at once, before the GL thread's next update reads it.
     val followedNow = remember { AtomicReference<TrackPoint?>(null) }
 
@@ -220,8 +228,7 @@ internal fun OfflineMapCanvas(
             }
         }
         map.input.bind(taps)
-        // North-up and flat, so a route keeps a recognisable shape.
-        map.eventLayer.enableRotation(false)
+        // Flat, so a route keeps a recognisable shape.
         map.eventLayer.enableTilt(false)
         onDispose { map.input.unbind(taps) }
     }
@@ -308,15 +315,21 @@ internal fun OfflineMapCanvas(
     // Saved, as is framedView: back from the list, the remembered camera is restored against them.
     var framedScale by rememberSaveable { mutableStateOf<Double?>(null) }
 
-    // Zoom-out floor: everything fits on the tighter axis. Against the whole view, not the
-    // uncovered part, since the sheet comes and goes; lowered for the last frame if need be.
-    LaunchedEffect(map, extent, basemaps, viewSize, framedScale) {
-        if (extent == null) return@LaunchedEffect
-        val size = viewSize ?: return@LaunchedEffect
-        if (size.width <= 0 || size.height <= 0) return@LaunchedEffect
+    // Zoom-out floor: everything fits on the tighter axis, as turned. Against the whole view,
+    // not the uncovered part, since the sheet comes and goes; lowered for the last frame if need be.
+    val currentFramedScale by rememberUpdatedState(framedScale)
+    val currentViewSize by rememberUpdatedState(viewSize)
+    val floorBearing = remember { floatArrayOf(Float.NaN) }
+    fun applyFloor(bearing: Float, extent: BoundingBox?) {
+        val size = currentViewSize ?: return
+        if (extent == null || size.width <= 0 || size.height <= 0) return
+        floorBearing[0] = bearing
         val viewport = map.viewport()
-        val floor = MapPosition().apply { setByBoundingBox(extent, size.width, size.height) }.scale
-        viewport.setMinScale(minOf(floor, framedScale ?: floor, viewport.maxScale))
+        val floor = fitScale(extent, size, bearing)
+        viewport.setMinScale(minOf(floor, currentFramedScale ?: floor, viewport.maxScale))
+    }
+    LaunchedEffect(map, extent, basemaps, viewSize, framedScale) {
+        applyFloor(map.mapPosition.bearing, extent)
     }
 
     // Lowers the floor now, not after recomposing, or this move would be clamped to it.
@@ -362,7 +375,7 @@ internal fun OfflineMapCanvas(
             ?: return false
         // Replacing the last framed view, as a framed track does: one left from following a
         // recording elsewhere would stretch the clamp and pull this frame off centre.
-        frameTo(fit(target, usable, insets, maxScale), size)
+        frameTo(fit(target, usable, insets, maxScale, map.mapPosition.bearing), size)
         hasFramed = true
         return true
     }
@@ -399,13 +412,76 @@ internal fun OfflineMapCanvas(
         return true
     }
 
+    // Turns about the followed point, if any, else the view's centre.
+    fun turnTo(bearing: Float) {
+        val camera = map.mapPosition
+        // Wrapped: VTM clamps a bearing past ±180 rather than wrapping it.
+        camera.setBearing(bearing)
+        val followed = followedNow.get()
+        if (followed == null || centreOn(followed, zoomIn = false, camera) != CentreResult.Centred) {
+            map.moveTo(camera, currentClamp(), currentCover)
+        }
+    }
+
+    // Not VTM's animator: it gives up when anything else moves the camera, as the clamp does.
+    val northTurn = remember { arrayOfNulls<ValueAnimator>(1) }
+    DisposableEffect(Unit) { onDispose { northTurn[0]?.cancel() } }
+    fun northUp() {
+        val from = map.mapPosition.bearing
+        if (from == 0f) return
+        northTurn[0]?.cancel()
+        // VTM keeps bearings within ±180, so straight to 0 is the short way.
+        northTurn[0] = ValueAnimator.ofFloat(from, 0f).apply {
+            duration = NORTH_UP_MS
+            addUpdateListener { turnTo(it.animatedValue as Float) }
+            start()
+        }
+    }
+
     SideEffect {
         controller.zoomBy = ::zoomBy
         controller.showAll = ::frameAll
         controller.centre = { point, zoomIn -> centreOn(point, zoomIn) }
+        controller.northUp = ::northUp
         followedNow.set(followed)
         // Zooms pivot on the view's centre then, so the followed point drifts least.
         map.eventLayer.setFixOnCenter(followed != null)
+        // The heading turns it then; a twist mid-pinch would fight it.
+        map.eventLayer.enableRotation(followed == null)
+    }
+
+    // VTM's bearing is the map's turn, the negated heading.
+    val headings = remember { HeadingFilter() }
+    val turning = followed != null
+    LaunchedEffect(turning) {
+        if (turning) headings.startAt(-map.mapPosition.bearing.toDouble())
+    }
+    fun headTo(heading: Double) {
+        val bearing = (-heading).toFloat()
+        if (kotlin.math.abs(turn(map.mapPosition.bearing.toDouble(), bearing.toDouble())) >= HEADING_STEP_DEGREES) {
+            turnTo(bearing)
+        }
+    }
+    HeadingSensorEffect(enabled = turning, near = followed) { degrees, at ->
+        headTo(headings.compass(degrees, at))
+    }
+    // The course between fixes, when moving fast enough for it to be sound.
+    val lastFix = remember { arrayOfNulls<Pair<TrackPoint, Long>>(1) }
+    LaunchedEffect(followed) {
+        // Forgotten between follows, or the first course would span the break.
+        val at = followed ?: return@LaunchedEffect lastFix.fill(null)
+        val now = android.os.SystemClock.elapsedRealtime()
+        val previous = lastFix[0]
+        lastFix[0] = at to now
+        if (previous == null) return@LaunchedEffect
+        val (from, then) = previous
+        val seconds = if (from.time != null && at.time != null) {
+            java.time.Duration.between(from.time, at.time).toMillis() / 1000.0
+        } else {
+            (now - then) / 1000.0
+        }
+        val meters = haversineMeters(from.latitude, from.longitude, at.latitude, at.longitude)
+        headings.course(bearingDegrees(from, at), meters, seconds, now)?.let(::headTo)
     }
 
     // Also as screen reader actions, so a TalkBack or switch user needn't turn the buttons on.
@@ -435,10 +511,20 @@ internal fun OfflineMapCanvas(
         val listener = Map.UpdateListener { event, position ->
             // Back onto the followed point after a pinch or a double tap's zoom, which pivot elsewhere.
             val followed = followedNow.get()
-            if (followed != null && (event == Map.SCALE_EVENT || event == Map.ANIM_END || map.animator().isActive)) {
+            if (followed != null &&
+                (
+                    event == Map.SCALE_EVENT || event == Map.ROTATE_EVENT || event == Map.ANIM_END ||
+                        map.animator().isActive
+                    )
+            ) {
                 centreOn(followed, zoomIn = false, MapPosition().apply { copy(position) })
             }
             reportScale(MercatorProjection.groundResolution(position))
+            reportBearing(position.bearing)
+            // The floor depends on the bearing; a degree's turn moves it little.
+            if (!(kotlin.math.abs(turn(floorBearing[0].toDouble(), position.bearing.toDouble())) < 1.0)) {
+                applyFloor(position.bearing, currentExtent)
+            }
             zoomLevel = position.zoomLevel
             currentFollowedWaypoint?.let { reportWaypointAt(map.screenPosition(it.point, position)) }
             // Not before first framing: until then VTM sits at whole-world, and remembering that
@@ -493,7 +579,7 @@ internal fun OfflineMapCanvas(
         val usable = size.usable(frameInsets) ?: return@LaunchedEffect
         // Null for a single point, which is left where the camera already is.
         extentOf(listOf(route), null, emptyList())?.let { target ->
-            frameTo(fit(target, usable, frameInsets, map.viewport().maxScale), size)
+            frameTo(fit(target, usable, frameInsets, map.viewport().maxScale, map.mapPosition.bearing), size)
         }
         hasFramed = true
         framed()
@@ -504,7 +590,7 @@ internal fun OfflineMapCanvas(
         val target = frameMap?.bounds ?: return@LaunchedEffect
         val size = viewSize ?: return@LaunchedEffect
         val usable = size.usable(frameInsets) ?: return@LaunchedEffect
-        frameTo(fit(target, usable, frameInsets, map.viewport().maxScale), size)
+        frameTo(fit(target, usable, frameInsets, map.viewport().maxScale, map.mapPosition.bearing), size)
         hasFramed = true
         onMapFramed()
     }
@@ -578,6 +664,11 @@ private const val TRIM_END_SCALE = 131072.0
 /** Used when no map is shown. */
 private const val DEFAULT_MAX_ZOOM = 18
 
+private const val NORTH_UP_MS = 300L
+
+/** Finer turns aren't worth a redraw. */
+private const val HEADING_STEP_DEGREES = 1.0
+
 private fun markerLayer(map: Map) =
     ItemizedLayer(map, MarkerSymbol(AndroidBitmap(1, 1, 0), MarkerSymbol.HotspotPlace.CENTER))
 
@@ -597,10 +688,12 @@ class MapController {
     internal var zoomBy: (Double) -> Boolean = { false }
     internal var showAll: () -> Boolean = { false }
     internal var centre: (TrackPoint, Boolean) -> CentreResult = { _, _ -> CentreResult.NotLaidOut }
+    internal var northUp: () -> Unit = {}
 
     fun zoomIn() = zoomBy(2.0)
     fun zoomOut() = zoomBy(0.5)
     fun showAllTracks() = showAll()
+    fun turnNorthUp() = northUp()
 
     /** [zoomIn] to street level, if further out. */
     fun centreOn(point: TrackPoint, zoomIn: Boolean) = centre(point, zoomIn)

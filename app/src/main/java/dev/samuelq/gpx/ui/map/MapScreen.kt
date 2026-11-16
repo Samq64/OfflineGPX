@@ -48,6 +48,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -162,6 +163,8 @@ fun MapScreen(
     val snackbarHostState = snackbars.host
     // Never read here: that would recompose the screen every frame of a pan. ScaleBar reads it.
     val metersPerPixel = remember { mutableDoubleStateOf(0.0) }
+    // The same for the compass button.
+    val bearing = remember { mutableFloatStateOf(0f) }
 
     val trackImporter = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
@@ -841,6 +844,7 @@ fun MapScreen(
                     onScaleChange = { metersPerPixel.doubleValue = it },
                     followed = followed,
                     onDrag = screen::stopFollowing,
+                    onBearingChange = { bearing.floatValue = it },
                     // Resume where the camera was left rather than re-fitting.
                     initialCamera = viewModel.lastCamera,
                     onCameraChange = { viewModel.lastCamera = it },
@@ -899,6 +903,18 @@ fun MapScreen(
                         modifier = Modifier
                             .align(Alignment.BottomStart)
                             .padding(start = panelCover + 12.dp, bottom = sheetInset + 4.dp),
+                    )
+                }
+
+                if (hasContent || isRecording) {
+                    CompassButton(
+                        bearing = bearing,
+                        // Following turns the map to the heading, so north up leaves it.
+                        onClick = {
+                            screen.stopFollowing()
+                            mapController.turnNorthUp()
+                        },
+                        modifier = Modifier.align(Alignment.TopEnd).padding(16.dp),
                     )
                 }
 

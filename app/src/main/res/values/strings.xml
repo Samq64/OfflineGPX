@@ -163,6 +163,7 @@
     <string name="map_follow_location">Follow my location</string>
     <string name="map_stop_following">Stop following my location</string>
     <string name="map_stop_location">Stop showing location</string>
+    <string name="map_north_up">Turn map north up</string>
     <string name="map_none_shown">No tracks shown</string>
     <string name="map_scale">Map scale: %1$s</string>
     <string name="map_show_all">Show all tracks</string>

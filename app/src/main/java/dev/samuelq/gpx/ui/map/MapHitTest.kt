@@ -86,9 +86,10 @@ internal fun mapPixel(
     width: Int,
     height: Int,
 ): Pair<Double, Double> {
-    // Screen pixels equal map pixels, since the map never rotates or tilts.
+    // Turned, not tilted: a screen pixel is a map pixel.
     val mapSize = Tile.SIZE * position.scale
-    return position.x * mapSize + (screenX - width / 2.0) to position.y * mapSize + (screenY - height / 2.0)
+    val (dx, dy) = screenToMap(screenX - width / 2.0, screenY - height / 2.0, position.bearing)
+    return position.x * mapSize + dx to position.y * mapSize + dy
 }
 
 /**

@@ -117,7 +117,8 @@ internal class MarkerSymbols(marker: Color, puck: Color, hole: Color, density: D
         edge.color = fill.toArgb()
         edge.strokeWidth = stroke
         canvas.drawPath(shape, edge)
-        return MarkerSymbol(AndroidBitmap(bitmap), MarkerSymbol.HotspotPlace.CENTER, false)
+        // Upright on screen however the map turns: play points right, as a button's does.
+        return MarkerSymbol(AndroidBitmap(bitmap), MarkerSymbol.HotspotPlace.CENTER, true)
     }
 
     private fun symbol(
@@ -138,7 +139,7 @@ internal class MarkerSymbols(marker: Color, puck: Color, hole: Color, density: D
         return MarkerSymbol(AndroidBitmap(bitmap), MarkerSymbol.HotspotPlace.CENTER, false)
     }
 
-    /** Pointing up, centred on the position; the map turns it to the heading. */
+    /** Pointing up, centred on the position; flat on the map, which turns it to the heading. */
     private fun arrow(radius: Float, ringWidth: Float, fill: Color, ring: Color): MarkerSymbol {
         val size = kotlin.math.ceil((radius + ringWidth) * 2).toInt() + 2
         val bitmap = createBitmap(size, size)
@@ -193,7 +194,8 @@ internal class MarkerSymbols(marker: Color, puck: Color, hole: Color, density: D
         // Not white either, which glared in dark mode.
         canvas.drawCircle(cx, cy, radius * PIN_HOLE_RATIO, fillPaint(hole))
         if (alpha < 1f) canvas.restore()
-        return MarkerSymbol(AndroidBitmap(bitmap), MarkerSymbol.HotspotPlace.BOTTOM_CENTER, false)
+        // Upright on screen however the map turns, as the tap test and tooltip take it.
+        return MarkerSymbol(AndroidBitmap(bitmap), MarkerSymbol.HotspotPlace.BOTTOM_CENTER, true)
     }
 }
 

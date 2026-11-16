@@ -43,17 +43,35 @@ internal fun PaddingValues.toInsets(density: Density, layoutDirection: LayoutDir
     )
 }
 
-/** Where [point] sits on screen at [position]; valid since the map never rotates or tilts. */
+/** Where [point] sits on screen at [position]; valid since the map never tilts. */
 internal fun Map.screenPosition(point: TrackPoint, position: MapPosition = mapPosition): Offset =
     screenPosition(point, position, width, height)
 
 /** [Map.screenPosition] for a [width] by [height] view; VTM's own map needs GL to construct. */
 internal fun screenPosition(point: TrackPoint, position: MapPosition, width: Int, height: Int): Offset {
     val mapSize = Tile.SIZE * position.scale
-    val x = (MercatorProjection.longitudeToX(point.longitude) - position.x) * mapSize + width / 2.0
-    val y = (MercatorProjection.latitudeToY(point.latitude) - position.y) * mapSize + height / 2.0
-    return Offset(x.toFloat(), y.toFloat())
+    val (x, y) = mapToScreen(
+        (MercatorProjection.longitudeToX(point.longitude) - position.x) * mapSize,
+        (MercatorProjection.latitudeToY(point.latitude) - position.y) * mapSize,
+        position.bearing,
+    )
+    return Offset((x + width / 2.0).toFloat(), (y + height / 2.0).toFloat())
 }
+
+/**
+ * A screen offset as a map-pixel one at [bearing], as VTM turns a drag: positive turns the
+ * map anticlockwise, so heading-up is the negated heading.
+ */
+internal fun screenToMap(dx: Double, dy: Double, bearing: Float): Pair<Double, Double> {
+    if (bearing == 0f) return dx to dy
+    val radians = Math.toRadians(bearing.toDouble())
+    val cos = kotlin.math.cos(radians)
+    val sin = kotlin.math.sin(radians)
+    return dx * cos + dy * sin to -dx * sin + dy * cos
+}
+
+/** The inverse of [screenToMap]. */
+internal fun mapToScreen(dx: Double, dy: Double, bearing: Float): Pair<Double, Double> = screenToMap(dx, dy, -bearing)
 
 /**
  * Every route's extent with a margin, plus every shown map's flush (past a map's edge is
@@ -74,32 +92,46 @@ internal fun GeoBounds.toBoundingBox() = BoundingBox(southLatitude, westLongitud
 /** [this] widened to take in [other], if any. */
 internal fun BoundingBox.including(other: BoundingBox?): BoundingBox = other?.let(::extendBoundingBox) ?: this
 
-/** What a [size] view shows with the camera at [this]. */
+/** What a [size] view shows with the camera at [this]; turned, the box around it. */
 internal fun MapPosition.visibleBox(size: IntSize): BoundingBox {
-    val mapSize = Tile.SIZE * scale
-    val halfWidth = size.width / 2.0 / mapSize
-    val halfHeight = size.height / 2.0 / mapSize
+    val (west, north, east, south) = mapBox(size, Insets(0, 0, 0, 0))
     return BoundingBox(
-        MercatorProjection.toLatitude(y + halfHeight),
-        MercatorProjection.toLongitude(x - halfWidth),
-        MercatorProjection.toLatitude(y - halfHeight),
-        MercatorProjection.toLongitude(x + halfWidth),
+        MercatorProjection.toLatitude(south),
+        MercatorProjection.toLongitude(west),
+        MercatorProjection.toLatitude(north),
+        MercatorProjection.toLongitude(east),
     )
 }
 
 /**
- * What a [size] view shows with the camera at [this], less [insets]. Longitudes run past ±180
- * when it spans the antimeridian, so west is always less than east.
+ * What a [size] view shows with the camera at [this], less [insets]; turned, the box around it.
+ * Longitudes run past ±180 when it spans the antimeridian, so west is always less than east.
  */
 internal fun MapPosition.uncoveredArea(size: IntSize, insets: Insets): GeoBounds {
-    val mapSize = Tile.SIZE * scale
+    val (west, north, east, south) = mapBox(size, insets)
     fun longitude(x: Double) = (x - 0.5) * 360.0
     return GeoBounds(
-        southLatitude = MercatorProjection.toLatitude(y + (size.height / 2.0 - insets.bottom) / mapSize),
-        westLongitude = longitude(x + (insets.left - size.width / 2.0) / mapSize),
-        northLatitude = MercatorProjection.toLatitude(y + (insets.top - size.height / 2.0) / mapSize),
-        eastLongitude = longitude(x + (size.width / 2.0 - insets.right) / mapSize),
+        southLatitude = MercatorProjection.toLatitude(south),
+        westLongitude = longitude(west),
+        northLatitude = MercatorProjection.toLatitude(north),
+        eastLongitude = longitude(east),
     )
+}
+
+/** The map-unit box, west, north, east, south, around the view less [insets]: unwrapped, unclamped. */
+private fun MapPosition.mapBox(size: IntSize, insets: Insets): DoubleArray {
+    val mapSize = Tile.SIZE * scale
+    val box = doubleArrayOf(Double.MAX_VALUE, Double.MAX_VALUE, -Double.MAX_VALUE, -Double.MAX_VALUE)
+    for (sx in doubleArrayOf(insets.left - size.width / 2.0, size.width / 2.0 - insets.right)) {
+        for (sy in doubleArrayOf(insets.top - size.height / 2.0, size.height / 2.0 - insets.bottom)) {
+            val (dx, dy) = screenToMap(sx, sy, bearing)
+            box[0] = minOf(box[0], x + dx / mapSize)
+            box[1] = minOf(box[1], y + dy / mapSize)
+            box[2] = maxOf(box[2], x + dx / mapSize)
+            box[3] = maxOf(box[3], y + dy / mapSize)
+        }
+    }
+    return box
 }
 
 /** 5% of a track's span on each side, as VTM's total-span factor. */
@@ -113,20 +145,50 @@ internal fun IntSize?.usable(insets: Insets): IntSize? {
     return if (usableWidth > 0 && usableHeight > 0) IntSize(usableWidth, usableHeight) else null
 }
 
-/** [target] fitted and centred in the uncovered part of the view, not the screen. */
-internal fun fit(target: BoundingBox, usable: IntSize, insets: Insets, maxScale: Double): MapPosition {
-    val position = MapPosition().apply { setByBoundingBox(target, usable.width, usable.height) }
+/** [target] fitted and centred in the uncovered part of the view, not the screen, turned to [bearing]. */
+internal fun fit(
+    target: BoundingBox,
+    usable: IntSize,
+    insets: Insets,
+    maxScale: Double,
+    bearing: Float = 0f,
+): MapPosition {
+    val position = MapPosition().apply {
+        setByBoundingBox(target, usable.width, usable.height)
+        // Turned, the box's corners reach further; the scale that fits them, 0 when it's a point.
+        setScale(fitScale(target, usable, bearing))
+        // Wrapped: VTM clamps a bearing past ±180 rather than wrapping it.
+        setBearing(bearing)
+    }
     // Capped here rather than by VTM, so the offset below is worked out at the scale it lands at.
     position.setScale(minOf(position.scale, maxScale))
     position.centreIn(insets)
     return position
 }
 
-/** Moves the centre from the screen's to the uncovered part's, at the current scale. */
+/** The scale at which [target], turned to [bearing], just fits a [size] view. */
+internal fun fitScale(target: BoundingBox, size: IntSize, bearing: Float): Double {
+    val width = kotlin.math.abs(
+        MercatorProjection.longitudeToX(target.maxLongitude) - MercatorProjection.longitudeToX(target.minLongitude),
+    )
+    val height = kotlin.math.abs(
+        MercatorProjection.latitudeToY(target.minLatitude) - MercatorProjection.latitudeToY(target.maxLatitude),
+    )
+    val radians = Math.toRadians(bearing.toDouble())
+    val cos = kotlin.math.abs(kotlin.math.cos(radians))
+    val sin = kotlin.math.abs(kotlin.math.sin(radians))
+    return minOf(
+        size.width / ((width * cos + height * sin) * Tile.SIZE),
+        size.height / ((width * sin + height * cos) * Tile.SIZE),
+    )
+}
+
+/** Moves the centre from the screen's to the uncovered part's, at the current scale and bearing. */
 internal fun MapPosition.centreIn(insets: Insets) {
     val mapSize = Tile.SIZE * scale
-    x -= (insets.left - insets.right) / 2.0 / mapSize
-    y -= (insets.top - insets.bottom) / 2.0 / mapSize
+    val (dx, dy) = screenToMap((insets.left - insets.right) / 2.0, (insets.top - insets.bottom) / 2.0, bearing)
+    x -= dx / mapSize
+    y -= dy / mapSize
 }
 
 /**
@@ -151,7 +213,7 @@ internal fun Map.moveTo(target: MapPosition, extent: BoundingBox?, cover: Insets
 
 /** Sets VTM's limit for [position]'s scale and pulls [position] inside it. True if it moved. */
 private fun Map.constrain(position: MapPosition, extent: BoundingBox, cover: Insets): Boolean {
-    val limit = centreLimit(extent, cover, width, height, position.scale)
+    val limit = centreLimit(extent, cover, width, height, position.scale, position.bearing)
     viewport().setMapLimit(limit.xmin, limit.ymin, limit.xmax, limit.ymax)
 
     val x = position.x.coerceIn(limit.xmin, limit.xmax)
@@ -162,44 +224,80 @@ private fun Map.constrain(position: MapPosition, extent: BoundingBox, cover: Ins
     return true
 }
 
-/** Where a [width] by [height] camera's centre may go at [scale], in map units. */
-internal fun centreLimit(extent: BoundingBox, cover: Insets, width: Int, height: Int, scale: Double): Box {
+/**
+ * Where a [width] by [height] camera's centre may go at [scale], in map units. Turned to
+ * [bearing], the view held to the extent is the largest upright box inside the uncovered part:
+ * the whole of it at 0, its sides swapped at 90, and unbroken between.
+ */
+internal fun centreLimit(
+    extent: BoundingBox,
+    cover: Insets,
+    width: Int,
+    height: Int,
+    scale: Double,
+    bearing: Float = 0f,
+): Box {
     val mapSize = Tile.SIZE * scale
+    val (viewWidth, viewHeight) = inscribed(
+        (width - cover.left - cover.right).coerceAtLeast(1).toDouble(),
+        (height - cover.top - cover.bottom).coerceAtLeast(1).toDouble(),
+        bearing,
+    )
+    // The uncovered part's centre, from the camera's, in map pixels.
+    val (offsetX, offsetY) = screenToMap(
+        (cover.left - cover.right) / 2.0,
+        (cover.top - cover.bottom) / 2.0,
+        bearing,
+    )
     val (minX, maxX) = centreRange(
         MercatorProjection.longitudeToX(extent.minLongitude),
         MercatorProjection.longitudeToX(extent.maxLongitude),
-        view = width,
-        visibleStart = cover.left,
-        visibleEnd = width - cover.right,
+        halfView = viewWidth / 2,
+        offset = offsetX,
         mapSize,
     )
     val (minY, maxY) = centreRange(
         MercatorProjection.latitudeToY(extent.maxLatitude),
         MercatorProjection.latitudeToY(extent.minLatitude),
-        view = height,
-        visibleStart = 0,
-        visibleEnd = height - cover.bottom,
+        halfView = viewHeight / 2,
+        offset = offsetY,
         mapSize,
     )
     return Box(minX, minY, maxX, maxY)
 }
 
+/** The largest upright box, width by height, inside a [width] by [height] one turned to [bearing]. */
+internal fun inscribed(width: Double, height: Double, bearing: Float): Pair<Double, Double> {
+    val radians = Math.toRadians(bearing.toDouble())
+    val sin = kotlin.math.abs(kotlin.math.sin(radians))
+    val cos = kotlin.math.abs(kotlin.math.cos(radians))
+    val long = maxOf(width, height)
+    val short = minOf(width, height)
+    if (short <= 2 * sin * cos * long || kotlin.math.abs(sin - cos) < 1e-10) {
+        // Held by the short sides alone: a box with two corners on each.
+        val half = short / 2
+        return if (width >= height) half / sin to half / cos else half / cos to half / sin
+    }
+    val cos2 = cos * cos - sin * sin
+    return (width * cos - height * sin) / cos2 to (height * cos - width * sin) / cos2
+}
+
 /**
- * Camera-centre range on one axis keeping [start] and [end] no further in than [visibleStart]
- * and [visibleEnd]. If both can't hold, the extent is narrower than visible and is centred.
+ * Camera-centre range on one axis keeping a view [halfView] pixels each side of a point
+ * [offset] from the camera within [start] to [end]. If it can't, the extent is narrower than
+ * the view and is centred on that point.
  */
 private fun centreRange(
     start: Double,
     end: Double,
-    view: Int,
-    visibleStart: Int,
-    visibleEnd: Int,
+    halfView: Double,
+    offset: Double,
     mapSize: Double,
 ): Pair<Double, Double> {
-    val min = start + (view / 2.0 - visibleStart) / mapSize
-    val max = end + (view / 2.0 - visibleEnd) / mapSize
+    val min = start + (halfView - offset) / mapSize
+    val max = end - (halfView + offset) / mapSize
     if (min <= max) return min to max
-    val centred = (start + end) / 2 + (view - visibleStart - visibleEnd) / 2.0 / mapSize
+    val centred = (start + end) / 2 - offset / mapSize
     return centred to centred
 }
 
@@ -207,9 +305,10 @@ private fun centreRange(
 internal fun Map.nudgeIntoView(point: TrackPoint, insets: Insets, margin: Int) {
     if (width <= 0 || height <= 0) return
     val position = mapPosition
-    val (dx, dy) = nudge(screenPosition(point, position), width, height, insets, margin) ?: return
+    val (panX, panY) = nudge(screenPosition(point, position), width, height, insets, margin) ?: return
     // Not animated: this follows a drag, and easing would lag the finger.
     val mapSize = Tile.SIZE * position.scale
+    val (dx, dy) = screenToMap(panX, panY, position.bearing)
     position.x -= dx / mapSize
     position.y -= dy / mapSize
     setMapPosition(position)

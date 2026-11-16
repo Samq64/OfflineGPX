@@ -207,7 +207,8 @@ internal class OverlayLayer(private val owner: Map) : VectorLayer(owner) {
     private fun check() {
         owner.viewport().getMapPosition(current)
         val behind = synchronized(drawnFor) {
-            !drawnValid || current.x != drawnFor.x || current.y != drawnFor.y || current.scale != drawnFor.scale
+            !drawnValid || current.x != drawnFor.x || current.y != drawnFor.y || current.scale != drawnFor.scale ||
+                current.bearing != drawnFor.bearing
         }
         if (behind) {
             update()
