@@ -3,8 +3,8 @@
     android:height="24dp"
     android:viewportWidth="960"
     android:viewportHeight="960">
-    <!-- The needle's south half; ic_compass_north is drawn over it. -->
+    <!-- The needle's south half, reaching a little under the north one so no seam shows between. -->
     <path
         android:fillColor="#FF000000"
-        android:pathData="M300,480L660,480L480,880Z" />
+        android:pathData="M340,480L480,440L620,480L480,900Z" />
 </vector>
