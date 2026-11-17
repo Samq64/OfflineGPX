@@ -1,5 +1,6 @@
 package dev.samuelq.gpx.ui.track
 
+import android.annotation.SuppressLint
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -25,8 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -91,8 +91,11 @@ internal val LocalOpenTrackColors = staticCompositionLocalOf<(() -> Unit)?> { nu
 @Composable
 internal fun ColorSwatches(colorIndex: Int, onPick: (Int) -> Unit, modifier: Modifier = Modifier) {
     val palette = routePalette()
-    // Six 48dp targets need about 330dp; narrower windows get two rows.
-    val windowWidth = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp() }
+
+    // Six 48dp targets need about 330dp; narrower windows get two rows. The configuration, as
+    // containerSize can lag a rotation.
+    @SuppressLint("ConfigurationScreenWidthHeight")
+    val windowWidth = LocalConfiguration.current.screenWidthDp.dp
     FlowRow(
         modifier = modifier.padding(horizontal = 8.dp),
         maxItemsInEachRow = if (windowWidth >= 330.dp) palette.size else palette.size / 2,

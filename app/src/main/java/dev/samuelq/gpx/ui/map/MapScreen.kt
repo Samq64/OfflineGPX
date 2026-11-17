@@ -1,5 +1,6 @@
 package dev.samuelq.gpx.ui.map
 
+import android.annotation.SuppressLint
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.PredictiveBackHandler
@@ -63,17 +64,18 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalResources
-import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -406,9 +408,18 @@ fun MapScreen(
     val sheetTitle = if (subject == null) lastTitle.orEmpty() else focusedTitle
     val sheetColor = if (subject == null) lastColor ?: focusedColor else focusedColor
 
+    // Measured, not LocalWindowInfo.containerSize: on some phones that lags a rotation behind,
+    // putting the panel in portrait. The configuration stands in until the first layout.
+    val configuration = LocalConfiguration.current
+    var measuredSize by remember { mutableStateOf<IntSize?>(null) }
+
+    @SuppressLint("ConfigurationScreenWidthHeight")
+    val windowSize = measuredSize ?: with(density) {
+        IntSize(configuration.screenWidthDp.dp.roundToPx(), configuration.screenHeightDp.dp.roundToPx())
+    }
+
     // Landscape, or any window Material calls expanded, uses a side panel; the sheet stays
     // composed but hidden so rotation keeps the track.
-    val windowSize = LocalWindowInfo.current.containerSize
     val sidePanel = windowSize.width > windowSize.height ||
         with(density) { windowSize.width.toDp() } >= ExpandedWidth
     val currentSidePanel by rememberUpdatedState(sidePanel)
@@ -730,7 +741,7 @@ fun MapScreen(
             }
         }
 
-    Box {
+    Box(Modifier.fillMaxSize().onSizeChanged { measuredSize = it }) {
         BottomSheetScaffold(
             modifier = Modifier.onSizeChanged { scaffoldHeight = it.height },
             scaffoldState = scaffoldState,
