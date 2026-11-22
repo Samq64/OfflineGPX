@@ -59,6 +59,8 @@ class SettingsViewModel(private val repository: SettingsRepository, private val 
 
     fun setTheme(theme: AppTheme) = repository.setTheme(theme)
 
+    fun setTurnToHeading(turn: Boolean) = repository.setTurnToHeading(turn)
+
     fun setRouteColor(dark: Boolean, slot: RouteColor, argb: Int?) = repository.setRouteColor(dark, slot, argb)
 
     fun resetRouteColors(dark: Boolean) = repository.resetRouteColors(dark)

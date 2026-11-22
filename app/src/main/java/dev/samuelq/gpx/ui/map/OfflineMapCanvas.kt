@@ -118,11 +118,10 @@ internal fun OfflineMapCanvas(
     panelWidth: Dp,
     basemapStyle: BasemapStyle,
     onScaleChange: (metersPerPixel: Double) -> Unit,
-    /**
-     * Kept centred through zooms while followed, and the map turned to the direction of travel;
-     * centring on each new one is the caller's.
-     */
+    /** Kept centred through zooms and sheet moves while followed; centring on each new one is the caller's. */
     followed: TrackPoint?,
+    /** Turns the map to the direction of travel while [followed]. */
+    turnToHeading: Boolean,
     /** A user's drag, which ends following; never a move the app makes. */
     onDrag: () -> Unit,
     /** The map's bearing as VTM has it, on every camera move: 0 is north up. */
@@ -389,10 +388,12 @@ internal fun OfflineMapCanvas(
         camera: MapPosition = map.mapPosition,
         scale: Double = LOCATE_SCALE,
     ): CentreResult {
-        val size = viewSize?.takeIf { it.usable(insets) != null } ?: return CentreResult.NotLaidOut
+        // Fresh: the update listener, bound once, calls this too.
+        val clear = currentInsets
+        val size = viewSize?.takeIf { it.usable(clear) != null } ?: return CentreResult.NotLaidOut
         camera.setPosition(point.latitude, point.longitude)
         if (zoomIn) camera.setScale(maxOf(camera.scale, scale).coerceAtMost(map.viewport().maxScale))
-        camera.centreIn(insets)
+        camera.centreIn(clear)
         val view = camera.visibleBox(size)
         if (currentExtent?.intersects(view) == false) return CentreResult.OutOfBounds
         framedView = view
@@ -438,6 +439,7 @@ internal fun OfflineMapCanvas(
         }
     }
 
+    val turning = followed != null && turnToHeading
     SideEffect {
         controller.zoomBy = ::zoomBy
         controller.showAll = ::frameAll
@@ -447,12 +449,16 @@ internal fun OfflineMapCanvas(
         // Zooms pivot on the view's centre then, so the followed point drifts least.
         map.eventLayer.setFixOnCenter(followed != null)
         // The heading turns it then; a twist mid-pinch would fight it.
-        map.eventLayer.enableRotation(followed == null)
+        map.eventLayer.enableRotation(!turning)
+    }
+
+    // Each frame of a sheet's slide, or the point jumps to the new centre at the next turn.
+    LaunchedEffect(insets) {
+        followedNow.get()?.let { centreOn(it, zoomIn = false) }
     }
 
     // VTM's bearing is the map's turn, the negated heading.
     val headings = remember { HeadingFilter() }
-    val turning = followed != null
     LaunchedEffect(turning) {
         if (turning) headings.startAt(-map.mapPosition.bearing.toDouble())
     }
@@ -481,7 +487,8 @@ internal fun OfflineMapCanvas(
             (now - then) / 1000.0
         }
         val meters = haversineMeters(from.latitude, from.longitude, at.latitude, at.longitude)
-        headings.course(bearingDegrees(from, at), meters, seconds, now)?.let(::headTo)
+        val course = headings.course(bearingDegrees(from, at), meters, seconds, now)
+        if (turning) course?.let(::headTo)
     }
 
     // Also as screen reader actions, so a TalkBack or switch user needn't turn the buttons on.

@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -46,6 +47,7 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -70,6 +72,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
@@ -253,6 +256,11 @@ fun SettingsScreen(
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
 
             SectionHeading(stringResource(R.string.settings_section_display))
+            SwitchRow(
+                title = stringResource(R.string.settings_turn_to_heading),
+                checked = settings.turnToHeading,
+                onCheckedChange = viewModel::setTurnToHeading,
+            )
             Setting(
                 title = stringResource(R.string.settings_units),
                 explanation = stringResource(R.string.settings_units_explanation),
@@ -397,6 +405,27 @@ private fun LinkButtons(links: List<Pair<String, String>>, onClick: (String) -> 
         links.forEach { (label, url) ->
             TextButton(onClick = { onClick(url) }) { Text(label) }
         }
+    }
+}
+
+/** The whole row toggles, so its target isn't only the switch. */
+@Composable
+private fun SwitchRow(title: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 56.dp)
+            .toggleable(checked, role = Role.Switch, onValueChange = onCheckedChange)
+            .padding(horizontal = EdgePadding, vertical = 8.dp),
+    ) {
+        Text(
+            title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.weight(1f),
+        )
+        Switch(checked, onCheckedChange = null, modifier = Modifier.padding(start = 16.dp))
     }
 }
 

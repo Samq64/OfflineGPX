@@ -16,6 +16,7 @@ import dev.samuelq.gpx.data.map.MapImportResult
 import dev.samuelq.gpx.data.map.MapStore
 import dev.samuelq.gpx.data.map.OfflineMap
 import dev.samuelq.gpx.data.record.RecordingController
+import dev.samuelq.gpx.data.settings.Settings
 import dev.samuelq.gpx.data.settings.SettingsRepository
 import dev.samuelq.gpx.data.track.LoadedTrack
 import dev.samuelq.gpx.data.track.ReceivedTrack
@@ -103,6 +104,8 @@ class MapViewModel(
 ) : ViewModel() {
 
     val basemaps: StateFlow<List<OfflineMap>> = mapStore.maps
+
+    val settings: StateFlow<Settings> = settings.settings
 
     private val _state = MutableStateFlow(MapUiState())
     internal val state: StateFlow<MapUiState> = _state.asStateFlow()

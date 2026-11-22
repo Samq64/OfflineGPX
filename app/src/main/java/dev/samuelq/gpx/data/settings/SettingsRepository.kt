@@ -17,6 +17,8 @@ data class Settings(
     /** ARGB by [RouteColor.ordinal], for the light and dark themes. */
     val routeColorsLight: List<Int> = RouteColors.LIGHT,
     val routeColorsDark: List<Int> = RouteColors.DARK,
+    /** While following, the direction of travel is up. */
+    val turnToHeading: Boolean = true,
 )
 
 /** Light or dark, or the system's. Stored by name. */
@@ -99,6 +101,8 @@ class SettingsRepository(context: Context) {
         )
     }
 
+    fun setTurnToHeading(turn: Boolean) = update { putBoolean(KEY_TURN_TO_HEADING, turn) }
+
     /** Null restores the default. Keyed by the slot's name, which is never renamed. */
     fun setRouteColor(dark: Boolean, slot: RouteColor, argb: Int?) = update {
         val key = routeColorKey(dark, slot)
@@ -132,6 +136,7 @@ class SettingsRepository(context: Context) {
             ?: AppTheme.SYSTEM,
         routeColorsLight = readRouteColors(dark = false),
         routeColorsDark = readRouteColors(dark = true),
+        turnToHeading = prefs.getBoolean(KEY_TURN_TO_HEADING, Settings().turnToHeading),
     )
 
     private fun readRouteColors(dark: Boolean): List<Int> {
@@ -147,6 +152,7 @@ class SettingsRepository(context: Context) {
         const val KEY_TRACK_SORT_DESCENDING = "track_sort_descending"
         const val KEY_LAST_RECORDING_CATEGORY = "last_recording_category"
         const val KEY_THEME = "theme"
+        const val KEY_TURN_TO_HEADING = "turn_to_heading"
 
         fun routeColorKey(dark: Boolean, slot: RouteColor) = "route_color_${if (dark) "dark" else "light"}_${slot.name}"
     }

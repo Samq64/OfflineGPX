@@ -151,6 +151,7 @@ fun MapScreen(
     val recording = recorder.state.collectAsStateWithLifecycle()
     val isRecording by remember { derivedStateOf { recording.value is RecordingState.Active } }
     val basemaps by viewModel.basemaps.collectAsStateWithLifecycle()
+    val settings by viewModel.settings.collectAsStateWithLifecycle()
     val locating by location.locating.collectAsStateWithLifecycle()
     val position by location.position.collectAsStateWithLifecycle()
 
@@ -854,6 +855,7 @@ fun MapScreen(
                     ),
                     onScaleChange = { metersPerPixel.doubleValue = it },
                     followed = followed,
+                    turnToHeading = settings.turnToHeading,
                     onDrag = screen::stopFollowing,
                     onBearingChange = { bearing.floatValue = it },
                     // Resume where the camera was left rather than re-fitting.
