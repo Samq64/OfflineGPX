@@ -279,14 +279,14 @@
     <string name="settings_track_colors">Track colors</string>
     <string name="track_colors_close_to">Close to the %1$s track color</string>
     <string name="track_colors_dark">Dark theme</string>
-    <string name="track_colors_explanation">Exported files use the color name, not the custom shade.</string>
+    <string name="track_colors_explanation">Exported files use color names, not custom shades.</string>
     <string name="track_colors_hex">Hex</string>
     <string name="track_colors_light">Light theme</string>
     <string name="track_colors_low_contrast">Hard to see on the map</string>
     <string name="track_colors_reset">Reset</string>
     <string name="settings_units">Units</string>
-    <string name="settings_turn_to_heading">Follow rotates map</string>
-    <string name="settings_units_explanation">Changes how values are shown. Files are always saved in metric.</string>
+    <string name="settings_turn_to_heading">Turn map while following</string>
+    <string name="settings_units_explanation">Files are always saved in metric.</string>
     <string name="settings_units_imperial">Imperial</string>
     <string name="settings_units_metric">Metric</string>
 

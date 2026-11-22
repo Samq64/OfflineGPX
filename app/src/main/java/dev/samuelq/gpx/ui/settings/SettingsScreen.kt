@@ -83,7 +83,6 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextDecoration
@@ -308,7 +307,11 @@ fun SettingsScreen(
                     }
                 }
             }
-            PageRow(stringResource(R.string.settings_track_colors), onClick = onOpenTrackColors)
+            PageRow(
+                title = stringResource(R.string.settings_track_colors),
+                explanation = stringResource(R.string.track_colors_explanation),
+                onClick = onOpenTrackColors,
+            )
 
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
             SectionHeading(stringResource(R.string.settings_section_about))
@@ -419,28 +422,23 @@ private fun SwitchRow(title: String, checked: Boolean, onCheckedChange: (Boolean
             .toggleable(checked, role = Role.Switch, onValueChange = onCheckedChange)
             .padding(horizontal = EdgePadding, vertical = 8.dp),
     ) {
-        Text(
-            title,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.weight(1f),
-        )
+        SettingText(title, explanation = null, Modifier.weight(1f))
         Switch(checked, onCheckedChange = null, modifier = Modifier.padding(start = 16.dp))
     }
 }
 
 /** Opens a sub-page; the chevron marks it as one. */
 @Composable
-internal fun PageRow(title: String, onClick: () -> Unit) {
+internal fun PageRow(title: String, explanation: String? = null, onClick: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 56.dp)
             .clickable(onClick = onClick)
-            .padding(horizontal = EdgePadding),
+            .padding(horizontal = EdgePadding, vertical = 8.dp),
     ) {
-        Text(title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        SettingText(title, explanation, Modifier.weight(1f))
         Icon(
             painterResource(R.drawable.ic_chevron_right),
             contentDescription = null,
@@ -660,19 +658,23 @@ internal fun SectionHeading(text: String) {
 @Composable
 private fun Setting(title: String, explanation: String? = null, control: @Composable () -> Unit) {
     Column(Modifier.fillMaxWidth().padding(horizontal = EdgePadding, vertical = 8.dp)) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-        )
+        SettingText(title, explanation)
+        Spacer(Modifier.height(8.dp))
+        control()
+    }
+}
+
+/** Every row's title and explanation, so the section reads as one list. */
+@Composable
+private fun SettingText(title: String, explanation: String?, modifier: Modifier = Modifier) {
+    Column(modifier) {
+        Text(title, style = MaterialTheme.typography.bodyLarge)
         explanation?.let {
             Text(
                 text = it,
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Spacer(Modifier.height(8.dp))
-        control()
     }
 }
