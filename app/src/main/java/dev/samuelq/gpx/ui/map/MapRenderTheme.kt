@@ -256,9 +256,9 @@ object MapRenderTheme {
     // --- Fixed colours ------------------------------------------------------------------
     // Water and vegetation ignore Material You: atlas convention outranks colour harmony.
 
-    private fun waterBlue(dark: Boolean) = if (dark) "#16323f" else "#a6cbe3"
+    internal fun waterBlue(dark: Boolean) = if (dark) "#16323f" else "#a6cbe3"
 
-    private fun greenVegetation(dark: Boolean) = if (dark) "#1e3220" else "#d5e9cf"
+    internal fun greenVegetation(dark: Boolean) = if (dark) "#1e3220" else "#d5e9cf"
 
     /**
      * Trail brown. The dark variant is much darker: roads step toward white in dark mode, and

@@ -63,8 +63,6 @@ class SettingsViewModel(private val repository: SettingsRepository, private val 
 
     fun setRouteColor(dark: Boolean, slot: RouteColor, argb: Int?) = repository.setRouteColor(dark, slot, argb)
 
-    fun resetRouteColors(dark: Boolean) = repository.resetRouteColors(dark)
-
     fun importMaps(uris: List<Uri>) {
         if (uris.isEmpty()) return
         viewModelScope.launch {

@@ -109,10 +109,6 @@ class SettingsRepository(context: Context) {
         if (argb == null) remove(key) else putInt(key, argb)
     }
 
-    fun resetRouteColors(dark: Boolean) = update {
-        RouteColor.entries.forEach { remove(routeColorKey(dark, it)) }
-    }
-
     /** The category the last saved recording had, which the next one is offered. */
     private val _lastRecordingCategory = MutableStateFlow(prefs.getString(KEY_LAST_RECORDING_CATEGORY, null))
     val lastRecordingCategory: StateFlow<String?> = _lastRecordingCategory.asStateFlow()

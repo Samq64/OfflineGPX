@@ -4,7 +4,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -18,22 +17,20 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -42,17 +39,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
-import androidx.core.graphics.ColorUtils
+import androidx.core.graphics.toColorInt
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.samuelq.gpx.R
@@ -62,6 +61,7 @@ import dev.samuelq.gpx.ui.BackButton
 import dev.samuelq.gpx.ui.BarInsets
 import dev.samuelq.gpx.ui.DialogTitle
 import dev.samuelq.gpx.ui.EdgePadding
+import dev.samuelq.gpx.ui.map.MapRenderTheme
 import dev.samuelq.gpx.ui.readableWidth
 import dev.samuelq.gpx.ui.theme.RouteColorNames
 import dev.samuelq.gpx.ui.theme.dynamicScheme
@@ -113,7 +113,7 @@ fun TrackColorsScreen(
                     dark = dark,
                     colors = if (dark) settings.routeColorsDark else settings.routeColorsLight,
                     onEdit = { slot -> editing = dark to slot },
-                    onReset = { viewModel.resetRouteColors(dark) },
+                    onReset = { slot -> viewModel.setRouteColor(dark, RouteColor.entries[slot], null) },
                 )
             }
         }
@@ -123,10 +123,9 @@ fun TrackColorsScreen(
         val colors = if (dark) settings.routeColorsDark else settings.routeColorsLight
         val defaults = if (dark) RouteColors.DARK else RouteColors.LIGHT
         ColorDialog(
-            title = stringResource(RouteColorNames[slot]),
-            initial = colors[slot],
-            default = defaults[slot],
-            land = dynamicScheme(dark).surfaceContainerLowest,
+            slot = slot,
+            palette = colors,
+            dark = dark,
             onDismiss = { editing = null },
             onConfirm = { argb ->
                 editing = null
@@ -137,7 +136,7 @@ fun TrackColorsScreen(
 }
 
 @Composable
-private fun Palette(dark: Boolean, colors: List<Int>, onEdit: (Int) -> Unit, onReset: () -> Unit) {
+private fun Palette(dark: Boolean, colors: List<Int>, onEdit: (Int) -> Unit, onReset: (Int) -> Unit) {
     val scheme = dynamicScheme(dark)
     val defaults = if (dark) RouteColors.DARK else RouteColors.LIGHT
     SectionHeading(stringResource(if (dark) R.string.track_colors_dark else R.string.track_colors_light))
@@ -148,7 +147,6 @@ private fun Palette(dark: Boolean, colors: List<Int>, onEdit: (Int) -> Unit, onR
             .background(scheme.surfaceContainerLowest),
     ) {
         colors.forEachIndexed { slot, argb ->
-            val name = stringResource(RouteColorNames[slot])
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -159,13 +157,21 @@ private fun Palette(dark: Boolean, colors: List<Int>, onEdit: (Int) -> Unit, onR
                     .padding(horizontal = 16.dp),
             ) {
                 RouteSample(Color(argb), Modifier.width(64.dp))
-                Text(name, style = MaterialTheme.typography.bodyLarge, color = scheme.onSurface)
+                Text(
+                    stringResource(RouteColorNames[slot]),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = scheme.onSurface,
+                    modifier = Modifier.weight(1f),
+                )
+                if (argb != defaults[slot]) {
+                    TextButton(
+                        onClick = { onReset(slot) },
+                        colors = ButtonDefaults.textButtonColors(contentColor = scheme.primary),
+                    ) {
+                        Text(stringResource(R.string.track_colors_reset))
+                    }
+                }
             }
-        }
-    }
-    Row(Modifier.padding(horizontal = EdgePadding - 12.dp)) {
-        TextButton(onClick = onReset, enabled = colors != defaults) {
-            Text(stringResource(R.string.track_colors_reset))
         }
     }
 }
@@ -179,125 +185,89 @@ private fun RouteSample(color: Color, modifier: Modifier = Modifier) {
     }
 }
 
-/** HSL rather than RGB sliders: hue is what names a slot, so it should move alone. */
-@OptIn(ExperimentalMaterial3Api::class)
+/** Hex only: the screen is for those who know what they want. Warnings advise, never block. */
 @Composable
 private fun ColorDialog(
-    title: String,
-    initial: Int,
-    default: Int,
-    land: Color,
+    slot: Int,
+    palette: List<Int>,
+    dark: Boolean,
     onDismiss: () -> Unit,
     onConfirm: (Int) -> Unit,
 ) {
-    val start = remember(initial) { FloatArray(3).also { ColorUtils.colorToHSL(initial, it) } }
-    var hue by rememberSaveable { mutableFloatStateOf(start[0]) }
-    var saturation by rememberSaveable { mutableFloatStateOf(start[1]) }
-    var lightness by rememberSaveable { mutableFloatStateOf(start[2]) }
-    var hex by rememberSaveable { mutableStateOf(initial.hex()) }
-
-    val argb = ColorUtils.HSLToColor(floatArrayOf(hue, saturation, lightness))
-    fun slid() {
-        hex = ColorUtils.HSLToColor(floatArrayOf(hue, saturation, lightness)).hex()
+    val land = dynamicScheme(dark).surfaceContainerLowest
+    val ground = remember(land, dark) {
+        MapGround(
+            land = land.toArgb(),
+            water = MapRenderTheme.waterBlue(dark).toColorInt(),
+            vegetation = MapRenderTheme.greenVegetation(dark).toColorInt(),
+        )
     }
-    fun load(color: Int) {
-        val hsl = FloatArray(3).also { ColorUtils.colorToHSL(color, it) }
-        hue = hsl[0]
-        saturation = hsl[1]
-        lightness = hsl[2]
-        hex = color.hex()
+    var hex by rememberSaveable { mutableStateOf(palette[slot].hex()) }
+    val argb = parseHex(hex)
+    val warning = remember(argb, palette, ground) {
+        argb?.let { colorWarning(it, slot, palette, dark, ground) }
     }
+    val name = stringResource(RouteColorNames[slot])
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { DialogTitle(title) },
+        title = { DialogTitle(name) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Box(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(land).padding(8.dp),
-                ) {
-                    RouteSample(Color(argb), Modifier.fillMaxWidth())
-                }
-                GradientSlider(
-                    label = stringResource(R.string.track_colors_hue),
-                    value = hue / 360f,
-                    onValueChange = {
-                        hue = it * 360f
-                        slid()
-                    },
-                    colors = (0..6).map { Color.hsl(it * 60f % 360f, saturation, lightness) },
-                )
-                GradientSlider(
-                    label = stringResource(R.string.track_colors_saturation),
-                    value = saturation,
-                    onValueChange = {
-                        saturation = it
-                        slid()
-                    },
-                    colors = listOf(Color.hsl(hue, 0f, lightness), Color.hsl(hue, 1f, lightness)),
-                )
-                GradientSlider(
-                    label = stringResource(R.string.track_colors_lightness),
-                    value = lightness,
-                    onValueChange = {
-                        lightness = it
-                        slid()
-                    },
-                    colors = listOf(Color.Black, Color.hsl(hue, saturation, 0.5f), Color.White),
-                )
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                GroundSample(argb?.let(::Color), ground)
                 OutlinedTextField(
                     value = hex,
-                    onValueChange = { text ->
-                        hex = text.take(7)
-                        parseHex(text)?.let { color ->
-                            val hsl = FloatArray(3).also { ColorUtils.colorToHSL(color, it) }
-                            hue = hsl[0]
-                            saturation = hsl[1]
-                            lightness = hsl[2]
-                        }
-                    },
+                    onValueChange = { text -> hex = text.filter { it == '#' || it.isLetterOrDigit() }.take(7) },
                     label = { Text(stringResource(R.string.track_colors_hex)) },
                     singleLine = true,
-                    isError = parseHex(hex) == null,
-                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
+                    isError = argb == null,
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Characters,
+                        autoCorrectEnabled = false,
+                    ),
+                    // Always present, if empty, so the dialog doesn't jump as a warning comes and goes.
+                    supportingText = {
+                        Text(
+                            text = when (warning) {
+                                null -> ""
+                                ColorWarning.LowContrast -> stringResource(R.string.track_colors_low_contrast)
+                                // Mid-sentence, where English doesn't capitalise a colour.
+                                is ColorWarning.CloseTo -> stringResource(
+                                    R.string.track_colors_close_to,
+                                    stringResource(RouteColorNames[warning.slot]).lowercase(Locale.getDefault()),
+                                )
+                            },
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                        )
+                    },
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(argb) }) { Text(stringResource(R.string.action_save)) }
+            TextButton(onClick = { argb?.let(onConfirm) }, enabled = argb != null) {
+                Text(stringResource(R.string.action_save))
+            }
         },
         dismissButton = {
-            Row {
-                TextButton(onClick = { load(default) }, enabled = argb != default) {
-                    Text(stringResource(R.string.track_colors_default))
-                }
-                TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
-            }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
         },
     )
 }
 
-/** A slider over its own range of colours. */
-@OptIn(ExperimentalMaterial3Api::class)
+/** The route across land, vegetation and water, the grounds its contrast is checked on. */
 @Composable
-private fun GradientSlider(label: String, value: Float, onValueChange: (Float) -> Unit, colors: List<Color>) {
-    Column {
-        Text(label, style = MaterialTheme.typography.labelMedium)
-        Slider(
-            value = value,
-            onValueChange = onValueChange,
-            modifier = Modifier.semantics { contentDescription = label },
-            track = {
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(12.dp)
-                        .clip(CircleShape)
-                        .background(Brush.horizontalGradient(colors)),
-                )
-            },
-        )
+private fun GroundSample(color: Color?, ground: MapGround) {
+    Canvas(Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(12.dp))) {
+        val third = size.width / 3
+        drawRect(Color(ground.land))
+        drawRect(Color(ground.vegetation), Offset(third, 0f), Size(third, size.height))
+        drawRect(Color(ground.water), Offset(2 * third, 0f), Size(third, size.height))
+        if (color != null) {
+            val y = size.height / 2
+            drawLine(color, Offset(12.dp.toPx(), y), Offset(size.width - 12.dp.toPx(), y), 5.dp.toPx(), StrokeCap.Round)
+        }
     }
 }
 
