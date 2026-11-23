@@ -44,6 +44,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
@@ -227,6 +228,7 @@ private fun ColorDialog(
                     ),
                     // Always present, if empty, so the dialog doesn't jump as a warning comes and goes.
                     supportingText = {
+                        val locale = LocalLocale.current.platformLocale
                         Text(
                             text = when (warning) {
                                 null -> ""
@@ -234,7 +236,7 @@ private fun ColorDialog(
                                 // Mid-sentence, where English doesn't capitalise a colour.
                                 is ColorWarning.CloseTo -> stringResource(
                                     R.string.track_colors_close_to,
-                                    stringResource(RouteColorNames[warning.slot]).lowercase(Locale.getDefault()),
+                                    stringResource(RouteColorNames[warning.slot]).lowercase(locale),
                                 )
                             },
                             color = MaterialTheme.colorScheme.error,

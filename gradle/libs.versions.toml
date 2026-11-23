@@ -1,26 +1,27 @@
 [versions]
-# AGP 9.4 supports up to API 37 and requires Gradle 9.1+ and JDK 17+.
-agp = "9.4.1"
+# AGP 9.5 supports up to API 37 and requires Gradle 9.1+ and JDK 17+.
+agp = "9.5.2"
 # Only for the Compose compiler plugin; AGP 9 has Kotlin built in.
 kotlin = "2.4.21"
 
 compileSdk = "37"
+compileSdkMinor = "1"
 minSdk = "31"
 targetSdk = "37"
 
-# Compose 1.12+ requires compileSdk 37 / AGP 9.1.1+.
-composeBom = "2026.09.00"
+# Compose 1.13+ requires compileSdk 37.1 / AGP 9.1.1+.
+composeBom = "2026.11.01"
 core = "1.19.1"
 # GPS altitude to sea level; ~150 KB, mostly its geoid map. The platform's own on API 34+.
-coreLocationAltitude = "1.0.0"
+coreLocationAltitude = "1.0.1"
 activityCompose = "1.13.0"
-lifecycle = "2.11.0"
+lifecycle = "2.11.1"
 
 # Versioned independently of Kotlin since 2.3.0.
-ksp = "2.3.12"
+ksp = "2.3.14"
 room = "2.8.5"
 navigation = "2.10.2"
-serialization = "1.11.0"
+serialization = "1.13.0"
 
 kxml2 = "2.3.0"
 # Matches the kotlinx-coroutines that Compose and Room resolve to.
@@ -32,7 +33,7 @@ androidxTestExtJunit = "1.3.0"
 espresso = "3.7.0"
 
 # Gradle's and AGP's built-in coverage; pinned for current Kotlin bytecode.
-jacoco = "0.8.15"
+jacoco = "0.8.16"
 
 # Plain jars, so no manifest or permissions. Its native tessellator is ~45 KB per ABI.
 vtm = "0.30.0"
