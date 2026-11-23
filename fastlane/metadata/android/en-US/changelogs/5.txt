@@ -1,0 +1,10 @@
+Two finger map rotation
+Following rotates map by default
+Set the app theme independently from the system
+The light and dark track color palettes are now customizable
+Resume interrupted recordings for up to 1 hour
+When possible, interrupted recordings send a notification
+Batch recategorize tracks and separate categorize from rename
+Hidden tracks show only while open, with a "Keep on map" option
+The location button better represents its state
+Unnamed tracks stay unnamed when re-importing
